@@ -1,4 +1,4 @@
-# Apuntes
+# OpenNote
 
 App de apuntes a mano (S Pen) y con teclado. Flutter: Android (tablet) y Linux (PC).
 
@@ -31,4 +31,4 @@ Por capas (cada una usa solo las de arriba):
 ## Tests
 
 - `flutter test test/` — lógica pura, en la PC (no necesita la tablet).
-- `./run_tests.sh` — tests de integración en la tablet (hace backup de los cuadernos).
+- `./run_tests.sh` — tests de integración en la tablet. Corren con el build debug (`com.apuntes.apuntes.test`, "OpenNote Test"), otra app con datos propios; antes y después verifica que OpenNote y sus cuadernos sigan intactos. `BACKUP=1 ./run_tests.sh` baja además un backup a `~/apuntes_app_backup/`.
