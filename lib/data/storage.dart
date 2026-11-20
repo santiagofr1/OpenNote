@@ -3,11 +3,13 @@ import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 
-import 'model.dart';
+import '../domain/domain.dart';
 
 /// Guarda todo como archivos JSON:
-///   <dir>/index.json         cuadernos y páginas
-///   <dir>/pages/<id>.json    contenido de cada página
+///   `<dir>/index.json`        cuadernos y páginas
+///   `<dir>/prefs.json`        herramientas elegidas
+///   `<dir>/pages/<id>.json`   contenido de cada página
+///   `<dir>/media/`            imágenes y audios
 /// Mismo formato que el servidor web, para poder sincronizar más adelante.
 class Storage {
   /// [root]: carpeta propia (los tests usan una temporal para no tocar tus cuadernos)
@@ -16,21 +18,18 @@ class Storage {
   late final Directory dir;
 
   Future<void> init() async {
-    if (root != null) {
-      dir = root!;
-      await Directory('${dir.path}/pages').create(recursive: true);
-      await Directory('${dir.path}/media').create(recursive: true);
-      return;
-    }
-    Directory? base;
-    if (Platform.isAndroid) base = await getExternalStorageDirectory();
-    base ??= await getApplicationDocumentsDirectory();
-    dir = Directory('${base.path}/apuntes');
+    dir = root ?? Directory('${(await _defaultBase()).path}/apuntes');
     await Directory('${dir.path}/pages').create(recursive: true);
     await Directory('${dir.path}/media').create(recursive: true);
   }
 
-  /// archivos de imágenes y audios
+  /// En Android, la carpeta externa de la app (se puede respaldar por USB).
+  static Future<Directory> _defaultBase() async {
+    Directory? base;
+    if (Platform.isAndroid) base = await getExternalStorageDirectory();
+    return base ?? await getApplicationDocumentsDirectory();
+  }
+
   File media(String name) => File('${dir.path}/media/$name');
 
   Future<String> addMedia(List<int> bytes, String ext) async {
@@ -46,8 +45,10 @@ class Storage {
   }
 
   File get _index => File('${dir.path}/index.json');
+  File get _prefs => File('${dir.path}/prefs.json');
   File _page(String id) => File('${dir.path}/pages/$id.json');
 
+  /// Escribe a un temporal y renombra: si se corta a la mitad, el archivo viejo queda entero.
   Future<void> _write(File f, Object data) async {
     final tmp = File('${f.path}.tmp');
     await tmp.writeAsString(jsonEncode(data), flush: true);
@@ -90,7 +91,19 @@ class Storage {
     return _write(_page(p.id), p.toJson());
   }
 
-  File get _prefs => File('${dir.path}/prefs.json');
+  Future<void> deletePage(String id) async {
+    final f = _page(id);
+    if (await f.exists()) await f.delete();
+  }
+
+  /// Borra las páginas del cuaderno y lo saca del índice.
+  Future<void> deleteNotebook(NotesIndex idx, Notebook nb) async {
+    for (final p in nb.pages) {
+      await deletePage(p.id);
+    }
+    idx.notebooks.remove(nb);
+    await saveIndex(idx);
+  }
 
   Future<Map?> loadPrefs() async {
     try {
@@ -101,9 +114,4 @@ class Storage {
   }
 
   Future<void> savePrefs(Map<String, dynamic> p) => _write(_prefs, p);
-
-  Future<void> deletePage(String id) async {
-    final f = _page(id);
-    if (await f.exists()) await f.delete();
-  }
 }
