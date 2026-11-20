@@ -91,6 +91,7 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
     hscroll.dispose();
     pullCtrl.dispose();
     _zoomPillT?.cancel();
+    _lpTimer?.cancel();
     super.dispose();
   }
 
@@ -857,6 +858,7 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
 
   void _flashZoom() {
     _zoomPillT?.cancel();
+    _lpTimer?.cancel();
     setState(() => _zoomPill = true);
     _zoomPillT = Timer(const Duration(milliseconds: 1100), () {
       if (mounted) setState(() => _zoomPill = false);
@@ -887,6 +889,12 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
     if (e.kind != PointerDeviceKind.touch) return;
     touches++;
     _touch[e.pointer] = e.position;
+    if (_touch.length == 1 && pointer == null) {
+      _lpStart = e.position;
+      _lpTimer = Timer(const Duration(milliseconds: 500), _lpFire);
+    } else {
+      _lpCancel(); // segundo dedo: es zoom, no menú
+    }
     // dos dedos = pellizco (salvo que el zoom esté fijado o se esté escribiendo con el lápiz)
     if (_touch.length == 2 && !ts.zoomLocked && pointer == null) {
       final p = _touch.values.toList();
@@ -900,6 +908,7 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
   void _touchMove(PointerMoveEvent e) {
     if (!_touch.containsKey(e.pointer)) return;
     _touch[e.pointer] = e.position;
+    if (_lpStart != null && (e.position - _lpStart!).distance > 12) _lpCancel(); // se movió: es scroll
     if (!pinching || _touch.length < 2) return;
     final p = _touch.values.take(2).toList();
     final box = _viewportKey.currentContext!.findRenderObject() as RenderBox;
@@ -911,6 +920,7 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
     if (e.kind != PointerDeviceKind.touch) return;
     _touch.remove(e.pointer);
     touches = max(0, touches - 1);
+    _lpCancel();
     if (pinching && _touch.length < 2) {
       setState(() => pinching = false);
       widget.onPrefsChanged();
@@ -989,7 +999,7 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
                         const SizedBox(height: _topPad),
                         Padding(
                           padding: EdgeInsets.only(left: _sheetLeft),
-                          child: SizedBox(width: sw, height: sheetH, child: _sheet(Size(sw, sheetH))),
+                          child: SizedBox(key: _sheetKey, width: sw, height: sheetH, child: _sheet(Size(sw, sheetH))),
                         ),
                         SizedBox(
                           width: contentW,
@@ -1047,7 +1057,7 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
     return Material(
       color: cs.inverseSurface,
       elevation: 4,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(16),
       child: Padding(
         padding: const EdgeInsets.all(3),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -1068,10 +1078,30 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
   }
 
   // ---- mantener el dedo sobre la hoja: menú contextual ----
-  Future<void> _longPressMenu(LongPressStartDetails d) async {
+  Timer? _lpTimer;
+  Offset? _lpStart;
+  final _sheetKey = GlobalKey();
+
+  void _lpCancel() {
+    _lpTimer?.cancel();
+    _lpTimer = null;
+    _lpStart = null;
+  }
+
+  void _lpFire() {
+    final g = _lpStart;
+    _lpCancel();
+    if (g == null || !mounted || pinching || _touch.length != 1 || pointer != null) return;
+    if (scroll.hasClients && scroll.position.isScrollingNotifier.value) return;
+    final box = _sheetKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final local = box.globalToLocal(g);
+    if (!(Offset.zero & box.size).contains(local)) return;
+    _longPressMenu(g, _logical(local));
+  }
+
+  Future<void> _longPressMenu(Offset g, Offset p) async {
     HapticFeedback.mediumImpact();
-    final p = _logical(d.localPosition);
-    final g = d.globalPosition;
     PopupMenuItem<String> item(String v, IconData i, String label, {bool enabled = true}) => PopupMenuItem(
           value: v,
           enabled: enabled,
@@ -1138,10 +1168,6 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
       onPointerUp: _up,
       onPointerCancel: _up,
       child: GestureDetector(
-        // mantener apretado con el dedo
-        supportedDevices: const {PointerDeviceKind.touch},
-        onLongPressStart: _longPressMenu,
-        child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTapUp: textMode ? _tapPage : null,
           child: Stack(clipBehavior: Clip.none, children: [
@@ -1161,7 +1187,6 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
               ),
             ),
           ]),
-        ),
       ),
     );
   }
@@ -1551,11 +1576,22 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
           setState(() => page.bg = v);
           _changed();
         },
-        itemBuilder: (_) => const [
-          PopupMenuItem(value: 'lined', child: Text('Rayado')),
-          PopupMenuItem(value: 'grid', child: Text('Cuadriculado')),
-          PopupMenuItem(value: 'dots', child: Text('Puntos')),
-          PopupMenuItem(value: 'blank', child: Text('Liso')),
+        itemBuilder: (_) => [
+          for (final (v, i, label) in const [
+            ('lined', Symbols.format_align_justify, 'Rayado'),
+            ('grid', Symbols.grid_4x4, 'Cuadriculado'),
+            ('dots', Symbols.grid_goldenratio, 'Puntos'),
+            ('blank', Symbols.crop_portrait, 'Liso'),
+          ])
+            PopupMenuItem(
+              value: v,
+              child: Row(children: [
+                Icon(i, size: 20, weight: 300, color: cs.onSurfaceVariant),
+                const SizedBox(width: 12),
+                Expanded(child: Text(label)),
+                if (page.bg == v) Icon(Symbols.check, size: 18, weight: 500, color: cs.primary),
+              ]),
+            ),
         ],
       );
 }

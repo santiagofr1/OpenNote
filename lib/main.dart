@@ -22,14 +22,55 @@ class ApuntesApp extends StatelessWidget {
           title: 'Apuntes',
           debugShowCheckedModeBanner: false,
           themeMode: ThemeMode.system,
-          theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: light?.primary ?? kAccent), useMaterial3: true),
-          darkTheme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(seedColor: dark?.primary ?? light?.primary ?? kAccent, brightness: Brightness.dark),
-            useMaterial3: true,
-          ),
+          theme: appTheme(ColorScheme.fromSeed(seedColor: light?.primary ?? kAccent)),
+          darkTheme: appTheme(ColorScheme.fromSeed(seedColor: dark?.primary ?? light?.primary ?? kAccent, brightness: Brightness.dark)),
           home: const Home(),
         ),
       );
+}
+
+/// Tema común: esquinas redondeadas parejas (10 / 14 / 18 / 26) en todo lo que flota.
+ThemeData appTheme(ColorScheme cs) {
+  RoundedRectangleBorder r(double v) => RoundedRectangleBorder(borderRadius: BorderRadius.circular(v));
+  return ThemeData(
+    colorScheme: cs,
+    useMaterial3: true,
+    popupMenuTheme: PopupMenuThemeData(
+      shape: r(18),
+      color: cs.surfaceContainerHigh,
+      surfaceTintColor: Colors.transparent,
+      elevation: 6,
+      shadowColor: Colors.black45,
+      menuPadding: const EdgeInsets.symmetric(vertical: 6),
+      textStyle: TextStyle(fontSize: 15, color: cs.onSurface),
+    ),
+    dialogTheme: DialogThemeData(
+      shape: r(26),
+      backgroundColor: cs.surfaceContainerHigh,
+      surfaceTintColor: Colors.transparent,
+      titleTextStyle: TextStyle(fontSize: 20, fontWeight: FontWeight.w500, color: cs.onSurface),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: cs.surfaceContainerHighest,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: cs.primary, width: 1.5)),
+    ),
+    snackBarTheme: SnackBarThemeData(shape: r(14), behavior: SnackBarBehavior.floating),
+    tooltipTheme: TooltipThemeData(
+      decoration: BoxDecoration(color: cs.inverseSurface, borderRadius: BorderRadius.circular(10)),
+      textStyle: TextStyle(color: cs.onInverseSurface, fontSize: 13),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    ),
+    drawerTheme: DrawerThemeData(
+      backgroundColor: cs.surfaceContainerLow,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.horizontal(right: Radius.circular(26))),
+    ),
+    chipTheme: ChipThemeData(shape: r(10)),
+    sliderTheme: const SliderThemeData(year2023: false),
+  );
 }
 
 class Home extends StatefulWidget {
@@ -146,7 +187,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: const Color(0xFFB42318)),
+              style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error, foregroundColor: Theme.of(ctx).colorScheme.onError),
               onPressed: () => Navigator.pop(ctx, true),
               child: const Text('Borrar'),
             ),
@@ -258,7 +299,6 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
 
   Widget _drawer(NotesIndex idx) => Drawer(
         width: 320,
-        shape: const RoundedRectangleBorder(),
         child: SafeArea(
           child: Column(children: [
             Padding(
@@ -299,8 +339,8 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
               icon: const Icon(Icons.more_vert, size: 20),
               onSelected: (v) => v == 'rename' ? _renameNotebook(nb) : _deleteNotebook(nb),
               itemBuilder: (_) => const [
-                PopupMenuItem(value: 'rename', child: Text('Renombrar')),
-                PopupMenuItem(value: 'delete', child: Text('Borrar cuaderno', style: TextStyle(color: Color(0xFFB42318)))),
+                PopupMenuItem(value: 'rename', child: _MenuRow(Icons.edit_outlined, 'Renombrar')),
+                PopupMenuItem(value: 'delete', child: _MenuRow(Icons.delete_outline, 'Borrar cuaderno', danger: true)),
               ],
             ),
           ]),
@@ -336,8 +376,8 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                       icon: Icon(Icons.more_horiz, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
                       onSelected: (v) => v == 'rename' ? _renamePage(p) : _deletePage(nb, p),
                       itemBuilder: (_) => const [
-                        PopupMenuItem(value: 'rename', child: Text('Renombrar')),
-                        PopupMenuItem(value: 'delete', child: Text('Borrar', style: TextStyle(color: Color(0xFFB42318)))),
+                        PopupMenuItem(value: 'rename', child: _MenuRow(Icons.edit_outlined, 'Renombrar')),
+                        PopupMenuItem(value: 'delete', child: _MenuRow(Icons.delete_outline, 'Borrar', danger: true)),
                       ],
                     ),
                   ]),
@@ -347,5 +387,22 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
           ),
       const SizedBox(height: 6),
     ];
+  }
+}
+
+class _MenuRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool danger;
+  const _MenuRow(this.icon, this.label, {this.danger = false});
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final c = danger ? cs.error : cs.onSurfaceVariant;
+    return Row(children: [
+      Icon(icon, size: 20, color: c),
+      const SizedBox(width: 12),
+      Text(label, style: TextStyle(color: danger ? cs.error : cs.onSurface)),
+    ]);
   }
 }
