@@ -86,7 +86,7 @@ jobs:
         run: |
           PREVIOUS_TAG=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
           if [ -n "$PREVIOUS_TAG" ]; then
-            COMMITS=$(git log --pretty=format:'- %s' "${PREVIOUS_TAG}..HEAD")
+            COMMITS=$(git log --first-parent --pretty=format:'- %s' "${PREVIOUS_TAG}..HEAD")
           else
             COMMITS=$(git log -n 30 --pretty=format:'- %s' HEAD)
           fi

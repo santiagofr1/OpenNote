@@ -50,6 +50,27 @@ UpdateInfo? parseRelease(Map<String, dynamic> json) {
   return null;
 }
 
+/// Del cuerpo del Release, las novedades para el usuario: renglones "- ...", sin metadatos ni
+/// merges de main, tests o docs; "Merge feat/x: Algo" queda como "Algo". Sin repetidos, en orden.
+List<String> userNotes(String body) {
+  const dropped = ['merge main', 'merge branch', 'test', 'pendientes', 'readme', 'docs'];
+  final prefix = RegExp(r'^Merge (?:feat|fix)/[^:\s]*: ', caseSensitive: false);
+  final out = <String>[];
+  for (final raw in body.split('\n')) {
+    var line = raw.trim();
+    if (!line.startsWith('- ') || line.contains('**APK:**') || line.contains('**Código de versión:**')) continue;
+    line = line.substring(2).trim();
+    if (line.isEmpty) continue;
+    final low = line.toLowerCase();
+    if (dropped.any(low.startsWith)) continue;
+    line = line.replaceFirst(prefix, '').trim();
+    if (line.isEmpty) continue;
+    line = line[0].toUpperCase() + line.substring(1);
+    if (!out.contains(line)) out.add(line);
+  }
+  return out;
+}
+
 /// La release es más nueva que la instalada (si no se puede leer la instalada, no se ofrece nada).
 UpdateInfo? newerThan(UpdateInfo? latest, AppVersion? installed) =>
     latest != null && installed != null && latest.version > installed ? latest : null;

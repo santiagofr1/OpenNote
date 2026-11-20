@@ -7,6 +7,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../../data/storage.dart';
 import '../../data/updates.dart';
 import '../../domain/domain.dart';
+import '../../domain/version.dart';
 import '../../widgets/dialogs.dart';
 import '../../widgets/pdf_progress.dart';
 import '../../widgets/update_dialog.dart';
@@ -76,10 +77,17 @@ class _LibraryState extends State<Library> {
     await _offer(u);
   }
 
-  Future<void> _offer(UpdateInfo u) => offerUpdate(context, u, onSkip: () async {
-        updPrefs.skipped = u.version.toString();
-        await store.savePrefs(updPrefs.toJson());
-      });
+  Future<void> _offer(UpdateInfo u) async {
+    AppVersion? installed;
+    try {
+      installed = await Updates.installed();
+    } catch (_) {}
+    if (!mounted) return;
+    await offerUpdate(context, u, installed: installed, onSkip: () async {
+      updPrefs.skipped = u.version.toString();
+      await store.savePrefs(updPrefs.toJson());
+    });
+  }
 
   /// "Buscar actualizaciones" a mano: ignora el plazo de 24 h y la versión omitida.
   Future<void> _manualUpdateCheck() async {
