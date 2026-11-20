@@ -52,11 +52,19 @@ void main() {
     await settle(t, 600); // que termine la entrada del botón "+"
   }
 
-  Future<NotesIndex> disk(WidgetTester t) => t.runAsync(() async {
-        await Future<void>.delayed(const Duration(milliseconds: 300)); // que terminen las escrituras
-        final s = Storage(root: root);
-        await s.init();
-        return s.loadIndex();
+  /// Lee el índice del disco. Con [until], reintenta hasta 5 s a que las escrituras en
+  /// segundo plano lleguen (en CI el disco es más lento que 300 ms).
+  Future<NotesIndex> disk(WidgetTester t, {bool Function(NotesIndex)? until}) => t.runAsync(() async {
+        NotesIndex idx;
+        var waited = 0;
+        do {
+          await Future<void>.delayed(const Duration(milliseconds: 300));
+          waited += 300;
+          final s = Storage(root: root);
+          await s.init();
+          idx = await s.loadIndex();
+        } while (until != null && !until(idx) && waited < 5000);
+        return idx;
       }).then((v) => v!);
 
   Finder k(String key) => find.byKey(Key(key));
@@ -126,7 +134,8 @@ void main() {
     expect(k('moveTarget-Análisis'), findsOneWidget, reason: 'el árbol muestra las subcarpetas');
     await tap(t, k('moveTarget-Análisis'));
     expect(k('nb-Suelto'), findsNothing);
-    expect((await disk(t)).notebooks.firstWhere((n) => n.name == 'Suelto').folder, 'f2');
+    expect((await disk(t, until: (i) => i.notebooks.firstWhere((n) => n.name == 'Suelto').folder == 'f2'))
+        .notebooks.firstWhere((n) => n.name == 'Suelto').folder, 'f2');
 
     await tap(t, k('folder-Facultad'));
     await tap(t, k('folder-Análisis'));
@@ -134,7 +143,8 @@ void main() {
     await tap(t, k('moveTo'));
     await tap(t, k('moveTarget-Inicio'));
     expect(k('nb-Suelto'), findsNothing);
-    expect((await disk(t)).notebooks.firstWhere((n) => n.name == 'Suelto').folder, isNull);
+    expect((await disk(t, until: (i) => i.notebooks.firstWhere((n) => n.name == 'Suelto').folder == null))
+        .notebooks.firstWhere((n) => n.name == 'Suelto').folder, isNull);
   });
 
   testWidgets('carpeta: renombrar, mover (no entra en sí misma) y borrar sacando los cuadernos', (t) async {
