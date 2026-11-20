@@ -14,14 +14,26 @@ const _pxWidth = 1654.0;
 
 /// Arma el PDF de un cuaderno: cada hoja de cada página es una hoja A4.
 /// [onProgress] recibe (hechas, total).
-Future<Uint8List> buildNotebookPdf(Storage store, Notebook nb, {void Function(int, int)? onProgress}) async {
-  final pages = <PageData>[for (final ref in nb.pages) await store.loadPage(ref.id)];
+Future<Uint8List> buildNotebookPdf(Storage store, Notebook nb, {void Function(int, int)? onProgress, List<String>? only}) async {
+  final pages = <PageData>[
+    for (final ref in nb.pages)
+      if (only == null || only.contains(ref.id)) await store.loadPage(ref.id)
+  ];
+  final images = <String, ui.Image>{};
+  for (final p in pages) {
+    for (final it in p.items.values) {
+      if (it.type == 'image' && it.file != null && !images.containsKey(it.file)) {
+        final f = store.media(it.file!);
+        if (await f.exists()) images[it.file!] = await decodeImage(await f.readAsBytes());
+      }
+    }
+  }
   final total = pages.fold<int>(0, (n, p) => n + sheetCount(p.h));
   final doc = pw.Document(title: nb.name, creator: 'Apuntes');
   var done = 0;
   for (final page in pages) {
     for (var k = 0; k < sheetCount(page.h); k++) {
-      final png = await _renderSheet(page, k);
+      final png = await renderSheetPng(page, k, images: images);
       doc.addPage(pw.Page(
         pageFormat: PdfPageFormat.a4,
         margin: pw.EdgeInsets.zero,
@@ -33,12 +45,17 @@ Future<Uint8List> buildNotebookPdf(Storage store, Notebook nb, {void Function(in
   return doc.save();
 }
 
-Future<Uint8List> _renderSheet(PageData page, int sheet) async {
+Future<ui.Image> decodeImage(Uint8List bytes) async {
+  final codec = await ui.instantiateImageCodec(bytes);
+  return (await codec.getNextFrame()).image;
+}
+
+Future<Uint8List> renderSheetPng(PageData page, int sheet, {Map<String, ui.Image>? images}) async {
   const k = _pxWidth / kW;
   final rec = ui.PictureRecorder();
   final c = ui.Canvas(rec);
   c.scale(k);
-  paintSheet(c, page, sheet, k);
+  paintSheet(c, page, sheet, k, images: images);
   final img = await rec.endRecording().toImage(_pxWidth.round(), (kSheetH * k).round());
   final data = await img.toByteData(format: ui.ImageByteFormat.png);
   img.dispose();

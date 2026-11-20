@@ -10,14 +10,39 @@ import 'model.dart';
 ///   <dir>/pages/<id>.json    contenido de cada página
 /// Mismo formato que el servidor web, para poder sincronizar más adelante.
 class Storage {
+  /// [root]: carpeta propia (los tests usan una temporal para no tocar tus cuadernos)
+  Storage({this.root});
+  final Directory? root;
   late final Directory dir;
 
   Future<void> init() async {
+    if (root != null) {
+      dir = root!;
+      await Directory('${dir.path}/pages').create(recursive: true);
+      await Directory('${dir.path}/media').create(recursive: true);
+      return;
+    }
     Directory? base;
     if (Platform.isAndroid) base = await getExternalStorageDirectory();
     base ??= await getApplicationDocumentsDirectory();
     dir = Directory('${base.path}/apuntes');
     await Directory('${dir.path}/pages').create(recursive: true);
+    await Directory('${dir.path}/media').create(recursive: true);
+  }
+
+  /// archivos de imágenes y audios
+  File media(String name) => File('${dir.path}/media/$name');
+
+  Future<String> addMedia(List<int> bytes, String ext) async {
+    final name = '${newId('m')}.$ext';
+    await media(name).writeAsBytes(bytes, flush: true);
+    return name;
+  }
+
+  Future<String> addMediaFile(File src, String ext) async {
+    final name = '${newId('m')}.$ext';
+    await src.copy(media(name).path);
+    return name;
   }
 
   File get _index => File('${dir.path}/index.json');

@@ -67,7 +67,8 @@ class ToolState {
   // portapapeles de la selección (sirve entre páginas)
   List<Stroke> clipStrokes = [];
   List<TextBlock> clipTexts = [];
-  bool get hasClip => clipStrokes.isNotEmpty || clipTexts.isNotEmpty;
+  List<Item> clipItems = [];
+  bool get hasClip => clipStrokes.isNotEmpty || clipTexts.isNotEmpty || clipItems.isNotEmpty;
 
   PenPreset get current => tool == Tool.hl ? hl : pen;
   List<String> get recent => tool == Tool.hl ? hlRecent : penRecent;
