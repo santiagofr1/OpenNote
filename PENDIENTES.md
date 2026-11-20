@@ -41,6 +41,12 @@ Para hacer después de pasar la reorganización del código (rama `refactor/arqu
     Permiso REQUEST_INSTALL_PACKAGES; opción en ajustes para desactivarlo. Android no permite instalación
     100 % silenciosa fuera de Play Store.
 
+13. **Carpetas en la biblioteca**: crear carpetas y agrupar cuadernos adentro; meter, sacar y mover cuadernos
+    entre carpetas (arrastrando o con mantener apretado → "Mover a…"); renombrar, borrar (pregunta qué hacer con
+    los cuadernos de adentro) y ver el contenido de cada carpeta en el inicio.
+14. **Buscar en el inicio** por nombre de cuaderno (y de carpeta).
+15. **LaTeX**: lo hace el usuario; no tocar.
+
 ## Hecho
 
 - **13. Carpetas en la biblioteca** (rama `feat/carpetas`): carpetas anidadas (`Folder` en `NotesIndex.folders`, `Notebook.folder`),
