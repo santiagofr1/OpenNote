@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
+
 import '../domain/domain.dart';
 
 // Formato binario de una hoja (`.sheet`). Dart puro: se puede correr en un isolate.
@@ -172,4 +174,38 @@ SheetContent decodeSheet(Uint8List bytes) {
     // zlib roto, JSON roto, tipos que no son: todo es "archivo roto"
     throw SheetFormatException('$e');
   }
+}
+
+// ---------------- huella del contenido ----------------
+Object? _round6(Object? v) => switch (v) {
+      double d => (d * 1e6).round() / 1e6,
+      Map m => {for (final e in m.entries) e.key: _round6(e.value)},
+      List l => [for (final e in l) _round6(e)],
+      _ => v,
+    };
+
+/// Huella del CONTENIDO de una hoja (todo lo que se guarda en su archivo: elementos, orden de dibujo, puntos en
+/// décimas, presión en 1/255), insensible al ruido de 1e-13 que dejan las sumas y restas de `kSheetStep` al cargar y
+/// partir las hojas. Dos contenidos con la misma huella se guardan igual. La carga perezosa la usa para comprobar que
+/// lo que hay en memoria es lo que hay en disco antes de soltar una hoja.
+String sheetDigest(SheetContent c) {
+  final b = StringBuffer();
+  for (final e in sortByZ([...c.items, ...c.strokes, ...c.texts])) {
+    switch (e) {
+      case Stroke s:
+        b.write('S|${s.id}|${s.k}|${s.c}|${s.w}|${s.o < 1 ? round2(s.o) : 1}|${s.n}|');
+        for (var i = 0; i < s.pts.length; i++) {
+          b
+            ..write(i % 3 == 2 ? (s.pts[i] * 255).round().clamp(0, 255) : (s.pts[i] * 10).round())
+            ..write(',');
+        }
+      case TextBlock t:
+        b.write('T|${jsonEncode(_round6(t.toJson()..remove('z')))}');
+      case Item i:
+        b.write('I|${jsonEncode(_round6(i.toJson()..remove('z')))}');
+      default:
+    }
+    b.write('\n');
+  }
+  return md5.convert(utf8.encode(b.toString())).toString();
 }

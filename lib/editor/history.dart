@@ -20,6 +20,35 @@ class EditAction {
     this.zAfter = const {},
   });
 
+  /// Ids de las hojas que toca esta acción: donde están ahora y donde estaban (antes/después) sus elementos.
+  /// Mientras la acción esté en el historial esas hojas no se pueden descargar: deshacer/rehacer las necesita en memoria.
+  Set<String> sheetIds(NotebookDoc doc) {
+    final out = <String>{};
+    void byId(String id) {
+      final s = doc.sheetIdOfElementId(id);
+      if (s != null) out.add(s);
+    }
+
+    for (final s in [...removed, ...added]) {
+      out.addAll(doc.sheetIdsOfRect(s.bounds));
+      byId(s.id);
+    }
+    for (final m in [textBefore, textAfter]) {
+      m.forEach((id, t) {
+        if (t != null) out.add(doc.sheets[doc.sheetOfY(t.y)].id);
+        byId(id);
+      });
+    }
+    for (final m in [itemBefore, itemAfter]) {
+      m.forEach((id, it) {
+        if (it != null) out.add(doc.sheets[doc.sheetOfY(it.y)].id);
+        byId(id);
+      });
+    }
+    zBefore.keys.followedBy(zAfter.keys).forEach(byId);
+    return out;
+  }
+
   /// Vuelve la página a como estaba antes ([undo]) o después de la acción.
   /// Los textos pasan por [putText] para que sus campos de edición se enteren.
   void apply(NotebookDoc doc, {required bool undo, required void Function(String id, TextBlock? t) putText}) {
@@ -58,6 +87,15 @@ class History {
     if (_undo.length > limit) _undo.removeAt(0);
     _redo.clear();
   }
+
+  /// La acción que haría [undo] / [redo], sin hacerla.
+  EditAction? peek({required bool undo}) => (undo ? _undo : _redo).lastOrNull;
+
+  /// Ids de las hojas que tocan las acciones del historial (deshacer y rehacer).
+  Set<String> sheetIds(NotebookDoc doc) => {
+        for (final a in _undo) ...a.sheetIds(doc),
+        for (final a in _redo) ...a.sheetIds(doc),
+      };
 
   /// La acción a deshacer (queda para rehacer), o null si no hay.
   EditAction? undo() => _move(_undo, _redo);

@@ -82,6 +82,12 @@ class _TrackedMap<V extends Layered> extends MapBase<String, V> {
 /// marca solo la hoja de antes y la de después. Lo que se cambia EN EL LUGAR (x, y, tamaño, texto, z)
 /// hay que marcarlo a mano con [markDirtyElement] antes y después del cambio. El contenido de cada hoja
 /// no incluye sus datos (título, fondo...): eso va en notebook.json y se compara aparte al guardar.
+///
+/// Carga perezosa: [sheets] (los [SheetMeta]) siempre están todas, pero los elementos (trazos, textos, items)
+/// solo existen de las hojas CARGADAS ([loadedSheets]). Una hoja no cargada es lo que dice su archivo en disco:
+/// NUNCA se escribe desde acá (el guardado solo toca las cargadas) y se carga con [attachSheet] / se suelta con
+/// [detachSheet] (los usa la `Storage`, que sabe cuándo es seguro). Las operaciones de hojas (mover, borrar,
+/// insertar) funcionan igual con hojas sin cargar porque lo que se guarda en cada archivo son coordenadas locales.
 class NotebookDoc {
   final Notebook nb;
   final Map<String, Stroke> _rawStrokes;
@@ -95,12 +101,28 @@ class NotebookDoc {
   final _dirty = <String>{};
   bool _allDirty = false;
 
-  NotebookDoc(this.nb, {Map<String, Stroke>? strokes, Map<String, TextBlock>? texts, Map<String, Item>? items})
+  // ids de las hojas cuyos elementos están en memoria
+  final _loaded = <String>{};
+  // hojas NO cargadas donde cayó un elemento (se lo movió o pegó ahí): al cargarlas hay que guardarlas
+  final _misplaced = <String>{};
+  final _loadListeners = <void Function(String id, bool loaded)>[];
+
+  /// [lazy]: ninguna hoja empieza cargada (las carga la `Storage` con [attachSheet]).
+  NotebookDoc(this.nb,
+      {Map<String, Stroke>? strokes, Map<String, TextBlock>? texts, Map<String, Item>? items, bool lazy = false})
       : _rawStrokes = strokes ?? {},
         _rawTexts = texts ?? {},
         _rawItems = items ?? {} {
-    if (nb.sheets.isEmpty) nb.sheets.add(nb.newSheet()); // un cuaderno siempre tiene al menos una hoja
+    if (nb.sheets.isEmpty) {
+      final m = nb.newSheet(); // un cuaderno siempre tiene al menos una hoja (nueva: no hay nada que cargar)
+      nb.sheets.add(m);
+      _loaded.add(m.id);
+    }
+    if (!lazy) _loaded.addAll(nb.sheets.map((m) => m.id));
   }
+
+  /// Cuaderno con todas las hojas sin cargar.
+  factory NotebookDoc.lazy(Notebook nb) => NotebookDoc(nb, lazy: true);
 
   /// Un documento de una sola hoja suelta (miniaturas de la biblioteca).
   factory NotebookDoc.single(SheetMeta meta, SheetContent c) =>
@@ -112,6 +134,71 @@ class NotebookDoc {
 
   /// Alto de toda la tira.
   double get h => heightFor(sheets.length);
+
+  // ================= hojas cargadas =================
+  /// Ids de las hojas cuyos elementos están en memoria.
+  Set<String> get loadedSheets => Set.unmodifiable(_loaded);
+  bool isLoaded(String sheetId) => _loaded.contains(sheetId);
+  bool isLoadedAt(int k) => k >= 0 && k < sheets.length && _loaded.contains(sheets[k].id);
+  bool get allLoaded => sheets.every((m) => _loaded.contains(m.id));
+
+  /// Índice de la hoja [sheetId] (-1 si ya no está).
+  int indexOfSheet(String sheetId) => sheets.indexWhere((m) => m.id == sheetId);
+
+  /// Hojas sin cargar donde cayó algún elemento: hay que cargarlas cuanto antes (al cargar se marcan para guardar).
+  Set<String> get misplacedSheets => Set.unmodifiable(_misplaced);
+  bool get hasMisplaced => _misplaced.isNotEmpty;
+
+  /// Avisa cuando una hoja se carga (true) o se descarga (false). Lo usan el editor y el panel de hojas.
+  void addLoadListener(void Function(String id, bool loaded) f) => _loadListeners.add(f);
+  void removeLoadListener(void Function(String id, bool loaded) f) => _loadListeners.remove(f);
+
+  /// Ids de las hojas que toca el rectángulo [r].
+  Iterable<String> sheetIdsOfRect(Rect r) sync* {
+    for (var k = sheetOfY(r.top); k <= sheetOfY(r.bottom); k++) {
+      yield sheets[k].id;
+    }
+  }
+
+  /// Id de la hoja donde está ahora el elemento [elementId] (trazo, texto o item); null si no está en memoria.
+  String? sheetIdOfElementId(String elementId) {
+    final e = _rawStrokes[elementId] ?? _rawTexts[elementId] ?? _rawItems[elementId];
+    return e == null ? null : sheets[sheetOfElement(e)].id;
+  }
+
+  /// Pone en memoria el contenido [c] (coordenadas locales, sin copiar) de la hoja [id], que estaba sin cargar.
+  /// Si ya está cargada no hace NADA (nunca pisa lo que hay en memoria). No marca nada sucio: es lo que dice el disco,
+  /// salvo que haya elementos que cayeron en esta hoja antes de cargarla. Devuelve si la cargó.
+  bool attachSheet(String id, SheetContent c) {
+    final k = indexOfSheet(id);
+    if (k < 0 || _loaded.contains(id)) return false;
+    _place(c, k * kSheetStep);
+    _loaded.add(id);
+    if (_misplaced.remove(id)) _dirty.add(id);
+    _touch(id);
+    if (k + 1 < sheets.length) _touch(sheets[k + 1].id); // un trazo puede pasarse a la hoja de abajo
+    for (final f in List.of(_loadListeners)) {
+      f(id, true);
+    }
+    return true;
+  }
+
+  /// Saca de memoria los elementos de la hoja [id] (no los borra del disco). Se niega (false) si la hoja
+  /// no está cargada o tiene cambios sin guardar: soltar eso perdería datos.
+  bool detachSheet(String id) {
+    final k = indexOfSheet(id);
+    if (k < 0 || !_loaded.contains(id) || isSheetDirty(id)) return false;
+    _rawStrokes.removeWhere((_, s) => _sheetOfStroke(s) == k);
+    _rawTexts.removeWhere((_, t) => sheetOfY(t.y) == k);
+    _rawItems.removeWhere((_, it) => sheetOfY(it.y) == k);
+    _loaded.remove(id);
+    _touch(id);
+    if (k + 1 < sheets.length) _touch(sheets[k + 1].id);
+    for (final f in List.of(_loadListeners)) {
+      f(id, false);
+    }
+    return true;
+  }
 
   bool get isEmpty => strokes.isEmpty && texts.isEmpty && items.isEmpty;
 
@@ -153,8 +240,23 @@ class NotebookDoc {
     }
   }
 
+  // Un elemento de la hoja k cambió. Si la hoja no está cargada, el elemento cayó ahí sin que la hoja esté en memoria
+  // (hay que cargarla; ver [misplacedSheets]).
   void _mark(int k) {
     final id = sheets[k].id;
+    if (_loaded.contains(id)) {
+      _dirty.add(id);
+    } else {
+      _misplaced.add(id);
+    }
+    _touch(id);
+  }
+
+  // Cambió algo de la hoja k que no es un elemento (la hoja de arriba de una nueva): una hoja sin cargar no se toca,
+  // su archivo no cambia.
+  void _markSheet(int k) {
+    final id = sheets[k].id;
+    if (!_loaded.contains(id)) return;
     _dirty.add(id);
     _touch(id);
   }
@@ -183,8 +285,8 @@ class NotebookDoc {
     }
   }
 
-  /// Marca la hoja de índice [k].
-  void markDirtySheet(int k) => _mark(k);
+  /// Marca la hoja de índice [k] (si no está cargada no hay nada que guardar y no hace nada).
+  void markDirtySheet(int k) => _markSheet(k);
 
   /// Todo cambió (operaciones de hojas): se guarda todo.
   void markAllDirty() {
@@ -193,6 +295,9 @@ class NotebookDoc {
   }
 
   bool get hasDirty => _allDirty || _dirty.isNotEmpty;
+
+  /// La hoja [id] tiene cambios sin guardar (o está todo sucio).
+  bool isSheetDirty(String id) => _allDirty || _dirty.contains(id);
 
   /// Lo sucio hasta ahora, y lo deja limpio (lo usa el guardado; lo que se marque después queda para el próximo).
   ({Set<String> ids, bool all}) takeDirty() {
@@ -259,7 +364,9 @@ class NotebookDoc {
   /// Agrega una hoja al final con el estilo del cuaderno.
   void addSheet() {
     markDirtySheet(sheets.length - 1); // lo que estaba pasado del final de la última puede caer en la nueva
-    sheets.add(nb.newSheet());
+    final m = nb.newSheet();
+    sheets.add(m);
+    _loaded.add(m.id); // una hoja nueva está entera en memoria
   }
 
   /// Agrega hojas hasta que [y] quede a menos de una hoja del final (escribir o pegar abajo).
@@ -275,6 +382,7 @@ class NotebookDoc {
   /// La última hoja no tiene nada: se puede quitar.
   bool get lastSheetEmpty {
     final top = (sheets.length - 1) * kSheetStep;
+    if (!isLoadedAt(sheets.length - 1)) return false; // sin cargar no se sabe: no se quita
     return !strokes.values.any((s) => s.bounds.bottom > top) &&
         !texts.values.any((t) => t.y + lineAt(t.y) > top) &&
         !items.values.any((i) => i.y + i.h > top);
@@ -283,7 +391,9 @@ class NotebookDoc {
   /// Quita la última hoja si hay más de una y está vacía.
   bool removeLastSheetIfEmpty() {
     if (sheets.length < 2 || !lastSheetEmpty) return false;
-    sheets.removeLast();
+    final gone = sheets.removeLast().id;
+    _loaded.remove(gone);
+    _dirty.remove(gone);
     return true;
   }
 
@@ -317,12 +427,14 @@ class NotebookDoc {
     _shiftWhere((k) => k >= at, kSheetStep);
     final m = meta ?? nb.newSheet();
     sheets.insert(at, m);
+    _loaded.add(m.id); // una hoja nueva está entera en memoria
     if (content != null) _place(content, at * kSheetStep);
     return m;
   }
 
   /// Copia la hoja [i] justo después de ella (con ids nuevos). Devuelve la hoja nueva.
   SheetMeta duplicateSheet(int i) {
+    if (!isLoadedAt(i)) throw StateError('la hoja $i no está cargada: cargala antes de duplicarla');
     final src = sheets[i];
     final copy = _contentOf(i, fresh: true);
     return insertSheet(i + 1,
@@ -338,7 +450,10 @@ class NotebookDoc {
     texts.removeWhere((_, t) => sheetOfY(t.y) == i);
     items.removeWhere((_, it) => sheetOfY(it.y) == i);
     _shiftWhere((k) => k > i, -kSheetStep);
-    sheets.removeAt(i);
+    final gone = sheets.removeAt(i).id; // si no estaba cargada no hay nada en memoria; su archivo lo borra la Storage
+    _loaded.remove(gone);
+    _misplaced.remove(gone);
+    _dirty.remove(gone);
     return true;
   }
 
@@ -394,7 +509,9 @@ class NotebookDoc {
   /// Parte el documento en el contenido de cada hoja, en coordenadas locales (copias).
   /// Cada elemento va a la hoja que contiene el borde de arriba de su rectángulo.
   /// Cada copia conserva su [Layered.z]: dentro de cada hoja queda el orden de dibujo.
+  /// Solo para documentos con todo cargado (una hoja sin cargar saldría vacía).
   List<SheetContent> splitBySheet() {
+    assert(allLoaded, 'splitBySheet con hojas sin cargar');
     final out = List.generate(sheets.length, (_) => SheetContent());
     for (final s in strokes.values) {
       final k = _sheetOfStroke(s);
@@ -413,10 +530,11 @@ class NotebookDoc {
 
   /// Como [splitBySheet] pero solo de las hojas con id en [ids] (copias; clave: id de la hoja).
   /// No copia el resto del cuaderno. Las hojas pedidas sin nada devuelven un contenido vacío.
+  /// Las hojas SIN CARGAR no aparecen nunca (su contenido no está en memoria: no se puede guardar).
   Map<String, SheetContent> splitSheets(Set<String> ids) {
     final out = <int, SheetContent>{};
     for (var k = 0; k < sheets.length; k++) {
-      if (ids.contains(sheets[k].id)) out[k] = SheetContent();
+      if (ids.contains(sheets[k].id) && _loaded.contains(sheets[k].id)) out[k] = SheetContent();
     }
     for (final s in strokes.values) {
       final k = _sheetOfStroke(s);
