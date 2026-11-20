@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'editor.dart';
+import 'pen_panel.dart';
 import 'model.dart';
 import 'storage.dart';
 
@@ -62,6 +63,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
 
   Future<void> _load() async {
     await store.init();
+    tools.load(await store.loadPrefs());
     final idx = await store.loadIndex();
     setState(() => index = idx);
     final last = idx.find(idx.last) != null ? idx.last : _firstPageId();
@@ -76,6 +78,12 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   }
 
   // ---------- guardado ----------
+  Timer? prefsTimer;
+  void _prefsChanged() {
+    prefsTimer?.cancel();
+    prefsTimer = Timer(const Duration(milliseconds: 500), () => store.savePrefs(tools.toJson()));
+  }
+
   void _pageChanged() {
     saveTimer?.cancel();
     saveTimer = Timer(const Duration(milliseconds: 600), _flush);
@@ -228,6 +236,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                     title: cur?.page.title ?? '',
                     subtitle: cur?.nb.name ?? '',
                     onChanged: _pageChanged,
+                    onPrefsChanged: _prefsChanged,
                     onMenu: () => scaffold.currentState?.openDrawer(),
                   ),
       ),

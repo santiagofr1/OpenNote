@@ -65,6 +65,18 @@ class Storage {
     return _write(_page(p.id), p.toJson());
   }
 
+  File get _prefs => File('${dir.path}/prefs.json');
+
+  Future<Map?> loadPrefs() async {
+    try {
+      return jsonDecode(await _prefs.readAsString()) as Map;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> savePrefs(Map<String, dynamic> p) => _write(_prefs, p);
+
   Future<void> deletePage(String id) async {
     final f = _page(id);
     if (await f.exists()) await f.delete();

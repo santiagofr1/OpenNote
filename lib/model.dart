@@ -15,13 +15,16 @@ double _num(dynamic v, [double d = 0]) => v is num ? v.toDouble() : d;
 
 /// Trazo: puntos guardados planos como [x, y, presión, x, y, presión, ...]
 class Stroke {
-  final String id, k, c; // k: 'pen' | 'hl'
-  final double w;
+  // k = punta: pen | fountain | pencil | fine | calli | hl
+  final String id, k, c;
+  final double w, o; // grosor y opacidad (0..1)
   final List<double> pts;
   late final Color color = parseColor(c);
   Rect? _bounds;
 
-  Stroke(this.id, this.k, this.c, this.w, this.pts);
+  Stroke(this.id, this.k, this.c, this.w, this.pts, [this.o = 1]);
+
+  void invalidate() => _bounds = null;
 
   int get n => pts.length ~/ 3;
 
@@ -34,7 +37,8 @@ class Stroke {
       y0 = min(y0, pts[i + 1]);
       y1 = max(y1, pts[i + 1]);
     }
-    return _bounds = Rect.fromLTRB(x0 - w, y0 - w, x1 + w, y1 + w);
+    final r = w * 1.6;
+    return _bounds = Rect.fromLTRB(x0 - r, y0 - r, x1 + r, y1 + r);
   }
 
   factory Stroke.fromJson(Map j) => Stroke(
@@ -46,6 +50,7 @@ class Stroke {
           for (final p in (j['pts'] as List))
             ...[_num(p[0]), _num(p[1]), (p as List).length > 2 ? _num(p[2], .5) : .5]
         ],
+        _num(j['o'], 1),
       );
 
   Map<String, dynamic> toJson() => {
@@ -53,6 +58,7 @@ class Stroke {
         'k': k,
         'c': c,
         'w': w,
+        if (o < 1) 'o': (o * 100).round() / 100,
         'pts': [
           for (var i = 0; i < pts.length; i += 3)
             [_r1(pts[i]), _r1(pts[i + 1]), (pts[i + 2] * 100).round() / 100]
