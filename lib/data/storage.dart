@@ -279,7 +279,12 @@ class Storage {
     }
   }
 
-  Future<void> savePrefs(Map<String, dynamic> p) => _writeJson(_prefs, p);
+  /// Mezcla [p] con lo que ya hay: así las herramientas y las opciones de actualización
+  /// (que se guardan por separado) no se pisan entre sí.
+  Future<void> savePrefs(Map<String, dynamic> p) async {
+    final prev = await loadPrefs();
+    await _writeJson(_prefs, {...?prev?.cast<String, dynamic>(), ...p});
+  }
 }
 
 Future<R> _compute<R>(R Function() f) => Storage.useIsolates ? Isolate.run(f) : Future.sync(f);
