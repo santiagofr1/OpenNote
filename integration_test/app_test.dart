@@ -6,13 +6,12 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
-import 'package:apuntes/common.dart';
-import 'package:apuntes/editor.dart';
-import 'package:apuntes/inserts.dart';
-import 'package:apuntes/main.dart';
-import 'package:apuntes/model.dart';
-import 'package:apuntes/pdf_export.dart';
-import 'package:apuntes/storage.dart';
+import 'package:apuntes/app.dart';
+import 'package:apuntes/data/export.dart';
+import 'package:apuntes/data/media_import.dart';
+import 'package:apuntes/data/storage.dart';
+import 'package:apuntes/domain/domain.dart';
+import 'package:apuntes/editor/page_editor.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';

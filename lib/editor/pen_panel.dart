@@ -2,112 +2,12 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
-import 'model.dart';
-import 'painters.dart';
-
-const kAccent = Color(0xFF2F5BD3);
-const kPanel = Color(0xFFF6F5F1);
-const kDesk = Color(0xFFECEBE6);
-const kText = Color(0xFF22211E);
-const kMuted = Color(0xFF7A776E);
-
-enum Tool { pen, hl, text, select }
-
-const tips = [
-  ('pen', 'Bolígrafo'),
-  ('fountain', 'Pluma'),
-  ('pencil', 'Lápiz'),
-  ('fine', 'Fibra'),
-  ('calli', 'Caligrafía'),
-];
-const eraserSizes = [8.0, 16.0, 30.0];
-
-/// Paleta: grises + 10 familias de color en 4 tonos (oscuro → claro)
-const palette = [
-  '#000000', '#22211e', '#4b4a46', '#7a776e', '#a8a59c', '#d4d1c8', '#ffffff',
-  '#7f1d1d', '#b91c1c', '#ef4444', '#fca5a5',
-  '#7c2d12', '#c2410c', '#f97316', '#fdba74',
-  '#713f12', '#ca8a04', '#facc15', '#fde68a',
-  '#14532d', '#15803d', '#22c55e', '#86efac',
-  '#134e4a', '#0f766e', '#14b8a6', '#5eead4',
-  '#1e3a8a', '#1d4ed8', '#3b82f6', '#93c5fd',
-  '#312e81', '#4338ca', '#6366f1', '#a5b4fc',
-  '#581c87', '#7e22ce', '#a855f7', '#d8b4fe',
-  '#831843', '#be185d', '#ec4899', '#f9a8d4',
-  '#3f2a1d', '#7c5a3c', '#a47551', '#d6b896',
-];
-const hlPalette = ['#f7d22c', '#ffb347', '#5ee08a', '#5bc8ff', '#ff86c8', '#c79bff', '#ff6b6b', '#b8f35d'];
-
-class PenPreset {
-  String tip, color;
-  double width, opacity;
-  PenPreset(this.tip, this.color, this.width, this.opacity);
-  Map<String, dynamic> toJson() => {'tip': tip, 'color': color, 'width': width, 'opacity': opacity};
-  void load(Map? j) {
-    if (j == null) return;
-    tip = (j['tip'] ?? tip) as String;
-    color = (j['color'] ?? color) as String;
-    width = ((j['width'] ?? width) as num).toDouble();
-    opacity = ((j['opacity'] ?? opacity) as num).toDouble();
-  }
-}
-
-/// Herramientas elegidas (se guardan en prefs.json)
-class ToolState {
-  Tool tool = Tool.pen;
-  final pen = PenPreset('pen', '#22211e', 2.6, 1);
-  final hl = PenPreset('hl', '#f7d22c', 22, .4);
-  List<String> penRecent = ['#22211e', '#1d4ed8', '#b91c1c', '#15803d', '#c2410c', '#7e22ce'];
-  List<String> hlRecent = ['#f7d22c', '#5ee08a', '#ff86c8', '#5bc8ff'];
-  int eraserSize = 1;
-  String dock = 'top'; // top | left | right
-  double zoom = 1; // 1 = la hoja entra justa a lo ancho
-  bool zoomLocked = false;
-
-  // portapapeles de la selección (sirve entre páginas)
-  List<Stroke> clipStrokes = [];
-  List<TextBlock> clipTexts = [];
-  List<Item> clipItems = [];
-  bool get hasClip => clipStrokes.isNotEmpty || clipTexts.isNotEmpty || clipItems.isNotEmpty;
-
-  PenPreset get current => tool == Tool.hl ? hl : pen;
-  List<String> get recent => tool == Tool.hl ? hlRecent : penRecent;
-
-  void pickColor(String c) {
-    current.color = c;
-    final r = recent..remove(c);
-    r.insert(0, c);
-    if (r.length > 7) r.removeLast();
-  }
-
-  Map<String, dynamic> toJson() => {
-        'tool': tool.name,
-        'pen': pen.toJson(),
-        'hl': hl.toJson(),
-        'penRecent': penRecent,
-        'hlRecent': hlRecent,
-        'eraserSize': eraserSize,
-        'dock': dock,
-        'zoom': zoom,
-        'zoomLocked': zoomLocked,
-      };
-
-  void load(Map? j) {
-    if (j == null) return;
-    tool = Tool.values.firstWhere((t) => t.name == j['tool'], orElse: () => Tool.pen);
-    pen.load(j['pen'] as Map?);
-    hl.load(j['hl'] as Map?);
-    if (j['penRecent'] is List) penRecent = List<String>.from(j['penRecent'] as List);
-    if (j['hlRecent'] is List) hlRecent = List<String>.from(j['hlRecent'] as List);
-    eraserSize = ((j['eraserSize'] ?? 1) as int).clamp(0, 2);
-    if (const ['top', 'left', 'right'].contains(j['dock'])) dock = j['dock'] as String;
-    zoom = ((j['zoom'] ?? 1) as num).toDouble().clamp(.5, 4.0);
-    zoomLocked = (j['zoomLocked'] ?? false) as bool;
-  }
-}
+import '../domain/domain.dart';
+import '../rendering/stroke_painter.dart';
+import '../theme/colors.dart';
 
 /// Trazo de muestra (una ola con presión variable) para previsualizar una punta.
-Stroke sampleStroke(String tip, String color, double w, double o, Size size) {
+Stroke _sampleStroke(String tip, String color, double w, double o, Size size) {
   final pts = <double>[];
   const n = 60;
   for (var i = 0; i < n; i++) {
@@ -124,11 +24,13 @@ class _SamplePainter extends CustomPainter {
   final double w, o;
   _SamplePainter(this.tip, this.color, this.w, this.o);
   @override
-  void paint(Canvas c, Size size) => paintStroke(c, sampleStroke(tip, color, w, o, size));
+  void paint(Canvas c, Size size) => paintStroke(c, _sampleStroke(tip, color, w, o, size));
   @override
   bool shouldRepaint(_SamplePainter x) => x.tip != tip || x.color != color || x.w != w || x.o != o;
 }
 
+/// Opciones del lápiz o del resaltador (según la herramienta actual): punta, grosor, opacidad,
+/// color y goma. [align]: del lado de la barra. [onChange] se llama en cada cambio.
 Future<void> showPenPanel(BuildContext context, ToolState ts, VoidCallback onChange, [Alignment align = Alignment.topCenter]) {
   return showDialog(
     context: context,

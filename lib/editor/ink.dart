@@ -1,0 +1,54 @@
+import 'package:flutter/gestures.dart';
+
+import '../domain/domain.dart';
+
+// Entrada del lápiz: qué hace cada puntero y cómo se arman los puntos del trazo.
+
+bool isStylus(PointerEvent e) => e.kind == PointerDeviceKind.stylus || e.kind == PointerDeviceKind.invertedStylus;
+
+/// Botón del S Pen apretado, punta goma del lápiz, o clic derecho del mouse.
+bool wantsEraser(PointerEvent e) =>
+    e.kind == PointerDeviceKind.invertedStylus ||
+    (isStylus(e) && (e.buttons & (kPrimaryStylusButton | kSecondaryStylusButton)) != 0) ||
+    (e.kind == PointerDeviceKind.mouse && (e.buttons & kSecondaryMouseButton) != 0);
+
+enum PenAction { erase, draw, select }
+
+/// Qué hace un puntero que apoya en la hoja con la herramienta [tool].
+/// null: nada (el dedo solo scrollea y así la palma se ignora; en modo texto el lápiz toca los campos).
+PenAction? penActionFor(PointerDownEvent e, Tool tool) {
+  final mouse = e.kind == PointerDeviceKind.mouse;
+  if (!isStylus(e) && !mouse) return null;
+  if (mouse && e.buttons != kPrimaryMouseButton && e.buttons != kSecondaryMouseButton) return null;
+  if (wantsEraser(e)) return PenAction.erase;
+  return switch (tool) {
+    Tool.text => null,
+    Tool.select => PenAction.select,
+    Tool.pen || Tool.hl => PenAction.draw,
+  };
+}
+
+/// Presión de 0 a 1. El mouse (o un lápiz que no informa rango) dibuja con presión media.
+double pressureOf(PointerEvent e) {
+  if (!isStylus(e)) return .5;
+  final range = e.pressureMax - e.pressureMin;
+  return range > 0 ? ((e.pressure - e.pressureMin) / range).clamp(0.0, 1.0) : .5;
+}
+
+/// Agrega un punto al trazo en curso. Descarta los que casi no se movieron
+/// y suaviza la presión para que el grosor no salte.
+void appendInkPoint(Stroke s, Offset p, double pressure) {
+  final pts = s.pts;
+  var pr = pressure;
+  if (pts.isNotEmpty) {
+    final lx = pts[pts.length - 3], ly = pts[pts.length - 2];
+    if ((p.dx - lx).abs() + (p.dy - ly).abs() < .6) return;
+    pr = pts[pts.length - 1] * .65 + pr * .35;
+  }
+  pts.addAll([p.dx, p.dy, pr]);
+  s.invalidate();
+}
+
+/// Trazos que toca la goma de radio [r] en [pt].
+List<Stroke> strokesHit(PageData page, Offset pt, double r) =>
+    [for (final s in page.strokes.values) if (s.hitBy(pt, r)) s];
