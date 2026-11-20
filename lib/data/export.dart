@@ -21,7 +21,7 @@ Future<Uint8List> buildNotebookPdf(Storage store, NotebookDoc nb,
       if (only == null || only.contains(k)) k
   ];
   final images = await loadImages(store, nb);
-  final pdf = pw.Document(title: nb.nb.name, creator: 'Apuntes');
+  final pdf = pw.Document(title: nb.nb.name, creator: 'OpenNote');
   var done = 0;
   for (final k in sheets) {
     final png = await renderSheetPng(nb, k, images: images);

@@ -29,11 +29,25 @@ android {
         versionName = flutter.versionName
     }
 
+    buildFeatures {
+        resValues = true
+    }
+
     buildTypes {
+        debug {
+            // La app de debug/tests es otra app: sus datos y su desinstalación no tocan la real.
+            applicationIdSuffix = ".test"
+            resValue("string", "app_name", "OpenNote Test")
+        }
         release {
+            resValue("string", "app_name", "OpenNote")
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+        }
+        // profile se crea como copia de release, pero no hereda el resValue.
+        getByName("profile") {
+            resValue("string", "app_name", "OpenNote")
         }
     }
 }
