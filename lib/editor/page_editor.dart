@@ -90,6 +90,22 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   }
 
   @override
+  void didUpdateWidget(PageEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // otra página en el mismo editor: lo de la anterior (deshacer, selección, campos) no sirve acá
+    if (oldWidget.page != widget.page) {
+      texts.attach(page);
+      history.clear();
+      sel.clear();
+      pointer = null;
+      live = null;
+      erased = null;
+      eraserAt = null;
+      liveTick.value++;
+    }
+  }
+
+  @override
   void dispose() {
     final pending = _saveTimers.values.any((t) => t.isActive);
     for (final t in _saveTimers.values) {
