@@ -4,8 +4,14 @@ import '../domain/domain.dart';
 import '../rendering/text_layout.dart';
 
 /// Rectángulo que envuelve trazos, textos y elementos (null si no hay nada).
-Rect? contentBounds(Iterable<Stroke> strokes, Iterable<TextBlock> texts, Iterable<Item> items) =>
-    unionRects([...strokes.map((s) => s.bounds), ...texts.map(textRect), ...items.map((i) => i.rect)]);
+/// [lineOf]: alto del renglón de cada texto (el de su hoja); sin él, el de referencia.
+Rect? contentBounds(Iterable<Stroke> strokes, Iterable<TextBlock> texts, Iterable<Item> items,
+        {double Function(TextBlock)? lineOf}) =>
+    unionRects([
+      ...strokes.map((s) => s.bounds),
+      ...texts.map((t) => textRect(t, lineOf?.call(t) ?? kLine)),
+      ...items.map((i) => i.rect)
+    ]);
 
 Rect? clipboardBounds(SelectionClipboard c) => contentBounds(c.strokes, c.texts, c.items);
 
@@ -67,6 +73,7 @@ class Selection {
       strokesOf(p),
       [for (final t in textsOf(p)) t.copy(d: back(d?.textOrig[t.id], t.x, t.y))],
       [for (final it in itemsOf(p)) it.copy(d: back(d?.itemOrig[it.id], it.x, it.y))],
+      lineOf: (t) => p.lineAt(t.y),
     )?.inflate(6);
   }
 
@@ -91,7 +98,7 @@ class Selection {
       if (inside * 2 >= s.n) strokes.add(s.id);
     }
     for (final t in doc.texts.values) {
-      if (r.contains(textRect(t).center)) texts.add(t.id);
+      if (r.contains(textRect(t, doc.lineAt(t.y)).center)) texts.add(t.id);
     }
     for (final it in doc.items.values) {
       if (r.contains(it.rect.center)) items.add(it.id);

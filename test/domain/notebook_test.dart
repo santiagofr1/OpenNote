@@ -24,10 +24,13 @@ void main() {
       expect(r[2].bottom, heightFor(3));
     });
 
-    test('snapTextY cae sobre el renglón (+4)', () {
-      expect(snapTextY(4), 4);
-      expect(snapTextY(60), 44);
-      expect(snapTextY(66), 84);
+    test('snapTextY cae sobre el renglón (+10 % del renglón)', () {
+      // rayado de 8 mm: renglón de 38,1 unidades y texto 3,8 por debajo
+      final line = mmToUnits(8), inset = line * .1;
+      expect(snapTextY(0, 'lined', 8), closeTo(inset, 1e-9));
+      expect(snapTextY(line + inset + 5, 'lined', 8), closeTo(line + inset, 1e-9));
+      expect(snapTextY(line * 1.6, 'lined', 8), closeTo(2 * line + inset, 1e-9));
+      expect(snapTextY(line * 1.6, 'lined', 8, floor: true), closeTo(line + inset, 1e-9));
     });
   });
 
@@ -50,7 +53,7 @@ void main() {
   group('hojas y cuadernos', () {
     test('SheetMeta: título y marcador solo si están', () {
       final m = SheetMeta('h1', bg: 'grid', paper: '#fbf3e0', rev: 3, updated: 9);
-      expect(roundTrip(m.toJson()), {'id': 'h1', 'bg': 'grid', 'paper': '#fbf3e0', 'rev': 3, 'updated': 9});
+      expect(roundTrip(m.toJson()), {'id': 'h1', 'bg': 'grid', 'paper': '#fbf3e0', 'spacing': 5.0, 'rev': 3, 'updated': 9});
       final back = SheetMeta.fromJson(roundTrip((m..title = 'Ohm'..bookmark = true).toJson()));
       expect([back.title, back.bookmark, back.bg, back.rev], ['Ohm', true, 'grid', 3]);
     });
@@ -77,7 +80,7 @@ void main() {
       expect([nb.id, nb.name, nb.updated, nb.last, nb.favorite, nb.pin, nb.bg, nb.paper],
           ['n1', 'Física', 99, 3, true, hashPin('1234'), 'grid', '#fbf3e0']);
       expect(nb.sheets, isEmpty, reason: 'las hojas no van en el índice');
-      expect(j['notebooks'][1], {'id': 'n2', 'name': 'Química', 'updated': 0, 'bg': 'lined', 'paper': '#fffefb', 'last': 0},
+      expect(j['notebooks'][1], {'id': 'n2', 'name': 'Química', 'updated': 0, 'bg': 'lined', 'paper': '#fffefb', 'spacing': 8.0, 'last': 0},
           reason: 'favorite y pin solo si están');
     });
 
