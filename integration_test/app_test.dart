@@ -105,7 +105,7 @@ void main() {
 
     final c = sheetCenter(t);
     await stylusLine(t, c, c + const Offset(200, 40));
-    expect(editor(t).page.strokes.length, 1);
+    expect(editor(t).doc.strokes.length, 1);
 
     // volver: guarda y muestra la biblioteca
     await t.tap(find.byKey(const Key('back')));
@@ -114,7 +114,7 @@ void main() {
     final nb = await savedNotebook('Física');
     final s = Storage(root: root);
     await s.init();
-    expect((await s.loadPage(nb.pages.first.id)).strokes.length, 1, reason: 'el trazo quedó guardado en disco');
+    expect((await s.loadNotebook(nb)).strokes.length, 1, reason: 'el trazo quedó guardado en disco');
   });
 
   testWidgets('modo lectura: el lápiz no dibuja', (t) async {
@@ -124,17 +124,17 @@ void main() {
     await settle(t);
     final c = sheetCenter(t);
     await stylusLine(t, c, c + const Offset(150, 0));
-    expect(editor(t).page.strokes, isEmpty);
+    expect(editor(t).doc.strokes, isEmpty);
     await t.tap(find.byKey(const Key('reading')));
     await settle(t);
     await stylusLine(t, c, c + const Offset(150, 0));
-    expect(editor(t).page.strokes.length, 1);
+    expect(editor(t).doc.strokes.length, 1);
     // salir: que el guardado termine antes de que el test borre su carpeta
     await t.tap(find.byKey(const Key('back')));
     await settle(t, 1200);
   });
 
-  testWidgets('panel de páginas: contador, agregar página y marcador', (t) async {
+  testWidgets('panel de páginas: contador, agregar hoja y marcador', (t) async {
     await start(t);
     await createNotebook(t, 'Panel');
     await t.tap(find.byKey(const Key('pagesBtn')));
@@ -152,11 +152,94 @@ void main() {
     await t.tap(find.byKey(const Key('thumb-1')));
     await settle(t, 600);
     expect(t.widget<Text>(find.byKey(const Key('pageCounter'))).textSpan!.toPlainText(), '1 / 2');
+    expect(t.widget<Text>(find.byKey(const Key('sheetCounter'))).data, '1 / 2', reason: 'contador del título');
 
     // marcador
     await t.tap(find.descendant(of: find.byKey(const Key('thumb-2')), matching: find.byType(IconButton)));
     await settle(t, 600);
-    expect((await savedNotebook('Panel')).pages[1].bookmark, isTrue);
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+    expect((await savedNotebook('Panel')).sheets[1].bookmark, isTrue);
+  });
+
+  testWidgets('el contador del título sigue al scroll', (t) async {
+    await start(t);
+    await createNotebook(t, 'Scroll');
+    // tres hojas más: se agregan desde el panel (cada una después de la actual)
+    await t.tap(find.byKey(const Key('pagesBtn')));
+    await settle(t, 600);
+    for (var i = 0; i < 3; i++) {
+      await t.tap(find.byKey(const Key('addPage')));
+      await settle(t, 900);
+    }
+    expect(editor(t).doc.sheetCount, 4);
+    await t.tap(find.byKey(const Key('thumb-1')));
+    await settle(t, 800);
+    expect(t.widget<Text>(find.byKey(const Key('sheetCounter'))).data, '1 / 4');
+    // scrollear con el dedo hasta la hoja 3
+    final ed = editor(t);
+    ed.scroll.jumpTo(2 * kSheetStep * ed.scale);
+    await settle(t, 600);
+    expect(t.widget<Text>(find.byKey(const Key('sheetCounter'))).data, '3 / 4');
+    expect(t.widget<Text>(find.byKey(const Key('pageCounter'))).textSpan!.toPlainText(), '3 / 4');
+  });
+
+  testWidgets('agregar, mover y borrar hojas desde el panel', (t) async {
+    await start(t);
+    await createNotebook(t, 'Hojas');
+    // un trazo en la hoja 1 para reconocerla después
+    final c = sheetCenter(t);
+    await stylusLine(t, c, c + const Offset(200, 0));
+    final strokeId = editor(t).doc.strokes.keys.single;
+
+    await t.tap(find.byKey(const Key('pagesBtn')));
+    await settle(t, 600);
+    await t.tap(find.byKey(const Key('addPage')));
+    await settle(t, 900);
+    await t.tap(find.byKey(const Key('addPage')));
+    await settle(t, 900);
+    expect(editor(t).doc.sheetCount, 3);
+    expect(find.byKey(const Key('thumb-3')), findsOneWidget);
+    expect(t.widget<Text>(find.byKey(const Key('pageCounter'))).textSpan!.toPlainText(), '3 / 3');
+
+    // mover la hoja 1 (con el trazo) después de la 2: el trazo baja una hoja
+    Future<void> longPressThumb(int n, String item) async {
+      await t.longPress(find.byKey(Key('thumb-$n')));
+      await settle(t, 500);
+      await t.tap(find.text(item));
+      await settle(t, 900);
+    }
+
+    await longPressThumb(1, 'Mover después');
+    expect(editor(t).doc.strokes[strokeId]!.bounds.top, greaterThan(kSheetStep), reason: 'el trazo viajó con su hoja');
+    expect(editor(t).doc.sheetOfY(editor(t).doc.strokes[strokeId]!.bounds.top), 1);
+
+    // borrar la hoja 2 (la del trazo): pide confirmación y se va con su contenido
+    await longPressThumb(2, 'Borrar');
+    await t.tap(find.byKey(const Key('confirmDelete')));
+    await settle(t, 900);
+    expect(editor(t).doc.sheetCount, 2);
+    expect(editor(t).doc.strokes, isEmpty);
+    expect(find.byKey(const Key('thumb-3')), findsNothing);
+
+    // borrar también la última de las dos; con una sola hoja el menú ya no ofrece "Borrar"
+    await longPressThumb(2, 'Borrar');
+    await t.tap(find.byKey(const Key('confirmDelete')));
+    await settle(t, 900);
+    await t.longPress(find.byKey(const Key('thumb-1')));
+    await settle(t, 500);
+    expect(find.text('Borrar'), findsNothing, reason: 'con una sola hoja no hay "Borrar"');
+    await t.tapAt(const Offset(5, 5)); // cierra el menú
+    await settle(t, 400);
+    expect(editor(t).doc.sheetCount, 1);
+
+    // todo quedó guardado: una hoja en notebook.json y un solo .sheet
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+    final nb = await savedNotebook('Hojas');
+    expect(nb.sheets.length, 1);
+    final sheets = Directory('${root.path}/notebooks/${nb.id}/sheets').listSync().where((e) => e.path.endsWith('.sheet'));
+    expect(sheets.length, 1);
   });
 
   testWidgets('nota adhesiva y búsqueda', (t) async {
@@ -166,7 +249,7 @@ void main() {
     await settle(t);
     await t.tap(find.text('Nota adhesiva'));
     await settle(t, 600);
-    final items = editor(t).page.items.values;
+    final items = editor(t).doc.items.values;
     expect(items.length, 1);
     expect(items.first.type, 'sticky');
 
@@ -197,13 +280,13 @@ void main() {
     await settle(t);
     await t.tap(find.text('Imagen'));
     await settle(t, 1200);
-    final it = editor(t).page.items.values.single;
+    final it = editor(t).doc.items.values.single;
     expect(it.type, 'image');
     expect(it.h / it.w, closeTo(.75, .01));
     expect(await File('${root.path}/media/${it.file}').exists(), isTrue, reason: 'la imagen se copió a la carpeta del cuaderno');
   });
 
-  testWidgets('estilo del cuaderno: fondo y papel en todas las páginas', (t) async {
+  testWidgets('estilo del cuaderno: fondo y papel en todas las hojas', (t) async {
     await start(t);
     await createNotebook(t, 'Estilo');
     await t.tap(find.byKey(const Key('pagesBtn')));
@@ -221,12 +304,11 @@ void main() {
     await t.tap(find.byKey(const Key('back')));
     await settle(t, 1200);
     final nb = await savedNotebook('Estilo');
-    final s = Storage(root: root);
-    await s.init();
-    for (final ref in nb.pages) {
-      final p = await s.loadPage(ref.id);
-      expect(p.bg, 'grid');
-      expect(p.paper, '#fbf3e0');
+    expect(nb.sheets.length, 2);
+    expect([nb.bg, nb.paper], ['grid', '#fbf3e0'], reason: 'también el estilo de las hojas nuevas');
+    for (final sheet in nb.sheets) {
+      expect(sheet.bg, 'grid');
+      expect(sheet.paper, '#fbf3e0');
     }
   });
 
@@ -314,16 +396,14 @@ void main() {
     expect(find.text('Pegar acá'), findsNothing);
   });
 
-  testWidgets('PDF: una hoja A4 por cada hoja de cada página', (t) async {
+  testWidgets('PDF: una hoja A4 por cada hoja del cuaderno, cada una con su papel', (t) async {
     final s = Storage(root: root);
     await s.init();
-    final p1 = PageData(newId('p'), h: heightFor(2)); // 2 hojas
-    final p2 = PageData(newId('p')); // 1 hoja
-    p1.texts['t1'] = TextBlock('t1', 90, 44, 800, 'Hola PDF');
-    await s.savePage(p1);
-    await s.savePage(p2);
-    final nb = Notebook(newId('n'), 'PDF', [PageRef(p1.id, 'a'), PageRef(p2.id, 'b')]);
-    final bytes = await buildNotebookPdf(s, nb);
+    final nb = Notebook.create('PDF');
+    nb.sheets.addAll([nb.newSheet(), nb.newSheet()..bg = 'grid']); // 3 hojas
+    final doc = NotebookDoc(nb);
+    doc.texts['t1'] = TextBlock('t1', 90, 44, 800, 'Hola PDF');
+    final bytes = await buildNotebookPdf(s, doc);
     expect(String.fromCharCodes(bytes.take(4)), '%PDF');
     final pages = await Printing.raster(bytes, dpi: 20).toList();
     expect(pages.length, 3);
