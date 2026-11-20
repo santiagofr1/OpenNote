@@ -46,6 +46,12 @@ Para hacer después de pasar la reorganización del código (rama `refactor/arqu
     - Conflictos: el formato por hojas (una hoja = un archivo con rev/updated) ya ayuda; definir qué pasa si se
       edita la misma hoja en los dos lados (guardar las dos versiones, o fusionar trazos por id).
     Entregable: un documento comparando opciones (seguridad, comodidad, esfuerzo) y una recomendación.
+18. **Aviso de actualización más amable** (opinión del usuario: "está un poco violento, no se entiende bien la
+    versión y parece que te van a hackear"). Rediseñar el diálogo: tono tranquilo, título tipo "Hay una versión
+    nueva de OpenNote", mostrar claro "Tenés la 1.0.4 → nueva 1.0.6", resumen de novedades en lenguaje de usuario
+    (no la lista cruda de commits), aclarar que viene de GitHub del proyecto y que los cuadernos no se tocan,
+    explicar el permiso de "instalar apps desconocidas" antes de pedirlo, botones suaves ("Ahora no" / "Actualizar").
+    Ver también las notas de las Releases (hoy son asuntos de commits): escribirlas pensando en el usuario.
 15. **LaTeX**: lo hace el usuario; no tocar.
 
 ## Hecho
