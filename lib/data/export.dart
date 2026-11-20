@@ -22,7 +22,7 @@ Future<Uint8List> buildNotebookPdf(Storage store, Notebook nb,
   ];
   final images = await loadImages(store, pages);
   final total = pages.fold<int>(0, (n, p) => n + sheetCount(p.h));
-  final doc = pw.Document(title: nb.name, creator: 'Apuntes');
+  final doc = pw.Document(title: nb.name, creator: 'OpenNote');
   var done = 0;
   for (final page in pages) {
     for (var k = 0; k < sheetCount(page.h); k++) {
