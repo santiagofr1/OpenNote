@@ -94,6 +94,16 @@ Al guardar se parte por hoja (coordenadas locales), y al leer se rearma la tira.
   1 byte.
 - Una hoja llena de letra ronda 2 bytes por punto, unas 10 veces menos que el JSON anterior.
 
+**Orden de dibujo y selección.** Hay un solo orden para trazos, textos, imágenes, notas y audios. En
+`lib/domain/z_order.dart`, `Layered` define el campo `z` de cada elemento, `sortByZ` ordena, `zRuns` agrupa las
+tandas de trazos (dentro de cada tanda el resaltador va primero) y `computeReorder` calcula el cambio de Traer al
+frente / Subir uno / Bajar uno / Enviar al fondo. `NotebookDoc.drawOrder()` da el orden, `nextZ()` el `z` más alto
+para lo nuevo y `reorder()` aplica el cambio (deshacible). `sheet_codec` guarda `z` en cada elemento de la hoja como
+0..n-1 de abajo hacia arriba; si falta (archivos viejos) vale 0 y el desempate por tipo es imágenes/notas/audio,
+trazos, textos. La selección ventana/captura está en `Selection.selectIn`: `Selection.capture` es true cuando el
+arrastre va de derecha a izquierda; en ese caso toma todo lo que toca el recuadro, con `Stroke.touchesRect` y
+`segmentIntersectsRect` (`geometry.dart`) para cortar contra el recorrido real del trazo.
+
 ### Guardado
 
 - Guardar codifica las hojas en otro isolate y escribe solo las que cambiaron (compara un hash con el

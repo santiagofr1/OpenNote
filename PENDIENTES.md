@@ -1,7 +1,5 @@
 # Pendientes
 
-Para hacer después de pasar la reorganización del código (rama `refactor/arquitectura`).
-
 1. **Carga perezosa de hojas lejanas** (resto de "todo hojas", ver Hecho). Hoy se leen y se decodifican todas las
    hojas al abrir el cuaderno (en un isolate, sin trabar la pantalla) y el cuaderno vive entero en memoria.
    Por qué no se hizo: el editor, la selección, la tinta y el deshacer trabajan sobre un solo documento con
@@ -13,26 +11,11 @@ Para hacer después de pasar la reorganización del código (rama `refactor/arqu
    - Exportar/backup del cuaderno entero como un archivo `.opennote` (ZIP).
    - Mover hojas arrastrando en el panel (hoy: menú "Mover antes / después").
    - Las operaciones de hojas (agregar, duplicar, mover, borrar) no se pueden deshacer: vacían el historial.
-2. **Capas al seleccionar**: menú "Orden" con Traer al frente, Subir uno, Bajar uno, Enviar al fondo.
-   - Un solo orden para trazos, imágenes, notas y textos (hoy las imágenes quedan siempre debajo de la tinta).
-   - "Subir/bajar uno" salta al siguiente elemento que se superpone con la selección.
-   - El resaltador sigue por debajo de la tinta del mismo nivel.
 9. **Capturas en el README**: 2–3 capturas (o un GIF corto) de la app en uso: cuaderno con escritura, panel de hojas,
    biblioteca con carpetas. Sacarlas de la app de test con datos de ejemplo (nunca de los cuadernos reales) y
    guardarlas en `docs/img/`. Recién ahí agregar la sección "Capturas" al README.
    Aparte, para `docs/TECNICO.md` (no el README): investigar compatibilidad con toda la gama Galaxy Tab S y tablets
    USI (botón del S Pen, pantallas, 60/120 Hz, minSdk). Hasta ahora solo probado en Tab S6 Lite (SM-P620, Android 16).
-10. **Compilación automática en cada commit a main** (GitHub Actions): `flutter analyze` + tests de PC,
-    build del APK firmado y publicación como GitHub Release (`v1.0.<n>`, versionCode = número de build).
-    Clave de firma propia guardada como secreto del repo (+ copia del usuario). El cambio de firma exige
-    desinstalar una vez: hacerlo con backup y restauración.
-
-16. **Selección tipo AutoCAD** (herramienta seleccionar de la barra): hoy solo toma lo que queda entero dentro del
-    recuadro. Según la dirección del arrastre:
-    - de izquierda a derecha (recuadro de "ventana", línea continua): solo lo que queda completo adentro (como hoy);
-    - de derecha a izquierda (recuadro de "captura", línea punteada y otro color): todo lo que el recuadro toca,
-      aunque quede una parte afuera (para trazos, intersección real con el recorrido, no solo con su rectángulo).
-    Que se vea cuál de los dos modos está activo mientras se arrastra.
 17. **App de PC + sincronización (A INVESTIGAR, no implementar todavía)**:
     - PC: Flutter desktop compila el mismo código para Linux, Windows y macOS. Investigar qué cambia: entrada
       (mouse/teclado y tabletas Wacom en PC), atajos de teclado, rutas de datos, empaquetado (AppImage/Flatpak/.deb,
@@ -55,6 +38,12 @@ Para hacer después de pasar la reorganización del código (rama `refactor/arqu
 15. **LaTeX**: lo hace el usuario; no tocar.
 
 ## Hecho
+
+- **2. Capas (rama feat/seleccion)**: un solo orden de dibujo para trazos, textos, imágenes, notas y audios (campo `z` por elemento, guardado en cada hoja; archivos viejos cargan como se veían). Menú "Orden" en la barrita de selección: Traer al frente, Subir uno, Bajar uno, Enviar al fondo; subir/bajar salta al próximo elemento que se superpone con la selección; se puede deshacer. El resaltador se dibuja debajo de la tinta de la misma tanda de trazos. Lo nuevo y lo duplicado queda arriba.
+
+- **16. Selección tipo AutoCAD (rama feat/seleccion)**: de izquierda a derecha, "ventana" (línea continua azul): solo lo que queda adentro; de derecha a izquierda, "captura" (punteada verde): todo lo que el recuadro toca, con intersección real con el recorrido del trazo.
+
+- **10. Releases automáticas**: workflow de GitHub Actions en cada push a main (analyze, tests, APK firmado, GitHub Release `v1.0.<n>`). Los cambios solo de docs no disparan release. Ver docs/RELEASES.md.
 
 - **8. Ícono nuevo**: opción A (hoja con esquina doblada y trazo de tinta), adaptativo con versión monocromática; fuentes en `docs/icon/`, se regenera con `tool/apply_icon.sh`.
 
