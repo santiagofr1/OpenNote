@@ -8,6 +8,25 @@ archivos, las medidas de la hoja y cómo se corren los tests. Para compilar y co
 
 OpenNote está hecho con Flutter. Apunta a Android (tablet) y a Linux (PC).
 
+### Tablets y lápices
+
+- **Probado:** solo en Galaxy Tab S6 Lite (SM-P620) con Android 16. Ahí andan la presión y el botón del S Pen
+  para borrar.
+- **Cómo se lee el lápiz:** todo en Dart (`lib/editor/ink.dart`), sin código nativo. Es lápiz si
+  `PointerDeviceKind.stylus` o `invertedStylus`. Borra si es `invertedStylus` (la punta goma de algunos lápices),
+  si tiene `kPrimaryStylusButton` o `kSecondaryStylusButton` apretado, o con el botón derecho del mouse. Son
+  constantes genéricas de Android (`TOOL_TYPE_STYLUS`/`ERASER`, `BUTTON_STYLUS_PRIMARY`/`SECONDARY`, API 23),
+  así que en principio sirven para cualquier lápiz activo.
+- **Galaxy Tab S, sin probar:** S8, S9 y S10 (no las FE) traen S Pen con Bluetooth. S9 FE, S10 FE y S11 lo
+  traen sin Bluetooth, y la S11 tiene pantalla de 120 Hz. El botón lateral debería llegar igual que en la S6 Lite,
+  pero no está confirmado modelo por modelo. Un issue viejo de Flutter (#87013, 2021) reportó que en una S6 Lite
+  2020 el botón no llegaba. En la SM-P620 sí llega.
+- **USI 2.0 y otras marcas** (Lenovo, Xiaomi, OnePlus): sin datos todavía.
+- **Para probar una tablet nueva:** escribir con presión, borrar con el botón, probar la punta goma si la tiene, y
+  hacer trazos rápidos para ver si se cortan (flutter/flutter#196867 menciona muestras de movimiento perdidas).
+- **minSdk:** hoy se hereda de Flutter (`flutter.minSdkVersion` en `android/app/build.gradle.kts`). Conviene
+  fijarlo en 26 (Android 8, cerca del 99 % de los equipos en uso).
+
 ## Estructura del código
 
 El código está dividido por capas. Cada capa usa solo las de arriba:
@@ -160,3 +179,8 @@ Requisitos:
   (`com.apuntes.apuntes.test`, "OpenNote Test"), que es otra app con datos propios. Antes y después
   verifica que OpenNote y sus cuadernos sigan intactos.
 - `BACKUP=1 ./run_tests.sh` además baja un backup a `~/apuntes_app_backup/`.
+- `tool/screenshots.sh`: regenera las capturas del README (`docs/img/*.png`) en la tablet. Corre
+  `integration_test/screenshots_test.dart` con el build debug (`com.apuntes.apuntes.test`) y datos de ejemplo
+  (`integration_test/screenshots_data.dart`) en una carpeta temporal, con las mismas verificaciones que
+  `run_tests.sh`. Como `flutter drive` no tiene `--no-uninstall`, compila antes y le pasa el APK con
+  `--use-application-binary`.
