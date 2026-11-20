@@ -22,16 +22,14 @@ Para hacer después de pasar la reorganización del código (rama `refactor/arqu
    negrita, cursiva, subrayado, tachado, color de texto, resaltado, tamaños (normal / título / subtítulo),
    listas con viñetas, numeradas y de tareas, sangría con Tab / Shift+Tab, alineación.
    Los textos existentes se convierten solos; búsqueda, PDF y miniaturas respetan el formato.
-8. **Ícono nuevo** (hoy es el de Flutter por defecto): adaptativo de Android (fondo + figura, con versión
+8. **Ícono nuevo** (en la tablet sigue el de Flutter por defecto; el usuario lo volvió a pedir): adaptativo de Android (fondo + figura, con versión
    monocromática para los íconos temáticos de Android 13+). Idea: una hoja con una esquina doblada y un trazo
    de tinta que la cruza, en los colores del tema. Mostrar 2–3 opciones antes de elegir.
-9. **README del proyecto** piola: qué es, capturas/GIF, funciones, cómo instalar (APK de Releases),
-   cómo compilar, arquitectura (capas), cómo contribuir, plantillas de issues (bug / idea), licencia.
-   Decidido: licencia **MIT** (agregar LICENSE); el usuario hace público el repo. Play Store queda para más adelante.
-   Sección **Compatibilidad** en el README: investigar si anda igual en toda la gama Galaxy Tab S (S6 Lite, S7–S11, FE,
-   Ultra) o hay que cambiar código. A revisar: cómo reporta cada modelo el botón del S Pen, pantallas/resoluciones
-   (Ultra 14,6"), 60 vs 120 Hz, versiones de Android (minSdk), escritura a mano en campos de texto de Android 14+,
-   y otras tablets con lápiz USI (Lenovo, etc.). Hasta ahora solo probado en Tab S6 Lite (SM-P620, Android 16).
+9. **Capturas en el README**: 2–3 capturas (o un GIF corto) de la app en uso: cuaderno con escritura, panel de hojas,
+   biblioteca con carpetas. Sacarlas de la app de test con datos de ejemplo (nunca de los cuadernos reales) y
+   guardarlas en `docs/img/`. Recién ahí agregar la sección "Capturas" al README.
+   Aparte, para `docs/TECNICO.md` (no el README): investigar compatibilidad con toda la gama Galaxy Tab S y tablets
+   USI (botón del S Pen, pantallas, 60/120 Hz, minSdk). Hasta ahora solo probado en Tab S6 Lite (SM-P620, Android 16).
 10. **Compilación automática en cada commit a main** (GitHub Actions): `flutter analyze` + tests de PC,
     build del APK firmado y publicación como GitHub Release (`v1.0.<n>`, versionCode = número de build).
     Clave de firma propia guardada como secreto del repo (+ copia del usuario). El cambio de firma exige
@@ -41,10 +39,12 @@ Para hacer después de pasar la reorganización del código (rama `refactor/arqu
     Permiso REQUEST_INSTALL_PACKAGES; opción en ajustes para desactivarlo. Android no permite instalación
     100 % silenciosa fuera de Play Store.
 
-13. **Carpetas en la biblioteca**: crear carpetas y agrupar cuadernos adentro; meter, sacar y mover cuadernos
-    entre carpetas (arrastrando o con mantener apretado → "Mover a…"); renombrar, borrar (pregunta qué hacer con
-    los cuadernos de adentro) y ver el contenido de cada carpeta en el inicio.
-14. **Buscar en el inicio** por nombre de cuaderno (y de carpeta).
+16. **Selección tipo AutoCAD** (herramienta seleccionar de la barra): hoy solo toma lo que queda entero dentro del
+    recuadro. Según la dirección del arrastre:
+    - de izquierda a derecha (recuadro de "ventana", línea continua): solo lo que queda completo adentro (como hoy);
+    - de derecha a izquierda (recuadro de "captura", línea punteada y otro color): todo lo que el recuadro toca,
+      aunque quede una parte afuera (para trazos, intersección real con el recorrido, no solo con su rectángulo).
+    Que se vea cuál de los dos modos está activo mientras se arrastra.
 15. **LaTeX**: lo hace el usuario; no tocar.
 
 ## Hecho
