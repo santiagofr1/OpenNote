@@ -17,11 +17,6 @@ Para hacer después de pasar la reorganización del código (rama `refactor/arqu
    - Un solo orden para trazos, imágenes, notas y textos (hoy las imágenes quedan siempre debajo de la tinta).
    - "Subir/bajar uno" salta al siguiente elemento que se superpone con la selección.
    - El resaltador sigue por debajo de la tinta del mismo nivel.
-3. **El tecladito abre el teclado al tocarlo**: crea un renglón nuevo debajo de lo último escrito en la parte visible; si ya estás en modo texto, vuelve a abrirlo.
-5. **Barra de formato tipo Word** al escribir con teclado (con flutter_quill):
-   negrita, cursiva, subrayado, tachado, color de texto, resaltado, tamaños (normal / título / subtítulo),
-   listas con viñetas, numeradas y de tareas, sangría con Tab / Shift+Tab, alineación.
-   Los textos existentes se convierten solos; búsqueda, PDF y miniaturas respetan el formato.
 8. **Ícono nuevo** (en la tablet sigue el de Flutter por defecto; el usuario lo volvió a pedir): adaptativo de Android (fondo + figura, con versión
    monocromática para los íconos temáticos de Android 13+). Idea: una hoja con una esquina doblada y un trazo
    de tinta que la cruza, en los colores del tema. Mostrar 2–3 opciones antes de elegir.
@@ -62,6 +57,11 @@ Para hacer después de pasar la reorganización del código (rama `refactor/arqu
 
 ## Hecho
 
+- **3. El tecladito abre el teclado al tocarlo** y **5. Formato tipo Word** (rama `feat/texto`): el tecladito crea un renglón
+  nuevo debajo de lo último visible (o arriba si está vacío) y abre el teclado; en modo texto lo reabre en el último bloque;
+  los bloques vacíos se borran. Barra de formato (negrita, cursiva, subrayado, tachado, colores, título/subtítulo, listas,
+  sangría, alineación), Ctrl+B/I/U y Tab / Shift+Tab. Sin flutter_quill: modelo propio (`rich_text.dart`) que dibujan igual
+  editor, miniaturas, PNG y PDF. Los textos viejos se convierten solos. Falta: selección que cruce párrafos con el dedo.
 - **13. Carpetas en la biblioteca** (rama `feat/carpetas`): carpetas anidadas (`Folder` en `NotesIndex.folders`, `Notebook.folder`),
   tarjetas de carpeta con cuántos cuadernos tienen, migas de pan y flecha para subir, atrás del sistema sube de a un nivel.
   "+" ofrece Cuaderno nuevo (en la carpeta actual) y Carpeta nueva. Mantener apretado: cuaderno o carpeta → "Mover a…"

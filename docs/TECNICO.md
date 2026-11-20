@@ -36,6 +36,31 @@ y en el PDF (página A4 llena), así que al imprimir al 100 % las medidas son re
 
 El texto con teclado se apoya en el renglón de su propia hoja.
 
+### Texto con formato
+- Modelo puro en `lib/domain/rich_text.dart`: `TextBlock.body` es un `RichBody` (lista de `Para`: estilo
+  normal/título/subtítulo, lista ninguna/viñeta/numerada/tareas, sangría 0..4, alineación; cada uno con `Run`s
+  de negrita, cursiva, subrayado, tachado, color y resaltado). Inmutable: cada operación (`toggle`, `setList`,
+  `enter`, `backspaceAtStart`, `replaceRange`, `indent`, `numbering`) devuelve un cuerpo nuevo. Los rangos son
+  posiciones globales (un salto de línea entre párrafos).
+- JSON: sin formato se guarda igual que antes (`text`); con formato agrega `rich` (y deja `text` de respaldo). Un
+  texto viejo (solo `text`) se carga como párrafos normales partiendo por `\n`: no hay migración. Búsqueda y
+  portapapeles usan `TextBlock.text` (texto plano).
+- Dibujo: `lib/rendering/text_layout.dart` (`paraLayout`, `layoutBlock`) lo comparten el editor y las miniaturas /
+  PNG / PDF. Los títulos usan letra más grande pero el interlineado queda en un renglón (caen sobre el rayado);
+  la casilla de tareas se dibuja con trazos.
+- Edición (`lib/editor/rich_editing.dart`): un `TextField` por párrafo, no uno solo. Se eligió así porque la
+  alineación, la sangría y el marcador son por párrafo y un campo único solo tiene una alineación; además
+  Enter / retroceso al principio parten y unen campos sin tocar el caret nativo. A cambio no hay selección que
+  cruce párrafos con el dedo (el formato de párrafo aplica al párrafo con foco; las operaciones del modelo ya
+  aceptan rangos entre párrafos). Cada campo lleva un carácter guía invisible (U+200B) al principio: si el teclado
+  del celular lo borra, es un retroceso al principio. `RichController.buildTextSpan` pinta los tramos y el valor
+  que escribe el usuario se pasa al modelo (`userEdit`) heredando el formato del carácter anterior o el pendiente
+  (negrita sin selección).
+- Barra de formato (`format_bar.dart`): botones que no toman el foco (`canRequestFocus: false` +
+  `TextFieldTapRegion`), así el teclado no se cierra.
+- El tecladito de la barra crea un bloque debajo de lo último visible de la hoja que se ve; en modo texto reabre el
+  teclado en el último bloque editado. Los bloques vacíos se borran al perder el foco.
+
 ## Almacenamiento (formato 3)
 
 ### Estructura de carpetas
