@@ -360,21 +360,28 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     }
   }
 
-  /// Estilo del cuaderno: fondo y papel de todas las hojas y de las que se agreguen.
+  /// Estilo de hoja: fondo, papel y espaciado de la hoja que se ve o de todo el cuaderno
+  /// (en ese caso también de las hojas que se agreguen).
   Future<void> _styleDialog() async {
     final d = doc;
     if (d == null) return;
-    final r = await showStyleDialog(context, d);
-    if (r != null && mounted) {
+    final k = curSheet;
+    final r = await showStyleDialog(context, d, sheet: k);
+    if (r == null || !mounted) return;
+    void apply(SheetMeta m) {
+      m.bg = r.bg;
+      m.paper = r.paper;
+      m.spacing = r.spacing;
+    }
+    if (r.all) {
       nb.bg = r.bg;
       nb.paper = r.paper;
+      nb.spacing = r.spacing;
       _indexDirty = true;
-      for (final m in d.sheets) {
-        m.bg = r.bg;
-        m.paper = r.paper;
-      }
+      d.sheets.forEach(apply);
+    } else {
+      apply(d.sheets[k]);
     }
-    // aunque se cancele: las hojas agregadas o quitadas ya quedaron en el cuaderno
     _structure.value++;
     _docChanged();
     editorKey.currentState?.refresh();

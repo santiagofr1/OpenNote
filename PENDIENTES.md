@@ -18,18 +18,10 @@ Para hacer después de pasar la reorganización del código (rama `refactor/arqu
    - "Subir/bajar uno" salta al siguiente elemento que se superpone con la selección.
    - El resaltador sigue por debajo de la tinta del mismo nivel.
 3. **El tecladito abre el teclado al tocarlo**: crea un renglón nuevo debajo de lo último escrito en la parte visible; si ya estás en modo texto, vuelve a abrirlo.
-4. **Fondo en milímetros reales de A4**: rayado 8 mm, cuadriculado 5 mm, puntos 5 mm, margen rojo 25 mm y margen superior.
-   - En el estilo de hoja: interlineado 7 / 8 / 10 mm y cuadrícula 5 / 7 mm.
-   - El texto con teclado se acomoda al renglón.
-   - Al imprimir, elegir "tamaño real / 100 %".
 5. **Barra de formato tipo Word** al escribir con teclado (con flutter_quill):
    negrita, cursiva, subrayado, tachado, color de texto, resaltado, tamaños (normal / título / subtítulo),
    listas con viñetas, numeradas y de tareas, sangría con Tab / Shift+Tab, alineación.
    Los textos existentes se convierten solos; búsqueda, PDF y miniaturas respetan el formato.
-6. **Estilo de hoja**: hoy el menú ⋮ tiene "Estilo del cuaderno" (fondo y papel de todas las hojas y de las nuevas);
-   falta "Estilo de hoja" con fondo, color de papel, interlineado / cuadrícula y un selector
-   "Aplicar a: esta hoja / todo el cuaderno" (por defecto, todo el cuaderno). Cada hoja ya guarda su fondo y papel.
-   El selector de fondo de la barra de herramientas ya cambia solo la hoja que se está viendo.
 8. **Ícono nuevo** (hoy es el de Flutter por defecto): adaptativo de Android (fondo + figura, con versión
    monocromática para los íconos temáticos de Android 13+). Idea: una hoja con una esquina doblada y un trazo
    de tinta que la cruza, en los colores del tema. Mostrar 2–3 opciones antes de elegir.
@@ -53,6 +45,16 @@ Para hacer después de pasar la reorganización del código (rama `refactor/arqu
 
 - **7. App renombrada a OpenNote** (nombre en la tablet y título; el id `com.apuntes.apuntes` no cambió).
 - **12. Tests sin tocar la app real**: el build debug se instala como `com.apuntes.apuntes.test` ("OpenNote Test"); `run_tests.sh` verifica que la app real y sus datos sigan intactos (`BACKUP=1` además hace backup).
+- **4. Fondo en milímetros reales de A4** (rama `feat/estilo-hoja`): 1 mm = 1000/210 unidades. Rayado 7 / 8 / 10 mm
+  (por defecto 8) con margen rojo a 25 mm y primer renglón cerca de 25 mm; cuadriculado y puntos 5 / 7 mm
+  (por defecto 5), centrados en la hoja. El espaciado se guarda por hoja (`spacing`, en mm; los archivos viejos
+  cargan con el por defecto). Miniaturas, PNG y PDF usan el mismo dibujo; el PDF es A4 con la imagen llenando la
+  página, así que al imprimir al 100 % salen milímetros reales. El texto con teclado se acomoda al renglón de SU hoja
+  y la letra escala con el interlineado (8 mm ≈ como antes); los textos existentes no se mueven hasta que se editan.
+- **6. Estilo de hoja**: el menú ⋮ tiene "Estilo de hoja" con fondo, color de papel, interlineado / cuadrícula,
+  vista previa y "Aplicar a: Esta hoja / Todo el cuaderno" (por defecto todo; "todo" también cambia el estilo de las
+  hojas nuevas). "Esta hoja" es la que se ve. Se sacaron de ahí "Agregar / Quitar la última hoja" (lo cubren el panel y
+  el pull-to-add). El selector de fondo de la barra sigue cambiando solo la hoja visible.
 - **Todo hojas, como Samsung Notes** (rama `feat/hojas`): el cuaderno es una tira continua de hojas.
   Contador "2 / 5" en el título, panel con una miniatura por hoja (agregar / duplicar / mover / borrar / marcar /
   renombrar), título y marcador por hoja en el panel y la búsqueda, PDF con una A4 por hoja con su fondo y papel,

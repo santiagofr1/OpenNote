@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 
+import 'paper_layout.dart';
 import 'values.dart';
 
 /// Una hoja del cuaderno: lo que se guarda en `notebook.json` (el contenido está en su `.sheet`).
@@ -11,6 +12,7 @@ class SheetMeta {
   bool bookmark;
   String bg; // lined | grid | dots | blank
   String paper; // color del papel
+  double spacing; // interlineado / paso de la cuadrícula en mm (ver paper_layout.dart)
   int rev; // sube cada vez que cambia el contenido guardado
   int updated; // ms epoch, para sincronizar algún día
   SheetMeta(this.id,
@@ -18,14 +20,23 @@ class SheetMeta {
       this.bookmark = false,
       this.bg = 'lined',
       this.paper = '#fffefb',
+      double? spacing,
       this.rev = 0,
-      this.updated = 0});
+      this.updated = 0})
+      : spacing = spacing ?? defaultSpacing(bg);
+
+  /// Cambia el fondo; el espaciado vuelve al por defecto si el actual no existe en el fondo nuevo.
+  void setBg(String v) {
+    bg = v;
+    spacing = validSpacing(v, spacing);
+  }
 
   SheetMeta copy({String? id, String? title, bool? bookmark}) => SheetMeta(id ?? this.id,
       title: title ?? this.title,
       bookmark: bookmark ?? this.bookmark,
       bg: bg,
       paper: paper,
+      spacing: spacing,
       rev: rev,
       updated: updated);
 
@@ -35,6 +46,7 @@ class SheetMeta {
         bookmark: (j['bookmark'] ?? false) as bool,
         bg: (j['bg'] ?? 'lined') as String,
         paper: (j['paper'] ?? '#fffefb') as String,
+        spacing: (j['spacing'] as num?)?.toDouble(), // los archivos viejos no lo tienen: el por defecto del fondo
         rev: (j['rev'] ?? 0) as int,
         updated: (j['updated'] ?? 0) as int,
       );
@@ -44,6 +56,7 @@ class SheetMeta {
         if (bookmark) 'bookmark': true,
         'bg': bg,
         'paper': paper,
+        'spacing': spacing,
         'rev': rev,
         'updated': updated,
       };
@@ -56,6 +69,7 @@ class Notebook {
   String name;
   final List<SheetMeta> sheets; // en orden
   String bg, paper; // estilo de las hojas nuevas
+  double spacing; // espaciado (mm) de las hojas nuevas
   int updated; // última edición (ms)
   int last; // índice de la última hoja vista
   bool favorite;
@@ -64,11 +78,13 @@ class Notebook {
       {List<SheetMeta>? sheets,
       this.bg = 'lined',
       this.paper = '#fffefb',
+      double? spacing,
       this.updated = 0,
       this.last = 0,
       this.favorite = false,
       this.pin})
-      : sheets = sheets ?? [];
+      : sheets = sheets ?? [],
+        spacing = spacing ?? defaultSpacing(bg);
 
   /// Cuaderno nuevo con una hoja en blanco.
   factory Notebook.create(String name) {
@@ -78,7 +94,7 @@ class Notebook {
   }
 
   /// Hoja nueva con el estilo del cuaderno (no la agrega).
-  SheetMeta newSheet() => SheetMeta(newId('h'), bg: bg, paper: paper);
+  SheetMeta newSheet() => SheetMeta(newId('h'), bg: bg, paper: paper, spacing: spacing);
 
   /// Marca la edición ahora (ordena la biblioteca por esto).
   void touch() => updated = DateTime.now().millisecondsSinceEpoch;
@@ -88,6 +104,7 @@ class Notebook {
         n['name'] as String,
         bg: (n['bg'] ?? 'lined') as String,
         paper: (n['paper'] ?? '#fffefb') as String,
+        spacing: (n['spacing'] as num?)?.toDouble(),
         updated: (n['updated'] ?? 0) as int,
         last: (n['last'] ?? 0) as int,
         favorite: (n['favorite'] ?? false) as bool,
@@ -101,6 +118,7 @@ class Notebook {
         'updated': updated,
         'bg': bg,
         'paper': paper,
+        'spacing': spacing,
         'last': last,
         if (favorite) 'favorite': true,
         if (pin != null) 'pin': pin,

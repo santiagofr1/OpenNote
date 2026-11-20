@@ -337,7 +337,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     drag.textOrig.forEach((id, o) {
       final t = doc.texts[id];
       if (t == null) return;
-      t.y = max(0.0, snapTextY(t.y)); // que caiga sobre el renglón
+      t.y = max(0.0, doc.snapTextY(t.y)); // que caiga sobre el renglón de su hoja
       t.x = t.x.clamp(0.0, kW - 60);
       textBefore[id] = TextBlock(t.id, o.dx, o.dy, t.w, t.text);
       textAfter[id] = t.copy();
@@ -471,9 +471,11 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   void _createTextAt(Offset p) {
     final x = p.dx.clamp(16.0, kW - 120);
-    var y = max(0.0, (p.dy / kLine).floorToDouble() * kLine + 4);
-    // en el espacio entre hojas: a la siguiente
-    if (y % kSheetStep > kSheetH - kLine) y = (y ~/ kSheetStep + 1) * kSheetStep + 4;
+    var y = max(0.0, doc.snapTextY(p.dy, floor: true)); // el renglón de esa hoja
+    // en el espacio entre hojas (o sin lugar para un renglón): a la siguiente
+    if (y % kSheetStep > kSheetH - doc.lineAt(y) && y ~/ kSheetStep < doc.sheetCount - 1) {
+      y = doc.snapTextY((y ~/ kSheetStep + 1) * kSheetStep, floor: true);
+    }
     final t = TextBlock(newId('t'), x.roundToDouble(), y, (kW - x - 30).roundToDouble(), '');
     setState(() => texts.put(t.id, t));
     WidgetsBinding.instance.addPostFrameCallback((_) => texts.focusOf(t.id)?.requestFocus());
@@ -484,7 +486,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     t.text = v;
     // estimación de renglones (70 letras por renglón) para agregar hojas a tiempo
     final lines = '\n'.allMatches(v).length + 1 + v.length ~/ 70;
-    _growIfNeeded(t.y + lines * kLine);
+    _growIfNeeded(t.y + lines * doc.lineAt(t.y));
     _saveSoon(t.id, const Duration(milliseconds: 300));
   }
 
@@ -779,7 +781,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
           },
           onPickColor: _pickQuick,
           onBg: (v) {
-            setState(() => doc.sheets[visibleSheet].bg = v); // la hoja que se está viendo
+            setState(() => doc.sheets[visibleSheet].setBg(v)); // la hoja que se está viendo
             _changed();
           },
           onOpenPanel: _openPanelForDrawing,
@@ -963,6 +965,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       controller: c,
       focus: f,
       scale: scale,
+      line: doc.lineAt(t.y),
       textMode: textMode,
       selected: sel.texts.contains(t.id),
       onChanged: (v) => _textChanged(t, v),
@@ -972,7 +975,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         t.w = min(t.w, kW - t.x - 10).clamp(120.0, kW);
       }),
       onHandleDragEnd: () => setState(() {
-        t.y = snapTextY(t.y);
+        t.y = doc.snapTextY(t.y);
         _changed();
       }),
     );

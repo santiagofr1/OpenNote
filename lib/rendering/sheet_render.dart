@@ -17,7 +17,7 @@ void paintSheet(Canvas c, NotebookDoc doc, int sheet, double pxPerUnit, {Map<Str
   c.clipRect(const Rect.fromLTWH(0, 0, kW, kSheetH));
   c.drawRect(const Rect.fromLTWH(0, 0, kW, kSheetH), Paint()..color = parseColor(meta.paper));
   // en miniaturas chicas las líneas no pueden ser más finas que esto o desaparecen
-  paintPaperPattern(c, meta.bg, ruleWidth: max(.6, 1 / pxPerUnit), marginWidth: max(.8, 1.2 / pxPerUnit));
+  paintPaperPattern(c, meta.bg, meta.spacing, ruleWidth: max(.6, 1 / pxPerUnit), marginWidth: max(.8, 1.2 / pxPerUnit));
   c.translate(0, -top);
   final visible = Rect.fromLTWH(0, top, kW, kSheetH);
   for (final it in doc.items.values) {
@@ -27,9 +27,10 @@ void paintSheet(Canvas c, NotebookDoc doc, int sheet, double pxPerUnit, {Map<Str
   for (final t in doc.texts.values) {
     // kLine * 40: tope generoso del alto de un texto, para no medirlos todos
     if (t.text.trim().isEmpty || t.y > top + kSheetH || t.y + kLine * 40 < top) continue;
+    final line = doc.lineAt(t.y);
     final tp = TextPainter(
-      text: TextSpan(text: t.text, style: const TextStyle(fontSize: kFont, height: kLine / kFont, color: kInk)),
-      strutStyle: kTextStrut,
+      text: TextSpan(text: t.text, style: textStyle(line, color: kInk)),
+      strutStyle: textStrut(line),
       textDirection: TextDirection.ltr,
     )..layout(maxWidth: t.w);
     tp.paint(c, Offset(t.x, t.y));

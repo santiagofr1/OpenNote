@@ -299,7 +299,7 @@ void main() {
     expect(await File('${root.path}/media/${it.file}').exists(), isTrue, reason: 'la imagen se copió a la carpeta del cuaderno');
   });
 
-  testWidgets('estilo del cuaderno: fondo y papel en todas las hojas', (t) async {
+  testWidgets('estilo de hoja: esta hoja y todo el cuaderno', (t) async {
     await start(t);
     await createNotebook(t, 'Estilo');
     await t.tap(find.byKey(const Key('pagesBtn')));
@@ -307,8 +307,12 @@ void main() {
     await t.tap(find.byKey(const Key('addPage')));
     await settle(t, 800);
 
-    await openMore(t, 'Estilo del cuaderno');
+    // solo la hoja que se ve (la 2, que acaba de agregarse)
+    await openMore(t, 'Estilo de hoja');
+    await t.tap(find.byKey(const Key('applySheet')));
     await t.tap(find.text('Cuadriculado'));
+    await settle(t, 300);
+    await t.tap(find.byKey(const Key('spacing-7')));
     await t.tap(find.byTooltip('Crema'));
     await settle(t);
     await t.tap(find.byKey(const Key('styleOk')));
@@ -316,12 +320,31 @@ void main() {
 
     await t.tap(find.byKey(const Key('back')));
     await settle(t, 1200);
-    final nb = await savedNotebook('Estilo');
+    var nb = await savedNotebook('Estilo');
+    expect([nb.sheets[0].bg, nb.sheets[0].spacing], ['lined', 8.0], reason: 'la otra hoja no cambia');
+    expect([nb.sheets[1].bg, nb.sheets[1].paper, nb.sheets[1].spacing], ['grid', '#fbf3e0', 7.0]);
+    expect([nb.bg, nb.spacing], ['lined', 8.0], reason: 'las hojas nuevas siguen igual');
+
+    // todo el cuaderno (es lo que viene marcado), y también las hojas nuevas
+    await t.tap(find.byKey(const Key('nb-Estilo')));
+    await settle(t, 1200);
+    await openMore(t, 'Estilo de hoja');
+    await t.tap(find.byKey(const Key('applyAll')));
+    await t.tap(find.text('Rayado'));
+    await settle(t, 300);
+    await t.tap(find.byKey(const Key('spacing-10')));
+    await t.tap(find.byTooltip('Celeste'));
+    await settle(t);
+    await t.tap(find.byKey(const Key('styleOk')));
+    await settle(t, 1200);
+
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+    nb = await savedNotebook('Estilo');
     expect(nb.sheets.length, 2);
-    expect([nb.bg, nb.paper], ['grid', '#fbf3e0'], reason: 'también el estilo de las hojas nuevas');
+    expect([nb.bg, nb.paper, nb.spacing], ['lined', '#eaf3fb', 10.0], reason: 'también el estilo de las hojas nuevas');
     for (final sheet in nb.sheets) {
-      expect(sheet.bg, 'grid');
-      expect(sheet.paper, '#fbf3e0');
+      expect([sheet.bg, sheet.paper, sheet.spacing], ['lined', '#eaf3fb', 10.0]);
     }
   });
 

@@ -29,7 +29,7 @@ Future<String?> showMoreMenu(BuildContext context, Offset at, Notebook nb) => sh
       position: RelativeRect.fromLTRB(at.dx - 260, at.dy, at.dx, at.dy),
       items: [
         const PopupMenuItem(value: 'search', child: MenuRow(Symbols.search, 'Buscar')),
-        const PopupMenuItem(value: 'style', child: MenuRow(Symbols.palette, 'Estilo del cuaderno')),
+        const PopupMenuItem(value: 'style', child: MenuRow(Symbols.palette, 'Estilo de hoja')),
         const PopupMenuDivider(),
         const PopupMenuItem(value: 'saveas', child: MenuRow(Symbols.save_as, 'Guardar como')),
         const PopupMenuDivider(),
