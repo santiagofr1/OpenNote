@@ -43,6 +43,14 @@ class Stroke {
     return Stroke(id ?? this.id, k, c, w, p, o);
   }
 
+  /// Corre el trazo [dy] hacia abajo, en el lugar (lo usan las operaciones de hojas).
+  void translateY(double dy) {
+    for (var i = 1; i < pts.length; i += 3) {
+      pts[i] += dy;
+    }
+    invalidate();
+  }
+
   /// ¿La goma de radio [r] en [pt] toca este trazo?
   bool hitBy(Offset pt, double r) {
     if (!bounds.inflate(r).contains(pt)) return false;

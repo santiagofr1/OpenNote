@@ -1,4 +1,4 @@
-import 'page.dart';
+import 'elements.dart';
 import 'stroke.dart';
 
 enum Tool { pen, hl, text, select }
