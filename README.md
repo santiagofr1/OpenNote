@@ -17,7 +17,7 @@ guardan en tu tablet, sin cuentas ni servidores.
 - Varias puntas, colores y grosores, y resaltador.
 - Borrá apretando el botón del S Pen.
 - Con el dedo te desplazás, pellizcás para hacer zoom, y podés bloquear el zoom.
-- Escribí con teclado cuando lo necesites.
+- Escribí con teclado cuando lo necesites: tocá el tecladito y se abre un renglón nuevo, con negrita, cursiva, colores, títulos, listas y alineación.
 - Seleccioná con un recuadro para mover, copiar, duplicar o eliminar.
 - Insertá imágenes, notas adhesivas y grabaciones de voz.
 
