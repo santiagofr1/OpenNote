@@ -29,15 +29,11 @@
     - Conflictos: el formato por hojas (una hoja = un archivo con rev/updated) ya ayuda; definir qué pasa si se
       edita la misma hoja en los dos lados (guardar las dos versiones, o fusionar trazos por id).
     Entregable: un documento comparando opciones (seguridad, comodidad, esfuerzo) y una recomendación.
-18. **Aviso de actualización más amable** (opinión del usuario: "está un poco violento, no se entiende bien la
-    versión y parece que te van a hackear"). Rediseñar el diálogo: tono tranquilo, título tipo "Hay una versión
-    nueva de OpenNote", mostrar claro "Tenés la 1.0.4 → nueva 1.0.6", resumen de novedades en lenguaje de usuario
-    (no la lista cruda de commits), aclarar que viene de GitHub del proyecto y que los cuadernos no se tocan,
-    explicar el permiso de "instalar apps desconocidas" antes de pedirlo, botones suaves ("Ahora no" / "Actualizar").
-    Ver también las notas de las Releases (hoy son asuntos de commits): escribirlas pensando en el usuario.
 15. **LaTeX**: lo hace el usuario; no tocar.
 
 ## Hecho
+
+- **18. Aviso de actualización más amable** (rama `feat/aviso-actualizacion`): "Hay una versión nueva de OpenNote", "Tenés la X → nueva Y", novedades en viñetas sacadas de los merges a main (sin merges internos, tests ni metadatos), aclaración de que viene de GitHub y no toca los cuadernos, botones "Ahora no" / "Omitir esta versión" / "Actualizar" y el permiso de instalar explicado antes de ir a ajustes.
 
 - **2. Capas (rama feat/seleccion)**: un solo orden de dibujo para trazos, textos, imágenes, notas y audios (campo `z` por elemento, guardado en cada hoja; archivos viejos cargan como se veían). Menú "Orden" en la barrita de selección: Traer al frente, Subir uno, Bajar uno, Enviar al fondo; subir/bajar salta al próximo elemento que se superpone con la selección; se puede deshacer. El resaltador se dibuja debajo de la tinta de la misma tanda de trazos. Lo nuevo y lo duplicado queda arriba.
 
