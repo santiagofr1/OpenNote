@@ -22,9 +22,7 @@ Para hacer después de pasar la reorganización del código (rama `refactor/arqu
    negrita, cursiva, subrayado, tachado, color de texto, resaltado, tamaños (normal / título / subtítulo),
    listas con viñetas, numeradas y de tareas, sangría con Tab / Shift+Tab, alineación.
    Los textos existentes se convierten solos; búsqueda, PDF y miniaturas respetan el formato.
-8. **Ícono nuevo** (en la tablet sigue el de Flutter por defecto; el usuario lo volvió a pedir): adaptativo de Android (fondo + figura, con versión
-   monocromática para los íconos temáticos de Android 13+). Idea: una hoja con una esquina doblada y un trazo
-   de tinta que la cruza, en los colores del tema. Mostrar 2–3 opciones antes de elegir.
+
 9. **Capturas en el README**: 2–3 capturas (o un GIF corto) de la app en uso: cuaderno con escritura, panel de hojas,
    biblioteca con carpetas. Sacarlas de la app de test con datos de ejemplo (nunca de los cuadernos reales) y
    guardarlas en `docs/img/`. Recién ahí agregar la sección "Capturas" al README.
@@ -57,6 +55,8 @@ Para hacer después de pasar la reorganización del código (rama `refactor/arqu
 15. **LaTeX**: lo hace el usuario; no tocar.
 
 ## Hecho
+
+- **8. Ícono nuevo**: opción A (hoja con esquina doblada y trazo de tinta), adaptativo con versión monocromática; fuentes en `docs/icon/`, se regenera con `tool/apply_icon.sh`.
 
 - **11. La app busca actualizaciones sola** (rama `feat/updater`): al abrir (Android release, cada 24 h) consulta el último
   Release; si hay versión nueva avisa con las notas ("Más tarde" / "Omitir esta versión" / "Actualizar"), descarga el APK
