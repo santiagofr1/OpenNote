@@ -111,7 +111,10 @@ class PagesPanel extends StatelessWidget {
     return GestureDetector(
       key: Key('thumb-$n'),
       onTap: () => onOpen(k),
+      onLongPressDown: (_) => debugPrint('DIAG down thumb $n'),
+      onLongPressCancel: () => debugPrint('DIAG cancel thumb $n'),
       onLongPress: () async {
+        debugPrint('DIAG longpress thumb $n');
         HapticFeedback.mediumImpact();
         final v = await _sheetMenu(context, k);
         if (v != null) onAction(k, v);
