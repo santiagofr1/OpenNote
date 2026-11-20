@@ -39,12 +39,15 @@ void paintPaperPattern(Canvas c, String bg, double spacing, {required double rul
   }
 }
 
-/// Fondo del editor: cada hoja con su papel, sombra suave y su patrón (cada una con el suyo).
+/// Fondo del editor: las hojas de [first] a [last] (las que están armadas), cada una con su papel, sombra suave
+/// y su patrón (cada una con el suyo). Las demás no se dibujan.
 class SheetPainter extends CustomPainter {
   final List<SheetMeta> sheets;
   final double scale;
+  final int first, last;
   final String _sig; // cómo estaban los estilos al crearse (la lista se modifica en el lugar)
-  SheetPainter(this.sheets, this.scale) : _sig = sheets.map((s) => '${s.bg}${s.paper}${s.spacing}').join('|');
+  SheetPainter(this.sheets, this.scale, this.first, this.last)
+      : _sig = [for (var k = first; k <= last && k < sheets.length; k++) '${sheets[k].bg}${sheets[k].paper}${sheets[k].spacing}'].join('|');
 
   @override
   void paint(Canvas c, Size size) {
@@ -52,7 +55,7 @@ class SheetPainter extends CustomPainter {
     final shadow = Paint()
       ..color = const Color(0x24000000)
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, 10 / scale);
-    for (var k = 0; k < sheets.length; k++) {
+    for (var k = first; k <= last && k < sheets.length; k++) {
       final r = Rect.fromLTWH(0, k * kSheetStep, kW, kSheetH);
       c.drawRect(r.shift(Offset(0, 4 / scale)), shadow);
       c.drawRect(r, Paint()..color = parseColor(sheets[k].paper));
@@ -66,5 +69,5 @@ class SheetPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(SheetPainter o) => o._sig != _sig || o.scale != scale;
+  bool shouldRepaint(SheetPainter o) => o._sig != _sig || o.scale != scale || o.first != first || o.last != last;
 }
