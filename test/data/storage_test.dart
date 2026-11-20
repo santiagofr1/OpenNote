@@ -38,6 +38,33 @@ void main() {
         for (final e in store.nbDir(nb.id).listSync(recursive: true).whereType<File>()) e.path: e.statSync().modified,
       };
 
+  test('carpetas: ida y vuelta por index.json, con el cuaderno dentro de su carpeta', () async {
+    final d = sample(1, name: 'Dentro');
+    final f1 = Folder.create('Facultad');
+    final f2 = Folder.create('Análisis', parent: f1.id)..color = '#336699';
+    d.nb.folder = f2.id;
+    await store.saveNotebook(d);
+    await store.saveIndex(NotesIndex(notebooks: [d.nb], folders: [f1, f2]));
+    final idx = await store.loadIndex();
+    expect(idx.folders.map((f) => (f.name, f.parent, f.color)), [('Facultad', null, null), ('Análisis', f1.id, '#336699')]);
+    expect(idx.notebooks.single.folder, f2.id);
+    expect(idx.pathLabel(f2.id), 'Inicio / Facultad / Análisis');
+  });
+
+  test('borrar una carpeta con todo adentro borra los archivos de sus cuadernos', () async {
+    final d = sample(1);
+    final f = Folder.create('Tmp');
+    d.nb.folder = f.id;
+    await store.saveNotebook(d);
+    final idx = NotesIndex(notebooks: [d.nb], folders: [f]);
+    await store.saveIndex(idx);
+    await store.deleteFolder(idx, f, FolderDelete.deleteContents);
+    expect(await store.nbDir(d.nb.id).exists(), isFalse);
+    final back = await store.loadIndex();
+    expect(back.notebooks, isEmpty);
+    expect(back.folders, isEmpty);
+  });
+
   test('primera vez: crea un cuaderno de ejemplo con una hoja', () async {
     final idx = await store.loadIndex();
     final nb = idx.notebooks.single;

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 
+import 'folders.dart';
 import 'values.dart';
 
 /// Una hoja del cuaderno: lo que se guarda en `notebook.json` (el contenido está en su `.sheet`).
@@ -60,6 +61,7 @@ class Notebook {
   int last; // índice de la última hoja vista
   bool favorite;
   String? pin; // hash del PIN (ver hashPin), si está bloqueado
+  String? folder; // id de la carpeta donde está (null = inicio)
   Notebook(this.id, this.name,
       {List<SheetMeta>? sheets,
       this.bg = 'lined',
@@ -67,7 +69,8 @@ class Notebook {
       this.updated = 0,
       this.last = 0,
       this.favorite = false,
-      this.pin})
+      this.pin,
+      this.folder})
       : sheets = sheets ?? [];
 
   /// Cuaderno nuevo con una hoja en blanco.
@@ -92,6 +95,7 @@ class Notebook {
         last: (n['last'] ?? 0) as int,
         favorite: (n['favorite'] ?? false) as bool,
         pin: n['pin'] as String?,
+        folder: n['folder'] as String?,
       );
 
   /// Entrada del índice (sin las hojas).
@@ -104,6 +108,7 @@ class Notebook {
         'last': last,
         if (favorite) 'favorite': true,
         if (pin != null) 'pin': pin,
+        if (folder != null) 'folder': folder,
       };
 
   /// Lo que va en `notebook.json`.
@@ -118,15 +123,24 @@ class NotesIndex {
   int rev;
   String? last; // id del último cuaderno abierto
   final List<Notebook> notebooks;
-  NotesIndex({this.rev = 0, this.last, List<Notebook>? notebooks}) : notebooks = notebooks ?? [];
+  final List<Folder> folders; // opcional en el archivo: los índices sin carpetas siguen cargando
+  NotesIndex({this.rev = 0, this.last, List<Notebook>? notebooks, List<Folder>? folders})
+      : notebooks = notebooks ?? [],
+        folders = folders ?? [];
 
   factory NotesIndex.fromJson(Map j) => NotesIndex(
         rev: (j['rev'] ?? 0) as int,
         last: j['last'] as String?,
         notebooks: [for (final n in (j['notebooks'] as List? ?? [])) Notebook.fromJson(n as Map)],
-      );
-  Map<String, dynamic> toJson() =>
-      {'format': Notebook.kFormat, 'rev': rev, 'last': last, 'notebooks': notebooks.map((n) => n.toJson()).toList()};
+        folders: [for (final f in (j['folders'] as List? ?? [])) Folder.fromJson(f as Map)],
+      )..repairFolders();
+  Map<String, dynamic> toJson() => {
+        'format': Notebook.kFormat,
+        'rev': rev,
+        'last': last,
+        'notebooks': notebooks.map((n) => n.toJson()).toList(),
+        if (folders.isNotEmpty) 'folders': folders.map((f) => f.toJson()).toList(),
+      };
 }
 
 /// PIN: se guarda solo su hash.

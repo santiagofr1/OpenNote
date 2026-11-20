@@ -270,6 +270,16 @@ class Storage {
     await removeNotebookFiles(nb.id);
   }
 
+  /// Borra una carpeta del índice (ver [FolderOps.deleteFolder]); si se borra su contenido,
+  /// también los archivos de esos cuadernos.
+  Future<void> deleteFolder(NotesIndex idx, Folder f, FolderDelete mode) async {
+    final removed = idx.deleteFolder(f, mode);
+    await saveIndex(idx);
+    for (final nb in removed) {
+      await removeNotebookFiles(nb.id);
+    }
+  }
+
   // ================= preferencias =================
   Future<Map?> loadPrefs() async {
     try {
