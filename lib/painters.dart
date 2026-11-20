@@ -247,3 +247,72 @@ void dashedRect(Canvas c, Rect r, Paint p, double dash) {
   line(r.bottomRight, r.bottomLeft);
   line(r.bottomLeft, r.topLeft);
 }
+
+/// Dibuja la hoja [sheet] de una página, completa (papel, renglones, tinta y texto),
+/// en coordenadas lógicas con origen en la esquina de esa hoja. Para miniaturas y PDF.
+void paintSheet(Canvas c, PageData page, int sheet, double pxPerUnit) {
+  final top = sheet * kSheetStep;
+  c.save();
+  c.clipRect(const Rect.fromLTWH(0, 0, kW, kSheetH));
+  c.drawRect(const Rect.fromLTWH(0, 0, kW, kSheetH), Paint()..color = const Color(0xFFFFFEFB));
+  final rule = Paint()
+    ..color = const Color(0xFFD5DFEE)
+    ..strokeWidth = max(.6, 1 / pxPerUnit);
+  switch (page.bg) {
+    case 'lined':
+      for (double y = kLine; y < kSheetH; y += kLine) {
+        c.drawLine(Offset(0, y), Offset(kW, y), rule);
+      }
+      c.drawLine(const Offset(70, 0), const Offset(70, kSheetH), Paint()..color = const Color(0xFFF0C9C9)..strokeWidth = max(.8, 1.2 / pxPerUnit));
+    case 'grid':
+      const g = kLine / 2;
+      for (double y = g; y < kSheetH; y += g) {
+        c.drawLine(Offset(0, y), Offset(kW, y), rule);
+      }
+      for (double x = g; x < kW; x += g) {
+        c.drawLine(Offset(x, 0), Offset(x, kSheetH), rule);
+      }
+    case 'dots':
+      const g = kLine / 2;
+      final dot = Paint()..color = const Color(0xFFB9C3D3);
+      for (double y = g; y < kSheetH; y += g) {
+        for (double x = g; x < kW; x += g) {
+          c.drawCircle(Offset(x, y), 1.4, dot);
+        }
+      }
+  }
+  c.translate(0, -top);
+  final visible = Rect.fromLTWH(0, top, kW, kSheetH);
+  final all = page.strokes.values.where((s) => s.bounds.overlaps(visible)).toList();
+  for (final s in all) {
+    if (s.k == 'hl') paintStroke(c, s);
+  }
+  for (final s in all) {
+    if (s.k != 'hl') paintStroke(c, s);
+  }
+  for (final t in page.texts.values) {
+    if (t.text.trim().isEmpty || t.y > top + kSheetH || t.y + kLine * 40 < top) continue;
+    final tp = TextPainter(
+      text: TextSpan(text: t.text, style: const TextStyle(fontSize: kFont, height: kLine / kFont, color: Color(0xFF22211E))),
+      strutStyle: const StrutStyle(fontSize: kFont, height: kLine / kFont, forceStrutHeight: true),
+      textDirection: TextDirection.ltr,
+    )..layout(maxWidth: t.w);
+    tp.paint(c, Offset(t.x, t.y));
+  }
+  c.restore();
+}
+
+/// Miniatura de la primera hoja de una página
+class SheetThumbPainter extends CustomPainter {
+  final PageData page;
+  SheetThumbPainter(this.page);
+  @override
+  void paint(Canvas c, Size size) {
+    final k = size.width / kW;
+    c.scale(k);
+    paintSheet(c, page, 0, k);
+  }
+
+  @override
+  bool shouldRepaint(SheetThumbPainter o) => o.page != page || o.page.rev != page.rev;
+}

@@ -32,8 +32,18 @@ class PageEditor extends StatefulWidget {
   final PageData page;
   final ToolState tools;
   final String title, subtitle;
-  final VoidCallback onChanged, onPrefsChanged, onMenu;
-  const PageEditor({super.key, required this.page, required this.tools, required this.title, required this.subtitle, required this.onChanged, required this.onPrefsChanged, required this.onMenu});
+  final VoidCallback onChanged, onPrefsChanged, onMenu, onBack;
+  const PageEditor({
+    super.key,
+    required this.page,
+    required this.tools,
+    required this.title,
+    required this.subtitle,
+    required this.onChanged,
+    required this.onPrefsChanged,
+    required this.onMenu,
+    required this.onBack,
+  });
 
   @override
   State<PageEditor> createState() => _PageEditorState();
@@ -1285,7 +1295,8 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
       final side = BorderSide(color: cs.outlineVariant.withValues(alpha: .6));
       final children = <Widget>[
         _grip(vertical),
-        _icon(Symbols.menu, 'Cuadernos', widget.onMenu),
+        _icon(Symbols.arrow_back, 'Volver a los cuadernos', widget.onBack),
+        _icon(Symbols.view_sidebar, 'Páginas del cuaderno', widget.onMenu),
         if (!vertical) const SizedBox(width: 6),
         if (!vertical)
           Expanded(
