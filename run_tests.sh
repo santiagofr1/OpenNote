@@ -12,7 +12,7 @@ PKG=com.apuntes.apuntes
 DATA=/sdcard/Android/data/$PKG/files/apuntes
 
 snapshot() { # lista de archivos (tamaño, fecha, ruta) de los cuadernos reales
-  adb -s "$DEV" shell "ls -lAR $DATA 2>&1"
+  adb -s "$DEV" shell "ls -lAR $DATA 2>&1" || true
 }
 instalada() { adb -s "$DEV" shell pm list packages "$PKG" | tr -d '\r' | grep -qx "package:$PKG"; }
 
@@ -25,7 +25,7 @@ echo "Datos reales antes: $N_ANTES archivos"
 if [ "${BACKUP:-0}" = 1 ]; then
   B=~/apuntes_app_backup/$(date +%Y%m%d-%H%M%S)
   mkdir -p "$B"
-  adb -s "$DEV" pull "$DATA" "$B/" >/dev/null
+  adb -s "$DEV" pull "$DATA" "$B/" >/dev/null 2>&1 || echo "Aviso: algunos archivos no se pudieron bajar (p. ej. media/)"
   if [ -z "$(find "$B" -type f 2>/dev/null | head -1)" ]; then
     echo "ERROR: el backup quedó vacío ($B)"; exit 1
   fi
