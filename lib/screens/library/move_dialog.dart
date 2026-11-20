@@ -34,9 +34,10 @@ Future<({String? id})?> askMoveTarget(BuildContext context, NotesIndex idx,
   return showDialog<({String? id})>(
     context: context,
     builder: (ctx) => AlertDialog(
+      scrollable: true,
       title: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
       contentPadding: const EdgeInsets.fromLTRB(8, 12, 8, 0),
-      content: SizedBox(width: 360, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: rows))),
+      content: SizedBox(width: 360, child: Column(mainAxisSize: MainAxisSize.min, children: rows)),
       actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar'))],
     ),
   );

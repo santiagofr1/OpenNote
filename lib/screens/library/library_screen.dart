@@ -97,9 +97,9 @@ class _LibraryState extends State<Library> {
 
   /// "+": cuaderno o carpeta nuevos, en la carpeta actual
   Future<void> _new() async {
-    final v = await showModalBottomSheet<String>(
-      context: context,
-      builder: (ctx) => SafeArea(
+    final v = await showSafeSheet<String>(
+      context,
+      (ctx) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -247,6 +247,7 @@ class _LibraryState extends State<Library> {
       builder: (ctx) {
         final cs = Theme.of(ctx).colorScheme;
         return AlertDialog(
+          scrollable: true,
           icon: Icon(Symbols.folder_delete, color: cs.error, weight: 300),
           title: Text('Borrar "${f.name}"'),
           content: Text('¿Qué hacemos con lo que tiene adentro?', style: TextStyle(color: cs.onSurfaceVariant)),
@@ -294,9 +295,9 @@ class _LibraryState extends State<Library> {
   /// Hoja inferior de opciones: (ícono, texto, valor, key); "Borrar" va al final y en rojo.
   Future<String?> _optionsSheet(String title, List<(IconData, String, String, String?)> items) {
     final cs = Theme.of(context).colorScheme;
-    return showModalBottomSheet<String>(
-      context: context,
-      builder: (ctx) => SafeArea(
+    return showSafeSheet<String>(
+      context,
+      (ctx) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
