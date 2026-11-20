@@ -39,15 +39,17 @@ void main() {
     });
   }
 
-  Future<void> start(WidgetTester t) async {
-    t.view.physicalSize = const Size(1600, 1000);
+  Future<void> start(WidgetTester t, {Size size = const Size(1600, 1000), double keyboard = 0}) async {
+    t.view.physicalSize = size;
     t.view.devicePixelRatio = 1;
+    if (keyboard > 0) t.view.viewInsets = FakeViewPadding(bottom: keyboard);
     addTearDown(t.view.reset);
     await t.runAsync(seed);
     await t.pumpWidget(ApuntesApp(root: root));
     for (var i = 0; i < 100 && find.byKey(const Key('folder-Facultad')).evaluate().isEmpty; i++) {
       await settle(t, 100);
     }
+    await settle(t, 600); // que termine la entrada del botón "+"
   }
 
   Future<NotesIndex> disk(WidgetTester t) => t.runAsync(() async {
@@ -204,4 +206,60 @@ void main() {
     expect(find.text('Esta carpeta está vacía'), findsOneWidget, reason: 'volvió a la carpeta actual (Análisis)');
     expect(k('crumb-Facultad'), findsOneWidget);
   });
+
+  // Hojas y diálogos de la biblioteca: sin desbordes en vertical, horizontal y con el teclado abierto.
+  for (final (name, size, kb) in [
+    ('vertical', const Size(800, 1333), 0.0),
+    ('horizontal', const Size(1333, 800), 0.0),
+    ('vertical con teclado', const Size(800, 1333), 300.0),
+    ('horizontal con teclado', const Size(1333, 800), 300.0),
+  ]) {
+    testWidgets('hojas y diálogos sin desbordes: $name', (t) async {
+      await start(t, size: size, keyboard: kb);
+      expect(t.takeException(), isNull, reason: 'la biblioteca sola');
+
+      Future<void> step(String what) async {
+        await settle(t, 400);
+        expect(t.takeException(), isNull, reason: what);
+      }
+
+      Future<void> close() async {
+        await t.tapAt(const Offset(2, 2)); // fuera de la hoja o diálogo
+        await settle(t, 400);
+        if (find.text('Cancelar').evaluate().isNotEmpty) await t.tap(find.text('Cancelar'));
+        await settle(t, 400);
+      }
+
+      await t.tap(k('new'));
+      await step('hoja "Nuevo"');
+      await t.tap(k('newFolder'));
+      await step('diálogo carpeta nueva');
+      await close();
+
+      await t.longPress(k('nb-Suelto'));
+      await step('opciones de cuaderno');
+      await t.tap(k('moveTo'));
+      await step('mover cuaderno');
+      await close();
+
+      await t.longPress(k('folder-Facultad'));
+      await step('opciones de carpeta');
+      await t.tap(find.text('Renombrar'));
+      await step('renombrar con teclado');
+      await close();
+
+      await t.longPress(k('folder-Facultad'));
+      await settle(t, 400);
+      await t.tap(k('moveTo'));
+      await step('mover carpeta');
+      await close();
+
+      await t.longPress(k('folder-Facultad'));
+      await settle(t, 400);
+      await t.tap(find.text('Borrar'));
+      await step('borrar carpeta');
+      await t.tap(k('folderDeleteAll'));
+      await step('confirmar borrar todo');
+    });
+  }
 }
