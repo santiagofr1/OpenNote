@@ -17,9 +17,6 @@ Para hacer después de pasar la reorganización del código (rama `refactor/arqu
    - Un solo orden para trazos, imágenes, notas y textos (hoy las imágenes quedan siempre debajo de la tinta).
    - "Subir/bajar uno" salta al siguiente elemento que se superpone con la selección.
    - El resaltador sigue por debajo de la tinta del mismo nivel.
-8. **Ícono nuevo** (en la tablet sigue el de Flutter por defecto; el usuario lo volvió a pedir): adaptativo de Android (fondo + figura, con versión
-   monocromática para los íconos temáticos de Android 13+). Idea: una hoja con una esquina doblada y un trazo
-   de tinta que la cruza, en los colores del tema. Mostrar 2–3 opciones antes de elegir.
 9. **Capturas en el README**: 2–3 capturas (o un GIF corto) de la app en uso: cuaderno con escritura, panel de hojas,
    biblioteca con carpetas. Sacarlas de la app de test con datos de ejemplo (nunca de los cuadernos reales) y
    guardarlas en `docs/img/`. Recién ahí agregar la sección "Capturas" al README.
@@ -29,10 +26,6 @@ Para hacer después de pasar la reorganización del código (rama `refactor/arqu
     build del APK firmado y publicación como GitHub Release (`v1.0.<n>`, versionCode = número de build).
     Clave de firma propia guardada como secreto del repo (+ copia del usuario). El cambio de firma exige
     desinstalar una vez: hacerlo con backup y restauración.
-11. **La app busca actualizaciones sola**: al abrir y cada 24 h consulta el último Release; si hay versión nueva
-    muestra un aviso con los cambios, descarga el APK y abre el instalador (un toque).
-    Permiso REQUEST_INSTALL_PACKAGES; opción en ajustes para desactivarlo. Android no permite instalación
-    100 % silenciosa fuera de Play Store.
 
 16. **Selección tipo AutoCAD** (herramienta seleccionar de la barra): hoy solo toma lo que queda entero dentro del
     recuadro. Según la dirección del arrastre:
@@ -57,6 +50,11 @@ Para hacer después de pasar la reorganización del código (rama `refactor/arqu
 
 ## Hecho
 
+- **8. Ícono nuevo**: opción A (hoja con esquina doblada y trazo de tinta), adaptativo con versión monocromática; fuentes en `docs/icon/`, se regenera con `tool/apply_icon.sh`.
+
+- **11. La app busca actualizaciones sola** (rama `feat/updater`): al abrir (Android release, cada 24 h) consulta el último
+  Release; si hay versión nueva avisa con las notas ("Más tarde" / "Omitir esta versión" / "Actualizar"), descarga el APK
+  y abre el instalador. Menú ⋮ de la biblioteca: "Buscar actualizaciones" y interruptor automático. Ver docs/TECNICO.md.
 - **3. El tecladito abre el teclado al tocarlo** y **5. Formato tipo Word** (rama `feat/texto`): el tecladito crea un renglón
   nuevo debajo de lo último visible (o arriba si está vacío) y abre el teclado; en modo texto lo reabre en el último bloque;
   los bloques vacíos se borran. Barra de formato (negrita, cursiva, subrayado, tachado, colores, título/subtítulo, listas,

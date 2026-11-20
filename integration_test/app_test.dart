@@ -558,4 +558,15 @@ void main() {
     expect(find.byKey(const Key('nb-Álgebra lineal')), findsNothing);
     expect(find.byKey(const Key('folder-Análisis')), findsOneWidget);
   });
+
+  testWidgets('ajustes: buscar actualizaciones a mano y el interruptor automático', (t) async {
+    await start(t);
+    await t.tap(find.byKey(const Key('libraryMenu')));
+    await settle(t, 600);
+    expect(find.byKey(const Key('checkUpdates')), findsOneWidget);
+    expect(t.widget<SwitchListTile>(find.byKey(const Key('autoUpdates'))).value, isTrue);
+    await t.tap(find.byKey(const Key('autoUpdates')));
+    await settle(t, 400);
+    expect(t.widget<SwitchListTile>(find.byKey(const Key('autoUpdates'))).value, isFalse);
+  });
 }
