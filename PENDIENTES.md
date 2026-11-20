@@ -2,38 +2,34 @@
 
 Para hacer después de pasar la reorganización del código (rama `refactor/arquitectura`).
 
-1. **Todo hojas, como Samsung Notes**: el cuaderno es una sola tira continua de hojas.
-   - Contador "2 / 5" en el título que se actualiza al scrollear según la hoja visible.
-   - Panel de páginas: una miniatura por hoja; agregar / duplicar / mover / borrar / marcar por hoja.
-   - Nombre o marcador opcional por hoja (se ve en el panel y entra en la búsqueda).
-   - Migración: las páginas viejas se aplanan en hojas seguidas, sin perder nada.
-   - **Almacenamiento eficiente** (hacerlo junto con esto). Investigado:
-     Samsung Notes (.sdocx) = ZIP con un `.page` binario por página + índice de orden + media/;
-     Microsoft ISF (OneNote) = coordenadas enteras + delta de delta + compresión (1–2 bytes/punto);
-     Xournal++ = un solo XML gzip que reescribe todo (lo que hay que evitar). Diseño:
-     1. Cuaderno = carpeta: índice con orden de hojas + un archivo por hoja + media/; guardar solo la hoja tocada.
-     2. Trazos en binario: x/y enteros (décimas), delta de delta zigzag-varint, presión 1 byte, zlib (dart:io).
-        ~2 bytes/punto: hoja llena ~30–40 KB en vez de ~400 KB.
-     3. Guardado en segundo plano (isolate), escritura atómica (tmp + rename).
-     4. Carga perezosa: solo las hojas cerca de la vista.
-     5. Exportar/backup del cuaderno entero como un archivo `.opennote` (ZIP).
-     Conversión automática de lo existente.
+1. **Carga perezosa de hojas lejanas** (resto de "todo hojas", ver Hecho). Hoy se leen y se decodifican todas las
+   hojas al abrir el cuaderno (en un isolate, sin trabar la pantalla) y el cuaderno vive entero en memoria.
+   Por qué no se hizo: el editor, la selección, la tinta y el deshacer trabajan sobre un solo documento con
+   coordenadas globales; cargar solo las hojas cercanas exige que el documento admita "hojas sin cargar"
+   (marcador de posición, guardar sin pisarlas, buscar y exportar leyéndolas del disco).
+   Medir primero con un cuaderno de 100+ hojas antes de complicarlo.
+   - Guardar parte y codifica todo el documento aunque solo una hoja haya cambiado (solo se *escribe* lo cambiado):
+     si pesa, llevar la cuenta de hojas tocadas y codificar solo esas.
+   - Exportar/backup del cuaderno entero como un archivo `.opennote` (ZIP).
+   - Mover hojas arrastrando en el panel (hoy: menú "Mover antes / después").
+   - Las operaciones de hojas (agregar, duplicar, mover, borrar) no se pueden deshacer: vacían el historial.
 2. **Capas al seleccionar**: menú "Orden" con Traer al frente, Subir uno, Bajar uno, Enviar al fondo.
    - Un solo orden para trazos, imágenes, notas y textos (hoy las imágenes quedan siempre debajo de la tinta).
    - "Subir/bajar uno" salta al siguiente elemento que se superpone con la selección.
    - El resaltador sigue por debajo de la tinta del mismo nivel.
 3. **El tecladito abre el teclado al tocarlo**: crea un renglón nuevo debajo de lo último escrito en la parte visible; si ya estás en modo texto, vuelve a abrirlo.
 4. **Fondo en milímetros reales de A4**: rayado 8 mm, cuadriculado 5 mm, puntos 5 mm, margen rojo 25 mm y margen superior.
-   - En Configuración de página: interlineado 7 / 8 / 10 mm y cuadrícula 5 / 7 mm.
+   - En el estilo de hoja: interlineado 7 / 8 / 10 mm y cuadrícula 5 / 7 mm.
    - El texto con teclado se acomoda al renglón.
    - Al imprimir, elegir "tamaño real / 100 %".
 5. **Barra de formato tipo Word** al escribir con teclado (con flutter_quill):
    negrita, cursiva, subrayado, tachado, color de texto, resaltado, tamaños (normal / título / subtítulo),
    listas con viñetas, numeradas y de tareas, sangría con Tab / Shift+Tab, alineación.
    Los textos existentes se convierten solos; búsqueda, PDF y miniaturas respetan el formato.
-6. **Unificar "Estilo del cuaderno" y "Configuración de página"** en una sola opción del menú ⋮
-   ("Estilo de hoja"): fondo, color de papel, interlineado / cuadrícula, con un selector
-   "Aplicar a: esta hoja / todo el cuaderno" (por defecto, todo el cuaderno).
+6. **Estilo de hoja**: hoy el menú ⋮ tiene "Estilo del cuaderno" (fondo y papel de todas las hojas y de las nuevas);
+   falta "Estilo de hoja" con fondo, color de papel, interlineado / cuadrícula y un selector
+   "Aplicar a: esta hoja / todo el cuaderno" (por defecto, todo el cuaderno). Cada hoja ya guarda su fondo y papel.
+   El selector de fondo de la barra de herramientas ya cambia solo la hoja que se está viendo.
 7. **Renombrar la app a OpenNote** (nombre en la tablet y título). El id del paquete no se toca para no perder datos.
 8. **Ícono nuevo** (hoy es el de Flutter por defecto): adaptativo de Android (fondo + figura, con versión
    monocromática para los íconos temáticos de Android 13+). Idea: una hoja con una esquina doblada y un trazo
@@ -57,3 +53,12 @@ Para hacer después de pasar la reorganización del código (rama `refactor/arqu
     Usar un flavor `test` con otro applicationId (`com.apuntes.apuntes.test`) para que los tests se instalen
     como otra app; mientras tanto `run_tests.sh` hace backup y restaura (en una corrida el backup salió vacío:
     revisar y verificar la restauración al final del script).
+
+## Hecho
+
+- **Todo hojas, como Samsung Notes** (rama `feat/hojas`): el cuaderno es una tira continua de hojas.
+  Contador "2 / 5" en el título, panel con una miniatura por hoja (agregar / duplicar / mover / borrar / marcar /
+  renombrar), título y marcador por hoja en el panel y la búsqueda, PDF con una A4 por hoja con su fondo y papel,
+  migración automática de las páginas viejas (con backup en `legacy_pages_backup/`).
+  Almacenamiento: carpeta por cuaderno, archivo binario por hoja (~2 bytes/punto, zlib), guardado en segundo
+  plano que escribe solo lo cambiado, escritura atómica. Detalle en el README.
