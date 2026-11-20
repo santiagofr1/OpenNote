@@ -1,0 +1,149 @@
+import 'dart:math';
+import 'dart:ui';
+
+// Medidas lógicas de la hoja. Se escala para entrar en pantalla, así se ve
+// igual en cualquier dispositivo (tablet, PC).
+const double kW = 1000, kSheetH = 1414, kLine = 40, kFont = 21;
+
+final _rnd = Random.secure();
+String newId(String prefix) =>
+    prefix + List.generate(6, (_) => _rnd.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+
+Color parseColor(String s) => Color(int.parse(s.substring(1), radix: 16) | 0xFF000000);
+double _r1(double v) => (v * 10).round() / 10;
+double _num(dynamic v, [double d = 0]) => v is num ? v.toDouble() : d;
+
+/// Trazo: puntos guardados planos como [x, y, presión, x, y, presión, ...]
+class Stroke {
+  final String id, k, c; // k: 'pen' | 'hl'
+  final double w;
+  final List<double> pts;
+  late final Color color = parseColor(c);
+  Rect? _bounds;
+
+  Stroke(this.id, this.k, this.c, this.w, this.pts);
+
+  int get n => pts.length ~/ 3;
+
+  Rect get bounds {
+    if (_bounds != null) return _bounds!;
+    double x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    for (var i = 0; i < pts.length; i += 3) {
+      x0 = min(x0, pts[i]);
+      x1 = max(x1, pts[i]);
+      y0 = min(y0, pts[i + 1]);
+      y1 = max(y1, pts[i + 1]);
+    }
+    return _bounds = Rect.fromLTRB(x0 - w, y0 - w, x1 + w, y1 + w);
+  }
+
+  factory Stroke.fromJson(Map j) => Stroke(
+        j['id'] as String,
+        (j['k'] ?? 'pen') as String,
+        (j['c'] ?? '#22211e') as String,
+        _num(j['w'], 2),
+        [
+          for (final p in (j['pts'] as List))
+            ...[_num(p[0]), _num(p[1]), (p as List).length > 2 ? _num(p[2], .5) : .5]
+        ],
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'k': k,
+        'c': c,
+        'w': w,
+        'pts': [
+          for (var i = 0; i < pts.length; i += 3)
+            [_r1(pts[i]), _r1(pts[i + 1]), (pts[i + 2] * 100).round() / 100]
+        ],
+      };
+}
+
+class TextBlock {
+  final String id;
+  double x, y, w;
+  String text;
+  TextBlock(this.id, this.x, this.y, this.w, this.text);
+
+  factory TextBlock.fromJson(Map j) =>
+      TextBlock(j['id'] as String, _num(j['x']), _num(j['y']), _num(j['w'], 800), (j['text'] ?? '') as String);
+  Map<String, dynamic> toJson() => {'id': id, 'x': x, 'y': y, 'w': w, 'text': text};
+}
+
+class PageData {
+  final String id;
+  int rev;
+  double h;
+  String bg; // lined | grid | dots | blank
+  int updated; // ms epoch, para sincronizar algún día
+  final Map<String, Stroke> strokes; // mantiene orden de inserción
+  final Map<String, TextBlock> texts;
+
+  PageData(this.id, {this.rev = 0, this.h = kSheetH, this.bg = 'lined', this.updated = 0, Map<String, Stroke>? strokes, Map<String, TextBlock>? texts})
+      : strokes = strokes ?? {},
+        texts = texts ?? {};
+
+  factory PageData.fromJson(Map j) => PageData(
+        j['id'] as String,
+        rev: (j['rev'] ?? 0) as int,
+        h: _num(j['h'], kSheetH),
+        bg: (j['bg'] ?? 'lined') as String,
+        updated: (j['updated'] ?? 0) as int,
+        strokes: {for (final s in ((j['strokes'] ?? {}) as Map).values) (s['id'] as String): Stroke.fromJson(s as Map)},
+        texts: {for (final t in ((j['texts'] ?? {}) as Map).values) (t['id'] as String): TextBlock.fromJson(t as Map)},
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'rev': rev,
+        'h': h,
+        'bg': bg,
+        'updated': updated,
+        'strokes': {for (final s in strokes.values) s.id: s.toJson()},
+        'texts': {for (final t in texts.values) t.id: t.toJson()},
+      };
+}
+
+class PageRef {
+  final String id;
+  String title;
+  PageRef(this.id, this.title);
+  Map<String, dynamic> toJson() => {'id': id, 'title': title};
+}
+
+class Notebook {
+  final String id;
+  String name;
+  final List<PageRef> pages;
+  Notebook(this.id, this.name, this.pages);
+  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'pages': pages.map((p) => p.toJson()).toList()};
+}
+
+class NotesIndex {
+  int rev;
+  String? last;
+  final List<Notebook> notebooks;
+  NotesIndex({this.rev = 0, this.last, List<Notebook>? notebooks}) : notebooks = notebooks ?? [];
+
+  factory NotesIndex.fromJson(Map j) => NotesIndex(
+        rev: (j['rev'] ?? 0) as int,
+        last: j['last'] as String?,
+        notebooks: [
+          for (final n in (j['notebooks'] as List? ?? []))
+            Notebook(n['id'] as String, n['name'] as String, [
+              for (final p in (n['pages'] as List? ?? [])) PageRef(p['id'] as String, p['title'] as String),
+            ])
+        ],
+      );
+  Map<String, dynamic> toJson() => {'rev': rev, 'last': last, 'notebooks': notebooks.map((n) => n.toJson()).toList()};
+
+  ({Notebook nb, PageRef page})? find(String? id) {
+    for (final nb in notebooks) {
+      for (final p in nb.pages) {
+        if (p.id == id) return (nb: nb, page: p);
+      }
+    }
+    return null;
+  }
+}
