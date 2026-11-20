@@ -140,24 +140,57 @@ class NotebookDoc {
         _ => 0,
       };
 
+  // Avisos para el render (repintar solo la hoja que cambió). Es aparte de lo sucio: takeDirty (el guardado)
+  // no los toca. id null = todas las hojas.
+  final _renderListeners = <void Function(String? sheetId)>[];
+  void addRenderListener(void Function(String? sheetId) f) => _renderListeners.add(f);
+  void removeRenderListener(void Function(String? sheetId) f) => _renderListeners.remove(f);
+
+  void _touch(String? id) {
+    if (_renderListeners.isEmpty) return;
+    for (final f in List.of(_renderListeners)) {
+      f(id);
+    }
+  }
+
+  void _mark(int k) {
+    final id = sheets[k].id;
+    _dirty.add(id);
+    _touch(id);
+  }
+
   /// Marca la hoja que contiene la altura [y].
-  void markDirtyAt(double y) => _dirty.add(sheets[sheetOfY(y)].id);
+  void markDirtyAt(double y) => _mark(sheetOfY(y));
 
   /// Marca todas las hojas que toca el rectángulo [r].
   void markDirtyRect(Rect r) {
     for (var k = sheetOfY(r.top); k <= sheetOfY(r.bottom); k++) {
-      _dirty.add(sheets[k].id);
+      _mark(k);
     }
   }
 
   /// Marca la hoja donde está ahora [e]. Si lo cambiás en el lugar, llamalo ANTES y DESPUÉS del cambio.
-  void markDirtyElement(Layered e) => _dirty.add(sheets[sheetOfElement(e)].id);
+  /// Para el guardado cuenta solo la hoja de su borde de arriba; para el render, un trazo avisa a todas
+  /// las hojas que toca (se dibuja recortado en cada una).
+  void markDirtyElement(Layered e) {
+    final k = sheetOfElement(e);
+    _mark(k);
+    if (e is Stroke) {
+      final b = e.bounds;
+      for (var j = sheetOfY(b.top); j <= sheetOfY(b.bottom); j++) {
+        if (j != k) _touch(sheets[j].id);
+      }
+    }
+  }
 
   /// Marca la hoja de índice [k].
-  void markDirtySheet(int k) => _dirty.add(sheets[k].id);
+  void markDirtySheet(int k) => _mark(k);
 
   /// Todo cambió (operaciones de hojas): se guarda todo.
-  void markAllDirty() => _allDirty = true;
+  void markAllDirty() {
+    _allDirty = true;
+    _touch(null);
+  }
 
   bool get hasDirty => _allDirty || _dirty.isNotEmpty;
 

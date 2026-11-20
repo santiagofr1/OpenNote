@@ -6,36 +6,36 @@ import 'package:flutter/rendering.dart';
 import '../domain/domain.dart';
 import 'stroke_painter.dart';
 
-/// Una tanda de trazos seguidos en el orden de dibujo (ver [ZRun]). Se repinta solo cuando cambia
-/// [version] o la lista de trazos; el resto del tiempo queda en caché. Cada tanda es su propia capa:
-/// una página normal tiene una sola (toda la tinta), y se parte en más solo si hay una imagen, nota
-/// o texto en el medio del orden.
+/// Una tanda de trazos seguidos en el orden de dibujo (ver [ZRun]) DE UNA HOJA. Se repinta solo cuando cambia
+/// [version] (la de esa hoja) o la lista de trazos; el resto del tiempo queda en caché. Cada tanda es su propia
+/// capa del tamaño de la hoja: una hoja normal tiene una sola (toda su tinta), y se parte en más solo si hay
+/// una imagen, nota o texto en el medio del orden.
+/// [sheet]: rectángulo de la hoja en la tira (coordenadas globales); la tinta se recorta a él, así un trazo
+/// que cruza de una hoja a la otra se ve en las dos.
 /// [hidden]: trazos que no se dibujan acá (los que se están moviendo).
 /// Los trazos borrados desde que se armó la lista se saltean (se mira [doc]), así borrar con la goma
 /// repinta sin rearmar los widgets.
 class InkPainter extends CustomPainter {
   final NotebookDoc doc;
   final List<Stroke> strokes;
+  final Rect sheet;
   final double scale;
   final ValueNotifier<int> version;
   final Set<String> Function() hidden;
-  InkPainter(this.doc, this.strokes, this.scale, this.version, this.hidden) : super(repaint: version);
+  InkPainter(this.doc, this.strokes, this.sheet, this.scale, this.version, this.hidden) : super(repaint: version);
 
   @override
   void paint(Canvas c, Size size) {
     c.scale(scale);
-    // la tinta solo se ve sobre las hojas, no en el espacio entre ellas
-    final clip = Path();
-    for (final r in sheetRects(doc.h)) {
-      clip.addRect(r);
-    }
-    c.clipPath(clip);
+    c.translate(0, -sheet.top);
+    c.clipRect(sheet);
     final skip = hidden();
     paintStrokes(c, strokes.where((s) => identical(doc.strokes[s.id], s) && !skip.contains(s.id)));
   }
 
   @override
-  bool shouldRepaint(InkPainter o) => o.doc != doc || o.scale != scale || !_same(o.strokes, strokes);
+  bool shouldRepaint(InkPainter o) =>
+      o.doc != doc || o.scale != scale || o.sheet != sheet || !_same(o.strokes, strokes);
 
   static bool _same(List<Stroke> a, List<Stroke> b) {
     if (a.length != b.length) return false;

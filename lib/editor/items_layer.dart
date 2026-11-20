@@ -17,6 +17,7 @@ class ItemView extends StatelessWidget {
   final double scale;
   final bool textMode, selected;
   final ValueChanged<String> onStickyChanged;
+  final ValueChanged<bool>? onStickyFocus; // la nota ganó o perdió el foco (el editor la deja armada mientras lo tenga)
   const ItemView({
     super.key,
     required this.item,
@@ -25,6 +26,7 @@ class ItemView extends StatelessWidget {
     required this.textMode,
     required this.selected,
     required this.onStickyChanged,
+    this.onStickyFocus,
   });
 
   @override
@@ -49,7 +51,12 @@ class ItemView extends StatelessWidget {
           child: IgnorePointer(
             // se escribe solo en modo texto; si no, el lápiz dibuja encima
             ignoring: !textMode,
-            child: StickyField(key: ValueKey('sticky-${it.id}'), text: it.text, fontSize: 20 * s, onChanged: onStickyChanged),
+            child: StickyField(
+                key: ValueKey('sticky-${it.id}'),
+                text: it.text,
+                fontSize: 20 * s,
+                onChanged: onStickyChanged,
+                onFocus: onStickyFocus),
           ),
         ),
       _ => AudioChip(file: file, dur: it.dur, scale: s),
@@ -76,7 +83,8 @@ class StickyField extends StatefulWidget {
   final String text;
   final double fontSize;
   final ValueChanged<String> onChanged;
-  const StickyField({super.key, required this.text, required this.fontSize, required this.onChanged});
+  final ValueChanged<bool>? onFocus;
+  const StickyField({super.key, required this.text, required this.fontSize, required this.onChanged, this.onFocus});
   @override
   State<StickyField> createState() => _StickyFieldState();
 }
@@ -90,14 +98,18 @@ class _StickyFieldState extends State<StickyField> {
   }
 
   @override
-  Widget build(BuildContext context) => TextField(
-        controller: c,
-        maxLines: null,
-        expands: true,
-        style: TextStyle(fontSize: widget.fontSize, height: 1.35, color: _stickyInk),
-        decoration: const InputDecoration.collapsed(hintText: 'Nota…', hintStyle: TextStyle(color: Color(0x662B2A27))),
-        cursorColor: _stickyInk,
-        onChanged: widget.onChanged,
+  Widget build(BuildContext context) => Focus(
+        canRequestFocus: false,
+        onFocusChange: widget.onFocus,
+        child: TextField(
+          controller: c,
+          maxLines: null,
+          expands: true,
+          style: TextStyle(fontSize: widget.fontSize, height: 1.35, color: _stickyInk),
+          decoration: const InputDecoration.collapsed(hintText: 'Nota…', hintStyle: TextStyle(color: Color(0x662B2A27))),
+          cursorColor: _stickyInk,
+          onChanged: widget.onChanged,
+        ),
       );
 }
 

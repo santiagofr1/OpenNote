@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -64,7 +65,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   ToolState get ts => widget.tools;
 
   final scroll = ScrollController(), hscroll = ScrollController();
-  final inkVersion = ValueNotifier(0); // repinta la capa de tinta fija
+  final _versions = <String, ValueNotifier<int>>{}; // por hoja (id): repinta solo la tinta de esa hoja
   final liveTick = ValueNotifier(0); // repinta la capa en vivo
   final history = History();
   final sel = Selection();
@@ -86,6 +87,11 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   final _saveTimers = <String, Timer>{}; // textos y notas: se guarda al dejar de escribir
   final _viewportKey = GlobalKey(), _sheetKey = GlobalKey();
 
+  // hojas armadas: las que se ven más un margen (ver [_calcRange]); las demás no tienen widgets
+  ({int first, int last}) _range = (first: 0, last: 0);
+  double _viewH = 800; // alto del visor
+  final _stickyFocus = <String>{}; // notas con el teclado abierto: se quedan armadas aunque se scrolleen lejos
+
   /// Ids de los elementos seleccionados (lo usan los tests).
   Set<String> get selI => sel.items;
 
@@ -93,7 +99,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   void initState() {
     super.initState();
     texts.attach(doc);
-    scroll.addListener(_scheduleVisibleSheet);
+    doc.addRenderListener(_onSheetTouched);
+    scroll.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) => scrollToSheet(widget.initialSheet, animate: false));
   }
 
@@ -102,6 +109,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     super.didUpdateWidget(oldWidget);
     // otro cuaderno en el mismo editor: lo de la anterior (deshacer, selección, campos) no sirve acá
     if (oldWidget.doc != widget.doc) {
+      oldWidget.doc.removeRenderListener(_onSheetTouched);
+      doc.addRenderListener(_onSheetTouched);
+      _versions.clear();
+      _stickyFocus.clear();
       texts.attach(doc);
       history.clear();
       sel.clear();
@@ -124,11 +135,79 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     scroll.dispose();
     hscroll.dispose();
     pull.dispose();
-    inkVersion.dispose();
+    doc.removeRenderListener(_onSheetTouched);
+    for (final v in _versions.values) {
+      v.dispose();
+    }
     liveTick.dispose();
     _zoomPillTimer?.cancel();
     stillPress.cancel();
     super.dispose();
+  }
+
+  /// Versión de la tinta de la hoja [sheetId] (sube cuando algo de esa hoja cambia). Para los tests.
+  @visibleForTesting
+  ValueNotifier<int> inkVersionOf(String sheetId) => _verOf(sheetId);
+
+  ValueNotifier<int> _verOf(String sheetId) => _versions.putIfAbsent(sheetId, () => ValueNotifier(0));
+
+  /// Algo de la hoja [id] cambió (null: de todas): se repinta solo su tinta.
+  void _onSheetTouched(String? id) {
+    if (id == null) {
+      _touchAll();
+    } else {
+      _versions[id]?.value++;
+    }
+  }
+
+  void _touchAll() {
+    for (final v in _versions.values) {
+      v.value++;
+    }
+  }
+
+  /// Repinta las hojas que toca el rectángulo [r] (sin que el cuaderno haya cambiado: ej. trazos que se ocultan al arrastrar).
+  void _touchRect(Rect r) {
+    for (var k = doc.sheetOfY(r.top); k <= doc.sheetOfY(r.bottom); k++) {
+      _versions[doc.sheets[k].id]?.value++;
+    }
+  }
+
+  void _touchStrokes(Iterable<Stroke> ss) {
+    for (final s in ss) {
+      _touchRect(s.bounds);
+    }
+  }
+
+  /// Hojas que se arman: las que se ven más un margen de un alto de visor arriba y abajo.
+  ({int first, int last}) _calcRange() {
+    final off = scroll.hasClients && scroll.position.hasPixels ? scroll.offset : 0.0;
+    final top = (off - kTopPad) / scale, span = _viewH / scale;
+    return (first: doc.sheetOfY(top - span), last: doc.sheetOfY(top + 2 * span));
+  }
+
+  /// Zona de la página que se ve (más un margen), para no pintar de más en la capa en vivo.
+  Rect _visiblePage() {
+    final off = scroll.hasClients && scroll.position.hasPixels ? scroll.offset : 0.0;
+    final top = (off - kTopPad) / scale, span = _viewH / scale;
+    return Rect.fromLTRB(-1e6, top - span, 1e6, top + 2 * span);
+  }
+
+  /// Al scrollear solo se rearma el cuaderno si cambió el rango de hojas armadas.
+  void _onScroll() {
+    _scheduleVisibleSheet();
+    if (_calcRange() == _range) return;
+    void rebuild() {
+      if (!mounted || _calcRange() == _range) return;
+      setState(() {});
+      if (sel.moving) liveTick.value++; // la capa en vivo dibuja solo lo visible
+    }
+
+    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => rebuild()); // en pleno armado no se puede
+    } else {
+      rebuild();
+    }
   }
 
   void _rebuild() {
@@ -233,8 +312,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     if (s.n < 2) return;
     s.smooth();
     s.z = doc.nextZ(); // arriba de todo
-    doc.strokes[s.id] = s;
-    inkVersion.value++;
+    doc.strokes[s.id] = s; // avisa a las hojas que toca
     _pushUndo(EditAction(added: [s]));
     _growIfNeeded(s.bounds.bottom);
     _changed();
@@ -253,8 +331,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     for (final s in hits) {
       doc.strokes.remove(s.id);
     }
-    erased!.addAll(hits);
-    inkVersion.value++;
+    erased!.addAll(hits); // (cada trazo sacado ya avisó a sus hojas)
     _changed();
   }
 
@@ -269,7 +346,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     if (a == null) return;
     a.apply(doc, undo: undo, putText: texts.put);
     _clearSel();
-    inkVersion.value++;
+    _touchAll();
     _changed();
     setState(() {});
   }
@@ -287,7 +364,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final r = sel.bounds(doc);
     if (r != null && r.inflate(12).contains(p)) {
       sel.startDrag(doc, p);
-      inkVersion.value++; // oculta los seleccionados de la capa fija
+      _touchStrokes(sel.strokesOf(doc)); // oculta los seleccionados de la capa fija
       setState(() {});
       return;
     }
@@ -327,7 +404,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     sel.drag = null;
     if (d.distance < .5) {
       // fue un toque: nada se movió
-      inkVersion.value++;
+      _touchStrokes(sel.strokesOf(doc));
       setState(() {});
       return;
     }
@@ -365,7 +442,6 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         textAfter: textAfter,
         itemBefore: itemBefore,
         itemAfter: itemAfter));
-    inkVersion.value++;
     final r = sel.bounds(doc);
     if (r != null) _growIfNeeded(r.bottom);
     _changed();
@@ -401,7 +477,6 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       itemAfter: absent(itemBefore.keys),
     ));
     _clearSel();
-    inkVersion.value++;
     _changed();
   }
 
@@ -436,7 +511,6 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       texts: newTexts.map((t) => t.id),
       items: newItems.map((it) => it.id),
     );
-    inkVersion.value++;
     final r = sel.bounds(doc);
     if (r != null) _growIfNeeded(r.bottom);
     _changed();
@@ -447,8 +521,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   void _reorderSel(ZMove m) {
     final ch = doc.reorder(sel.allIds, m, _rectOf);
     if (ch == null) return;
-    _pushUndo(EditAction(zBefore: ch.before, zAfter: ch.after));
-    inkVersion.value++;
+    _pushUndo(EditAction(zBefore: ch.before, zAfter: ch.after)); // el cambio de z ya avisó a sus hojas
     liveTick.value++;
     _changed();
   }
@@ -811,7 +884,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     eraserAt = null;
     _changed();
     setState(() {});
-    inkVersion.value++;
+    _touchAll();
     liveTick.value++;
     _updateVisibleSheet();
   }
@@ -851,7 +924,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   /// Después de cambiar fondo/papel desde afuera.
   void refresh() {
     setState(() {});
-    inkVersion.value++;
+    _touchAll();
   }
 
   // ---------------- armado ----------------
@@ -896,6 +969,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       color: cs.surfaceContainerLow,
       child: LayoutBuilder(builder: (context, box) {
         layout = SheetLayout(box.maxWidth, ts.zoom);
+        _viewH = box.maxHeight;
+        _range = _calcRange();
         final sheetSize = Size(layout.sheetWidth, doc.h * scale);
         // durante el pellizco no scrollea: si no, el zoom tironea
         final physics = touch.pinching ? const NeverScrollableScrollPhysics() : const ClampingScrollPhysics();
@@ -1009,13 +1084,47 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   /// De abajo hacia arriba: papel, y después todo en el orden de dibujo (un solo orden para trazos,
   /// textos y elementos), y arriba la capa en vivo.
   ///
-  /// Rendimiento: la tinta no se dibuja trazo por trazo en widgets. Los trazos seguidos en el orden forman
-  /// una tanda ([ZRun]) y cada tanda es una capa con caché ([RepaintBoundary]) que solo se repinta cuando
-  /// cambian sus trazos. Una página normal (cientos de trazos y los textos/imágenes de siempre) es una
-  /// sola tanda, igual que antes; cada imagen, nota o texto que quede "en el medio" de la tinta suma una
-  /// capa más. Los widgets llevan clave para conservar su estado (campos de texto, audio) al reordenarse.
+  /// Rendimiento: la tinta no se dibuja trazo por trazo en widgets, y solo se arma lo que se ve.
+  /// - Solo hay widgets de las hojas del rango [_range] (las visibles más un margen). Además quedan armados,
+  ///   aunque estén lejos, los textos y notas con foco, lo seleccionado, los audios y lo de una hoja de arriba
+  ///   que se pasa a las armadas ("extras", al final del orden).
+  /// - Cada hoja tiene sus propias tandas ([ZRun]) y cada tanda de tinta es una capa con caché ([RepaintBoundary])
+  ///   del tamaño de UNA hoja, recortada a ella. Un trazo que cruza de una hoja a otra está en las tandas de las dos.
+  ///   Una hoja normal tiene una sola tanda; cada imagen, nota o texto "en el medio" de su tinta suma una capa.
+  /// - Cada hoja repinta con su propia versión ([_verOf]): borrar o dibujar en una no toca las otras.
+  /// Los widgets llevan clave para conservar su estado (campos de texto, audio) al reordenarse o pasar de hoja.
   Widget _layers(bool textMode) {
-    final runs = zRuns(doc.drawOrder());
+    final first = _range.first, last = _range.last;
+    final rangeTop = first * kSheetStep;
+    final fixed = <String>{...sel.texts, ...sel.items, ..._stickyFocus};
+    final focusedText = texts.focused?.block.id;
+    if (focusedText != null) fixed.add(focusedText);
+    final bySheet = [for (var k = first; k <= last; k++) <Layered>[]];
+    final extras = <Layered>[];
+    for (final e in doc.drawOrder()) {
+      switch (e) {
+        case Stroke s:
+          final b = s.bounds;
+          for (var k = max(first, doc.sheetOfY(b.top)); k <= min(last, doc.sheetOfY(b.bottom)); k++) {
+            if (b.overlaps(Rect.fromLTWH(0, k * kSheetStep, kW, kSheetH))) bySheet[k - first].add(s);
+          }
+        case Item it:
+          final k = doc.sheetOfY(it.y);
+          if (k >= first && k <= last) {
+            bySheet[k - first].add(it);
+          } else if (fixed.contains(it.id) || it.type == 'audio' || (k < first && it.y + it.h > rangeTop)) {
+            extras.add(it);
+          }
+        case TextBlock t:
+          final k = doc.sheetOfY(t.y);
+          if (k >= first && k <= last) {
+            bySheet[k - first].add(t);
+          } else if (fixed.contains(t.id) || (k < first && t.y + _textExtent(t) > rangeTop)) {
+            extras.add(t);
+          }
+        default:
+      }
+    }
     return Listener(
       onPointerDown: _down,
       onPointerMove: _move,
@@ -1025,13 +1134,20 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         behavior: HitTestBehavior.opaque,
         onTapUp: textMode ? _tapPage : null,
         child: Stack(clipBehavior: Clip.none, children: [
-          Positioned.fill(child: CustomPaint(painter: SheetPainter(doc.sheets, scale))),
-          for (var i = 0; i < runs.length; i++) _run(runs[i], i, textMode),
+          Positioned.fill(
+            child: RepaintBoundary(child: CustomPaint(painter: SheetPainter(doc.sheets, scale, first, last))),
+          ),
+          for (var k = first; k <= last; k++) ...[
+            for (final (i, run) in zRuns(bySheet[k - first]).indexed) _run(run, i, textMode, k),
+          ],
+          for (final (i, run) in zRuns(extras).indexed) _run(run, i, textMode, -1),
           Positioned.fill(
             child: IgnorePointer(
-              child: CustomPaint(
-                // método y no closure: tiene que leer el trazo en curso al pintar, no al armar
-                painter: LivePainter(_paintLive, scale, liveTick),
+              child: RepaintBoundary(
+                child: CustomPaint(
+                  // método y no closure: tiene que leer el trazo en curso al pintar, no al armar
+                  painter: LivePainter(_paintLive, scale, liveTick),
+                ),
               ),
             ),
           ),
@@ -1040,15 +1156,32 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     );
   }
 
-  Widget _run(ZRun run, int i, bool textMode) {
+  /// Alto de más para un texto (unidades), sin medirlo: sirve para saber si un texto de una hoja de arriba
+  /// llega hasta las hojas armadas. Pasarse solo arma un texto de más.
+  double _textExtent(TextBlock t) {
+    var lines = 0.0;
+    for (final p in t.body.paras) {
+      lines += max(1, (p.length * 26 / max(1.0, t.w)).ceil());
+    }
+    return (lines + 1) * doc.lineAt(t.y) * 1.8;
+  }
+
+  /// [sheet]: índice de la hoja de la tanda de tinta (-1 en los extras, que nunca llevan tinta).
+  Widget _run(ZRun run, int i, bool textMode, int sheet) {
     final strokes = run.strokes;
     if (strokes != null) {
-      return Positioned.fill(
-        key: ValueKey('ink-$i'),
+      final r = Rect.fromLTWH(0, sheet * kSheetStep, kW, kSheetH);
+      final id = doc.sheets[sheet].id;
+      return Positioned(
+        key: ValueKey('ink-$id-$i'),
+        left: 0,
+        top: r.top * scale,
+        width: kW * scale,
+        height: kSheetH * scale,
         child: IgnorePointer(
           child: RepaintBoundary(
             child: CustomPaint(
-                painter: InkPainter(doc, strokes, scale, inkVersion, () => sel.moving ? sel.strokes : const {}),
+                painter: InkPainter(doc, strokes, r, scale, _verOf(id), () => sel.moving ? sel.strokes : const {}),
                 isComplex: true),
           ),
         ),
@@ -1068,13 +1201,14 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
           doc.markDirtyElement(e);
           _saveSoon(e.id, const Duration(milliseconds: 350));
         },
+        onStickyFocus: (f) => f ? _stickyFocus.add(e.id) : _stickyFocus.remove(e.id),
       );
     }
     return _textBlock(e as TextBlock, textMode);
   }
 
   void _paintLive(Canvas c) => paintLiveLayer(c,
-      doc: doc, scale: scale, sel: sel, live: live, eraserAt: eraserAt, eraserRadius: ts.eraserRadius);
+      doc: doc, scale: scale, sel: sel, live: live, eraserAt: eraserAt, eraserRadius: ts.eraserRadius, visible: _visiblePage());
 
   Widget _textBlock(TextBlock t, bool textMode) {
     final ed = texts.editor(t.id);

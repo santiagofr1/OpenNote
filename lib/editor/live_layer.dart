@@ -16,6 +16,7 @@ void paintLiveLayer(
   Stroke? live,
   Offset? eraserAt,
   double eraserRadius = 0,
+  Rect? visible, // zona que se ve (más margen): los trazos arrastrados de afuera no se dibujan
 }) {
   if (live != null) paintStroke(c, live);
   if (eraserAt != null) {
@@ -57,6 +58,7 @@ void paintLiveLayer(
     c.save();
     c.translate(drag.delta.dx, drag.delta.dy);
     for (final s in sel.strokesOf(doc)) {
+      if (visible != null && !s.bounds.shift(drag.delta).overlaps(visible)) continue;
       paintStroke(c, s);
     }
     c.restore();
