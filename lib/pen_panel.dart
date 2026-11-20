@@ -11,7 +11,7 @@ const kDesk = Color(0xFFECEBE6);
 const kText = Color(0xFF22211E);
 const kMuted = Color(0xFF7A776E);
 
-enum Tool { pen, hl, text }
+enum Tool { pen, hl, text, select }
 
 const tips = [
   ('pen', 'Bolígrafo'),
@@ -60,6 +60,11 @@ class ToolState {
   List<String> penRecent = ['#22211e', '#1d4ed8', '#b91c1c', '#15803d', '#c2410c', '#7e22ce'];
   List<String> hlRecent = ['#f7d22c', '#5ee08a', '#ff86c8', '#5bc8ff'];
   int eraserSize = 1;
+
+  // portapapeles de la selección (sirve entre páginas)
+  List<Stroke> clipStrokes = [];
+  List<TextBlock> clipTexts = [];
+  bool get hasClip => clipStrokes.isNotEmpty || clipTexts.isNotEmpty;
 
   PenPreset get current => tool == Tool.hl ? hl : pen;
   List<String> get recent => tool == Tool.hl ? hlRecent : penRecent;
