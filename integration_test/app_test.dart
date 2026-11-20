@@ -12,6 +12,7 @@ import 'package:apuntes/data/media_import.dart';
 import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/editor/page_editor.dart';
+import 'package:apuntes/editor/selection_menu.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -106,6 +107,30 @@ void main() {
     final f = File('${root.path}/foto.png');
     await f.writeAsBytes(png!.buffer.asUint8List());
     return f;
+  }
+
+  /// Documento -> pantalla: el Listener de las capas mide exactamente la hoja (ancho kW * escala) y se
+  /// pregunta al render, así que cuenta escala y scroll (anda igual en la tablet vertical u horizontal).
+  Offset Function(Offset) docToScreen(WidgetTester t) {
+    final ed = editor(t);
+    final layers = find
+        .descendant(of: find.byType(PageEditor), matching: find.byType(Listener))
+        .evaluate()
+        .map((e) => e.renderObject as RenderBox)
+        .firstWhere((b) => b.hasSize && (b.size.width - kW * ed.scale).abs() < .5);
+    return (Offset p) => layers.localToGlobal(p * ed.scale);
+  }
+
+  /// Arrastre de lápiz; [during] se evalúa con el lápiz todavía apoyado.
+  Future<void> stylusDrag(WidgetTester t, Offset a, Offset b, {void Function()? during}) async {
+    final g = await t.startGesture(a, kind: PointerDeviceKind.stylus);
+    for (var i = 1; i <= 10; i++) {
+      await g.moveTo(Offset.lerp(a, b, i / 10)!);
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    during?.call();
+    await g.up();
+    await settle(t, 300);
   }
 
   // ---------------- tests ----------------
@@ -568,5 +593,86 @@ void main() {
     await t.tap(find.byKey(const Key('autoUpdates')));
     await settle(t, 400);
     expect(t.widget<SwitchListTile>(find.byKey(const Key('autoUpdates'))).value, isFalse);
+  });
+
+  testWidgets('seleccionar: hacia la derecha toma lo de adentro, hacia la izquierda todo lo que toca', (t) async {
+    await start(t);
+    await createNotebook(t, 'Selección');
+    final p = docToScreen(t);
+    // zona del recuadro (coordenadas del documento): A queda entero adentro, B cruza con casi todo afuera, C lejos
+    const zone = Rect.fromLTRB(100, 100, 400, 300);
+    await stylusLine(t, p(const Offset(150, 150)), p(const Offset(350, 250)));
+    await stylusLine(t, p(const Offset(300, 200)), p(const Offset(900, 200)));
+    await stylusLine(t, p(const Offset(600, 340)), p(const Offset(900, 340)));
+    final ed = editor(t);
+    expect(ed.doc.strokes.length, 3);
+    final strokes = ed.doc.strokes.values.toList();
+    final a = strokes.firstWhere((s) => zone.contains(s.bounds.center) && s.bounds.width < 300).id;
+    final b = strokes.firstWhere((s) => s.bounds.width > 400 && s.bounds.center.dy < 300).id;
+    final c = strokes.firstWhere((s) => s.bounds.center.dy > 300).id;
+
+    await t.tap(find.byTooltip('Seleccionar'));
+    await settle(t);
+
+    // izquierda -> derecha: ventana
+    var duringCapture = true, duringBand = false;
+    await stylusDrag(t, p(zone.topLeft), p(zone.bottomRight), during: () {
+      duringCapture = ed.sel.capture;
+      duringBand = ed.sel.band != null;
+    });
+    expect(duringBand, isTrue);
+    expect(duringCapture, isFalse);
+    expect(ed.sel.strokes, {a});
+    expect(find.byType(SelectionMenu), findsOneWidget);
+
+    // deseleccionar con la X de la barrita
+    await t.tap(find.byTooltip('Deseleccionar'));
+    await settle(t);
+    expect(ed.sel.strokes, isEmpty);
+    expect(find.byType(SelectionMenu), findsNothing);
+
+    // derecha -> izquierda: captura
+    duringCapture = false;
+    await stylusDrag(t, p(zone.bottomRight), p(zone.topLeft), during: () => duringCapture = ed.sel.capture);
+    expect(duringCapture, isTrue);
+    expect(ed.sel.strokes, {a, b});
+    expect(ed.sel.strokes, isNot(contains(c)));
+    expect(find.byType(SelectionMenu), findsOneWidget);
+  });
+
+  testWidgets('selección: menú Orden lleva al frente y al fondo', (t) async {
+    await start(t);
+    await createNotebook(t, 'Orden');
+    final p = docToScreen(t);
+    // dos trazos que se cruzan: el horizontal se dibuja primero (abajo), el vertical después (arriba)
+    await stylusLine(t, p(const Offset(200, 200)), p(const Offset(600, 200)));
+    await stylusLine(t, p(const Offset(400, 100)), p(const Offset(400, 320)));
+    final ed = editor(t);
+    final low = ed.doc.strokes.values.firstWhere((s) => s.bounds.width > 300).id;
+    expect(ed.doc.drawOrder().first.id, low);
+
+    await t.tap(find.byTooltip('Seleccionar'));
+    await settle(t);
+    // ventana que encierra solo el horizontal
+    await stylusDrag(t, p(const Offset(150, 170)), p(const Offset(650, 230)));
+    expect(ed.sel.strokes, {low});
+    expect(find.byType(SelectionMenu), findsOneWidget);
+
+    await t.tap(find.byKey(const Key('selOrder')));
+    await settle(t);
+    await t.tap(find.text('Traer al frente'));
+    await settle(t);
+    expect(ed.doc.drawOrder().last.id, low);
+
+    await t.tap(find.byKey(const Key('selOrder')));
+    await settle(t);
+    await t.tap(find.text('Enviar al fondo'));
+    await settle(t);
+    expect(ed.doc.drawOrder().first.id, low);
+
+    // deshacer: vuelve al orden anterior (al frente)
+    await t.tap(find.byTooltip('Deshacer'));
+    await settle(t);
+    expect(ed.doc.drawOrder().last.id, low);
   });
 }
