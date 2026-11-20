@@ -11,11 +11,6 @@
    - Exportar/backup del cuaderno entero como un archivo `.opennote` (ZIP).
    - Mover hojas arrastrando en el panel (hoy: menú "Mover antes / después").
    - Las operaciones de hojas (agregar, duplicar, mover, borrar) no se pueden deshacer: vacían el historial.
-9. **Capturas en el README**: 2–3 capturas (o un GIF corto) de la app en uso: cuaderno con escritura, panel de hojas,
-   biblioteca con carpetas. Sacarlas de la app de test con datos de ejemplo (nunca de los cuadernos reales) y
-   guardarlas en `docs/img/`. Recién ahí agregar la sección "Capturas" al README.
-   Aparte, para `docs/TECNICO.md` (no el README): investigar compatibilidad con toda la gama Galaxy Tab S y tablets
-   USI (botón del S Pen, pantallas, 60/120 Hz, minSdk). Hasta ahora solo probado en Tab S6 Lite (SM-P620, Android 16).
 17. **App de PC + sincronización (A INVESTIGAR, no implementar todavía)**:
     - PC: Flutter desktop compila el mismo código para Linux, Windows y macOS. Investigar qué cambia: entrada
       (mouse/teclado y tabletas Wacom en PC), atajos de teclado, rutas de datos, empaquetado (AppImage/Flatpak/.deb,
@@ -32,6 +27,8 @@
 15. **LaTeX**: lo hace el usuario; no tocar.
 
 ## Hecho
+
+- **9. Capturas en el README** (rama `feat/capturas`): 3 capturas (cuaderno, panel de hojas, biblioteca) que se generan solas en la tablet con `tool/screenshots.sh`, desde "OpenNote Test" con datos de ejemplo (letra con la fuente Hershey Script). La compatibilidad con otras tablets quedó en docs/TECNICO.md ("Tablets y lápices"); falta probarla en otros equipos.
 
 - **18. Aviso de actualización más amable** (rama `feat/aviso-actualizacion`): "Hay una versión nueva de OpenNote", "Tenés la X → nueva Y", novedades en viñetas sacadas de los merges a main (sin merges internos, tests ni metadatos), aclaración de que viene de GitHub y no toca los cuadernos, botones "Ahora no" / "Omitir esta versión" / "Actualizar" y el permiso de instalar explicado antes de ir a ajustes.
 
