@@ -18,6 +18,17 @@ instalada() { adb -s "$DEV" shell pm list packages "$PKG" | tr -d '\r' | grep -q
 
 instalada || { echo "ERROR: la app real ($PKG) no está instalada; no corro nada."; exit 1; }
 
+# 1) Solo si la tablet está en el inicio o en OpenNote (nunca encima de otra app, p. ej. Samsung Notes).
+FOCO=$(adb -s "$DEV" shell dumpsys window | grep mCurrentFocus | tr -d '\r')
+echo "$FOCO" | grep -qE 'launcher|com\.apuntes\.apuntes' || { echo "ERROR: la tablet está en otra app; no corro nada."; echo "$FOCO"; exit 1; }
+
+# 2) Compilar antes: flutter decide qué app desinstalar ANTES de compilar, leyendo el APK que haya.
+#    Sin APK previo usa el id del código (com.apuntes.apuntes) y desinstalaría la app real.
+flutter build apk --debug >/dev/null
+AAPT=$(ls -d "$ANDROID_HOME"/build-tools/*/ | tail -1)aapt2
+ID=$("$AAPT" dump badging build/app/outputs/flutter-apk/app-debug.apk | sed -n "s/^package: name='\([^']*\)'.*/\1/p")
+[ "$ID" = "$PKG.test" ] || { echo "ERROR: el APK de test es '$ID', no $PKG.test; no corro nada."; exit 1; }
+
 ANTES=$(snapshot)
 N_ANTES=$(echo "$ANTES" | grep -c '^-' || true)
 echo "Datos reales antes: $N_ANTES archivos"
@@ -33,7 +44,7 @@ if [ "${BACKUP:-0}" = 1 ]; then
 fi
 
 set +e
-flutter test integration_test/app_test.dart -d "$DEV" -r expanded
+flutter test integration_test/app_test.dart -d "$DEV" -r expanded --no-uninstall
 R=$?
 set -e
 
