@@ -1,9 +1,11 @@
 import 'dart:math';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 
 import '../domain/domain.dart';
+import 'sheet_image_cache.dart';
 import 'stroke_painter.dart';
 
 /// Una tanda de trazos seguidos en el orden de dibujo (ver [ZRun]) DE UNA HOJA. Se repinta solo cuando cambia
@@ -13,6 +15,7 @@ import 'stroke_painter.dart';
 /// [sheet]: rectángulo de la hoja en la tira (coordenadas globales); la tinta se recorta a él, así un trazo
 /// que cruza de una hoja a la otra se ve en las dos.
 /// [hidden]: trazos que no se dibujan acá (los que se están moviendo).
+/// Si hay [cache], una tanda quieta se dibuja como imagen (ver [SheetImageCache]).
 /// Los trazos borrados desde que se armó la lista se saltean (se mira [doc]), así borrar con la goma
 /// repinta sin rearmar los widgets.
 class InkPainter extends CustomPainter {
@@ -22,28 +25,71 @@ class InkPainter extends CustomPainter {
   final double scale;
   final ValueNotifier<int> version;
   final Set<String> Function() hidden;
-  InkPainter(this.doc, this.strokes, this.sheet, this.scale, this.version, this.hidden) : super(repaint: version);
+
+  /// Caché de imagen (ver [SheetImageCache]): [cacheKey] / [sheetId] dicen qué tanda es. [dpr] pasa de unidades
+  /// lógicas a píxeles; [maxPx] es el ancho máximo en píxeles que se cachea (más zoom que eso va vectorial).
+  final SheetImageCache? cache;
+  final String cacheKey, sheetId;
+  final double dpr, maxPx;
+  final InkImage? _img;
+  int? _points;
+
+  InkPainter(this.doc, this.strokes, this.sheet, this.scale, this.version, this.hidden,
+      {this.cache, this.cacheKey = '', this.sheetId = '', this.dpr = 1, this.maxPx = 4096})
+      : _img = cache?.entry(cacheKey, sheetId),
+        super(repaint: cache == null ? version : Listenable.merge([version, cache.entry(cacheKey, sheetId)]));
+
+  /// Trazos vivos de la tanda (los borrados desde que se armó la lista se saltean).
+  Iterable<Stroke> _alive(Set<String> skip) => strokes.where((s) => identical(doc.strokes[s.id], s) && !skip.contains(s.id));
 
   @override
   void paint(Canvas c, Size size) {
+    final skip = hidden();
+    final img = _img;
+    if (img != null && cache != null) {
+      final w = (size.width * dpr).round(), h = (size.height * dpr).round();
+      _points ??= strokes.fold<int>(0, (a, s) => a + s.n);
+      // con trazos arrastrándose (ocultos), muy ampliada o con poca tinta: vectorial y sin imagen
+      if (skip.isNotEmpty || w > maxPx || _points! < cache!.minPoints) {
+        img.invalidate();
+      } else {
+        if (img.image != null && !InkImage.sameStrokes(img.imageStrokes, strokes)) img.invalidate();
+        img.want(w, h);
+        img.record = _record;
+        img.recStrokes = strokes;
+        final im = img.image;
+        if (im != null) {
+          // la imagen es de la hoja entera; si el zoom cambió se estira la vieja hasta que se regenere
+          c.drawImageRect(im, Rect.fromLTWH(0, 0, im.width.toDouble(), im.height.toDouble()), Offset.zero & size,
+              Paint()..filterQuality = FilterQuality.low);
+          img.schedule();
+          return;
+        }
+        img.schedule();
+      }
+    }
     c.scale(scale);
     c.translate(0, -sheet.top);
     c.clipRect(sheet);
+    paintStrokes(c, _alive(skip));
+  }
+
+  /// Graba la tanda entera de la hoja a [w] x [h] píxeles (para la imagen). null si hay trazos ocultos.
+  ui.Picture? _record(int w, int h) {
     final skip = hidden();
-    paintStrokes(c, strokes.where((s) => identical(doc.strokes[s.id], s) && !skip.contains(s.id)));
+    if (skip.isNotEmpty) return null;
+    final rec = ui.PictureRecorder();
+    final c = Canvas(rec);
+    c.scale(w / sheet.width, h / sheet.height);
+    c.translate(0, -sheet.top);
+    c.clipRect(sheet);
+    paintStrokes(c, _alive(skip));
+    return rec.endRecording();
   }
 
   @override
   bool shouldRepaint(InkPainter o) =>
-      o.doc != doc || o.scale != scale || o.sheet != sheet || !_same(o.strokes, strokes);
-
-  static bool _same(List<Stroke> a, List<Stroke> b) {
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (!identical(a[i], b[i])) return false;
-    }
-    return true;
-  }
+      o.doc != doc || o.scale != scale || o.sheet != sheet || o.dpr != dpr || !InkImage.sameStrokes(o.strokes, strokes);
 }
 
 /// Capa de lo que pasa "ahora": trazo en curso, goma, selección.
