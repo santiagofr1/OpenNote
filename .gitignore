@@ -54,3 +54,4 @@ android/key.properties
 
 # Herramientas locales
 .claude-flow/
+android/.kotlin/

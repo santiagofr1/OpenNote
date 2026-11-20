@@ -32,13 +32,7 @@ void paintSheet(Canvas c, NotebookDoc doc, int sheet, double pxPerUnit, {Map<Str
       final t = e;
       // kLine * 40: tope generoso del alto de un texto, para no medirlos todos
       if (t.text.trim().isEmpty || t.y > top + kSheetH || t.y + kLine * 40 < top) continue;
-      final line = doc.lineAt(t.y);
-      final tp = TextPainter(
-        text: TextSpan(text: t.text, style: textStyle(line, color: kInk)),
-        strutStyle: textStrut(line),
-        textDirection: TextDirection.ltr,
-      )..layout(maxWidth: t.w);
-      tp.paint(c, Offset(t.x, t.y));
+      layoutBlock(t, doc.lineAt(t.y)).paint(c, Offset(t.x, t.y));
     }
   }
   c.restore();

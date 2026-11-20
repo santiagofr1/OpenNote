@@ -36,6 +36,31 @@ y en el PDF (página A4 llena), así que al imprimir al 100 % las medidas son re
 
 El texto con teclado se apoya en el renglón de su propia hoja.
 
+### Texto con formato
+- Modelo puro en `lib/domain/rich_text.dart`: `TextBlock.body` es un `RichBody` (lista de `Para`: estilo
+  normal/título/subtítulo, lista ninguna/viñeta/numerada/tareas, sangría 0..4, alineación; cada uno con `Run`s
+  de negrita, cursiva, subrayado, tachado, color y resaltado). Inmutable: cada operación (`toggle`, `setList`,
+  `enter`, `backspaceAtStart`, `replaceRange`, `indent`, `numbering`) devuelve un cuerpo nuevo. Los rangos son
+  posiciones globales (un salto de línea entre párrafos).
+- JSON: sin formato se guarda igual que antes (`text`); con formato agrega `rich` (y deja `text` de respaldo). Un
+  texto viejo (solo `text`) se carga como párrafos normales partiendo por `\n`: no hay migración. Búsqueda y
+  portapapeles usan `TextBlock.text` (texto plano).
+- Dibujo: `lib/rendering/text_layout.dart` (`paraLayout`, `layoutBlock`) lo comparten el editor y las miniaturas /
+  PNG / PDF. Los títulos usan letra más grande pero el interlineado queda en un renglón (caen sobre el rayado);
+  la casilla de tareas se dibuja con trazos.
+- Edición (`lib/editor/rich_editing.dart`): un `TextField` por párrafo, no uno solo. Se eligió así porque la
+  alineación, la sangría y el marcador son por párrafo y un campo único solo tiene una alineación; además
+  Enter / retroceso al principio parten y unen campos sin tocar el caret nativo. A cambio no hay selección que
+  cruce párrafos con el dedo (el formato de párrafo aplica al párrafo con foco; las operaciones del modelo ya
+  aceptan rangos entre párrafos). Cada campo lleva un carácter guía invisible (U+200B) al principio: si el teclado
+  del celular lo borra, es un retroceso al principio. `RichController.buildTextSpan` pinta los tramos y el valor
+  que escribe el usuario se pasa al modelo (`userEdit`) heredando el formato del carácter anterior o el pendiente
+  (negrita sin selección).
+- Barra de formato (`format_bar.dart`): botones que no toman el foco (`canRequestFocus: false` +
+  `TextFieldTapRegion`), así el teclado no se cierra.
+- El tecladito de la barra crea un bloque debajo de lo último visible de la hoja que se ve; en modo texto reabre el
+  teclado en el último bloque editado. Los bloques vacíos se borran al perder el foco.
+
 ## Almacenamiento (formato 3)
 
 ### Estructura de carpetas
@@ -97,6 +122,23 @@ Requisitos:
 - Flutter en `~/flutter`.
 - Android SDK en `~/Android/Sdk`.
 - JDK 21 en `~/Android/jdk21`.
+
+## Actualizaciones
+
+`lib/domain/version.dart` parsea y compara versiones (`v1.0.12`; prereleases y tags raros se ignoran).
+`lib/data/updates.dart` consulta `GET https://api.github.com/repos/santiagofr1/OpenNote/releases/latest`
+(sin autenticación, `User-Agent: OpenNote-app`, con `dart:io`), elige el asset `.apk` y compara el tag con
+`versionName` (`package_info_plus`). Cualquier error o un 404 (repo privado) es "sin información" y no muestra nada.
+
+- Automático: al abrir la biblioteca, solo Android release (no en debug `.test` ni en tests), si está activado y
+  pasaron 24 h. `updLastCheck`, `updSkipped` y `updAuto` se guardan en `prefs.json` (`Storage.savePrefs` mezcla
+  las claves, así no pisa las de las herramientas).
+- Manual: ⋮ de la biblioteca → "Buscar actualizaciones" (ignora el plazo y la versión omitida).
+- Actualizar: descarga a `cache/updates/` con progreso cancelable, verifica el tamaño y abre el instalador por el
+  canal `opennote/updater` (`MainActivity.kt`) con un `FileProvider` (`res/xml/file_paths.xml`). Si falta el permiso
+  "instalar apps desconocidas" abre esa pantalla para OpenNote. Permisos: `INTERNET`, `REQUEST_INSTALL_PACKAGES`.
+- Los tests reemplazan `Updates.check/download/install` (como `Pickers`).
+- Android exige que el APK nuevo esté firmado con la misma clave que el instalado (ver `docs/RELEASES.md`).
 
 ## Tests
 
