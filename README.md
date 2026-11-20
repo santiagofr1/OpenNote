@@ -16,8 +16,19 @@ Requiere Flutter en `~/flutter`, Android SDK en `~/Android/Sdk` y JDK 21 en `~/A
 
 ## Código
 
-- `lib/model.dart`   — trazos, textos, páginas, cuadernos (+ JSON)
-- `lib/storage.dart` — lectura/escritura de archivos
-- `lib/painters.dart` — dibujo de hoja, tinta y trazo en vivo
-- `lib/editor.dart`  — editor de página y barra de herramientas
-- `lib/main.dart`    — app, menú de cuadernos, guardado
+Por capas (cada una usa solo las de arriba):
+
+- `lib/domain/`    — datos puros: medidas de la hoja, trazos, páginas, cuadernos, herramientas (+ JSON)
+- `lib/data/`      — archivos (`Storage`), exportar PDF/PNG, importar imágenes/audio/PDF
+- `lib/rendering/` — dibujo de trazos, papel, hojas completas (miniaturas y PDF) y capas del editor
+- `lib/editor/`    — editor de página: `page_editor.dart` coordina; entrada del lápiz (`ink`),
+  selección, deshacer (`history`), textos, elementos, zoom (`viewport`, `touch_gestures`),
+  tirar para agregar hoja, barra acoplable (`dock_layout`, `toolbar`) y menús
+- `lib/screens/`   — biblioteca y cuaderno abierto (panel de páginas, búsqueda, estilo, menús)
+- `lib/widgets/`, `lib/theme/` — diálogos compartidos y tema
+- `lib/main.dart`, `lib/app.dart` — arranque
+
+## Tests
+
+- `flutter test test/` — lógica pura, en la PC (no necesita la tablet).
+- `./run_tests.sh` — tests de integración en la tablet (hace backup de los cuadernos).
