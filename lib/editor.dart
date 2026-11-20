@@ -6,20 +6,7 @@ import 'package:flutter/material.dart';
 
 import 'model.dart';
 import 'painters.dart';
-
-enum Tool { pen, hl, eraser, text }
-
-const penColors = ['#22211e', '#2f5bd3', '#d33a2c', '#1f8a4c', '#e2730b', '#7c3aed'];
-const hlColors = ['#f7d22c', '#5ee08a', '#ff86c8', '#5bc8ff'];
-const sizes = {
-  'pen': [1.6, 2.6, 4.2],
-  'hl': [14.0, 22.0, 32.0],
-  'eraser': [8.0, 16.0, 30.0],
-};
-const kAccent = Color(0xFF2F5BD3);
-const kPanel = Color(0xFFF6F5F1);
-const kDesk = Color(0xFFECEBE6);
-const kText = Color(0xFF22211E);
+import 'pen_panel.dart';
 
 class _Act {
   final bool add;
@@ -27,20 +14,12 @@ class _Act {
   _Act(this.add, this.strokes);
 }
 
-/// Herramientas elegidas: viven fuera del editor para que no se pierdan al cambiar de página.
-class ToolState {
-  Tool tool = Tool.pen;
-  final color = {'pen': penColors[0], 'hl': hlColors[0]};
-  final size = {'pen': 1, 'hl': 1, 'eraser': 1};
-}
-
 class PageEditor extends StatefulWidget {
   final PageData page;
   final ToolState tools;
   final String title, subtitle;
-  final VoidCallback onChanged;
-  final VoidCallback onMenu;
-  const PageEditor({super.key, required this.page, required this.tools, required this.title, required this.subtitle, required this.onChanged, required this.onMenu});
+  final VoidCallback onChanged, onPrefsChanged, onMenu;
+  const PageEditor({super.key, required this.page, required this.tools, required this.title, required this.subtitle, required this.onChanged, required this.onPrefsChanged, required this.onMenu});
 
   @override
   State<PageEditor> createState() => _PageEditorState();
@@ -102,28 +81,56 @@ class _PageEditorState extends State<PageEditor> {
     final mouse = e.kind == PointerDeviceKind.mouse;
     if (!stylus && !mouse) return; // el dedo solo scrollea (palma ignorada)
     if (pointer != null) return;
-    if (mouse && e.buttons != kPrimaryMouseButton) return;
-    final penButton = e.kind == PointerDeviceKind.invertedStylus || (stylus && (e.buttons & kSecondaryStylusButton) != 0);
-    final tool = penButton ? Tool.eraser : ts.tool;
-    if (tool == Tool.text) return;
-    pointer = e.pointer;
+    if (mouse && e.buttons != kPrimaryMouseButton && e.buttons != kSecondaryMouseButton) return;
     final p = _logical(e.localPosition);
-    if (tool == Tool.eraser) {
-      erased = [];
-      _eraseAt(p);
-      eraserAt = p;
-      liveTick.value++;
+    if (_wantsEraser(e)) {
+      pointer = e.pointer;
+      _startErase(p);
       return;
     }
-    final k = tool == Tool.hl ? 'hl' : 'pen';
-    live = Stroke(newId('s'), k, ts.color[k]!, sizes[k]![ts.size[k]!], []);
+    if (ts.tool == Tool.text) return;
+    pointer = e.pointer;
+    final pr = ts.current;
+    live = Stroke(newId('s'), ts.tool == Tool.hl ? 'hl' : pr.tip, pr.color, pr.width, [], pr.opacity);
     _addPoint(e, p);
     liveTick.value++;
+  }
+
+  /// botón del S Pen apretado, punta goma del lápiz, o clic derecho del mouse
+  bool _wantsEraser(PointerEvent e) =>
+      e.kind == PointerDeviceKind.invertedStylus ||
+      (_isStylus(e) && (e.buttons & (kPrimaryStylusButton | kSecondaryStylusButton)) != 0) ||
+      (e.kind == PointerDeviceKind.mouse && (e.buttons & kSecondaryMouseButton) != 0);
+
+  void _startErase(Offset p) {
+    erased = [];
+    _eraseAt(p);
+    eraserAt = p;
+    liveTick.value++;
+  }
+
+  void _commitLive() {
+    final s = live;
+    live = null;
+    if (s == null || s.n < 2) return;
+    _smooth(s);
+    s.invalidate();
+    page.strokes[s.id] = s;
+    inkVersion.value++;
+    _pushUndo(_Act(true, [s]));
+    _growIfNeeded(s.bounds.bottom);
+    _changed();
   }
 
   void _move(PointerMoveEvent e) {
     if (e.pointer != pointer) return;
     final p = _logical(e.localPosition);
+    if (live != null && _wantsEraser(e)) {
+      // apretó el botón a mitad del trazo: lo que venía queda, y sigue borrando
+      _commitLive();
+      _startErase(p);
+      return;
+    }
     if (erased != null) {
       _eraseAt(p);
       eraserAt = p;
@@ -147,12 +154,8 @@ class _PageEditorState extends State<PageEditor> {
     live = null;
     liveTick.value++;
     if (s == null || (e is PointerCancelEvent && s.n < 3)) return;
-    _smooth(s);
-    page.strokes[s.id] = s;
-    inkVersion.value++;
-    _pushUndo(_Act(true, [s]));
-    _growIfNeeded(s.bounds.bottom);
-    _changed();
+    live = s;
+    _commitLive();
   }
 
   void _addPoint(PointerEvent e, Offset p) {
@@ -168,6 +171,7 @@ class _PageEditorState extends State<PageEditor> {
       pr = pts[pts.length - 1] * .65 + pr * .35; // suaviza la presión
     }
     pts.addAll([p.dx, p.dy, pr]);
+    live!.invalidate();
   }
 
   /// promedio con los vecinos: saca el temblequeo sin deformar
@@ -182,14 +186,14 @@ class _PageEditorState extends State<PageEditor> {
     }
   }
 
-  double get _eraserR => sizes['eraser']![ts.size['eraser']!];
+  double get _eraserR => eraserSizes[ts.eraserSize];
 
   void _eraseAt(Offset pt) {
     final r = _eraserR;
     final hits = <Stroke>[];
     for (final s in page.strokes.values) {
       if (!s.bounds.inflate(r).contains(pt)) continue;
-      final lim = r + s.w / 2, p = s.pts;
+      final lim = r + s.w * .75, p = s.pts;
       var hit = s.n == 1 && (Offset(p[0], p[1]) - pt).distance < lim;
       for (var i = 1; i < s.n && !hit; i++) {
         if (_distSeg(pt, Offset(p[i * 3 - 3], p[i * 3 - 2]), Offset(p[i * 3], p[i * 3 + 1])) < lim) hit = true;
@@ -445,11 +449,26 @@ class _PageEditorState extends State<PageEditor> {
   }
 
   // ---------------- barra de herramientas ----------------
+  void _toolTap(Tool t) {
+    if (ts.tool == t && t != Tool.text) {
+      _openPanel(); // tocar de nuevo la herramienta elegida abre sus opciones
+      return;
+    }
+    _setTool(t);
+    widget.onPrefsChanged();
+  }
+
+  Future<void> _openPanel() async {
+    await showPenPanel(context, ts, () {
+      setState(() {});
+      widget.onPrefsChanged();
+    });
+    if (mounted) setState(() {});
+  }
+
   Widget _toolbar() {
-    final k = ts.tool == Tool.hl ? 'hl' : ts.tool == Tool.eraser ? 'eraser' : 'pen';
-    final colorKey = ts.tool == Tool.hl ? 'hl' : 'pen';
-    final showColors = ts.tool == Tool.pen || ts.tool == Tool.hl;
-    final showSizes = ts.tool != Tool.text;
+    final showColors = ts.tool != Tool.text;
+    final cur = ts.current;
     return Container(
       color: kPanel,
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
@@ -461,7 +480,7 @@ class _PageEditorState extends State<PageEditor> {
           child: Text.rich(
             TextSpan(children: [
               TextSpan(text: widget.title, style: const TextStyle(fontWeight: FontWeight.w600)),
-              TextSpan(text: '  ${widget.subtitle}', style: const TextStyle(color: Color(0xFF7A776E), fontSize: 13)),
+              TextSpan(text: '  ${widget.subtitle}', style: const TextStyle(color: kMuted, fontSize: 13)),
             ]),
             overflow: TextOverflow.ellipsis,
           ),
@@ -476,24 +495,22 @@ class _PageEditorState extends State<PageEditor> {
               reverse: true,
               child: Row(children: [
                 _group([
-                  _toolBtn(Tool.pen, const Icon(Icons.edit), 'Lápiz'),
-                  _toolBtn(Tool.hl, const Icon(Icons.border_color), 'Resaltador'),
-                  _toolBtn(Tool.eraser, const _EraserIcon(), 'Goma'),
-                  _toolBtn(Tool.text, const Icon(Icons.title), 'Texto'),
+                  _toolBtn(Tool.pen, Icons.edit, 'Lápiz (tocá de nuevo para opciones)', ts.pen),
+                  _toolBtn(Tool.hl, Icons.border_color, 'Resaltador (tocá de nuevo para opciones)', ts.hl),
+                  _toolBtn(Tool.text, Icons.title, 'Texto', null),
                 ]),
                 if (showColors) ...[
                   const SizedBox(width: 8),
                   _group([
-                    for (final c in colorKey == 'hl' ? hlColors : penColors)
-                      _swatch(c, ts.color[colorKey] == c, () => setState(() => ts.color[colorKey] = c)),
+                    for (final c in ts.recent)
+                      _swatch(c, cur.color == c, () {
+                        setState(() => ts.pickColor(c));
+                        widget.onPrefsChanged();
+                      }),
+                    _moreColors(),
                   ]),
-                ],
-                if (showSizes) ...[
                   const SizedBox(width: 8),
-                  _group([
-                    for (var i = 0; i < 3; i++)
-                      _sizeBtn([5.0, 9.0, 14.0][i], ts.size[k] == i, () => setState(() => ts.size[k] = i)),
-                  ]),
+                  _group([_widthBtn(cur)]),
                 ],
                 const SizedBox(width: 8),
                 _group([
@@ -530,20 +547,36 @@ class _PageEditorState extends State<PageEditor> {
         child: Row(mainAxisSize: MainAxisSize.min, children: children),
       );
 
-  Widget _toolBtn(Tool t, Widget icon, String tip) {
+  Widget _toolBtn(Tool t, IconData icon, String tip, PenPreset? preset) {
     final on = ts.tool == t;
     return Tooltip(
       message: tip,
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
-        onTap: () => _setTool(t),
+        onTap: () => _toolTap(t),
+        onLongPress: preset == null ? null : () {
+          _setTool(t);
+          _openPanel();
+        },
         child: Container(
-          width: 44,
+          width: 48,
           height: 40,
           decoration: on
               ? BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), boxShadow: const [BoxShadow(color: Color(0x22000000), blurRadius: 2, offset: Offset(0, 1))])
               : null,
-          child: IconTheme(data: IconThemeData(color: on ? kAccent : kText, size: 22), child: Center(child: icon)),
+          child: Stack(alignment: Alignment.center, children: [
+            Icon(icon, size: 22, color: on ? kAccent : kText),
+            // rayita con el color actual de la herramienta
+            if (preset != null)
+              Positioned(
+                bottom: 4,
+                child: Container(
+                  width: 18,
+                  height: 3,
+                  decoration: BoxDecoration(color: parseColor(preset.color).withValues(alpha: max(preset.opacity, .35)), borderRadius: BorderRadius.circular(2)),
+                ),
+              ),
+          ]),
         ),
       ),
     );
@@ -569,49 +602,55 @@ class _PageEditorState extends State<PageEditor> {
         ),
       );
 
-  Widget _sizeBtn(double dot, bool on, VoidCallback tap) => InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: tap,
-        child: Container(
-          width: 38,
-          height: 40,
-          alignment: Alignment.center,
-          decoration: on ? BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)) : null,
-          child: Container(width: dot, height: dot, decoration: BoxDecoration(color: on ? kAccent : kText, shape: BoxShape.circle)),
+  Widget _moreColors() => Tooltip(
+        message: 'Más colores',
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: _openPanel,
+          child: Container(
+            width: 36,
+            height: 40,
+            alignment: Alignment.center,
+            child: Container(
+              width: 22,
+              height: 22,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: SweepGradient(colors: [
+                  Color(0xFFEF4444), Color(0xFFFACC15), Color(0xFF22C55E), Color(0xFF3B82F6), Color(0xFFA855F7), Color(0xFFEF4444),
+                ]),
+              ),
+            ),
+          ),
         ),
       );
-}
 
-class _EraserIcon extends StatelessWidget {
-  const _EraserIcon();
-  @override
-  Widget build(BuildContext context) {
-    final color = IconTheme.of(context).color ?? kText;
-    return CustomPaint(size: const Size(22, 22), painter: _EraserPainter(color));
+  /// muestra grosor y opacidad actuales; abre el panel
+  Widget _widthBtn(PenPreset p) {
+    final hl = ts.tool == Tool.hl;
+    final d = hl ? (p.width / 60 * 22).clamp(6.0, 22.0) : (p.width / 16 * 20).clamp(3.0, 20.0);
+    return Tooltip(
+      message: 'Punta, grosor y opacidad',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: _openPanel,
+        child: SizedBox(
+          width: 44,
+          height: 40,
+          child: Center(
+            child: Container(
+              width: d,
+              height: d,
+              decoration: BoxDecoration(
+                color: parseColor(p.color).withValues(alpha: p.opacity),
+                shape: hl ? BoxShape.rectangle : BoxShape.circle,
+                borderRadius: hl ? BorderRadius.circular(2) : null,
+                border: Border.all(color: const Color(0x22000000)),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
-}
-
-class _EraserPainter extends CustomPainter {
-  final Color color;
-  _EraserPainter(this.color);
-  @override
-  void paint(Canvas c, Size s) {
-    final p = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.8
-      ..strokeJoin = StrokeJoin.round
-      ..strokeCap = StrokeCap.round;
-    c.save();
-    c.translate(s.width / 2, s.height / 2 - 1);
-    c.rotate(-pi / 4);
-    final r = RRect.fromRectAndRadius(const Rect.fromLTWH(-9, -5, 18, 10), const Radius.circular(2));
-    c.drawRRect(r, p);
-    c.drawLine(const Offset(-2, -5), const Offset(-2, 5), p);
-    c.restore();
-    c.drawLine(Offset(s.width * .3, s.height - 2), Offset(s.width - 2, s.height - 2), p);
-  }
-
-  @override
-  bool shouldRepaint(_EraserPainter o) => o.color != color;
 }
