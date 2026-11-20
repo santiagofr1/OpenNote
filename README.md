@@ -30,11 +30,18 @@ Por capas (cada una usa solo las de arriba):
 - `lib/widgets/`, `lib/theme/` — diálogos compartidos y tema
 - `lib/main.dart`, `lib/app.dart` — arranque
 
+## Fondos en milímetros de A4
+
+La hoja mide 1000 x 1414 unidades lógicas = 210 x 297 mm (1 mm = 1000/210 unidades; `lib/domain/geometry.dart`).
+El rayado (7 / 8 / 10 mm, margen rojo a 25 mm) y la cuadrícula / puntos (5 / 7 mm, centrados) salen de
+`lib/domain/paper_layout.dart`; el mismo dibujo se usa en el editor, miniaturas, PNG y PDF (página A4 llena),
+así que al imprimir al 100 % las medidas son reales. El texto con teclado se apoya en el renglón de su hoja.
+
 ## Almacenamiento (formato 3)
 
 ```
-apuntes/index.json                          cuadernos: id, nombre, favorito, PIN, fondo y papel por defecto, última hoja  ("format": 3)
-apuntes/notebooks/<cuaderno>/notebook.json  orden de las hojas: id, título, marcador, fondo, papel, rev, updated
+apuntes/index.json                          cuadernos: id, nombre, favorito, PIN, fondo, papel y espaciado por defecto, última hoja  ("format": 3)
+apuntes/notebooks/<cuaderno>/notebook.json  orden de las hojas: id, título, marcador, fondo, papel, espaciado (`spacing`, mm; opcional), rev, updated
 apuntes/notebooks/<cuaderno>/sheets/<hoja>.sheet   contenido de cada hoja (binario)
 apuntes/media/                              imágenes y audios (compartidos por todos los cuadernos)
 apuntes/prefs.json                          herramientas
