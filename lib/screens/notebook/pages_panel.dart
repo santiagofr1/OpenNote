@@ -111,11 +111,11 @@ class PagesPanel extends StatelessWidget {
     return GestureDetector(
       key: Key('thumb-$n'),
       onTap: () => onOpen(k),
-      onLongPressDown: (_) => debugPrint('DIAG down thumb $n'),
-      onLongPressCancel: () => debugPrint('DIAG cancel thumb $n'),
-      onLongPress: () async {
-        debugPrint('DIAG longpress thumb $n');
-        HapticFeedback.mediumImpact();
+      // El menú se abre al soltar, no al reconocer el long-press: abrir una ruta con el dedo apoyado
+      // hace que el Navigator cancele el puntero, y en los tests (que sueltan por su cuenta) el
+      // reconocedor quedaba trabado en "posible" y la próxima pulsación se perdía.
+      onLongPress: () => HapticFeedback.mediumImpact(),
+      onLongPressUp: () async {
         final v = await _sheetMenu(context, k);
         if (v != null) onAction(k, v);
       },
