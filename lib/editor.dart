@@ -8,10 +8,22 @@ import 'model.dart';
 import 'painters.dart';
 import 'pen_panel.dart';
 
+/// Una acción deshacible: trazos que salieron/entraron y cómo estaban los textos antes/después.
 class _Act {
-  final bool add;
-  final List<Stroke> strokes;
-  _Act(this.add, this.strokes);
+  final List<Stroke> removed, added;
+  final Map<String, TextBlock?> textBefore, textAfter;
+  _Act({this.removed = const [], this.added = const [], this.textBefore = const {}, this.textAfter = const {}});
+}
+
+TextBlock _copyText(TextBlock t, [Offset d = Offset.zero]) => TextBlock(t.id, t.x + d.dx, t.y + d.dy, t.w, t.text);
+
+Stroke _moved(Stroke s, Offset d, [String? id]) {
+  final p = List<double>.of(s.pts);
+  for (var i = 0; i < p.length; i += 3) {
+    p[i] += d.dx;
+    p[i + 1] += d.dy;
+  }
+  return Stroke(id ?? s.id, s.k, s.c, s.w, p, s.o);
 }
 
 class PageEditor extends StatefulWidget {
@@ -40,6 +52,14 @@ class _PageEditorState extends State<PageEditor> {
   Stroke? live;
   Offset? eraserAt;
   List<Stroke>? erased;
+
+  // selección
+  final selS = <String>{}, selT = <String>{};
+  Offset? bandA, bandB; // rectángulo que se está estirando
+  Offset? dragFrom;
+  Offset dragDelta = Offset.zero;
+  bool moving = false;
+  Map<String, Offset> textOrig = {};
 
   // texto
   final ctrls = <String, TextEditingController>{};
@@ -90,6 +110,10 @@ class _PageEditorState extends State<PageEditor> {
     }
     if (ts.tool == Tool.text) return;
     pointer = e.pointer;
+    if (ts.tool == Tool.select) {
+      _selDown(p);
+      return;
+    }
     final pr = ts.current;
     live = Stroke(newId('s'), ts.tool == Tool.hl ? 'hl' : pr.tip, pr.color, pr.width, [], pr.opacity);
     _addPoint(e, p);
@@ -117,7 +141,7 @@ class _PageEditorState extends State<PageEditor> {
     s.invalidate();
     page.strokes[s.id] = s;
     inkVersion.value++;
-    _pushUndo(_Act(true, [s]));
+    _pushUndo(_Act(added: [s]));
     _growIfNeeded(s.bounds.bottom);
     _changed();
   }
@@ -125,6 +149,15 @@ class _PageEditorState extends State<PageEditor> {
   void _move(PointerMoveEvent e) {
     if (e.pointer != pointer) return;
     final p = _logical(e.localPosition);
+    if (moving) {
+      _selDrag(p);
+      return;
+    }
+    if (bandA != null) {
+      bandB = p;
+      liveTick.value++;
+      return;
+    }
     if (live != null && _wantsEraser(e)) {
       // apretó el botón a mitad del trazo: lo que venía queda, y sigue borrando
       _commitLive();
@@ -143,8 +176,18 @@ class _PageEditorState extends State<PageEditor> {
   void _up(PointerEvent e) {
     if (e.pointer != pointer) return;
     pointer = null;
+    if (moving) {
+      _selDrop();
+      return;
+    }
+    if (bandA != null) {
+      _selectIn(Rect.fromPoints(bandA!, bandB!));
+      bandA = bandB = null;
+      liveTick.value++;
+      return;
+    }
     if (erased != null) {
-      if (erased!.isNotEmpty) _pushUndo(_Act(false, erased!));
+      if (erased!.isNotEmpty) _pushUndo(_Act(removed: erased!));
       erased = null;
       eraserAt = null;
       liveTick.value++;
@@ -232,18 +275,290 @@ class _PageEditorState extends State<PageEditor> {
   void _undoRedo(List<_Act> from, List<_Act> to) {
     if (from.isEmpty) return;
     final a = from.removeLast();
-    final add = a.add == identical(from, redo);
-    for (final s in a.strokes) {
-      if (add) {
-        page.strokes[s.id] = s;
-      } else {
-        page.strokes.remove(s.id);
-      }
+    final undoing = identical(from, undo);
+    final out = undoing ? a.added : a.removed, back = undoing ? a.removed : a.added;
+    for (final s in out) {
+      page.strokes.remove(s.id);
     }
+    for (final s in back) {
+      page.strokes[s.id] = s;
+    }
+    (undoing ? a.textBefore : a.textAfter).forEach((id, t) => _putText(id, t == null ? null : _copyText(t)));
+    _clearSel();
     to.add(a);
     inkVersion.value++;
     _changed();
     setState(() {});
+  }
+
+  // ---------------- selección ----------------
+  Size _textSize(TextBlock t) {
+    final tp = TextPainter(
+      text: TextSpan(text: t.text.isEmpty ? ' ' : t.text, style: const TextStyle(fontSize: kFont, height: kLine / kFont)),
+      strutStyle: const StrutStyle(fontSize: kFont, height: kLine / kFont, forceStrutHeight: true),
+      textDirection: TextDirection.ltr,
+    )..layout(maxWidth: t.w);
+    return Size(max(tp.width, 20), max(tp.height, kLine));
+  }
+
+  Rect _textRect(TextBlock t) => Offset(t.x, t.y) & _textSize(t);
+
+  bool get hasSel => selS.isNotEmpty || selT.isNotEmpty;
+
+  /// rectángulo que envuelve lo seleccionado, en su posición original (sin el arrastre en curso)
+  Rect? get selRect {
+    Rect? r;
+    for (final id in selS) {
+      final s = page.strokes[id];
+      if (s != null) r = r == null ? s.bounds : r.expandToInclude(s.bounds);
+    }
+    for (final id in selT) {
+      final t = page.texts[id];
+      if (t == null) continue;
+      final o = moving ? textOrig[id] : null;
+      final tr = o != null ? _textRect(t).shift(o - Offset(t.x, t.y)) : _textRect(t);
+      r = r == null ? tr : r.expandToInclude(tr);
+    }
+    return r?.inflate(6);
+  }
+
+  void _clearSel() {
+    if (!hasSel && bandA == null) return;
+    selS.clear();
+    selT.clear();
+    bandA = bandB = null;
+    moving = false;
+    if (mounted) setState(() {});
+    liveTick.value++;
+  }
+
+  void _selDown(Offset p) {
+    final r = selRect;
+    if (r != null && r.inflate(12).contains(p)) {
+      moving = true;
+      dragFrom = p;
+      dragDelta = Offset.zero;
+      textOrig = {
+        for (final id in selT)
+          if (page.texts[id] != null) id: Offset(page.texts[id]!.x, page.texts[id]!.y)
+      };
+      inkVersion.value++; // oculta los seleccionados de la capa fija
+      setState(() {});
+      return;
+    }
+    _clearSel();
+    bandA = bandB = p;
+    liveTick.value++;
+  }
+
+  void _selDrag(Offset p) {
+    dragDelta = p - dragFrom!;
+    setState(() {
+      for (final e in textOrig.entries) {
+        final t = page.texts[e.key];
+        if (t != null) {
+          t.x = e.value.dx + dragDelta.dx;
+          t.y = e.value.dy + dragDelta.dy;
+        }
+      }
+    });
+    liveTick.value++;
+  }
+
+  void _selDrop() {
+    final d = dragDelta;
+    if (d.distance < .5) {
+      moving = false;
+      dragDelta = Offset.zero;
+      textOrig = {};
+      inkVersion.value++;
+      setState(() {});
+      return;
+    }
+    final removed = <Stroke>[], added = <Stroke>[];
+    for (final id in selS) {
+      final s = page.strokes.remove(id);
+      if (s == null) continue;
+      final m = _moved(s, d);
+      removed.add(s);
+      added.add(m);
+      page.strokes[id] = m;
+    }
+    final before = <String, TextBlock?>{}, after = <String, TextBlock?>{};
+    for (final e in textOrig.entries) {
+      final t = page.texts[e.key];
+      if (t == null) continue;
+      t.y = max(0.0, ((t.y - 4) / kLine).roundToDouble() * kLine + 4); // que caiga sobre el renglón
+      t.x = t.x.clamp(0.0, kW - 60);
+      before[e.key] = TextBlock(t.id, e.value.dx, e.value.dy, t.w, t.text);
+      after[e.key] = _copyText(t);
+    }
+    moving = false;
+    dragDelta = Offset.zero;
+    textOrig = {};
+    _pushUndo(_Act(removed: removed, added: added, textBefore: before, textAfter: after));
+    inkVersion.value++;
+    final r = selRect;
+    if (r != null) _growIfNeeded(r.bottom);
+    _changed();
+    setState(() {});
+  }
+
+  void _selectIn(Rect r) {
+    selS.clear();
+    selT.clear();
+    if (r.width < 4 && r.height < 4) {
+      setState(() {});
+      return;
+    }
+    for (final s in page.strokes.values) {
+      if (!r.overlaps(s.bounds)) continue;
+      var inside = 0;
+      for (var i = 0; i < s.pts.length; i += 3) {
+        if (r.contains(Offset(s.pts[i], s.pts[i + 1]))) inside++;
+      }
+      if (inside * 2 >= s.n) selS.add(s.id); // la mitad o más adentro
+    }
+    for (final t in page.texts.values) {
+      if (r.contains(_textRect(t).center)) selT.add(t.id);
+    }
+    setState(() {});
+  }
+
+  void _toast(String msg) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(msg), duration: const Duration(milliseconds: 1200), behavior: SnackBarBehavior.floating, width: 260));
+  }
+
+  void _copySel() {
+    ts.clipStrokes = [
+      for (final id in selS)
+        if (page.strokes[id] != null) page.strokes[id]!
+    ];
+    ts.clipTexts = [
+      for (final id in selT)
+        if (page.texts[id] != null) _copyText(page.texts[id]!)
+    ];
+    setState(() {});
+  }
+
+  void _deleteSel() {
+    final removed = [
+      for (final id in selS)
+        if (page.strokes[id] != null) page.strokes[id]!
+    ];
+    final before = <String, TextBlock?>{
+      for (final id in selT)
+        if (page.texts[id] != null) id: _copyText(page.texts[id]!)
+    };
+    for (final s in removed) {
+      page.strokes.remove(s.id);
+    }
+    for (final id in before.keys) {
+      _putText(id, null);
+    }
+    _pushUndo(_Act(removed: removed, textBefore: before, textAfter: {for (final id in before.keys) id: null}));
+    _clearSel();
+    inkVersion.value++;
+    _changed();
+  }
+
+  /// pega trazos/textos (con ids nuevos), corridos [d], y los deja seleccionados
+  void _insert(List<Stroke> strokes, List<TextBlock> texts, Offset d) {
+    final added = [for (final s in strokes) _moved(s, d, newId('s'))];
+    final after = <String, TextBlock>{};
+    for (final t in texts) {
+      final n = TextBlock(newId('t'), (t.x + d.dx).clamp(0.0, kW - 60), max(0.0, t.y + d.dy), t.w, t.text);
+      after[n.id] = n;
+    }
+    for (final s in added) {
+      page.strokes[s.id] = s;
+    }
+    after.forEach((id, t) => _putText(id, t));
+    _pushUndo(_Act(
+      added: added,
+      textBefore: {for (final id in after.keys) id: null},
+      textAfter: {for (final e in after.entries) e.key: _copyText(e.value)},
+    ));
+    if (ts.tool != Tool.select) _setTool(Tool.select);
+    selS
+      ..clear()
+      ..addAll(added.map((s) => s.id));
+    selT
+      ..clear()
+      ..addAll(after.keys);
+    inkVersion.value++;
+    final r = selRect;
+    if (r != null) _growIfNeeded(r.bottom);
+    _changed();
+    setState(() {});
+  }
+
+  void _duplicateSel() {
+    _insert([
+      for (final id in selS)
+        if (page.strokes[id] != null) page.strokes[id]!
+    ], [
+      for (final id in selT)
+        if (page.texts[id] != null) page.texts[id]!
+    ], const Offset(30, 30));
+  }
+
+  void _paste() {
+    if (!ts.hasClip) return;
+    Rect? r;
+    for (final s in ts.clipStrokes) {
+      r = r == null ? s.bounds : r.expandToInclude(s.bounds);
+    }
+    for (final t in ts.clipTexts) {
+      r = r == null ? _textRect(t) : r.expandToInclude(_textRect(t));
+    }
+    // si lo copiado está a la vista, se pega corrido; si no, arriba de lo que estás viendo
+    final top = max(0.0, (scroll.offset - 16) / scale);
+    final bottom = top + scroll.position.viewportDimension / scale;
+    final d = (r!.top > top && r.top < bottom - 60) ? const Offset(30, 30) : Offset(90 - r.left, top + 60 - r.top);
+    _insert(ts.clipStrokes, ts.clipTexts, d);
+  }
+
+  /// capa "en vivo": trazo en curso, goma, rectángulo de selección, lo que se arrastra
+  void _paintLive(Canvas c) {
+    final s = live;
+    if (s != null) paintStroke(c, s);
+    final e = eraserAt;
+    if (e != null) {
+      c.drawCircle(
+        e,
+        _eraserR,
+        Paint()
+          ..color = kMuted
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2 / scale,
+      );
+    }
+    final border = Paint()
+      ..color = kAccent
+      ..strokeWidth = 1.5 / scale;
+    if (bandA != null && bandB != null) {
+      final r = Rect.fromPoints(bandA!, bandB!);
+      c.drawRect(r, Paint()..color = const Color(0x142F5BD3));
+      dashedRect(c, r, border, 6 / scale);
+    }
+    if (moving) {
+      c.save();
+      c.translate(dragDelta.dx, dragDelta.dy);
+      for (final id in selS) {
+        final st = page.strokes[id];
+        if (st != null) paintStroke(c, st);
+      }
+      c.restore();
+    }
+    final r = selRect;
+    if (r != null) {
+      final rr = r.shift(moving ? dragDelta : Offset.zero);
+      c.drawRect(rr, Paint()..color = const Color(0x0F2F5BD3));
+      dashedRect(c, rr, border, 6 / scale);
+    }
   }
 
   // ---------------- texto ----------------
@@ -259,6 +574,26 @@ class _PageEditorState extends State<PageEditor> {
     });
     ctrls[t.id] = c;
     focus[t.id] = f;
+  }
+
+  /// pone (o saca, si es null) un bloque de texto, con su campo de edición
+  void _putText(String id, TextBlock? t) {
+    if (t == null) {
+      page.texts.remove(id);
+      textTimers.remove(id)?.cancel();
+      final c = ctrls.remove(id), f = focus.remove(id);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        c?.dispose();
+        f?.dispose();
+      });
+      return;
+    }
+    page.texts[id] = t;
+    if (ctrls[id] == null) {
+      _bindText(t);
+    } else if (ctrls[id]!.text != t.text) {
+      ctrls[id]!.text = t.text;
+    }
   }
 
   void _removeText(String id) {
@@ -304,6 +639,7 @@ class _PageEditorState extends State<PageEditor> {
 
   // ---------------- UI ----------------
   void _setTool(Tool t) {
+    if (t != Tool.select) _clearSel();
     setState(() => ts.tool = t);
     if (t != Tool.text) FocusScope.of(context).unfocus();
   }
@@ -367,6 +703,55 @@ class _PageEditorState extends State<PageEditor> {
 
   Widget _sheet(Size size) {
     final textMode = ts.tool == Tool.text;
+    final r = hasSel && !moving ? selRect : null;
+    return Stack(clipBehavior: Clip.none, children: [
+      _sheetInput(textMode),
+      if (r != null)
+        Positioned(
+          left: max(0.0, r.left * scale),
+          top: r.top * scale > 60 ? r.top * scale - 56 : r.bottom * scale + 8,
+          child: _selMenu(),
+        ),
+    ]);
+  }
+
+  Widget _selMenu() {
+    Widget b(IconData i, String label, VoidCallback f) => InkWell(
+          onTap: f,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(i, size: 19, color: Colors.white),
+              const SizedBox(width: 6),
+              Text(label, style: const TextStyle(color: Colors.white, fontSize: 14)),
+            ]),
+          ),
+        );
+    return Material(
+      color: const Color(0xFF2B2A27),
+      elevation: 6,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.all(3),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          b(Icons.content_copy, 'Copiar', () {
+            _copySel();
+            _toast('Copiado');
+          }),
+          b(Icons.content_cut, 'Cortar', () {
+            _copySel();
+            _deleteSel();
+          }),
+          b(Icons.control_point_duplicate, 'Duplicar', _duplicateSel),
+          b(Icons.delete_outline, 'Eliminar', _deleteSel),
+          IconButton(onPressed: _clearSel, icon: const Icon(Icons.close, size: 19, color: Colors.white70), tooltip: 'Deseleccionar'),
+        ]),
+      ),
+    );
+  }
+
+  Widget _sheetInput(bool textMode) {
     return Listener(
       onPointerDown: _down,
       onPointerMove: _move,
@@ -382,13 +767,13 @@ class _PageEditorState extends State<PageEditor> {
           Positioned.fill(
             child: IgnorePointer(
               child: RepaintBoundary(
-                child: CustomPaint(painter: InkPainter(page, scale, inkVersion), isComplex: true),
+                child: CustomPaint(painter: InkPainter(page, scale, inkVersion, () => moving ? selS : const {}), isComplex: true),
               ),
             ),
           ),
           Positioned.fill(
             child: IgnorePointer(
-              child: CustomPaint(painter: LivePainter(() => live, () => eraserAt, () => _eraserR, scale, liveTick)),
+              child: CustomPaint(painter: LivePainter(_paintLive, scale, liveTick)),
             ),
           ),
         ]),
@@ -410,7 +795,9 @@ class _PageEditorState extends State<PageEditor> {
           Container(
             decoration: f.hasFocus && textMode
                 ? BoxDecoration(color: const Color(0x082F5BD3), border: Border.all(color: const Color(0x552F5BD3)), borderRadius: BorderRadius.circular(3))
-                : null,
+                : selT.contains(t.id)
+                    ? BoxDecoration(color: const Color(0x1A2F5BD3), borderRadius: BorderRadius.circular(3))
+                    : null,
             child: TextField(
               controller: c,
               focusNode: f,
@@ -450,7 +837,7 @@ class _PageEditorState extends State<PageEditor> {
 
   // ---------------- barra de herramientas ----------------
   void _toolTap(Tool t) {
-    if (ts.tool == t && t != Tool.text) {
+    if (ts.tool == t && (t == Tool.pen || t == Tool.hl)) {
       _openPanel(); // tocar de nuevo la herramienta elegida abre sus opciones
       return;
     }
@@ -467,7 +854,7 @@ class _PageEditorState extends State<PageEditor> {
   }
 
   Widget _toolbar() {
-    final showColors = ts.tool != Tool.text;
+    final showColors = ts.tool == Tool.pen || ts.tool == Tool.hl;
     final cur = ts.current;
     return Container(
       color: kPanel,
@@ -498,7 +885,12 @@ class _PageEditorState extends State<PageEditor> {
                   _toolBtn(Tool.pen, Icons.edit, 'Lápiz (tocá de nuevo para opciones)', ts.pen),
                   _toolBtn(Tool.hl, Icons.border_color, 'Resaltador (tocá de nuevo para opciones)', ts.hl),
                   _toolBtn(Tool.text, Icons.title, 'Texto', null),
+                  _toolBtn(Tool.select, Icons.highlight_alt, 'Seleccionar', null),
                 ]),
+                if (ts.tool == Tool.select && ts.hasClip) ...[
+                  const SizedBox(width: 8),
+                  _group([IconButton(onPressed: _paste, icon: const Icon(Icons.content_paste), tooltip: 'Pegar')]),
+                ],
                 if (showColors) ...[
                   const SizedBox(width: 8),
                   _group([

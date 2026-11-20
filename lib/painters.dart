@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
 import 'model.dart';
@@ -176,17 +178,20 @@ class SheetPainter extends CustomPainter {
 }
 
 /// Todos los trazos guardados. Se repinta solo cuando cambia [version].
+/// [hidden]: trazos que no se dibujan acá (los que se están moviendo).
 class InkPainter extends CustomPainter {
   final PageData page;
   final double scale;
   final ValueNotifier<int> version;
-  InkPainter(this.page, this.scale, this.version) : super(repaint: version);
+  final Set<String> Function() hidden;
+  InkPainter(this.page, this.scale, this.version, this.hidden) : super(repaint: version);
 
   @override
   void paint(Canvas c, Size size) {
     c.clipRect(Offset.zero & size);
     c.scale(scale);
-    final all = page.strokes.values;
+    final skip = hidden();
+    final all = page.strokes.values.where((s) => !skip.contains(s.id));
     for (final s in all) {
       if (s.k == 'hl') paintStroke(c, s);
     }
@@ -199,32 +204,33 @@ class InkPainter extends CustomPainter {
   bool shouldRepaint(InkPainter o) => o.page != page || o.scale != scale;
 }
 
-/// El trazo que se está dibujando ahora (y el círculo de la goma).
+/// Capa de lo que pasa "ahora": trazo en curso, goma, selección.
 class LivePainter extends CustomPainter {
-  final Stroke? Function() stroke;
-  final Offset? Function() eraser;
-  final double Function() eraserR;
+  final void Function(Canvas) draw;
   final double scale;
-  LivePainter(this.stroke, this.eraser, this.eraserR, this.scale, Listenable tick) : super(repaint: tick);
+  LivePainter(this.draw, this.scale, Listenable tick) : super(repaint: tick);
 
   @override
   void paint(Canvas c, Size size) {
     c.scale(scale);
-    final s = stroke();
-    if (s != null) paintStroke(c, s);
-    final e = eraser();
-    if (e != null) {
-      c.drawCircle(
-        e,
-        eraserR(),
-        Paint()
-          ..color = const Color(0xFF7A776E)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.2 / scale,
-      );
-    }
+    draw(c);
   }
 
   @override
   bool shouldRepaint(LivePainter o) => o.scale != scale;
+}
+
+/// Rectángulo punteado
+void dashedRect(Canvas c, Rect r, Paint p, double dash) {
+  void line(Offset a, Offset b) {
+    final len = (b - a).distance, dir = (b - a) / len;
+    for (double d = 0; d < len; d += dash * 2) {
+      c.drawLine(a + dir * d, a + dir * min(d + dash, len), p);
+    }
+  }
+
+  line(r.topLeft, r.topRight);
+  line(r.topRight, r.bottomRight);
+  line(r.bottomRight, r.bottomLeft);
+  line(r.bottomLeft, r.topLeft);
 }
