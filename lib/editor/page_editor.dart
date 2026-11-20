@@ -303,15 +303,19 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       drag.textOrig.forEach((id, o) {
         final t = doc.texts[id];
         if (t != null) {
+          doc.markDirtyElement(t); // hoja de antes y de después: puede guardarse a mitad del arrastre
           t.x = o.dx + d.dx;
           t.y = o.dy + d.dy;
+          doc.markDirtyElement(t);
         }
       });
       drag.itemOrig.forEach((id, o) {
         final it = doc.items[id];
         if (it != null) {
+          doc.markDirtyElement(it);
           it.x = o.dx + d.dx;
           it.y = o.dy + d.dy;
+          doc.markDirtyElement(it);
         }
       });
     });
@@ -340,8 +344,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     drag.textOrig.forEach((id, o) {
       final t = doc.texts[id];
       if (t == null) return;
+      doc.markDirtyElement(t);
       t.y = max(0.0, doc.snapTextY(t.y)); // que caiga sobre el renglón de su hoja
       t.x = t.x.clamp(0.0, kW - 60);
+      doc.markDirtyElement(t);
       textBefore[id] = t.copy(d: o - Offset(t.x, t.y));
       textAfter[id] = t.copy();
     });
@@ -988,7 +994,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         ResizeHandle(
           item: resizable,
           scale: scale,
-          onResize: () => setState(() => liveTick.value++),
+          onResize: () {
+            doc.markDirtyElement(resizable); // cambió de tamaño en el lugar (puede pasar de hoja)
+            setState(() => liveTick.value++);
+          },
           onResizeEnd: (before) {
             _pushUndo(EditAction(itemBefore: {resizable.id: before}, itemAfter: {resizable.id: resizable.copy()}));
             _changed();
@@ -1056,6 +1065,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         selected: sel.items.contains(e.id),
         onStickyChanged: (v) {
           e.text = v;
+          doc.markDirtyElement(e);
           _saveSoon(e.id, const Duration(milliseconds: 350));
         },
       );
@@ -1078,12 +1088,16 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       textMode: textMode,
       selected: sel.texts.contains(t.id),
       onHandleDrag: (delta) => setState(() {
+        doc.markDirtyElement(t);
         t.x = (t.x + delta.dx / scale).clamp(0.0, kW - 60);
         t.y = max(0.0, t.y + delta.dy / scale);
         t.w = min(t.w, kW - t.x - 10).clamp(120.0, kW);
+        doc.markDirtyElement(t);
       }),
       onHandleDragEnd: () => setState(() {
+        doc.markDirtyElement(t);
         t.y = doc.snapTextY(t.y);
+        doc.markDirtyElement(t);
         _changed();
       }),
     );

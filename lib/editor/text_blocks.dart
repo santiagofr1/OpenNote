@@ -66,6 +66,7 @@ class TextFields {
         onFocusChange();
       },
       onEdited: () {
+        doc.markDirtyElement(ed.block); // cambió su contenido: la hoja se guarda
         lastEdited = ed.block.id;
         _notify();
         onEdited(ed.block);

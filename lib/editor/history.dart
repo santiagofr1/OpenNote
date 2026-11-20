@@ -30,7 +30,12 @@ class EditAction {
       doc.strokes[s.id] = s;
     }
     // se aplican copias: lo guardado en la acción no se toca al seguir editando
-    (undo ? textBefore : textAfter).forEach((id, t) => putText(id, t?.copy()));
+    (undo ? textBefore : textAfter).forEach((id, t) {
+      final cur = doc.texts[id];
+      if (cur != null) doc.markDirtyElement(cur); // la hoja de donde sale
+      putText(id, t?.copy());
+      if (t != null) doc.markDirtyElement(t); // y la de donde queda
+    });
     (undo ? itemBefore : itemAfter).forEach((id, it) => it == null ? doc.items.remove(id) : doc.items[id] = it.copy());
     (undo ? zBefore : zAfter).forEach(doc.setZ);
   }
