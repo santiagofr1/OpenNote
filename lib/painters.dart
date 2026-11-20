@@ -127,7 +127,12 @@ void _calli(Canvas c, Stroke s) {
   }
 }
 
-/// Fondo de la hoja: papel, renglones/cuadrícula/puntos, margen y cortes de hoja.
+/// Rectángulos de cada hoja dentro de la página (con espacio entre hojas).
+List<Rect> sheetRects(double h) => [
+      for (var k = 0; k < sheetCount(h); k++) Rect.fromLTWH(0, k * kSheetStep, kW, kSheetH),
+    ];
+
+/// Fondo: cada hoja con su papel, sombra suave, renglones/cuadrícula/puntos y margen.
 class SheetPainter extends CustomPainter {
   final String bg;
   final double h, scale;
@@ -136,40 +141,43 @@ class SheetPainter extends CustomPainter {
   @override
   void paint(Canvas c, Size size) {
     c.scale(scale);
-    c.drawRect(Rect.fromLTWH(0, 0, kW, h), Paint()..color = const Color(0xFFFFFEFB));
+    final paper = Paint()..color = const Color(0xFFFFFEFB);
+    final shadow = Paint()
+      ..color = const Color(0x24000000)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 10 / scale);
     final rule = Paint()
       ..color = const Color(0xFFD5DFEE)
       ..strokeWidth = 1 / scale;
-    switch (bg) {
-      case 'lined':
-        for (double y = kLine; y < h; y += kLine) {
-          c.drawLine(Offset(0, y), Offset(kW, y), rule);
-        }
-        c.drawLine(const Offset(70, 0), Offset(70, h), Paint()..color = const Color(0xFFF0C9C9)..strokeWidth = 1.2 / scale);
-      case 'grid':
-        const g = kLine / 2;
-        for (double y = g; y < h; y += g) {
-          c.drawLine(Offset(0, y), Offset(kW, y), rule);
-        }
-        for (double x = g; x < kW; x += g) {
-          c.drawLine(Offset(x, 0), Offset(x, h), rule);
-        }
-      case 'dots':
-        const g = kLine / 2;
-        final dot = Paint()..color = const Color(0xFFB9C3D3);
-        for (double y = g; y < h; y += g) {
-          for (double x = g; x < kW; x += g) {
-            c.drawCircle(Offset(x, y), 1.4, dot);
+    final dot = Paint()..color = const Color(0xFFB9C3D3);
+    for (final r in sheetRects(h)) {
+      c.drawRect(r.shift(Offset(0, 4 / scale)), shadow);
+      c.drawRect(r, paper);
+      c.save();
+      c.clipRect(r);
+      c.translate(0, r.top);
+      switch (bg) {
+        case 'lined':
+          for (double y = kLine; y < kSheetH; y += kLine) {
+            c.drawLine(Offset(0, y), Offset(kW, y), rule);
           }
-        }
-    }
-    final sep = Paint()
-      ..color = const Color(0xFFC9C4B8)
-      ..strokeWidth = 1.5 / scale;
-    for (double y = kSheetH; y < h; y += kSheetH) {
-      for (double x = 0; x < kW; x += 14) {
-        c.drawLine(Offset(x, y), Offset(x + 7, y), sep);
+          c.drawLine(const Offset(70, 0), const Offset(70, kSheetH), Paint()..color = const Color(0xFFF0C9C9)..strokeWidth = 1.2 / scale);
+        case 'grid':
+          const g = kLine / 2;
+          for (double y = g; y < kSheetH; y += g) {
+            c.drawLine(Offset(0, y), Offset(kW, y), rule);
+          }
+          for (double x = g; x < kW; x += g) {
+            c.drawLine(Offset(x, 0), Offset(x, kSheetH), rule);
+          }
+        case 'dots':
+          const g = kLine / 2;
+          for (double y = g; y < kSheetH; y += g) {
+            for (double x = g; x < kW; x += g) {
+              c.drawCircle(Offset(x, y), 1.4, dot);
+            }
+          }
       }
+      c.restore();
     }
   }
 
@@ -188,8 +196,13 @@ class InkPainter extends CustomPainter {
 
   @override
   void paint(Canvas c, Size size) {
-    c.clipRect(Offset.zero & size);
     c.scale(scale);
+    // la tinta solo se ve sobre las hojas, no en el espacio entre ellas
+    final clip = Path();
+    for (final r in sheetRects(page.h)) {
+      clip.addRect(r);
+    }
+    c.clipPath(clip);
     final skip = hidden();
     final all = page.strokes.values.where((s) => !skip.contains(s.id));
     for (final s in all) {

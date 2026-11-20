@@ -61,6 +61,8 @@ class ToolState {
   List<String> hlRecent = ['#f7d22c', '#5ee08a', '#ff86c8', '#5bc8ff'];
   int eraserSize = 1;
   String dock = 'top'; // top | left | right
+  double zoom = 1; // 1 = la hoja entra justa a lo ancho
+  bool zoomLocked = false;
 
   // portapapeles de la selección (sirve entre páginas)
   List<Stroke> clipStrokes = [];
@@ -85,6 +87,8 @@ class ToolState {
         'hlRecent': hlRecent,
         'eraserSize': eraserSize,
         'dock': dock,
+        'zoom': zoom,
+        'zoomLocked': zoomLocked,
       };
 
   void load(Map? j) {
@@ -96,6 +100,8 @@ class ToolState {
     if (j['hlRecent'] is List) hlRecent = List<String>.from(j['hlRecent'] as List);
     eraserSize = ((j['eraserSize'] ?? 1) as int).clamp(0, 2);
     if (const ['top', 'left', 'right'].contains(j['dock'])) dock = j['dock'] as String;
+    zoom = ((j['zoom'] ?? 1) as num).toDouble().clamp(.5, 4.0);
+    zoomLocked = (j['zoomLocked'] ?? false) as bool;
   }
 }
 

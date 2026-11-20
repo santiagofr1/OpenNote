@@ -88,7 +88,9 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
       f.dispose();
     }
     scroll.dispose();
+    hscroll.dispose();
     pullCtrl.dispose();
+    _zoomPillT?.cancel();
     super.dispose();
   }
 
@@ -263,7 +265,7 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
 
   void _growIfNeeded(double y) {
     if (y > page.h - 250) {
-      setState(() => page.h = (y ~/ kSheetH + 2) * kSheetH);
+      setState(() => page.h = heightFor(y ~/ kSheetStep + 2));
     }
   }
 
@@ -625,7 +627,8 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
 
   void _createTextAt(Offset p) {
     final x = p.dx.clamp(16.0, kW - 120);
-    final y = max(0.0, (p.dy / kLine).floorToDouble() * kLine + 4);
+    var y = max(0.0, (p.dy / kLine).floorToDouble() * kLine + 4);
+    if (y % kSheetStep > kSheetH - kLine) y = (y ~/ kSheetStep + 1) * kSheetStep + 4; // en el espacio entre hojas: a la siguiente
     final t = TextBlock(newId('t'), x.roundToDouble(), y, (kW - x - 30).roundToDouble(), '');
     setState(() {
       page.texts[t.id] = t;
@@ -655,6 +658,9 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
   // ---- barra acoplable: arriba / izquierda / derecha ----
   final _editorKey = GlobalKey();
   String? _dockPreview; // mientras se arrastra la barra
+  Offset? _dragPos; // dónde está el dedo (coordenadas del editor)
+
+  Offset _editorLocal(Offset g) => (_editorKey.currentContext!.findRenderObject() as RenderBox).globalToLocal(g);
 
   String _dockFor(Offset global) {
     final box = _editorKey.currentContext!.findRenderObject() as RenderBox;
@@ -666,7 +672,24 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
   @override
   Widget build(BuildContext context) {
     final dock = ts.dock;
-    final bar = _toolbar(vertical: dock != 'top');
+    final bar = TweenAnimationBuilder<double>(
+      key: ValueKey(dock),
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutQuart,
+      builder: (context, t, child) => Opacity(
+        opacity: t,
+        child: FractionalTranslation(
+          translation: switch (dock) { 'left' => Offset(-(1 - t) * .5, 0), 'right' => Offset((1 - t) * .5, 0), _ => Offset(0, -(1 - t) * .5) },
+          child: child,
+        ),
+      ),
+      child: AnimatedOpacity(
+        opacity: _dockPreview != null ? .3 : 1,
+        duration: const Duration(milliseconds: 150),
+        child: _toolbar(vertical: dock != 'top'),
+      ),
+    );
     final canvas = Expanded(child: _canvasArea());
     final body = dock == 'top'
         ? Column(children: [bar, canvas])
@@ -674,16 +697,44 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
     return Stack(key: _editorKey, children: [
       body,
       if (_dockPreview != null) Positioned.fill(child: IgnorePointer(child: _dockGhost(_dockPreview!))),
+      if (_dragPos != null)
+        AnimatedPositioned(
+          duration: const Duration(milliseconds: 60),
+          left: _dragPos!.dx - (_dockPreview == 'top' ? 120 : 30),
+          top: _dragPos!.dy - (_dockPreview == 'top' ? 30 : 110),
+          child: IgnorePointer(child: _barGhost(_dockPreview != 'top')),
+        ),
     ]);
+  }
+
+  /// mini barra que sigue al dedo mientras se mueve la barra
+  Widget _barGhost(bool vertical) {
+    final kids = <Widget>[
+      for (final i in [Symbols.stylus, Symbols.ink_highlighter, Symbols.keyboard, Symbols.highlight_alt])
+        Padding(padding: const EdgeInsets.all(8), child: Icon(i, size: 20, weight: 300, color: cs.onSurfaceVariant)),
+    ];
+    return AnimatedScale(
+      scale: 1,
+      duration: const Duration(milliseconds: 150),
+      child: Material(
+        color: cs.surfaceContainerHigh,
+        elevation: 8,
+        shadowColor: Colors.black54,
+        borderRadius: BorderRadius.circular(18),
+        child: Padding(
+          padding: const EdgeInsets.all(6),
+          child: Flex(direction: vertical ? Axis.vertical : Axis.horizontal, mainAxisSize: MainAxisSize.min, children: kids),
+        ),
+      ),
+    );
   }
 
   /// zona resaltada donde va a quedar la barra al soltarla
   Widget _dockGhost(String d) {
     final zone = Container(
       decoration: BoxDecoration(
-        color: cs.primary.withValues(alpha: .12),
-        border: Border.all(color: cs.primary.withValues(alpha: .5), width: 1.5),
-        borderRadius: BorderRadius.circular(14),
+        color: cs.primary.withValues(alpha: .08),
+        borderRadius: BorderRadius.circular(16),
       ),
     );
     return Padding(
@@ -728,13 +779,13 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
     HapticFeedback.mediumImpact();
     final oldH = page.h;
     setState(() {
-      page.h += kSheetH;
+      page.h = heightFor(sheetCount(page.h) + 1);
       pullJustAdded = true;
     });
     _changed();
     // lleva a la hoja nueva
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      scroll.animateTo(min(scroll.position.maxScrollExtent, oldH * scale), duration: const Duration(milliseconds: 420), curve: Curves.easeOutQuart);
+      scroll.animateTo(min(scroll.position.maxScrollExtent, (oldH + kGap) * scale), duration: const Duration(milliseconds: 420), curve: Curves.easeOutQuart);
     });
     Future.delayed(const Duration(milliseconds: 900), () {
       if (!mounted) return;
@@ -794,28 +845,128 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
     );
   }
 
+  // ---- zoom con dos dedos (y candado para fijarlo) ----
+  final hscroll = ScrollController();
+  final _touch = <int, Offset>{};
+  bool pinching = false;
+  double _pinchDist0 = 1, _pinchZoom0 = 1;
+  double _sheetLeft = 0;
+  bool _zoomPill = false;
+  Timer? _zoomPillT;
+  static const _topPad = 16.0;
+
+  void _flashZoom() {
+    _zoomPillT?.cancel();
+    setState(() => _zoomPill = true);
+    _zoomPillT = Timer(const Duration(milliseconds: 1100), () {
+      if (mounted) setState(() => _zoomPill = false);
+    });
+  }
+
+  /// cambia el zoom dejando quieto el punto [f] (coordenadas del visor)
+  void _setZoom(double z, Offset? f) {
+    z = z.clamp(.5, 4.0);
+    if ((z - ts.zoom).abs() < .001) return;
+    f ??= Offset(hscroll.hasClients ? hscroll.position.viewportDimension / 2 : 0, scroll.hasClients ? scroll.position.viewportDimension / 2 : 0);
+    final s0 = scale, l0 = _sheetLeft;
+    final h0 = hscroll.hasClients ? hscroll.offset : 0.0;
+    final v0 = scroll.hasClients ? scroll.offset : 0.0;
+    final sx = (h0 + f.dx - l0) / s0, sy = (v0 + f.dy - _topPad) / s0;
+    setState(() => ts.zoom = z);
+    _flashZoom();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (hscroll.hasClients) hscroll.jumpTo((sx * scale + _sheetLeft - f!.dx).clamp(0.0, hscroll.position.maxScrollExtent));
+      if (scroll.hasClients) scroll.jumpTo((sy * scale + _topPad - f!.dy).clamp(0.0, scroll.position.maxScrollExtent));
+    });
+  }
+
+  final _viewportKey = GlobalKey();
+
+  void _touchDown(PointerDownEvent e) {
+    if (e.kind != PointerDeviceKind.touch) return;
+    touches++;
+    _touch[e.pointer] = e.position;
+    // dos dedos = pellizco (salvo que el zoom esté fijado o se esté escribiendo con el lápiz)
+    if (_touch.length == 2 && !ts.zoomLocked && pointer == null) {
+      final p = _touch.values.toList();
+      _pinchDist0 = max(1, (p[0] - p[1]).distance);
+      _pinchZoom0 = ts.zoom;
+      _pullCancel();
+      setState(() => pinching = true);
+    }
+  }
+
+  void _touchMove(PointerMoveEvent e) {
+    if (!_touch.containsKey(e.pointer)) return;
+    _touch[e.pointer] = e.position;
+    if (!pinching || _touch.length < 2) return;
+    final p = _touch.values.take(2).toList();
+    final box = _viewportKey.currentContext!.findRenderObject() as RenderBox;
+    final focal = box.globalToLocal((p[0] + p[1]) / 2);
+    _setZoom(_pinchZoom0 * (p[0] - p[1]).distance / _pinchDist0, focal);
+  }
+
+  void _touchUp(PointerEvent e) {
+    if (e.kind != PointerDeviceKind.touch) return;
+    _touch.remove(e.pointer);
+    touches = max(0, touches - 1);
+    if (pinching && _touch.length < 2) {
+      setState(() => pinching = false);
+      widget.onPrefsChanged();
+    }
+    if (touches == 0) _pullCancel(); // soltó antes de completar: vuelve
+  }
+
+  void _toggleZoomLock() {
+    setState(() => ts.zoomLocked = !ts.zoomLocked);
+    HapticFeedback.selectionClick();
+    _flashZoom();
+    widget.onPrefsChanged();
+  }
+
+  Widget _zoomIndicator() => IgnorePointer(
+        child: AnimatedOpacity(
+          opacity: _zoomPill || pinching ? 1 : 0,
+          duration: const Duration(milliseconds: 180),
+          child: Material(
+            color: cs.inverseSurface.withValues(alpha: .88),
+            shape: const StadiumBorder(),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(ts.zoomLocked ? Symbols.lock : Symbols.zoom_in, size: 16, weight: 400, color: cs.onInverseSurface),
+                const SizedBox(width: 6),
+                Text(
+                  '${(ts.zoom * 100).round()}%${ts.zoomLocked ? ' · fijo' : ''}',
+                  style: TextStyle(color: cs.onInverseSurface, fontSize: 13, fontFeatures: const [FontFeature.tabularFigures()]),
+                ),
+              ]),
+            ),
+          ),
+        ),
+      );
+
   Widget _canvasArea() {
     return Container(
       color: cs.surfaceContainerLow,
       child: LayoutBuilder(builder: (context, box) {
-        final sw = min(box.maxWidth - (box.maxWidth < 700 ? 12 : 48), 1100.0);
+        final vw = box.maxWidth;
+        final side = vw < 700 ? 6.0 : 24.0;
+        final fit = min(vw - side * 2, 1100.0);
+        final sw = fit * ts.zoom;
         scale = sw / kW;
         final sheetH = page.h * scale;
+        final contentW = max(vw, sw + side * 2);
+        _sheetLeft = (contentW - sw) / 2;
+        final noScroll = pinching ? const NeverScrollableScrollPhysics() : const ClampingScrollPhysics();
         return Stack(children: [
           Listener(
-            onPointerDown: (e) {
-              if (e.kind == PointerDeviceKind.touch) touches++;
-            },
-            onPointerUp: (e) {
-              if (e.kind != PointerDeviceKind.touch) return;
-              touches = max(0, touches - 1);
-              if (touches == 0) _pullCancel(); // soltó antes de completar: vuelve
-            },
-            onPointerCancel: (e) {
-              if (e.kind != PointerDeviceKind.touch) return;
-              touches = max(0, touches - 1);
-              if (touches == 0) _pullCancel();
-            },
+            key: _viewportKey,
+            onPointerDown: _touchDown,
+            onPointerMove: _touchMove,
+            onPointerUp: _touchUp,
+            onPointerCancel: _touchUp,
             child: NotificationListener<ScrollNotification>(
               onNotification: _onScrollNote,
               child: ScrollConfiguration(
@@ -826,37 +977,40 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
                 ),
                 child: SingleChildScrollView(
                   controller: scroll,
-                  physics: const ClampingScrollPhysics(),
+                  physics: noScroll,
                   keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 16, bottom: 24),
-                    child: Column(children: [
-                      Center(
-                        child: Container(
-                          width: sw,
-                          height: sheetH,
-                          decoration: const BoxDecoration(boxShadow: [
-                            BoxShadow(color: Color(0x22000000), blurRadius: 3, offset: Offset(0, 1)),
-                            BoxShadow(color: Color(0x10000000), blurRadius: 24, offset: Offset(0, 6)),
-                          ]),
-                          child: _sheet(Size(sw, sheetH)),
+                  child: SingleChildScrollView(
+                    controller: hscroll,
+                    scrollDirection: Axis.horizontal,
+                    physics: noScroll,
+                    child: SizedBox(
+                      width: contentW,
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        const SizedBox(height: _topPad),
+                        Padding(
+                          padding: EdgeInsets.only(left: _sheetLeft),
+                          child: SizedBox(width: sw, height: sheetH, child: _sheet(Size(sw, sheetH))),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 22, 16, 70),
-                        child: Text(
-                          'Al final, deslizá hacia arriba y mantené para agregar una hoja',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: cs.onSurfaceVariant.withValues(alpha: .7), fontSize: 13),
+                        SizedBox(
+                          width: contentW,
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 22, 16, 70),
+                            child: Text(
+                              'Al final, deslizá hacia arriba y mantené para agregar una hoja',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: cs.onSurfaceVariant.withValues(alpha: .7), fontSize: 13),
+                            ),
+                          ),
                         ),
-                      ),
-                    ]),
+                      ]),
+                    ),
                   ),
                 ),
               ),
             ),
           ),
           Positioned(left: 0, right: 0, bottom: 28, child: Center(child: _pullIndicator())),
+          Positioned(left: 0, right: 0, top: 14, child: Center(child: _zoomIndicator())),
         ]);
       }),
     );
@@ -935,6 +1089,7 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
         item('text', Symbols.keyboard, 'Escribir acá'),
         item('all', Symbols.select_all, 'Seleccionar todo', enabled: page.strokes.isNotEmpty || page.texts.isNotEmpty),
         item('sheet', Symbols.note_add, 'Agregar hoja al final'),
+        item('zoom100', Symbols.fit_page_width, 'Zoom al ancho de la hoja', enabled: !ts.zoomLocked && (ts.zoom - 1).abs() > .01),
       ],
     );
     if (!mounted) return;
@@ -956,8 +1111,11 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
         });
         liveTick.value++;
       case 'sheet':
-        setState(() => page.h += kSheetH);
+        setState(() => page.h = heightFor(sheetCount(page.h) + 1));
         _changed();
+      case 'zoom100':
+        _setZoom(1, null);
+        widget.onPrefsChanged();
     }
   }
 
@@ -1135,6 +1293,7 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
         _divider(vertical),
         _icon(Symbols.undo, 'Deshacer', undo.isEmpty ? null : () => _undoRedo(undo, redo)),
         _icon(Symbols.redo, 'Rehacer', redo.isEmpty ? null : () => _undoRedo(redo, undo)),
+        _lockBtn(),
         _bgMenu(),
         IgnorePointer(
           ignoring: !ts.hasClip,
@@ -1170,23 +1329,34 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
         waitDuration: const Duration(milliseconds: 600),
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onPanStart: (d) => setState(() => _dockPreview = _dockFor(d.globalPosition)),
+          onPanStart: (d) {
+            HapticFeedback.lightImpact();
+            setState(() {
+              _dockPreview = _dockFor(d.globalPosition);
+              _dragPos = _editorLocal(d.globalPosition);
+            });
+          },
           onPanUpdate: (d) {
             final t = _dockFor(d.globalPosition);
-            if (t != _dockPreview) {
-              HapticFeedback.selectionClick();
-              setState(() => _dockPreview = t);
-            }
+            if (t != _dockPreview) HapticFeedback.selectionClick();
+            setState(() {
+              _dockPreview = t;
+              _dragPos = _editorLocal(d.globalPosition);
+            });
           },
           onPanEnd: (_) {
             final t = _dockPreview;
             setState(() {
               _dockPreview = null;
+              _dragPos = null;
               if (t != null) ts.dock = t;
             });
             widget.onPrefsChanged();
           },
-          onPanCancel: () => setState(() => _dockPreview = null),
+          onPanCancel: () => setState(() {
+            _dockPreview = null;
+            _dragPos = null;
+          }),
           child: SizedBox(
             width: vertical ? 60 : 26,
             height: vertical ? 26 : 56,
@@ -1197,6 +1367,24 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
           ),
         ),
       );
+
+  Widget _lockBtn() {
+    final on = ts.zoomLocked;
+    return Tooltip(
+      message: on ? 'Zoom fijo (${(ts.zoom * 100).round()}%) · tocá para soltarlo' : 'Fijar el zoom',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: _toggleZoomLock,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(color: on ? cs.secondaryContainer : Colors.transparent, borderRadius: BorderRadius.circular(12)),
+          child: Icon(on ? Symbols.lock : Symbols.lock_open, size: 21, weight: on ? 400 : 300, color: on ? cs.onSecondaryContainer : cs.onSurfaceVariant),
+        ),
+      ),
+    );
+  }
 
   Widget _divider(bool vertical) => Container(
         width: vertical ? 22 : 1,
