@@ -53,7 +53,9 @@ void main() {
   }
 
   Future<void> createNotebook(WidgetTester t, String name) async {
-    await t.tap(find.text('Nuevo cuaderno'));
+    await t.tap(find.byKey(const Key('new')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('newNotebook')));
     await settle(t);
     await t.enterText(find.byKey(const Key('askText')), name);
     await t.tap(find.byKey(const Key('askOk')));
@@ -421,5 +423,84 @@ void main() {
     final pages = await Printing.raster(bytes, dpi: 20).toList();
     expect(pages.length, 3);
     expect(pages.first.width / pages.first.height, closeTo(210 / 297, .02), reason: 'tamaño A4');
+  });
+
+  Future<void> createFolder(WidgetTester t, String name) async {
+    await t.tap(find.byKey(const Key('new')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('newFolder')));
+    await settle(t);
+    await t.enterText(find.byKey(const Key('askText')), name);
+    await t.tap(find.byKey(const Key('askOk')));
+    await settle(t, 800);
+  }
+
+  testWidgets('carpetas: crear, meter un cuaderno, renombrar y sacar', (t) async {
+    await start(t);
+    await createNotebook(t, 'Suelto'); // se abre solo: volver a la biblioteca
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+    await createFolder(t, 'Facultad');
+    expect(find.byKey(const Key('folder-Facultad')), findsOneWidget);
+
+    // meter el cuaderno
+    await holdOn(t, find.byKey(const Key('nb-Suelto')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('moveTo')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('moveTarget-Facultad')));
+    await settle(t, 800);
+    expect(find.byKey(const Key('nb-Suelto')), findsNothing);
+    await t.tap(find.byKey(const Key('folder-Facultad')));
+    await settle(t, 800);
+    expect(find.byKey(const Key('nb-Suelto')), findsOneWidget);
+
+    // volver y renombrar la carpeta
+    await t.tap(find.byKey(const Key('up')));
+    await settle(t, 800);
+    await holdOn(t, find.byKey(const Key('folder-Facultad')));
+    await settle(t);
+    await t.tap(find.text('Renombrar'));
+    await settle(t);
+    await t.enterText(find.byKey(const Key('askText')), 'Uni');
+    await t.tap(find.byKey(const Key('askOk')));
+    await settle(t, 800);
+    expect(find.byKey(const Key('folder-Uni')), findsOneWidget);
+
+    // borrarla sacando los cuadernos
+    await holdOn(t, find.byKey(const Key('folder-Uni')));
+    await settle(t);
+    await t.tap(find.text('Borrar'));
+    await settle(t);
+    await t.tap(find.byKey(const Key('folderKeep')));
+    await settle(t, 800);
+    expect(find.byKey(const Key('folder-Uni')), findsNothing);
+    expect(find.byKey(const Key('nb-Suelto')), findsOneWidget);
+  });
+
+  testWidgets('buscar en el inicio', (t) async {
+    await start(t);
+    await createFolder(t, 'Análisis');
+    await t.tap(find.byKey(const Key('folder-Análisis')));
+    await settle(t, 800);
+    await createNotebook(t, 'Álgebra lineal');
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+    await t.tap(find.byKey(const Key('up')));
+    await settle(t, 800);
+    expect(find.byKey(const Key('nb-Álgebra lineal')), findsNothing);
+
+    await t.enterText(find.byKey(const Key('librarySearch')), 'ALGEBRA');
+    await settle(t, 600);
+    expect(find.byKey(const Key('nb-Álgebra lineal')), findsOneWidget);
+    expect(find.text('Inicio / Análisis'), findsOneWidget);
+    await t.enterText(find.byKey(const Key('librarySearch')), 'analisis');
+    await settle(t, 600);
+    expect(find.byKey(const Key('folder-Análisis')), findsOneWidget);
+
+    await t.tap(find.byKey(const Key('librarySearchClear')));
+    await settle(t, 600);
+    expect(find.byKey(const Key('nb-Álgebra lineal')), findsNothing);
+    expect(find.byKey(const Key('folder-Análisis')), findsOneWidget);
   });
 }
