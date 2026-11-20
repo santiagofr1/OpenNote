@@ -150,8 +150,16 @@ class Notebook {
   final String id;
   String name;
   final List<PageRef> pages;
-  Notebook(this.id, this.name, this.pages);
-  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'pages': pages.map((p) => p.toJson()).toList()};
+  int updated; // última edición (ms)
+  String? last; // última página abierta
+  Notebook(this.id, this.name, this.pages, {this.updated = 0, this.last});
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'updated': updated,
+        'last': last,
+        'pages': pages.map((p) => p.toJson()).toList(),
+      };
 }
 
 class NotesIndex {
@@ -165,9 +173,13 @@ class NotesIndex {
         last: j['last'] as String?,
         notebooks: [
           for (final n in (j['notebooks'] as List? ?? []))
-            Notebook(n['id'] as String, n['name'] as String, [
-              for (final p in (n['pages'] as List? ?? [])) PageRef(p['id'] as String, p['title'] as String),
-            ])
+            Notebook(
+              n['id'] as String,
+              n['name'] as String,
+              [for (final p in (n['pages'] as List? ?? [])) PageRef(p['id'] as String, p['title'] as String)],
+              updated: (n['updated'] ?? 0) as int,
+              last: n['last'] as String?,
+            )
         ],
       );
   Map<String, dynamic> toJson() => {'rev': rev, 'last': last, 'notebooks': notebooks.map((n) => n.toJson()).toList()};

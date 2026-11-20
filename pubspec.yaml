@@ -38,6 +38,8 @@ dependencies:
   path_provider: ^2.1.6
   material_symbols_icons: ^4.2960.0
   dynamic_color: ^2.1.0
+  pdf: ^3.13.1
+  file_picker: ^13.4.0
 
 dev_dependencies:
   flutter_test:
