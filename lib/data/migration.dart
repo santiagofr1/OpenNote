@@ -27,8 +27,8 @@ Future<NotesIndex> migrateLegacy(Storage store, Map old) async {
     n as Map;
     final nb = Notebook(n['id'] as String, n['name'] as String,
         updated: (n['updated'] ?? 0) as int, favorite: (n['favorite'] ?? false) as bool, pin: n['pin'] as String?);
-    final doc = NotebookDoc(nb);
     nb.sheets.clear();
+    final strokes = <String, Stroke>{}, texts = <String, TextBlock>{}, items = <String, Item>{};
     final lastPage = n['last'];
     var offset = 0; // hojas ya puestas
     for (final p in (n['pages'] as List? ?? [])) {
@@ -48,10 +48,11 @@ Future<NotesIndex> migrateLegacy(Storage store, Map old) async {
             paper: page.paper));
       }
       if (p['id'] == lastPage) nb.last = offset;
-      _append(doc, page, offset * kSheetStep);
+      _append(strokes, texts, items, page, offset * kSheetStep);
       offset += count;
     }
     if (nb.sheets.isEmpty) nb.sheets.add(nb.newSheet());
+    final doc = NotebookDoc(nb, strokes: strokes, texts: texts, items: items); // con las hojas ya armadas: todas cargadas
     await store.removeNotebookFiles(nb.id); // restos de un intento anterior
     await store.saveNotebook(doc);
     out.notebooks.add(nb);
@@ -71,21 +72,21 @@ Future<LegacyPage> _readPage(Storage store, String id) async {
   }
 }
 
-/// Suma lo de [page] al final de [doc], [dy] más abajo. Las páginas duplicadas conservaban los
+/// Suma lo de [page] al final de los mapas, [dy] más abajo. Las páginas duplicadas conservaban los
 /// ids de sus trazos, así que si un id ya está se le da uno nuevo.
-void _append(NotebookDoc doc, LegacyPage page, double dy) {
+void _append(Map<String, Stroke> strokes, Map<String, TextBlock> texts, Map<String, Item> items, LegacyPage page, double dy) {
   final d = Offset(0, dy);
   for (final s in page.strokes.values) {
-    final id = doc.strokes.containsKey(s.id) ? newId('s') : s.id;
-    doc.strokes[id] = s.moved(d, id: id);
+    final id = strokes.containsKey(s.id) ? newId('s') : s.id;
+    strokes[id] = s.moved(d, id: id);
   }
   for (final t in page.texts.values) {
-    final id = doc.texts.containsKey(t.id) ? newId('t') : t.id;
-    doc.texts[id] = t.copy(id: id, d: d);
+    final id = texts.containsKey(t.id) ? newId('t') : t.id;
+    texts[id] = t.copy(id: id, d: d);
   }
   for (final i in page.items.values) {
-    final id = doc.items.containsKey(i.id) ? newId('i') : i.id;
-    doc.items[id] = i.copy(id: id, d: d);
+    final id = items.containsKey(i.id) ? newId('i') : i.id;
+    items[id] = i.copy(id: id, d: d);
   }
 }
 

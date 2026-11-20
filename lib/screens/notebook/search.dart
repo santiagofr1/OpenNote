@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import '../../data/storage.dart';
 import '../../domain/domain.dart';
 
 /// Un resultado: texto o nota adhesiva ([id]) o el título de la hoja ([id] null).
@@ -35,6 +36,41 @@ List<SearchHit> searchNotebook(NotebookDoc doc, String query) {
   }
   found.sort((a, b) => a.$1 != b.$1 ? a.$1.compareTo(b.$1) : a.$2.compareTo(b.$2));
   return [for (final f in found) f.$3];
+}
+
+/// Como [searchNotebook] pero en TODAS las hojas: las cargadas se buscan en memoria y las otras se leen de disco
+/// de a una (solo sus textos, en otro isolate), sin dejarlas cargadas ni juntar todo el cuaderno en memoria.
+Future<List<SearchHit>> searchNotebookAll(Storage store, NotebookDoc doc, String query) async {
+  final q = query.trim().toLowerCase();
+  if (q.isEmpty) return [];
+  final found = <(int, double, SearchHit)>[];
+  // lo de las hojas cargadas (y los títulos de todas): en memoria, incluye lo que se editó y todavía no se guardó
+  final inMemory = searchNotebook(doc, query);
+  // el resto, de disco; se decide hoja por hoja (una puede cargarse mientras se busca)
+  for (var k = 0; k < doc.sheetCount; k++) {
+    final m = doc.sheets[k];
+    if (doc.isLoaded(m.id)) continue;
+    List<SheetText> texts;
+    try {
+      texts = await store.readSheetTexts(doc.nb, m);
+    } catch (_) {
+      continue; // no se pudo leer: se sigue con las demás
+    }
+    if (doc.isLoaded(m.id)) continue; // se cargó mientras se leía: ya está en memoria
+    final k2 = doc.indexOfSheet(m.id);
+    if (k2 < 0) continue;
+    for (final t in texts) {
+      final i = t.text.toLowerCase().indexOf(q);
+      if (i >= 0) found.add((k2, t.y, SearchHit(k2, m, t.id, snippet(t.text, i, q.length))));
+    }
+  }
+  found.sort((a, b) => a.$1 != b.$1 ? a.$1.compareTo(b.$1) : a.$2.compareTo(b.$2));
+  // por hoja: primero lo de memoria (el título y, si está cargada, todo lo suyo) y después lo de disco
+  final all = <(int, int, int, SearchHit)>[
+    for (final (i, h) in inMemory.indexed) (h.sheet, 0, i, h),
+    for (final (i, f) in found.indexed) (f.$1, 1, i, f.$3),
+  ]..sort((a, b) => a.$1 != b.$1 ? a.$1.compareTo(b.$1) : a.$2 != b.$2 ? a.$2.compareTo(b.$2) : a.$3.compareTo(b.$3));
+  return [for (final h in all) h.$4];
 }
 
 /// Pedacito de [s] alrededor de lo encontrado (en [i], de largo [n]), en una línea.

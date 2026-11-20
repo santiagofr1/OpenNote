@@ -105,6 +105,51 @@ pertenece a la hoja que contiene su borde de arriba.
 
 Al guardar se parte por hoja (coordenadas locales), y al leer se rearma la tira.
 
+#### Carga perezosa de hojas
+
+El cuaderno no se lee entero: `NotebookDoc.sheets` (los `SheetMeta`) siempre están todas, pero los elementos
+(`strokes` / `texts` / `items`) solo existen de las hojas **cargadas** (`loadedSheets`, ids de hoja). Una hoja sin
+cargar es, para la app, lo que dice su archivo en disco.
+
+- **Al abrir** (`Storage.openNotebook(nb, around: nb.last)`): se lee `notebook.json` y solo las hojas de la última
+  vista ±2. `Storage.loadNotebook` (cargar todo) queda para los tests y lo que necesite el cuaderno entero.
+- **Cargar / soltar**: `Storage.loadSheets(doc, ids)` lee y decodifica en otro isolate y las pone en su lugar
+  (`NotebookDoc.attachSheet`: coordenadas globales = local + `índice * kSheetStep`, sin marcar nada sucio; si la hoja ya
+  estaba cargada no hace nada, nunca pisa lo de memoria). `Storage.unloadSheets(doc, ids, canUnload:)` las suelta
+  (`detachSheet`).
+- **Quién decide** (`PageEditor`, ver `_syncLoaded` / `_unloadFar`): se cargan las hojas del rango armado
+  (`_range`: lo que se ve más un margen) más `kLoadMargin` = 2 de cada lado; se sueltan las que quedan a más de
+  `kKeepMargin` = 6 hojas del rango (la diferencia evita cargar y soltar en loop), un rato después de scrollear. Una hoja
+  visible sin cargar muestra el papel y "Cargando la hoja N…"; el lápiz y las herramientas la ignoran hasta que cargue.
+- **Nunca se suelta una hoja** que: tiene cambios sin guardar (o hay un guardado en curso), no tiene archivo conocido
+  en disco, su contenido no tiene la misma huella (`sheetDigest`: todo lo que se guarda, sin el ruido de 1e-13 de mover hojas) que el archivo (si difiere se la marca para guardar y no se suelta), tiene
+  selección o arrastre, un texto o nota con foco, un trazo o borrador en curso, un audio, un elemento caído
+  encima (`misplacedSheets`), o la tocan acciones del historial de deshacer / rehacer (`EditAction.sheetIds`: mientras
+  una acción esté en el historial sus hojas quedan fijadas; con historial largo se sueltan menos hojas, a propósito).
+
+**Regla de oro: nunca perder datos.** Una hoja no cargada NUNCA se escribe. `Storage._saveNow` solo toma hojas
+cargadas (`splitSheets` ni siquiera devuelve las otras; hay un `assert` y una guarda que no escribe y loguea), también
+en el primer guardado y con todo sucio: las coordenadas en cada archivo son locales, así que mover, insertar o
+borrar hojas no cambia el contenido de las no cargadas (solo `notebook.json`). Al borrar una hoja sin cargar se
+borra su archivo (la `Storage` recuerda qué ids figuran en `notebook.json`). Los hashes de las no cargadas son
+desconocidos hasta leer su archivo.
+
+Qué pasa con el resto de la app cuando no está todo en memoria:
+- **Seleccionar todo**: solo lo de las hojas cargadas (las visibles y las cercanas).
+- **Un elemento que cae en una hoja sin cargar** (arrastre, pegado): el movimiento se deshace si la hoja no cargó al
+  soltar; si igual llega, la hoja se anota en `misplacedSheets`, el editor la carga enseguida y al cargarla se marca para
+  guardar (el elemento y lo del disco quedan juntos).
+- **Miniaturas del panel**: las de hojas no cargadas se leen de disco (`SheetThumbCache`, últimas 16, clave con `rev`).
+- **Búsqueda** (`searchNotebookAll`): memoria para las cargadas y, para las demás, `Storage.readSheetTexts` (otro isolate,
+  una hoja por vez, solo se devuelven los textos). Tocar un resultado carga esa hoja y va ahí.
+- **PDF / PNG** (`sheetSource`): hoja por hoja; las no cargadas se leen de disco (con la de arriba, por si un trazo se
+  pasa) y se sueltan. Lo cargado y sin guardar se exporta desde memoria.
+- **Duplicar cuaderno**: se copian los archivos (`Storage.copyNotebookFiles`), sin decodificar nada.
+- **Duplicar una hoja** sin cargar: se carga primero (una sola hoja) y se duplica en memoria.
+- Los z (`Layered.z`) de una hoja que se carga van arriba de los de memoria: el orden *dentro* de cada hoja es el del
+  archivo, pero lo que se arrastra de una hoja a otra conserva su z, así que su capa respecto a lo que ya había en la
+  hoja de destino depende del orden de carga (solo cambia cómo se superponen; se guarda lo que se vio).
+
 ### Formato `.sheet`
 
 - Cabecera `"ONS"` + versión + `zlib( JSON )`. El JSON tiene los textos, los elementos y los atributos
@@ -125,8 +170,10 @@ arrastre va de derecha a izquierda; en ese caso toma todo lo que toca el recuadr
 
 ### Guardado
 
-- Guardar codifica las hojas en otro isolate y escribe solo las que cambiaron (compara un hash con el
-  último guardado), más `notebook.json` si cambió algo de las hojas.
+- Guardar codifica en otro isolate solo las hojas sucias (`NotebookDoc.takeDirty`; los mapas de elementos avisan
+  qué hoja tocó cada alta/baja, y lo que se cambia en el lugar se marca con `markDirtyElement`) y escribe las que
+  cambiaron (compara un hash con el último guardado), más `notebook.json` si cambió algo de las hojas. Solo se
+  guardan hojas cargadas (ver Carga perezosa).
 - Las hojas borradas se eliminan.
 - Escritura atómica (temporal + rename). Los guardados de un mismo cuaderno se hacen de a uno y se
   juntan.
@@ -174,7 +221,10 @@ Requisitos:
 
 ## Tests
 
-- `flutter test test/`: lógica pura, en la PC. No necesita la tablet.
+- `flutter test test/`: lógica pura, en la PC. No necesita la tablet. `test/data/dirty_save_test.dart` y
+  `test/data/lazy_load_test.dart` son la red de seguridad del guardado: secuencias aleatorias de operaciones contra
+  un modelo de referencia con todo cargado, comparando cada `.sheet` (el segundo mezcla además cargas y descargas de
+  hojas); `test/screens/lazy_notebook_test.dart` abre un cuaderno de 30 hojas por la UI.
 - `./run_tests.sh`: tests de integración en la tablet. Corren con el build debug
   (`com.apuntes.apuntes.test`, "OpenNote Test"), que es otra app con datos propios. Antes y después
   verifica que OpenNote y sus cuadernos sigan intactos.

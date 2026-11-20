@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 import 'dart:math';
 
 import 'package:flutter/gestures.dart';
@@ -28,6 +29,13 @@ import 'toolbar.dart';
 import 'touch_gestures.dart';
 import 'viewport.dart';
 import 'zoom_indicator.dart';
+
+/// Hojas que se cargan de disco más allá del rango armado (de cada lado).
+const kLoadMargin = 2;
+
+/// Las hojas más lejos que esto del rango armado (de cada lado) se descargan (si se puede). Mayor que [kLoadMargin]:
+/// así una hoja no se carga y se descarga en loop al scrollear de un lado a otro.
+const kKeepMargin = 6;
 
 /// Editor del cuaderno: la tira continua de hojas, con tinta, textos y elementos y su barra de herramientas.
 ///
@@ -92,6 +100,13 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   double _viewH = 800; // alto del visor
   final _stickyFocus = <String>{}; // notas con el teclado abierto: se quedan armadas aunque se scrolleen lejos
 
+  // carga perezosa de hojas (ver [_syncLoaded] y [_unloadFar])
+  final _loading = <String>{}; // hojas que se están leyendo de disco
+  ({int first, int last})? _syncedRange; // rango para el que ya se pidieron las hojas
+  int _syncedCount = -1;
+  bool _syncPending = false;
+  Timer? _unloadTimer, _retryTimer;
+
   /// Ids de los elementos seleccionados (lo usan los tests).
   Set<String> get selI => sel.items;
 
@@ -100,6 +115,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     super.initState();
     texts.attach(doc);
     doc.addRenderListener(_onSheetTouched);
+    doc.addLoadListener(_onSheetLoaded);
     scroll.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) => scrollToSheet(widget.initialSheet, animate: false));
   }
@@ -110,9 +126,13 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     // otro cuaderno en el mismo editor: lo de la anterior (deshacer, selección, campos) no sirve acá
     if (oldWidget.doc != widget.doc) {
       oldWidget.doc.removeRenderListener(_onSheetTouched);
+      oldWidget.doc.removeLoadListener(_onSheetLoaded);
       doc.addRenderListener(_onSheetTouched);
+      doc.addLoadListener(_onSheetLoaded);
       _versions.clear();
       _stickyFocus.clear();
+      _loading.clear();
+      _syncedRange = null;
       texts.attach(doc);
       history.clear();
       sel.clear();
@@ -136,6 +156,9 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     hscroll.dispose();
     pull.dispose();
     doc.removeRenderListener(_onSheetTouched);
+    doc.removeLoadListener(_onSheetLoaded);
+    _unloadTimer?.cancel();
+    _retryTimer?.cancel();
     for (final v in _versions.values) {
       v.dispose();
     }
@@ -157,6 +180,19 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       _touchAll();
     } else {
       _versions[id]?.value++;
+      if (!doc.isLoaded(id)) _requestSync(); // algo cayó en una hoja sin cargar: hay que cargarla
+    }
+  }
+
+  /// Una hoja se cargó o se descargó: se arman (o sueltan) los campos de sus textos y se rearma.
+  void _onSheetLoaded(String id, bool loaded) {
+    texts.adoptNew();
+    texts.releaseGone();
+    if (!mounted) return;
+    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _rebuild());
+    } else {
+      setState(() {});
     }
   }
 
@@ -182,7 +218,9 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   /// Hojas que se arman: las que se ven más un margen de un alto de visor arriba y abajo.
   ({int first, int last}) _calcRange() {
     final off = scroll.hasClients && scroll.position.hasPixels ? scroll.offset : 0.0;
-    final top = (off - kTopPad) / scale, span = _viewH / scale;
+    // sin scroll todavía (primer cuadro): se mira desde la hoja inicial, que es adonde se va a saltar
+    final top = scroll.hasClients && scroll.position.hasPixels ? (off - kTopPad) / scale : widget.initialSheet * kSheetStep;
+    final span = _viewH / scale;
     return (first: doc.sheetOfY(top - span), last: doc.sheetOfY(top + 2 * span));
   }
 
@@ -197,6 +235,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   void _onScroll() {
     _scheduleVisibleSheet();
     if (_calcRange() == _range) return;
+    _scheduleUnload();
     void rebuild() {
       if (!mounted || _calcRange() == _range) return;
       setState(() {});
@@ -213,6 +252,109 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   void _rebuild() {
     if (mounted) setState(() {});
   }
+
+  // ---------------- carga perezosa de hojas ----------------
+  /// Pide cargar las hojas del rango armado más [kLoadMargin] de cada lado (en el próximo cuadro).
+  void _requestSync() {
+    if (_syncPending || !mounted) return;
+    if (_syncedRange == _range && _syncedCount == doc.sheetCount && !doc.hasMisplaced) return;
+    _syncPending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _syncPending = false;
+      if (mounted) _syncLoaded();
+    });
+  }
+
+  void _syncLoaded() {
+    _syncedRange = _range;
+    _syncedCount = doc.sheetCount;
+    final n = doc.sheetCount;
+    final from = max(0, _range.first - kLoadMargin), to = min(n - 1, _range.last + kLoadMargin);
+    // las del rango se piden de a una (la visible no espera a las del margen); las del margen, juntas
+    final inRange = <String>[], margin = <String>[...doc.misplacedSheets];
+    for (var k = from; k <= to; k++) {
+      if (doc.isLoadedAt(k)) continue;
+      (k >= _range.first && k <= _range.last ? inRange : margin).add(doc.sheets[k].id);
+    }
+    for (final batch in [for (final id in inRange) [id], margin]) {
+      final ids = [for (final id in batch) if (!_loading.contains(id) && !doc.isLoaded(id)) id];
+      if (ids.isEmpty) continue;
+      _loading.addAll(ids);
+      widget.store.loadSheets(doc, ids).then((_) {}, onError: (Object e) {
+        developer.log('no se pudieron cargar las hojas $ids: $e', name: 'editor', level: 900);
+        _retryTimer ??= Timer(const Duration(seconds: 2), () {
+          _retryTimer = null;
+          _syncedRange = null;
+          _requestSync();
+        });
+      }).whenComplete(() {
+        _loading.removeAll(ids);
+        if (mounted) _scheduleUnload();
+      });
+    }
+    _scheduleUnload();
+  }
+
+  /// Hojas cargadas lejos del rango armado (más de [kKeepMargin] hojas).
+  List<String> _farLoaded() => [
+        for (var k = 0; k < doc.sheetCount; k++)
+          if (doc.isLoadedAt(k) && (k < _range.first - kKeepMargin || k > _range.last + kKeepMargin)) doc.sheets[k].id
+      ];
+
+  /// Un rato después de scrollear (y de que se guarde), suelta las hojas lejanas. Se reintenta unas veces si no se pudo.
+  void _scheduleUnload({int tries = 0}) {
+    _unloadTimer?.cancel();
+    if (!mounted || tries > 20 || _farLoaded().isEmpty) return;
+    _unloadTimer = Timer(Duration(milliseconds: tries == 0 ? 1200 : 2500), () => _unloadFar(tries));
+  }
+
+  Future<void> _unloadFar(int tries) async {
+    if (!mounted) return;
+    final far = _farLoaded();
+    if (far.isEmpty) return;
+    final r = await widget.store.unloadSheets(doc, far, canUnload: (id) => mounted && !_pinnedSheets().contains(id));
+    if (!mounted) return;
+    if (r.healed.isNotEmpty) _changed(); // lo que no coincidía con el disco: que se guarde
+    if (r.unloaded.length < far.length) _scheduleUnload(tries: tries + 1); // algo no se pudo (sucia, guardando...)
+  }
+
+  /// Hojas que NO se pueden descargar: con selección (o arrastre), texto o nota con foco, trazo o borrador en curso,
+  /// audios, elementos caídos en una hoja sin cargar, y las que tocan las acciones del historial (deshacer / rehacer
+  /// las necesitan en memoria). Las hojas con cambios sin guardar las protege la `Storage`.
+  Set<String> _pinnedSheets() {
+    final out = <String>{...doc.misplacedSheets};
+    void byId(String id) {
+      final s = doc.sheetIdOfElementId(id);
+      if (s != null) out.add(s);
+    }
+
+    sel.allIds.forEach(byId);
+    final f = texts.focused;
+    if (f != null) byId(f.block.id);
+    _stickyFocus.forEach(byId);
+    for (final s in [?live, ...?erased]) {
+      out.addAll(doc.sheetIdsOfRect(s.bounds));
+    }
+    for (final it in doc.items.values) {
+      if (it.type == 'audio') byId(it.id);
+    }
+    out.addAll(history.sheetIds(doc));
+    return out;
+  }
+
+  /// Corre [then] cuando las hojas [ids] estén cargadas (las pide si hace falta).
+  void _whenLoaded(Iterable<String> ids, VoidCallback then) {
+    final need = [for (final id in ids.toSet()) if (!doc.isLoaded(id)) id];
+    if (need.isEmpty) {
+      then();
+      return;
+    }
+    widget.store.loadSheets(doc, need).then((_) {
+      if (mounted && need.every(doc.isLoaded)) then();
+    }, onError: (Object e) => developer.log('no se pudieron cargar $need: $e', name: 'editor', level: 900));
+  }
+
+  bool _loadedAt(double y) => doc.isLoadedAt(doc.sheetOfY(y));
 
   void _changed() => widget.onChanged();
 
@@ -233,8 +375,12 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     if (widget.readOnly || pointer != null) return;
     final action = penActionFor(e, ts.tool);
     if (action == null) return;
-    pointer = e.pointer;
     final p = _toPage(e.localPosition);
+    if (!_loadedAt(p.dy)) {
+      _requestSync(); // la hoja todavía no se leyó de disco: no se escribe encima hasta que cargue
+      return;
+    }
+    pointer = e.pointer;
     switch (action) {
       case PenAction.erase:
         _startErase(p);
@@ -342,6 +488,14 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   }
 
   void _undoRedo({required bool undo}) {
+    final peek = history.peek(undo: undo);
+    if (peek == null) return;
+    // las hojas del historial están fijadas en memoria; si por algún motivo falta alguna, se carga antes
+    final ids = peek.sheetIds(doc);
+    if (!ids.every(doc.isLoaded)) {
+      _whenLoaded(ids, () => _undoRedo(undo: undo));
+      return;
+    }
     final a = undo ? history.undo() : history.redo();
     if (a == null) return;
     a.apply(doc, undo: undo, putText: texts.put);
@@ -406,6 +560,42 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       // fue un toque: nada se movió
       _touchStrokes(sel.strokesOf(doc));
       setState(() {});
+      return;
+    }
+    // si algo va a caer en una hoja sin cargar, se deshace el movimiento (y se pide cargarla): nada se pierde
+    var lands = true;
+    for (final s in sel.strokesOf(doc)) {
+      lands &= _loadedAt(s.bounds.top + d.dy);
+    }
+    for (final id in drag.textOrig.keys) {
+      final t = doc.texts[id];
+      if (t != null) lands &= _loadedAt(t.y);
+    }
+    for (final id in drag.itemOrig.keys) {
+      final it = doc.items[id];
+      if (it != null) lands &= _loadedAt(it.y);
+    }
+    if (!lands) {
+      drag.textOrig.forEach((id, o) {
+        final t = doc.texts[id];
+        if (t == null) return;
+        doc.markDirtyElement(t);
+        t.x = o.dx;
+        t.y = o.dy;
+        doc.markDirtyElement(t);
+      });
+      drag.itemOrig.forEach((id, o) {
+        final it = doc.items[id];
+        if (it == null) return;
+        doc.markDirtyElement(it);
+        it.x = o.dx;
+        it.y = o.dy;
+        doc.markDirtyElement(it);
+      });
+      _touchStrokes(sel.strokesOf(doc));
+      _requestSync();
+      setState(() {});
+      liveTick.value++;
       return;
     }
     final removed = <Stroke>[], added = <Stroke>[];
@@ -482,6 +672,16 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   /// Pega copias (con ids nuevos) corridas [d] y las deja seleccionadas.
   void _insert(List<Stroke> strokes, List<TextBlock> textBlocks, Offset d, List<Item> items) {
+    // el destino tiene que estar cargado: si no, se carga y se vuelve a intentar
+    final target = {
+      for (final s in strokes) doc.sheetOfY(s.bounds.top + d.dy),
+      for (final t in textBlocks) doc.sheetOfY(max(0.0, t.y + d.dy)),
+      for (final it in items) doc.sheetOfY(it.y + d.dy),
+    };
+    if (target.any((k) => !doc.isLoadedAt(k))) {
+      _whenLoaded([for (final k in target) doc.sheets[k].id], () => _insert(strokes, textBlocks, d, items));
+      return;
+    }
     final newStrokes = [for (final s in strokes) s.moved(d, id: newId('s'))];
     final newItems = [for (final it in items) it.copy(id: newId('i'), d: d)];
     final newTexts = [
@@ -571,6 +771,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   }
 
   void _createTextAt(Offset p) {
+    if (!_loadedAt(p.dy)) {
+      _requestSync();
+      return;
+    }
     final x = p.dx.clamp(16.0, kW - 120);
     var y = max(0.0, doc.snapTextY(p.dy, floor: true)); // el renglón de esa hoja
     // en el espacio entre hojas (o sin lugar para un renglón): a la siguiente
@@ -594,6 +798,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   /// (o en el primer renglón de la parte visible si no hay nada).
   void _newTextAtVisible() {
     final k = visibleSheet, sheetTop = k * kSheetStep, line = doc.lineAt(sheetTop + 1);
+    if (!doc.isLoadedAt(k)) {
+      _requestSync(); // la hoja que se ve todavía se está leyendo
+      return;
+    }
     final vh = scroll.hasClients ? scroll.position.viewportDimension / scale : 600 / scale;
     final top = scroll.hasClients ? max(0.0, (scroll.offset - kTopPad) / scale) : sheetTop;
     final region = Rect.fromLTRB(0, max(top, sheetTop), kW, min(top + vh, sheetTop + kSheetH));
@@ -887,13 +1095,21 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     _touchAll();
     liveTick.value++;
     _updateVisibleSheet();
+    _syncedRange = null;
+    _requestSync();
+    _scheduleUnload();
   }
 
   /// Agrega un elemento centrado en lo que se está viendo y lo deja seleccionado.
   void insertItem(Item it) {
     final c = viewCenter;
+    final y = max(0.0, c.dy - it.h / 2);
+    if (!_loadedAt(y)) {
+      _whenLoaded([doc.sheets[doc.sheetOfY(y)].id], () => insertItem(it));
+      return;
+    }
     it.x = (c.dx - it.w / 2).clamp(10.0, max(10.0, kW - it.w - 10));
-    it.y = max(0.0, c.dy - it.h / 2);
+    it.y = y;
     it.z = doc.nextZ();
     doc.items[it.id] = it;
     _pushUndo(EditAction(itemBefore: {it.id: null}, itemAfter: {it.id: it.copy()}));
@@ -971,6 +1187,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         layout = SheetLayout(box.maxWidth, ts.zoom);
         _viewH = box.maxHeight;
         _range = _calcRange();
+        _requestSync();
         final sheetSize = Size(layout.sheetWidth, doc.h * scale);
         // durante el pellizco no scrollea: si no, el zoom tironea
         final physics = touch.pinching ? const NeverScrollableScrollPhysics() : const ClampingScrollPhysics();
@@ -1138,6 +1355,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             child: RepaintBoundary(child: CustomPaint(painter: SheetPainter(doc.sheets, scale, first, last))),
           ),
           for (var k = first; k <= last; k++) ...[
+            if (!doc.isLoadedAt(k)) _loadingMark(k),
             for (final (i, run) in zRuns(bySheet[k - first]).indexed) _run(run, i, textMode, k),
           ],
           for (final (i, run) in zRuns(extras).indexed) _run(run, i, textMode, -1),
@@ -1155,6 +1373,21 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       ),
     );
   }
+
+  /// Aviso (sin animación) en una hoja visible que todavía no se leyó de disco: se ve el papel y nada más.
+  Widget _loadingMark(int k) => Positioned(
+        key: ValueKey('loading-${doc.sheets[k].id}'),
+        left: 0,
+        top: k * kSheetStep * scale,
+        width: kW * scale,
+        height: 120 * scale,
+        child: IgnorePointer(
+          child: Center(
+            child: Text('Cargando la hoja ${k + 1}…',
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: .55), fontSize: 14)),
+          ),
+        ),
+      );
 
   /// Alto de más para un texto (unidades), sin medirlo: sirve para saber si un texto de una hoja de arriba
   /// llega hasta las hojas armadas. Pasarse solo arma un texto de más.

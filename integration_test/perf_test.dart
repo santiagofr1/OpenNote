@@ -7,8 +7,11 @@
 //
 // Qué mide cada número:
 //   puntos / disco        puntos de tinta del cuaderno y tamaño de su carpeta (hojas + notebook.json)
-//   leer+decodificar      Storage.loadNotebook (lo que hace la app al abrir): leer los .sheet, descomprimir y armar el
-//                         NotebookDoc. Mediana de 3 corridas con Storage nuevo (el sistema ya tiene los archivos en caché).
+//   leer+decodificar      Storage.loadNotebook (TODO el cuaderno, como se abría antes de la carga perezosa; hoy solo lo usan
+//                         duplicar y los tests, queda para comparar): leer los .sheet, descomprimir y armar el NotebookDoc.
+//                         Mediana de 3 corridas con Storage nuevo (el sistema ya tiene los archivos en caché).
+//   abrir perezoso        Storage.openNotebook (lo que hace la app al abrir): notebook.json y solo las hojas de la mitad
+//                         del cuaderno ±2. Mediana de 3 corridas.
 //   bloqueo hilo principal  mayor tiempo seguido que el hilo de la UI no atendió eventos mientras corría (timer de 2 ms)
 //   abrir por la UI       desde tocar el cuaderno en la biblioteca hasta que el PageEditor está construido (incluye
 //                         la lectura y la animación de entrada)
@@ -202,7 +205,7 @@ void main() {
     // tabla resumen entre tamaños
     say('');
     say('===== RESUMEN (modo ${modo()}) =====');
-    say('hojas | puntos | disco MB | leer+decod ms | abrir UI ms | guardar 1 trazo ms | scroll build p90 | '
+    say('hojas | puntos | disco MB | leer+decod ms | abrir perezoso ms | abrir UI ms | guardar 1 trazo ms | scroll build p90 | '
         'scroll raster p90 | >16ms % | RSS abierto MB | maxRSS MB');
     for (final n in sizes) {
       final m = results['$n'];
@@ -211,7 +214,7 @@ void main() {
       double worst(String k) => sc.isEmpty ? 0 : sc.map((e) => (e[k] as num).toDouble()).reduce(max);
       final fr = sc.fold<int>(0, (a, e) => a + (e['frames'] as int));
       final slow = sc.fold<int>(0, (a, e) => a + (e['frames_mas_16ms'] as int));
-      say('$n | ${m['puntos']} | ${m['disco_mb']} | ${m['leer_decodificar_ms']} | ${m['abrir_ui_ms']} | '
+      say('$n | ${m['puntos']} | ${m['disco_mb']} | ${m['leer_decodificar_ms']} | ${m['abrir_perezoso_ms']} | ${m['abrir_ui_ms']} | '
           '${m['guardar_1_trazo_ms']} | ${worst('build_p90_ms')} | ${worst('raster_p90_ms')} | '
           '${fr == 0 ? '-' : r1(100 * slow / fr)} | ${m['rss_abierto_mb']} | ${m['rss_max_mb']}');
     }
@@ -256,6 +259,27 @@ void main() {
         out['leer_decodificar_bloqueo_ms'] = r1(stall);
         say('leer+decodificar (Storage): mediana ${out['leer_decodificar_ms']} ms (corridas ${out['leer_decodificar_corridas_ms']}), '
             'bloqueo máx del hilo principal ${r1(stall)} ms');
+
+        // ---------- (a ter) abrir perezoso con Storage.openNotebook (como la app) ----------
+        final lazyReads = <double>[];
+        var lazyStall = 0.0;
+        var lazyLoaded = 0;
+        for (var i = 0; i < 3; i++) {
+          final s2 = Storage(root: root);
+          await s2.init();
+          final idx = await s2.loadIndex();
+          sw = Stopwatch()..start();
+          final (dd, st) = await withStall(() => s2.openNotebook(idx.notebooks.first, around: n ~/ 2));
+          lazyReads.add(ms(sw.elapsed));
+          lazyStall = max(lazyStall, st);
+          lazyLoaded = dd.loadedSheets.length;
+        }
+        out['abrir_perezoso_ms'] = r1(median(lazyReads));
+        out['abrir_perezoso_corridas_ms'] = [for (final v in lazyReads) r1(v)];
+        out['abrir_perezoso_hojas_cargadas'] = lazyLoaded;
+        out['abrir_perezoso_bloqueo_ms'] = r1(lazyStall);
+        say('abrir perezoso (Storage.openNotebook, $lazyLoaded hojas): mediana ${out['abrir_perezoso_ms']} ms '
+            '(corridas ${out['abrir_perezoso_corridas_ms']}), bloqueo máx ${r1(lazyStall)} ms');
 
         // ---------- (b) guardar después de agregar UN trazo ----------
         final d = doc!;
