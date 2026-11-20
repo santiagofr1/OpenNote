@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'elements.dart';
 import 'geometry.dart';
 import 'notebook.dart';
+import 'paper_layout.dart' as paper;
 import 'stroke.dart';
 import 'values.dart';
 
@@ -56,6 +57,19 @@ class NotebookDoc {
   /// Hoja que contiene la altura [y] (el espacio entre hojas cuenta para la de arriba).
   int sheetOfY(double y) => (y / kSheetStep).floor().clamp(0, sheets.length - 1);
 
+  /// Alto del renglón de texto (unidades) de la hoja que contiene [y].
+  double lineAt(double y) {
+    final m = sheets[sheetOfY(y)];
+    return paper.textLine(m.bg, m.spacing);
+  }
+
+  /// Lleva la y global [y] de un texto al renglón de SU hoja (cada hoja tiene su espaciado).
+  /// [floor]: al renglón de arriba en vez del más cercano.
+  double snapTextY(double y, {bool floor = false}) {
+    final k = sheetOfY(y), m = sheets[k];
+    return k * kSheetStep + paper.snapTextY(y - k * kSheetStep, m.bg, m.spacing, floor: floor);
+  }
+
   int _sheetOfStroke(Stroke s) => sheetOfY(s.bounds.top);
 
   // ================= hojas al final =================
@@ -76,7 +90,7 @@ class NotebookDoc {
   bool get lastSheetEmpty {
     final top = (sheets.length - 1) * kSheetStep;
     return !strokes.values.any((s) => s.bounds.bottom > top) &&
-        !texts.values.any((t) => t.y + kLine > top) &&
+        !texts.values.any((t) => t.y + lineAt(t.y) > top) &&
         !items.values.any((i) => i.y + i.h > top);
   }
 

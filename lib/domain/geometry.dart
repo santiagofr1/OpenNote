@@ -4,6 +4,17 @@ import 'dart:ui';
 // Medidas lógicas de la hoja. Se escala para entrar en pantalla, así se ve
 // igual en cualquier dispositivo (tablet, PC).
 const double kW = 1000, kSheetH = 1414, kLine = 40, kFont = 21;
+// kLine y kFont son la medida de referencia (renglón y letra de las hojas viejas, ~8,5 mm): la letra es 21/40 del renglón.
+
+// Milímetros reales de A4 (210 x 297 mm): 1 mm = kW / 210 unidades lógicas.
+// kSheetH = 1414 ≈ 297 mm (el error es de 0,05 mm), así que al imprimir al 100 % las medidas salen reales.
+const double kA4WidthMm = 210, kA4HeightMm = 297, kMm = kW / kA4WidthMm;
+
+/// Milímetros -> unidades lógicas.
+double mmToUnits(double mm) => mm * kMm;
+
+/// Unidades lógicas -> milímetros.
+double unitsToMm(double u) => u / kMm;
 
 // Entre hoja y hoja queda un espacio. Hoja + espacio = 1480, múltiplo de kLine,
 // así los renglones de todas las hojas caen en la misma grilla.
@@ -19,9 +30,6 @@ double heightFor(int sheets) => sheets * kSheetH + (sheets - 1) * kGap;
 List<Rect> sheetRects(double h) => [
       for (var k = 0; k < sheetCount(h); k++) Rect.fromLTWH(0, k * kSheetStep, kW, kSheetH),
     ];
-
-/// Lleva la y de un texto al renglón más cercano (el texto va 4 por debajo de la línea).
-double snapTextY(double y) => ((y - 4) / kLine).roundToDouble() * kLine + 4;
 
 /// Envuelve todos los rectángulos; null si no hay ninguno.
 Rect? unionRects(Iterable<Rect> rects) {

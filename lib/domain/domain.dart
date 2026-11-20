@@ -7,6 +7,7 @@ export 'elements.dart';
 export 'geometry.dart';
 export 'notebook.dart';
 export 'notebook_doc.dart';
+export 'paper_layout.dart';
 export 'stroke.dart';
 export 'tools.dart';
 export 'values.dart';
