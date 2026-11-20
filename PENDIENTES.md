@@ -30,7 +30,6 @@ Para hacer después de pasar la reorganización del código (rama `refactor/arqu
    falta "Estilo de hoja" con fondo, color de papel, interlineado / cuadrícula y un selector
    "Aplicar a: esta hoja / todo el cuaderno" (por defecto, todo el cuaderno). Cada hoja ya guarda su fondo y papel.
    El selector de fondo de la barra de herramientas ya cambia solo la hoja que se está viendo.
-7. **Renombrar la app a OpenNote** (nombre en la tablet y título). El id del paquete no se toca para no perder datos.
 8. **Ícono nuevo** (hoy es el de Flutter por defecto): adaptativo de Android (fondo + figura, con versión
    monocromática para los íconos temáticos de Android 13+). Idea: una hoja con una esquina doblada y un trazo
    de tinta que la cruza, en los colores del tema. Mostrar 2–3 opciones antes de elegir.
@@ -49,13 +48,11 @@ Para hacer después de pasar la reorganización del código (rama `refactor/arqu
     muestra un aviso con los cambios, descarga el APK y abre el instalador (un toque).
     Permiso REQUEST_INSTALL_PACKAGES; opción en ajustes para desactivarlo. Android no permite instalación
     100 % silenciosa fuera de Play Store.
-12. **Tests sin tocar la app real**: `flutter test` desinstala la app al terminar (y Android borra sus datos).
-    Usar un flavor `test` con otro applicationId (`com.apuntes.apuntes.test`) para que los tests se instalen
-    como otra app; mientras tanto `run_tests.sh` hace backup y restaura (en una corrida el backup salió vacío:
-    revisar y verificar la restauración al final del script).
 
 ## Hecho
 
+- **7. App renombrada a OpenNote** (nombre en la tablet y título; el id `com.apuntes.apuntes` no cambió).
+- **12. Tests sin tocar la app real**: el build debug se instala como `com.apuntes.apuntes.test` ("OpenNote Test"); `run_tests.sh` verifica que la app real y sus datos sigan intactos (`BACKUP=1` además hace backup).
 - **Todo hojas, como Samsung Notes** (rama `feat/hojas`): el cuaderno es una tira continua de hojas.
   Contador "2 / 5" en el título, panel con una miniatura por hoja (agregar / duplicar / mover / borrar / marcar /
   renombrar), título y marcador por hoja en el panel y la búsqueda, PDF con una A4 por hoja con su fondo y papel,
