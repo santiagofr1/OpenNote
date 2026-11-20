@@ -24,6 +24,11 @@
     - Conflictos: el formato por hojas (una hoja = un archivo con rev/updated) ya ayuda; definir qué pasa si se
       edita la misma hoja en los dos lados (guardar las dos versiones, o fusionar trazos por id).
     Entregable: un documento comparando opciones (seguridad, comodidad, esfuerzo) y una recomendación.
+19. **Selección: resaltador y tocar afuera** (reportado por el usuario en la 1.0.9):
+    - Una palabra escrita y resaltada encima: con seleccionar no se puede agarrar solo el resaltador; agarra la tinta,
+      o las dos juntas. Hace falta una forma de elegir solo uno (p. ej. un toque sobre el resaltador elige el de arriba
+      en el orden; tocar de nuevo en el mismo lugar alterna al de abajo; o un filtro "solo resaltador / solo tinta").
+    - Con algo seleccionado, tocar FUERA del recuadro no hace nada: debería deseleccionar.
 15. **LaTeX**: lo hace el usuario; no tocar.
 
 ## Hecho
