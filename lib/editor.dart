@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import 'model.dart';
 import 'painters.dart';
@@ -648,7 +649,6 @@ class _PageEditorState extends State<PageEditor> {
   Widget build(BuildContext context) {
     return Column(children: [
       _toolbar(),
-      const Divider(height: 1, color: Color(0xFFDCD9D0)),
       Expanded(child: _canvasArea()),
     ]);
   }
@@ -853,119 +853,129 @@ class _PageEditorState extends State<PageEditor> {
     if (mounted) setState(() {});
   }
 
+  // Barra: zonas de ancho fijo para que nada salte al cambiar de herramienta.
+  // [menú][título ......][herramientas] | [colores][grosor] | [pegar][deshacer][rehacer][fondo]
+  static const _ink = Color(0xFF4A4741); // íconos en reposo
+  static const _hair = Color(0xFFE3E0D7); // líneas finas
+  static const _bar = Color(0xFFF8F7F3);
+
   Widget _toolbar() {
-    final showColors = ts.tool == Tool.pen || ts.tool == Tool.hl;
+    final drawing = ts.tool == Tool.pen || ts.tool == Tool.hl;
     final cur = ts.current;
-    return Container(
-      color: kPanel,
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-      child: Row(children: [
-        IconButton(onPressed: widget.onMenu, icon: const Icon(Icons.menu), tooltip: 'Cuadernos'),
-        const SizedBox(width: 4),
-        Flexible(
-          flex: 2,
-          child: Text.rich(
-            TextSpan(children: [
-              TextSpan(text: widget.title, style: const TextStyle(fontWeight: FontWeight.w600)),
-              TextSpan(text: '  ${widget.subtitle}', style: const TextStyle(color: kMuted, fontSize: 13)),
-            ]),
-            overflow: TextOverflow.ellipsis,
+    return LayoutBuilder(builder: (context, box) {
+      final compact = box.maxWidth < 820;
+      final nColors = compact ? 4 : 6;
+      // los colores que se muestran: recientes de la herramienta, completados con la paleta
+      final base = ts.tool == Tool.hl ? ts.hlRecent : ts.penRecent;
+      final fill = ts.tool == Tool.hl ? hlPalette : palette;
+      final colors = <String>[...base];
+      for (final c in fill) {
+        if (colors.length >= nColors) break;
+        if (!colors.contains(c)) colors.add(c);
+      }
+      return Container(
+        height: 56,
+        decoration: const BoxDecoration(color: _bar, border: Border(bottom: BorderSide(color: _hair))),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Row(children: [
+          _icon(Symbols.menu, 'Cuadernos', widget.onMenu),
+          const SizedBox(width: 6),
+          Expanded(
+            child: compact
+                ? const SizedBox()
+                : Text.rich(
+                    TextSpan(children: [
+                      TextSpan(text: widget.title, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 15, color: kText)),
+                      TextSpan(text: '   ${widget.subtitle}', style: const TextStyle(color: kMuted, fontSize: 13)),
+                    ]),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
           ),
-        ),
-        const SizedBox(width: 8),
-        Flexible(
-          flex: 5,
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              reverse: true,
-              child: Row(children: [
-                _group([
-                  _toolBtn(Tool.pen, Icons.edit, 'Lápiz (tocá de nuevo para opciones)', ts.pen),
-                  _toolBtn(Tool.hl, Icons.border_color, 'Resaltador (tocá de nuevo para opciones)', ts.hl),
-                  _toolBtn(Tool.text, Icons.title, 'Texto', null),
-                  _toolBtn(Tool.select, Icons.highlight_alt, 'Seleccionar', null),
-                ]),
-                if (ts.tool == Tool.select && ts.hasClip) ...[
-                  const SizedBox(width: 8),
-                  _group([IconButton(onPressed: _paste, icon: const Icon(Icons.content_paste), tooltip: 'Pegar')]),
-                ],
-                if (showColors) ...[
-                  const SizedBox(width: 8),
-                  _group([
-                    for (final c in ts.recent)
-                      _swatch(c, cur.color == c, () {
-                        setState(() => ts.pickColor(c));
-                        widget.onPrefsChanged();
-                      }),
-                    _moreColors(),
-                  ]),
-                  const SizedBox(width: 8),
-                  _group([_widthBtn(cur)]),
-                ],
-                const SizedBox(width: 8),
-                _group([
-                  IconButton(onPressed: undo.isEmpty ? null : () => _undoRedo(undo, redo), icon: const Icon(Icons.undo), tooltip: 'Deshacer'),
-                  IconButton(onPressed: redo.isEmpty ? null : () => _undoRedo(redo, undo), icon: const Icon(Icons.redo), tooltip: 'Rehacer'),
-                ]),
-                const SizedBox(width: 4),
-                PopupMenuButton<String>(
-                  tooltip: 'Fondo',
-                  icon: const Icon(Icons.wallpaper),
-                  initialValue: page.bg,
-                  onSelected: (v) {
-                    setState(() => page.bg = v);
-                    _changed();
-                  },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'lined', child: Text('Rayado')),
-                    PopupMenuItem(value: 'grid', child: Text('Cuadriculado')),
-                    PopupMenuItem(value: 'dots', child: Text('Puntos')),
-                    PopupMenuItem(value: 'blank', child: Text('Liso')),
-                  ],
-                ),
-              ]),
+          _toolBtn(Tool.pen, Symbols.stylus, 'Lápiz · tocá de nuevo para opciones', ts.pen),
+          _toolBtn(Tool.hl, Symbols.ink_highlighter, 'Resaltador · tocá de nuevo para opciones', ts.hl),
+          _toolBtn(Tool.text, Symbols.text_fields, 'Texto', null),
+          _toolBtn(Tool.select, Symbols.highlight_alt, 'Seleccionar', null),
+          _divider(),
+          // colores y grosor: siempre presentes; atenuados si la herramienta no dibuja
+          AnimatedOpacity(
+            opacity: drawing ? 1 : .38,
+            duration: const Duration(milliseconds: 160),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              for (final c in colors.take(nColors)) _swatch(c, drawing && cur.color == c),
+              _moreColors(),
+              _widthBtn(cur),
+            ]),
+          ),
+          _divider(),
+          _icon(Symbols.undo, 'Deshacer', undo.isEmpty ? null : () => _undoRedo(undo, redo)),
+          _icon(Symbols.redo, 'Rehacer', redo.isEmpty ? null : () => _undoRedo(redo, undo)),
+          _bgMenu(),
+          // pegar ocupa su lugar siempre (al final); solo se ve cuando hay algo copiado
+          IgnorePointer(
+            ignoring: !ts.hasClip,
+            child: AnimatedOpacity(
+              opacity: ts.hasClip ? 1 : 0,
+              duration: const Duration(milliseconds: 160),
+              child: _icon(Symbols.content_paste, 'Pegar', _paste),
             ),
           ),
-        ),
-      ]),
-    );
+        ]),
+      );
+    });
   }
 
-  Widget _group(List<Widget> children) => Container(
-        padding: const EdgeInsets.all(2),
-        decoration: BoxDecoration(color: const Color(0x08000000), borderRadius: BorderRadius.circular(12)),
-        child: Row(mainAxisSize: MainAxisSize.min, children: children),
+  Widget _divider() => Container(width: 1, height: 22, margin: const EdgeInsets.symmetric(horizontal: 8), color: _hair);
+
+  Widget _icon(IconData icon, String tip, VoidCallback? onTap) => IconButton(
+        onPressed: onTap,
+        tooltip: tip,
+        icon: Icon(icon, size: 22, weight: 300, opticalSize: 24),
+        color: _ink,
+        disabledColor: const Color(0x4D4A4741),
+        style: IconButton.styleFrom(
+          minimumSize: const Size(44, 44),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
       );
 
   Widget _toolBtn(Tool t, IconData icon, String tip, PenPreset? preset) {
     final on = ts.tool == t;
     return Tooltip(
       message: tip,
+      waitDuration: const Duration(milliseconds: 600),
       child: InkWell(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         onTap: () => _toolTap(t),
-        onLongPress: preset == null ? null : () {
-          _setTool(t);
-          _openPanel();
-        },
-        child: Container(
-          width: 48,
-          height: 40,
-          decoration: on
-              ? BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), boxShadow: const [BoxShadow(color: Color(0x22000000), blurRadius: 2, offset: Offset(0, 1))])
-              : null,
+        onLongPress: preset == null
+            ? null
+            : () {
+                _setTool(t);
+                _openPanel();
+              },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOutQuart,
+          width: 46,
+          height: 44,
+          margin: const EdgeInsets.symmetric(horizontal: 1),
+          decoration: BoxDecoration(
+            color: on ? const Color(0x142F5BD3) : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+          ),
           child: Stack(alignment: Alignment.center, children: [
-            Icon(icon, size: 22, color: on ? kAccent : kText),
-            // rayita con el color actual de la herramienta
+            Icon(icon, size: 22, weight: on ? 400 : 300, opticalSize: 24, fill: 0, color: on ? kAccent : _ink),
+            // puntito con el color de la herramienta
             if (preset != null)
               Positioned(
-                bottom: 4,
+                bottom: 5,
                 child: Container(
-                  width: 18,
-                  height: 3,
-                  decoration: BoxDecoration(color: parseColor(preset.color).withValues(alpha: max(preset.opacity, .35)), borderRadius: BorderRadius.circular(2)),
+                  width: 5,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: parseColor(preset.color).withValues(alpha: max(preset.opacity, .45)),
+                    shape: BoxShape.circle,
+                  ),
                 ),
               ),
           ]),
@@ -974,21 +984,36 @@ class _PageEditorState extends State<PageEditor> {
     );
   }
 
-  Widget _swatch(String c, bool on, VoidCallback tap) => InkWell(
+  /// tocar un color: si estás en texto/seleccionar, vuelve al lápiz con ese color
+  void _pickQuick(String c) {
+    if (ts.tool != Tool.pen && ts.tool != Tool.hl) _setTool(Tool.pen);
+    setState(() => ts.pickColor(c));
+    widget.onPrefsChanged();
+  }
+
+  Widget _swatch(String c, bool on) => InkWell(
         customBorder: const CircleBorder(),
-        onTap: tap,
-        child: Container(
-          width: 36,
-          height: 40,
-          alignment: Alignment.center,
-          child: Container(
-            width: 22,
-            height: 22,
-            decoration: BoxDecoration(
-              color: parseColor(c),
-              shape: BoxShape.circle,
-              border: on ? Border.all(color: Colors.white, width: 2.5) : null,
-              boxShadow: on ? const [BoxShadow(color: kAccent, spreadRadius: 2)] : const [BoxShadow(color: Color(0x33000000), spreadRadius: .5)],
+        onTap: () => _pickQuick(c),
+        child: SizedBox(
+          width: 32,
+          height: 44,
+          child: Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 140),
+              width: on ? 21 : 16,
+              height: on ? 21 : 16,
+              padding: EdgeInsets.all(on ? 2.5 : 0),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: on ? Border.all(color: kAccent, width: 1.5) : null,
+              ),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: parseColor(c),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0x1F000000), width: .8),
+                ),
+              ),
             ),
           ),
         ),
@@ -998,46 +1023,52 @@ class _PageEditorState extends State<PageEditor> {
         message: 'Más colores',
         child: InkWell(
           customBorder: const CircleBorder(),
-          onTap: _openPanel,
-          child: Container(
-            width: 36,
-            height: 40,
-            alignment: Alignment.center,
-            child: Container(
-              width: 22,
-              height: 22,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: SweepGradient(colors: [
-                  Color(0xFFEF4444), Color(0xFFFACC15), Color(0xFF22C55E), Color(0xFF3B82F6), Color(0xFFA855F7), Color(0xFFEF4444),
-                ]),
+          onTap: () {
+            if (ts.tool != Tool.pen && ts.tool != Tool.hl) _setTool(Tool.pen);
+            _openPanel();
+          },
+          child: SizedBox(
+            width: 32,
+            height: 44,
+            child: Center(
+              child: Container(
+                width: 18,
+                height: 18,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: SweepGradient(colors: [
+                    Color(0xFFD9625B), Color(0xFFDDB24A), Color(0xFF5FAE78), Color(0xFF5B8FD9), Color(0xFF9B78D0), Color(0xFFD9625B),
+                  ]),
+                ),
               ),
             ),
           ),
         ),
       );
 
-  /// muestra grosor y opacidad actuales; abre el panel
+  /// grosor actual (punto proporcional); abre el panel
   Widget _widthBtn(PenPreset p) {
     final hl = ts.tool == Tool.hl;
-    final d = hl ? (p.width / 60 * 22).clamp(6.0, 22.0) : (p.width / 16 * 20).clamp(3.0, 20.0);
+    final d = hl ? (p.width / 60 * 18).clamp(5.0, 18.0) : (p.width / 16 * 16).clamp(2.5, 16.0);
     return Tooltip(
       message: 'Punta, grosor y opacidad',
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
-        onTap: _openPanel,
+        onTap: () {
+          if (ts.tool != Tool.pen && ts.tool != Tool.hl) _setTool(Tool.pen);
+          _openPanel();
+        },
         child: SizedBox(
-          width: 44,
-          height: 40,
+          width: 40,
+          height: 44,
           child: Center(
             child: Container(
               width: d,
-              height: d,
+              height: hl ? d * .6 : d,
               decoration: BoxDecoration(
-                color: parseColor(p.color).withValues(alpha: p.opacity),
+                color: _ink,
                 shape: hl ? BoxShape.rectangle : BoxShape.circle,
-                borderRadius: hl ? BorderRadius.circular(2) : null,
-                border: Border.all(color: const Color(0x22000000)),
+                borderRadius: hl ? BorderRadius.circular(1.5) : null,
               ),
             ),
           ),
@@ -1045,4 +1076,21 @@ class _PageEditorState extends State<PageEditor> {
       ),
     );
   }
+
+  Widget _bgMenu() => PopupMenuButton<String>(
+        tooltip: 'Fondo de la hoja',
+        icon: const Icon(Symbols.background_grid_small, size: 22, weight: 300, color: _ink),
+        initialValue: page.bg,
+        position: PopupMenuPosition.under,
+        onSelected: (v) {
+          setState(() => page.bg = v);
+          _changed();
+        },
+        itemBuilder: (_) => const [
+          PopupMenuItem(value: 'lined', child: Text('Rayado')),
+          PopupMenuItem(value: 'grid', child: Text('Cuadriculado')),
+          PopupMenuItem(value: 'dots', child: Text('Puntos')),
+          PopupMenuItem(value: 'blank', child: Text('Liso')),
+        ],
+      );
 }
