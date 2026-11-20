@@ -1,0 +1,25 @@
+PERF --- 50 hojas: 2333297 puntos en 61563 trazos (46665.9 puntos/hoja), disco 5.5 MB (generar: 7.5 s) ---
+PERF leer+decodificar (Storage): mediana 1429.6 ms (corridas [1429.6, 1404.5, 1463.9]), bloqueo máx del hilo principal 349.8 ms
+PERF guardar tras 1 trazo: mediana 3841.4 ms (corridas [3818.6, 3841.4, 4044.9]; splitBySheet 429.8 ms; hojas escritas 1), sin cambios 3702.6 ms, bloqueo máx 857.1 ms
+PERF abrir por la UI: 4535.8 ms hasta el PageEditor; en esa ventana 63 frames, peor 2837.4 ms, 42 > 16 ms
+PERF RSS: antes de abrir 724.7 MB, abierto 976.7 MB, maxRSS 1159.4 MB
+PERF alto del cuaderno: 54587.0 px, escala 0.8 px/unidad
+PERF scroll inicio: 128 frames, 29165.9 px en 17.7 s | build prom/p90/p99 7.2/30.8/49.7 ms | raster prom/p90/p99 139.8/157.4/169.2 ms | >16 ms: 128 (>33 ms: 128), peor 395.1 ms
+PERF scroll medio: 109 frames, 27293.5 px en 18.1 s | build prom/p90/p99 7.2/30.5/41.2 ms | raster prom/p90/p99 169.2/194.5/215.5 ms | >16 ms: 109 (>33 ms: 109), peor 555.5 ms
+PERF scroll final: 121 frames, 29165.9 px en 18.8 s | build prom/p90/p99 7.0/29.9/38.6 ms | raster prom/p90/p99 157.1/176.0/192.3 ms | >16 ms: 121 (>33 ms: 121), peor 461.5 ms
+PERF RSS tras scrollear 1000.3 MB, maxRSS 1159.4 MB
+PERF --- 100 hojas: 4664599 puntos en 123280 trazos (46646.0 puntos/hoja), disco 11.0 MB (generar: 15.4 s) ---
+PERF leer+decodificar (Storage): mediana 3281.9 ms (corridas [3222.1, 3281.9, 3658.7]), bloqueo máx del hilo principal 757.5 ms
+PERF guardar tras 1 trazo: mediana 9040.6 ms (corridas [9040.6, 8847.1, 9353.0]; splitBySheet 1143.2 ms; hojas escritas 1), sin cambios 9407.4 ms, bloqueo máx 1837.8 ms
+PERF PDF de 100 hojas: SALTEADO, estimado 209.4 s (> 2 min)
+PERF abrir por la UI: 11378.9 ms hasta el PageEditor; en esa ventana 105 frames, peor 7024.7 ms, 44 > 16 ms
+PERF RSS: antes de abrir 896.9 MB, abierto 1418.3 MB, maxRSS 1892.7 MB
+PERF alto del cuaderno: 110235.0 px, escala 0.8 px/unidad
+PERF scroll inicio: 114 frames, 29165.9 px en 19.6 s | build prom/p90/p99 15.7/66.3/82.0 ms | raster prom/p90/p99 164.2/190.3/204.9 ms | >16 ms: 114 (>33 ms: 114), peor 569.5 ms
+PERF scroll medio: 100 frames, 29165.9 px en 25.2 s | build prom/p90/p99 20.9/73.4/90.4 ms | raster prom/p90/p99 251.2/279.2/314.1 ms | >16 ms: 100 (>33 ms: 100), peor 826.6 ms
+PERF scroll final: 95 frames, 29165.9 px en 26.0 s | build prom/p90/p99 17.3/66.9/89.7 ms | raster prom/p90/p99 274.6/298.2/319.9 ms | >16 ms: 95 (>33 ms: 95), peor 737.6 ms
+PERF RSS tras scrollear 1272.0 MB, maxRSS 1892.7 MB
+PERF --- 200 hojas: 9319472 puntos en 246218 trazos (46597.4 puntos/hoja), disco 22.1 MB (generar: 36.3 s) ---
+PERF leer+decodificar (Storage): mediana 7439.8 ms (corridas [7422.1, 7439.8, 7679.7]), bloqueo máx del hilo principal 1772.3 ms
+PERF guardar tras 1 trazo: mediana 19867.8 ms (corridas [19867.8, 18798.7, 19970.0]; splitBySheet 2344.6 ms; hojas escritas 1), sin cambios 19916.5 ms, bloqueo máx 4103.0 ms
+PERF --- 200 hojas: la app se cerró por falta de memoria (lmkd: 1,9 GB de RSS) durante la medición; 400 no se midió.
