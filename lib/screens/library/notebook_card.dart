@@ -10,9 +10,16 @@ class NotebookCard extends StatelessWidget {
   final Notebook nb;
   final NotebookDoc? thumb; // primera hoja, null mientras carga
   final bool pressed; // resaltada mientras está abierto su menú
+  final String? location; // ruta de su carpeta (al buscar); reemplaza la fecha
   final VoidCallback onTap, onLongPress;
   const NotebookCard(
-      {super.key, required this.nb, this.thumb, this.pressed = false, required this.onTap, required this.onLongPress});
+      {super.key,
+      required this.nb,
+      this.thumb,
+      this.pressed = false,
+      this.location,
+      required this.onTap,
+      required this.onLongPress});
 
   @override
   Widget build(BuildContext context) {
@@ -63,8 +70,9 @@ class NotebookCard extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15, color: cs.onSurface)),
           const SizedBox(height: 2),
           Text(
-            '$n ${n == 1 ? 'hoja' : 'hojas'}${nb.updated > 0 ? ' · ${fmtDate(nb.updated)}' : ''}',
+            location ?? '$n ${n == 1 ? 'hoja' : 'hojas'}${nb.updated > 0 ? ' · ${fmtDate(nb.updated)}' : ''}',
             maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(fontSize: 12.5, color: cs.onSurfaceVariant),
           ),
         ]),
