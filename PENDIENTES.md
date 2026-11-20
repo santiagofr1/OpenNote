@@ -34,10 +34,6 @@ Para hacer después de pasar la reorganización del código (rama `refactor/arqu
     build del APK firmado y publicación como GitHub Release (`v1.0.<n>`, versionCode = número de build).
     Clave de firma propia guardada como secreto del repo (+ copia del usuario). El cambio de firma exige
     desinstalar una vez: hacerlo con backup y restauración.
-11. **La app busca actualizaciones sola**: al abrir y cada 24 h consulta el último Release; si hay versión nueva
-    muestra un aviso con los cambios, descarga el APK y abre el instalador (un toque).
-    Permiso REQUEST_INSTALL_PACKAGES; opción en ajustes para desactivarlo. Android no permite instalación
-    100 % silenciosa fuera de Play Store.
 
 16. **Selección tipo AutoCAD** (herramienta seleccionar de la barra): hoy solo toma lo que queda entero dentro del
     recuadro. Según la dirección del arrastre:
@@ -62,6 +58,9 @@ Para hacer después de pasar la reorganización del código (rama `refactor/arqu
 
 ## Hecho
 
+- **11. La app busca actualizaciones sola** (rama `feat/updater`): al abrir (Android release, cada 24 h) consulta el último
+  Release; si hay versión nueva avisa con las notas ("Más tarde" / "Omitir esta versión" / "Actualizar"), descarga el APK
+  y abre el instalador. Menú ⋮ de la biblioteca: "Buscar actualizaciones" y interruptor automático. Ver docs/TECNICO.md.
 - **13. Carpetas en la biblioteca** (rama `feat/carpetas`): carpetas anidadas (`Folder` en `NotesIndex.folders`, `Notebook.folder`),
   tarjetas de carpeta con cuántos cuadernos tienen, migas de pan y flecha para subir, atrás del sistema sube de a un nivel.
   "+" ofrece Cuaderno nuevo (en la carpeta actual) y Carpeta nueva. Mantener apretado: cuaderno o carpeta → "Mover a…"
