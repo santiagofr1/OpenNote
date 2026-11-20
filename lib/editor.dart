@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,12 +11,21 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'model.dart';
 import 'painters.dart';
 import 'pen_panel.dart';
+import 'storage.dart';
 
 /// Una acción deshacible: trazos que salieron/entraron y cómo estaban los textos antes/después.
 class _Act {
   final List<Stroke> removed, added;
   final Map<String, TextBlock?> textBefore, textAfter;
-  _Act({this.removed = const [], this.added = const [], this.textBefore = const {}, this.textAfter = const {}});
+  final Map<String, Item?> itemBefore, itemAfter;
+  _Act({
+    this.removed = const [],
+    this.added = const [],
+    this.textBefore = const {},
+    this.textAfter = const {},
+    this.itemBefore = const {},
+    this.itemAfter = const {},
+  });
 }
 
 TextBlock _copyText(TextBlock t, [Offset d = Offset.zero]) => TextBlock(t.id, t.x + d.dx, t.y + d.dy, t.w, t.text);
@@ -32,24 +43,26 @@ class PageEditor extends StatefulWidget {
   final PageData page;
   final ToolState tools;
   final String title, subtitle;
-  final VoidCallback onChanged, onPrefsChanged, onMenu, onBack;
+  final VoidCallback onChanged, onPrefsChanged;
+  final Storage store;
+  final bool readOnly; // modo lectura: no se edita y no hay barra de herramientas
   const PageEditor({
     super.key,
     required this.page,
     required this.tools,
-    required this.title,
-    required this.subtitle,
+    required this.store,
+    this.title = '',
+    this.subtitle = '',
+    this.readOnly = false,
     required this.onChanged,
     required this.onPrefsChanged,
-    required this.onMenu,
-    required this.onBack,
   });
 
   @override
-  State<PageEditor> createState() => _PageEditorState();
+  State<PageEditor> createState() => PageEditorState();
 }
 
-class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateMixin {
+class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMixin {
   PageData get page => widget.page;
   ToolState get ts => widget.tools;
 
@@ -66,7 +79,8 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
   List<Stroke>? erased;
 
   // selección
-  final selS = <String>{}, selT = <String>{};
+  final selS = <String>{}, selT = <String>{}, selI = <String>{};
+  Map<String, Offset> itemOrig = {};
   Offset? bandA, bandB; // rectángulo que se está estirando
   Offset? dragFrom;
   Offset dragDelta = Offset.zero;
@@ -113,6 +127,7 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
   Offset _logical(Offset local) => local / scale;
 
   void _down(PointerDownEvent e) {
+    if (widget.readOnly) return;
     final stylus = _isStylus(e);
     final mouse = e.kind == PointerDeviceKind.mouse;
     if (!stylus && !mouse) return; // el dedo solo scrollea (palma ignorada)
@@ -300,6 +315,7 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
       page.strokes[s.id] = s;
     }
     (undoing ? a.textBefore : a.textAfter).forEach((id, t) => _putText(id, t == null ? null : _copyText(t)));
+    (undoing ? a.itemBefore : a.itemAfter).forEach((id, it) => it == null ? page.items.remove(id) : page.items[id] = it.copy());
     _clearSel();
     to.add(a);
     inkVersion.value++;
@@ -319,7 +335,7 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
 
   Rect _textRect(TextBlock t) => Offset(t.x, t.y) & _textSize(t);
 
-  bool get hasSel => selS.isNotEmpty || selT.isNotEmpty;
+  bool get hasSel => selS.isNotEmpty || selT.isNotEmpty || selI.isNotEmpty;
 
   /// rectángulo que envuelve lo seleccionado, en su posición original (sin el arrastre en curso)
   Rect? get selRect {
@@ -335,6 +351,13 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
       final tr = o != null ? _textRect(t).shift(o - Offset(t.x, t.y)) : _textRect(t);
       r = r == null ? tr : r.expandToInclude(tr);
     }
+    for (final id in selI) {
+      final it = page.items[id];
+      if (it == null) continue;
+      final o = moving ? itemOrig[id] : null;
+      final ir = o != null ? it.rect.shift(o - Offset(it.x, it.y)) : it.rect;
+      r = r == null ? ir : r.expandToInclude(ir);
+    }
     return r?.inflate(6);
   }
 
@@ -342,6 +365,7 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
     if (!hasSel && bandA == null) return;
     selS.clear();
     selT.clear();
+    selI.clear();
     bandA = bandB = null;
     moving = false;
     if (mounted) setState(() {});
@@ -357,6 +381,10 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
       textOrig = {
         for (final id in selT)
           if (page.texts[id] != null) id: Offset(page.texts[id]!.x, page.texts[id]!.y)
+      };
+      itemOrig = {
+        for (final id in selI)
+          if (page.items[id] != null) id: Offset(page.items[id]!.x, page.items[id]!.y)
       };
       inkVersion.value++; // oculta los seleccionados de la capa fija
       setState(() {});
@@ -377,6 +405,13 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
           t.y = e.value.dy + dragDelta.dy;
         }
       }
+      for (final e in itemOrig.entries) {
+        final it = page.items[e.key];
+        if (it != null) {
+          it.x = e.value.dx + dragDelta.dx;
+          it.y = e.value.dy + dragDelta.dy;
+        }
+      }
     });
     liveTick.value++;
   }
@@ -387,6 +422,7 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
       moving = false;
       dragDelta = Offset.zero;
       textOrig = {};
+      itemOrig = {};
       inkVersion.value++;
       setState(() {});
       return;
@@ -409,10 +445,18 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
       before[e.key] = TextBlock(t.id, e.value.dx, e.value.dy, t.w, t.text);
       after[e.key] = _copyText(t);
     }
+    final iBefore = <String, Item?>{}, iAfter = <String, Item?>{};
+    for (final e in itemOrig.entries) {
+      final it = page.items[e.key];
+      if (it == null) continue;
+      iBefore[e.key] = it.copy(d: e.value - Offset(it.x, it.y));
+      iAfter[e.key] = it.copy();
+    }
     moving = false;
     dragDelta = Offset.zero;
     textOrig = {};
-    _pushUndo(_Act(removed: removed, added: added, textBefore: before, textAfter: after));
+    itemOrig = {};
+    _pushUndo(_Act(removed: removed, added: added, textBefore: before, textAfter: after, itemBefore: iBefore, itemAfter: iAfter));
     inkVersion.value++;
     final r = selRect;
     if (r != null) _growIfNeeded(r.bottom);
@@ -423,6 +467,7 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
   void _selectIn(Rect r) {
     selS.clear();
     selT.clear();
+    selI.clear();
     if (r.width < 4 && r.height < 4) {
       setState(() {});
       return;
@@ -437,6 +482,9 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
     }
     for (final t in page.texts.values) {
       if (r.contains(_textRect(t).center)) selT.add(t.id);
+    }
+    for (final it in page.items.values) {
+      if (r.contains(it.rect.center)) selI.add(it.id);
     }
     setState(() {});
   }
@@ -456,6 +504,10 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
       for (final id in selT)
         if (page.texts[id] != null) _copyText(page.texts[id]!)
     ];
+    ts.clipItems = [
+      for (final id in selI)
+        if (page.items[id] != null) page.items[id]!.copy()
+    ];
     setState(() {});
   }
 
@@ -474,15 +526,32 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
     for (final id in before.keys) {
       _putText(id, null);
     }
-    _pushUndo(_Act(removed: removed, textBefore: before, textAfter: {for (final id in before.keys) id: null}));
+    final iBefore = <String, Item?>{
+      for (final id in selI)
+        if (page.items[id] != null) id: page.items[id]!.copy()
+    };
+    for (final id in iBefore.keys) {
+      page.items.remove(id);
+    }
+    _pushUndo(_Act(
+      removed: removed,
+      textBefore: before,
+      textAfter: {for (final id in before.keys) id: null},
+      itemBefore: iBefore,
+      itemAfter: {for (final id in iBefore.keys) id: null},
+    ));
     _clearSel();
     inkVersion.value++;
     _changed();
   }
 
   /// pega trazos/textos (con ids nuevos), corridos [d], y los deja seleccionados
-  void _insert(List<Stroke> strokes, List<TextBlock> texts, Offset d) {
+  void _insert(List<Stroke> strokes, List<TextBlock> texts, Offset d, [List<Item> items = const []]) {
     final added = [for (final s in strokes) _moved(s, d, newId('s'))];
+    final newItems = [for (final it in items) it.copy(id: newId('i'), d: d)];
+    for (final it in newItems) {
+      page.items[it.id] = it;
+    }
     final after = <String, TextBlock>{};
     for (final t in texts) {
       final n = TextBlock(newId('t'), (t.x + d.dx).clamp(0.0, kW - 60), max(0.0, t.y + d.dy), t.w, t.text);
@@ -496,6 +565,8 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
       added: added,
       textBefore: {for (final id in after.keys) id: null},
       textAfter: {for (final e in after.entries) e.key: _copyText(e.value)},
+      itemBefore: {for (final it in newItems) it.id: null},
+      itemAfter: {for (final it in newItems) it.id: it.copy()},
     ));
     if (ts.tool != Tool.select) _setTool(Tool.select);
     selS
@@ -504,6 +575,9 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
     selT
       ..clear()
       ..addAll(after.keys);
+    selI
+      ..clear()
+      ..addAll(newItems.map((i) => i.id));
     inkVersion.value++;
     final r = selRect;
     if (r != null) _growIfNeeded(r.bottom);
@@ -518,7 +592,10 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
     ], [
       for (final id in selT)
         if (page.texts[id] != null) page.texts[id]!
-    ], const Offset(30, 30));
+    ], const Offset(30, 30), [
+      for (final id in selI)
+        if (page.items[id] != null) page.items[id]!
+    ]);
   }
 
   void _paste() {
@@ -530,11 +607,14 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
     for (final t in ts.clipTexts) {
       r = r == null ? _textRect(t) : r.expandToInclude(_textRect(t));
     }
+    for (final it in ts.clipItems) {
+      r = r == null ? it.rect : r.expandToInclude(it.rect);
+    }
     // si lo copiado está a la vista, se pega corrido; si no, arriba de lo que estás viendo
     final top = max(0.0, (scroll.offset - 16) / scale);
     final bottom = top + scroll.position.viewportDimension / scale;
     final d = (r!.top > top && r.top < bottom - 60) ? const Offset(30, 30) : Offset(90 - r.left, top + 60 - r.top);
-    _insert(ts.clipStrokes, ts.clipTexts, d);
+    _insert(ts.clipStrokes, ts.clipTexts, d, ts.clipItems);
   }
 
   /// capa "en vivo": trazo en curso, goma, rectángulo de selección, lo que se arrastra
@@ -683,6 +763,7 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
   @override
   Widget build(BuildContext context) {
     final dock = ts.dock;
+    if (widget.readOnly) return Stack(key: _editorKey, children: [Column(children: [Expanded(child: _canvasArea())])]);
     final bar = TweenAnimationBuilder<double>(
       key: ValueKey(dock),
       tween: Tween(begin: 0, end: 1),
@@ -1047,6 +1128,7 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
           top: r.top * scale > 60 ? r.top * scale - 56 : r.bottom * scale + 8,
           child: _selMenu(),
         ),
+      if (r != null && selI.length == 1 && selS.isEmpty && selT.isEmpty) _resizeHandle(page.items[selI.first]),
     ]);
   }
 
@@ -1127,7 +1209,7 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
       items: [
         item('paste', Symbols.content_paste, 'Pegar acá', enabled: ts.hasClip),
         item('text', Symbols.keyboard, 'Escribir acá'),
-        item('all', Symbols.select_all, 'Seleccionar todo', enabled: page.strokes.isNotEmpty || page.texts.isNotEmpty),
+        item('all', Symbols.select_all, 'Seleccionar todo', enabled: page.strokes.isNotEmpty || page.texts.isNotEmpty || page.items.isNotEmpty),
         item('sheet', Symbols.note_add, 'Agregar hoja al final'),
         item('zoom100', Symbols.fit_page_width, 'Zoom al ancho de la hoja', enabled: !ts.zoomLocked && (ts.zoom - 1).abs() > .01),
       ],
@@ -1148,6 +1230,9 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
           selT
             ..clear()
             ..addAll(page.texts.keys);
+          selI
+            ..clear()
+            ..addAll(page.items.keys);
         });
         liveTick.value++;
       case 'sheet':
@@ -1168,7 +1253,10 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
     for (final t in ts.clipTexts) {
       r = r == null ? _textRect(t) : r.expandToInclude(_textRect(t));
     }
-    _insert(ts.clipStrokes, ts.clipTexts, p - r!.topLeft);
+    for (final it in ts.clipItems) {
+      r = r == null ? it.rect : r.expandToInclude(it.rect);
+    }
+    _insert(ts.clipStrokes, ts.clipTexts, p - r!.topLeft, ts.clipItems);
   }
 
   Widget _sheetInput(bool textMode) {
@@ -1181,7 +1269,9 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
           behavior: HitTestBehavior.opaque,
           onTapUp: textMode ? _tapPage : null,
           child: Stack(clipBehavior: Clip.none, children: [
-            Positioned.fill(child: CustomPaint(painter: SheetPainter(page.bg, page.h, scale))),
+            Positioned.fill(child: CustomPaint(painter: SheetPainter(page.bg, page.h, scale, page.paper))),
+            // elementos insertados (imágenes, notas, audios), debajo de la tinta
+            ...page.items.values.map((it) => _itemWidget(it, textMode)),
             // textos (solo se tocan en modo texto)
             ...page.texts.values.map((t) => _textBlock(t, textMode)),
             Positioned.fill(
@@ -1255,6 +1345,158 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
     );
   }
 
+  // ---------------- elementos insertados ----------------
+  final _itemTimers = <String, Timer>{};
+
+  Widget _itemWidget(Item it, bool textMode) {
+    final s = scale;
+    final sel = selI.contains(it.id);
+    Widget child;
+    switch (it.type) {
+      case 'image':
+        final f = widget.store.media(it.file ?? '');
+        child = ClipRRect(
+          borderRadius: BorderRadius.circular(4 * s),
+          child: Image.file(f, fit: BoxFit.fill, gaplessPlayback: true, errorBuilder: (_, __, ___) => Container(color: const Color(0xFFE6E3DA))),
+        );
+      case 'sticky':
+        child = Container(
+          decoration: BoxDecoration(
+            color: parseColor(it.color),
+            borderRadius: BorderRadius.circular(10 * s),
+            boxShadow: const [BoxShadow(color: Color(0x22000000), blurRadius: 8, offset: Offset(0, 3))],
+          ),
+          padding: EdgeInsets.fromLTRB(16 * s, 14 * s, 16 * s, 10 * s),
+          child: IgnorePointer(
+            ignoring: !textMode,
+            child: _StickyField(
+              key: ValueKey('sticky-${it.id}'),
+              text: it.text,
+              fontSize: 20 * s,
+              onChanged: (v) {
+                it.text = v;
+                _itemTimers[it.id]?.cancel();
+                _itemTimers[it.id] = Timer(const Duration(milliseconds: 350), _changed);
+              },
+            ),
+          ),
+        );
+      default: // audio
+        child = _AudioChip(file: widget.store.media(it.file ?? ''), dur: it.dur, scale: s);
+    }
+    return Positioned(
+      left: it.x * s,
+      top: it.y * s,
+      width: it.w * s,
+      height: it.h * s,
+      child: DecoratedBox(
+        position: DecorationPosition.foreground,
+        decoration: BoxDecoration(
+          border: sel ? Border.all(color: cs.primary.withValues(alpha: .7), width: 1.5) : null,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: child,
+      ),
+    );
+  }
+
+  /// esquina para agrandar/achicar el elemento seleccionado
+  Widget _resizeHandle(Item? it) {
+    if (it == null) return const SizedBox.shrink();
+    Item? before;
+    final aspect = it.h / max(1, it.w);
+    return Positioned(
+      left: (it.x + it.w) * scale - 18,
+      top: (it.y + it.h) * scale - 18,
+      child: GestureDetector(
+        onPanStart: (_) => before = it.copy(),
+        onPanUpdate: (d) => setState(() {
+          it.w = max(60, it.w + d.delta.dx / scale);
+          it.h = it.type == 'image' ? it.w * aspect : max(it.type == 'audio' ? 56 : 60, it.h + d.delta.dy / scale);
+          liveTick.value++;
+        }),
+        onPanEnd: (_) {
+          if (before != null) _pushUndo(_Act(itemBefore: {it.id: before}, itemAfter: {it.id: it.copy()}));
+          _changed();
+        },
+        child: Container(
+          width: 36,
+          height: 36,
+          alignment: Alignment.center,
+          child: Container(
+            width: 18,
+            height: 18,
+            decoration: BoxDecoration(
+              color: cs.surface,
+              shape: BoxShape.circle,
+              border: Border.all(color: cs.primary, width: 2),
+              boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 3)],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ---------------- lo que usa la barra de arriba ----------------
+  /// centro de lo que se está viendo, en coordenadas de la página
+  Offset get viewCenter {
+    final vw = hscroll.hasClients ? hscroll.position.viewportDimension : kW * scale;
+    final vh = scroll.hasClients ? scroll.position.viewportDimension : 600.0;
+    final x = ((hscroll.hasClients ? hscroll.offset : 0) + vw / 2 - _sheetLeft) / scale;
+    final y = ((scroll.hasClients ? scroll.offset : 0) + vh / 2 - _topPad) / scale;
+    return Offset(x.clamp(0, kW), y.clamp(0, page.h));
+  }
+
+  /// hoja que se está viendo (0, 1, 2...)
+  int get visibleSheet => (viewCenter.dy / kSheetStep).floor().clamp(0, sheetCount(page.h) - 1);
+
+  /// agrega un elemento centrado en lo que se está viendo y lo deja seleccionado
+  void insertItem(Item it) {
+    final c = viewCenter;
+    it.x = (c.dx - it.w / 2).clamp(10.0, max(10.0, kW - it.w - 10));
+    it.y = max(0.0, c.dy - it.h / 2);
+    page.items[it.id] = it;
+    _pushUndo(_Act(itemBefore: {it.id: null}, itemAfter: {it.id: it.copy()}));
+    _setTool(Tool.select);
+    selS.clear();
+    selT.clear();
+    selI
+      ..clear()
+      ..add(it.id);
+    _growIfNeeded(it.y + it.h);
+    _changed();
+    setState(() {});
+    liveTick.value++;
+  }
+
+  /// lleva la vista a un texto o elemento y lo deja seleccionado (búsqueda)
+  void reveal(String id) {
+    final t = page.texts[id], it = page.items[id];
+    final y = t?.y ?? it?.y;
+    if (y == null) return;
+    _setTool(Tool.select);
+    setState(() {
+      selS.clear();
+      selT.clear();
+      selI.clear();
+      if (t != null) selT.add(id);
+      if (it != null) selI.add(id);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (scroll.hasClients) {
+        scroll.animateTo((y * scale + _topPad - 120).clamp(0.0, scroll.position.maxScrollExtent), duration: const Duration(milliseconds: 380), curve: Curves.easeOutQuart);
+      }
+    });
+    liveTick.value++;
+  }
+
+  /// después de cambiar fondo/papel desde afuera
+  void refresh() {
+    setState(() {});
+    inkVersion.value++;
+  }
+
   // ---------------- barra de herramientas ----------------
   void _toolTap(Tool t) {
     if (ts.tool == t && (t == Tool.pen || t == Tool.hl)) {
@@ -1283,7 +1525,7 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
     final axis = vertical ? Axis.vertical : Axis.horizontal;
     return LayoutBuilder(builder: (context, box) {
       final room = vertical ? box.maxHeight : box.maxWidth;
-      final compact = room < 820;
+      final compact = room < 700;
       final nColors = compact ? 4 : 6;
       final base = ts.tool == Tool.hl ? ts.hlRecent : ts.penRecent;
       final fill = ts.tool == Tool.hl ? hlPalette : palette;
@@ -1295,22 +1537,7 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
       final side = BorderSide(color: cs.outlineVariant.withValues(alpha: .6));
       final children = <Widget>[
         _grip(vertical),
-        _icon(Symbols.arrow_back, 'Volver a los cuadernos', widget.onBack),
-        _icon(Symbols.view_sidebar, 'Páginas del cuaderno', widget.onMenu),
-        if (!vertical) const SizedBox(width: 6),
-        if (!vertical)
-          Expanded(
-            child: compact
-                ? const SizedBox()
-                : Text.rich(
-                    TextSpan(children: [
-                      TextSpan(text: widget.title, style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15, color: cs.onSurface)),
-                      TextSpan(text: '   ${widget.subtitle}', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13)),
-                    ]),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-          ),
+        if (!vertical) const Spacer(),
         if (vertical) const SizedBox(height: 4),
         _toolBtn(Tool.pen, Symbols.stylus, 'Lápiz · tocá de nuevo para opciones', ts.pen),
         _toolBtn(Tool.hl, Symbols.ink_highlighter, 'Resaltador · tocá de nuevo para opciones', ts.hl),
@@ -1339,6 +1566,7 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
             child: _icon(Symbols.content_paste, 'Pegar', _paste),
           ),
         ),
+        if (!vertical) const Spacer(),
       ];
       return Container(
         width: vertical ? 60 : null,
@@ -1605,4 +1833,103 @@ class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateM
             ),
         ],
       );
+}
+
+/// Campo de texto de una nota adhesiva (mantiene su propio controlador)
+class _StickyField extends StatefulWidget {
+  final String text;
+  final double fontSize;
+  final ValueChanged<String> onChanged;
+  const _StickyField({super.key, required this.text, required this.fontSize, required this.onChanged});
+  @override
+  State<_StickyField> createState() => _StickyFieldState();
+}
+
+class _StickyFieldState extends State<_StickyField> {
+  late final c = TextEditingController(text: widget.text);
+  @override
+  void dispose() {
+    c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => TextField(
+        controller: c,
+        maxLines: null,
+        expands: true,
+        style: TextStyle(fontSize: widget.fontSize, height: 1.35, color: const Color(0xFF2B2A27)),
+        decoration: const InputDecoration.collapsed(hintText: 'Nota…', hintStyle: TextStyle(color: Color(0x662B2A27))),
+        cursorColor: const Color(0xFF2B2A27),
+        onChanged: widget.onChanged,
+      );
+}
+
+/// Audio insertado: tocar para reproducir/pausar
+class _AudioChip extends StatefulWidget {
+  final File file;
+  final int dur;
+  final double scale;
+  const _AudioChip({required this.file, required this.dur, required this.scale});
+  @override
+  State<_AudioChip> createState() => _AudioChipState();
+}
+
+class _AudioChipState extends State<_AudioChip> {
+  AudioPlayer? player;
+  bool playing = false;
+  Duration pos = Duration.zero;
+
+  @override
+  void dispose() {
+    player?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _toggle() async {
+    if (player == null) {
+      player = AudioPlayer();
+      player!.onPositionChanged.listen((p) => mounted ? setState(() => pos = p) : null);
+      player!.onPlayerComplete.listen((_) => mounted ? setState(() {
+            playing = false;
+            pos = Duration.zero;
+          }) : null);
+    }
+    if (playing) {
+      await player!.pause();
+    } else {
+      await player!.play(DeviceFileSource(widget.file.path));
+    }
+    if (mounted) setState(() => playing = !playing);
+  }
+
+  String _fmt(int ms) => '${ms ~/ 60000}:${((ms ~/ 1000) % 60).toString().padLeft(2, '0')}';
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final s = widget.scale;
+    return GestureDetector(
+      // solo el dedo o el mouse reproducen; el lápiz sigue escribiendo encima
+      supportedDevices: const {PointerDeviceKind.touch, PointerDeviceKind.mouse},
+      onTap: _toggle,
+      child: Container(
+        decoration: BoxDecoration(color: const Color(0xFFE9E6F5), borderRadius: BorderRadius.circular(999)),
+        padding: EdgeInsets.symmetric(horizontal: 10 * s),
+        child: Row(children: [
+          Icon(playing ? Symbols.pause_circle : Symbols.play_circle, size: 34 * s, fill: 1, color: const Color(0xFF5B4FC4)),
+          SizedBox(width: 8 * s),
+          Expanded(
+            child: Text(
+              playing || pos > Duration.zero ? '${_fmt(pos.inMilliseconds)} / ${_fmt(widget.dur)}' : 'Audio · ${_fmt(widget.dur)}',
+              maxLines: 1,
+              overflow: TextOverflow.fade,
+              style: TextStyle(fontSize: 19 * s, color: const Color(0xFF2B2A27), fontFeatures: const [FontFeature.tabularFigures()]),
+            ),
+          ),
+          Icon(Symbols.graphic_eq, size: 24 * s, color: cs.primary.withValues(alpha: .0)),
+        ]),
+      ),
+    );
+  }
 }

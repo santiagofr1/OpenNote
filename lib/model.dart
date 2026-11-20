@@ -83,18 +83,70 @@ class TextBlock {
   Map<String, dynamic> toJson() => {'id': id, 'x': x, 'y': y, 'w': w, 'text': text};
 }
 
+/// Elemento insertado en la página: imagen, nota adhesiva o audio.
+class Item {
+  final String id;
+  final String type; // image | sticky | audio
+  double x, y, w, h;
+  String? file; // nombre del archivo en media/ (imagen o audio)
+  String text; // nota adhesiva
+  String color; // nota adhesiva
+  int dur; // audio, en ms
+  Item(this.id, this.type, this.x, this.y, this.w, this.h, {this.file, this.text = '', this.color = '#fde68a', this.dur = 0});
+
+  Rect get rect => Rect.fromLTWH(x, y, w, h);
+  Item copy({String? id, Offset d = Offset.zero}) =>
+      Item(id ?? this.id, type, x + d.dx, y + d.dy, w, h, file: file, text: text, color: color, dur: dur);
+
+  factory Item.fromJson(Map j) => Item(
+        j['id'] as String,
+        j['type'] as String,
+        _num(j['x']),
+        _num(j['y']),
+        _num(j['w'], 200),
+        _num(j['h'], 200),
+        file: j['file'] as String?,
+        text: (j['text'] ?? '') as String,
+        color: (j['color'] ?? '#fde68a') as String,
+        dur: (j['dur'] ?? 0) as int,
+      );
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'type': type,
+        'x': x,
+        'y': y,
+        'w': w,
+        'h': h,
+        if (file != null) 'file': file,
+        if (text.isNotEmpty) 'text': text,
+        if (type == 'sticky') 'color': color,
+        if (dur > 0) 'dur': dur,
+      };
+}
+
 class PageData {
   final String id;
   int rev;
   double h;
   String bg; // lined | grid | dots | blank
+  String paper; // color del papel
   int updated; // ms epoch, para sincronizar algún día
   final Map<String, Stroke> strokes; // mantiene orden de inserción
   final Map<String, TextBlock> texts;
+  final Map<String, Item> items;
 
-  PageData(this.id, {this.rev = 0, this.h = kSheetH, this.bg = 'lined', this.updated = 0, Map<String, Stroke>? strokes, Map<String, TextBlock>? texts})
+  PageData(this.id,
+      {this.rev = 0,
+      this.h = kSheetH,
+      this.bg = 'lined',
+      this.paper = '#fffefb',
+      this.updated = 0,
+      Map<String, Stroke>? strokes,
+      Map<String, TextBlock>? texts,
+      Map<String, Item>? items})
       : strokes = strokes ?? {},
-        texts = texts ?? {};
+        texts = texts ?? {},
+        items = items ?? {};
 
   factory PageData.fromJson(Map j) {
     final p = PageData._fromJson(j);
@@ -114,6 +166,9 @@ class PageData {
     for (final t in texts.values) {
       t.y = shift(t.y);
     }
+    for (final i in items.values) {
+      i.y = shift(i.y);
+    }
     h = heightFor((h / kSheetH).ceil());
   }
 
@@ -122,7 +177,9 @@ class PageData {
         rev: (j['rev'] ?? 0) as int,
         h: _num(j['h'], kSheetH),
         bg: (j['bg'] ?? 'lined') as String,
+        paper: (j['paper'] ?? '#fffefb') as String,
         updated: (j['updated'] ?? 0) as int,
+        items: {for (final i in ((j['items'] ?? {}) as Map).values) (i['id'] as String): Item.fromJson(i as Map)},
         strokes: {for (final s in ((j['strokes'] ?? {}) as Map).values) (s['id'] as String): Stroke.fromJson(s as Map)},
         texts: {for (final t in ((j['texts'] ?? {}) as Map).values) (t['id'] as String): TextBlock.fromJson(t as Map)},
       );
@@ -132,7 +189,9 @@ class PageData {
         'rev': rev,
         'h': h,
         'bg': bg,
+        'paper': paper,
         'updated': updated,
+        'items': {for (final i in items.values) i.id: i.toJson()},
         'layout': 2,
         'strokes': {for (final s in strokes.values) s.id: s.toJson()},
         'texts': {for (final t in texts.values) t.id: t.toJson()},
@@ -142,8 +201,9 @@ class PageData {
 class PageRef {
   final String id;
   String title;
-  PageRef(this.id, this.title);
-  Map<String, dynamic> toJson() => {'id': id, 'title': title};
+  bool bookmark;
+  PageRef(this.id, this.title, {this.bookmark = false});
+  Map<String, dynamic> toJson() => {'id': id, 'title': title, if (bookmark) 'bookmark': true};
 }
 
 class Notebook {
@@ -152,12 +212,16 @@ class Notebook {
   final List<PageRef> pages;
   int updated; // última edición (ms)
   String? last; // última página abierta
-  Notebook(this.id, this.name, this.pages, {this.updated = 0, this.last});
+  bool favorite;
+  String? pin; // sha256 del PIN, si está bloqueado
+  Notebook(this.id, this.name, this.pages, {this.updated = 0, this.last, this.favorite = false, this.pin});
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,
         'updated': updated,
         'last': last,
+        if (favorite) 'favorite': true,
+        if (pin != null) 'pin': pin,
         'pages': pages.map((p) => p.toJson()).toList(),
       };
 }
@@ -176,9 +240,11 @@ class NotesIndex {
             Notebook(
               n['id'] as String,
               n['name'] as String,
-              [for (final p in (n['pages'] as List? ?? [])) PageRef(p['id'] as String, p['title'] as String)],
+              [for (final p in (n['pages'] as List? ?? [])) PageRef(p['id'] as String, p['title'] as String, bookmark: (p['bookmark'] ?? false) as bool)],
               updated: (n['updated'] ?? 0) as int,
               last: n['last'] as String?,
+              favorite: (n['favorite'] ?? false) as bool,
+              pin: n['pin'] as String?,
             )
         ],
       );

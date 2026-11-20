@@ -1,14 +1,15 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
-import 'editor.dart';
+import 'common.dart';
 import 'model.dart';
+import 'notebook_screen.dart';
 import 'painters.dart';
-import 'pdf_export.dart';
 import 'pen_panel.dart';
 import 'storage.dart';
 
@@ -18,7 +19,9 @@ void main() {
 }
 
 class ApuntesApp extends StatelessWidget {
-  const ApuntesApp({super.key});
+  /// [root]: carpeta de datos propia (los tests usan una temporal)
+  const ApuntesApp({super.key, this.root});
+  final Directory? root;
   @override
   Widget build(BuildContext context) => DynamicColorBuilder(
         // colores del sistema (Material You) y modo claro/oscuro del dispositivo
@@ -28,7 +31,7 @@ class ApuntesApp extends StatelessWidget {
           themeMode: ThemeMode.system,
           theme: appTheme(ColorScheme.fromSeed(seedColor: light?.primary ?? kAccent)),
           darkTheme: appTheme(ColorScheme.fromSeed(seedColor: dark?.primary ?? light?.primary ?? kAccent, brightness: Brightness.dark)),
-          home: const Library(),
+          home: Library(root: root),
         ),
       );
 }
@@ -85,111 +88,17 @@ ThemeData appTheme(ColorScheme cs) {
 }
 
 // ======================================================================
-// Diálogos compartidos
-// ======================================================================
-Future<String?> askText(BuildContext context, String title, {String initial = '', String hint = '', String ok = 'Listo'}) {
-  final c = TextEditingController(text: initial)..selection = TextSelection(baseOffset: 0, extentOffset: initial.length);
-  return showDialog<String>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: Text(title),
-      content: SizedBox(
-        width: 360,
-        child: TextField(
-          controller: c,
-          autofocus: true,
-          textCapitalization: TextCapitalization.sentences,
-          decoration: InputDecoration(hintText: hint),
-          onSubmitted: (v) => Navigator.pop(ctx, v),
-        ),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-        FilledButton(onPressed: () => Navigator.pop(ctx, c.text), child: Text(ok)),
-      ],
-    ),
-  );
-}
-
-Future<bool> confirmDelete(BuildContext context, String title, String msg) async =>
-    await showDialog<bool>(
-      context: context,
-      builder: (ctx) {
-        final cs = Theme.of(ctx).colorScheme;
-        return AlertDialog(
-          icon: Icon(Symbols.delete, color: cs.error, weight: 300),
-          title: Text(title),
-          content: Text(msg, style: TextStyle(color: cs.onSurfaceVariant)),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: cs.error, foregroundColor: cs.onError),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Borrar'),
-            ),
-          ],
-        );
-      },
-    ) ??
-    false;
-
-String fmtDate(int ms) {
-  if (ms == 0) return '';
-  final d = DateTime.fromMillisecondsSinceEpoch(ms), now = DateTime.now();
-  final hm = '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
-  if (d.year == now.year && d.month == now.month && d.day == now.day) return 'hoy $hm';
-  final y = now.subtract(const Duration(days: 1));
-  if (d.year == y.year && d.month == y.month && d.day == y.day) return 'ayer $hm';
-  return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}${d.year != now.year ? '/${d.year}' : ''}';
-}
-
-String todayTitle() {
-  final d = DateTime.now();
-  return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
-}
-
-/// Exporta con un diálogo de progreso; después el sistema pregunta carpeta y nombre.
-Future<void> exportPdfFlow(BuildContext context, Storage store, Notebook nb) async {
-  final progress = ValueNotifier<(int, int)>((0, 1));
-  final nav = Navigator.of(context);
-  final messenger = ScaffoldMessenger.of(context);
-  unawaited(showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (ctx) => AlertDialog(
-      title: const Text('Generando PDF'),
-      content: ValueListenableBuilder(
-        valueListenable: progress,
-        builder: (ctx, v, _) => Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          LinearProgressIndicator(value: v.$2 == 0 ? null : v.$1 / v.$2, borderRadius: BorderRadius.circular(4)),
-          const SizedBox(height: 12),
-          Text('Hoja ${v.$1} de ${v.$2}', style: TextStyle(color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
-        ]),
-      ),
-    ),
-  ));
-  try {
-    final bytes = await buildNotebookPdf(store, nb, onProgress: (a, b) => progress.value = (a, b));
-    nav.pop();
-    final ok = await savePdf(bytes, nb.name);
-    if (ok) messenger.showSnackBar(SnackBar(content: Text('PDF de "${nb.name}" guardado')));
-  } catch (e) {
-    nav.pop();
-    messenger.showSnackBar(SnackBar(content: Text('No se pudo exportar: $e')));
-  }
-}
-
-// ======================================================================
 // Biblioteca: todos los cuadernos con su miniatura
 // ======================================================================
 class Library extends StatefulWidget {
-  const Library({super.key});
+  const Library({super.key, this.root});
+  final Directory? root;
   @override
   State<Library> createState() => _LibraryState();
 }
 
 class _LibraryState extends State<Library> {
-  final store = Storage();
+  late final store = Storage(root: widget.root);
   final tools = ToolState();
   NotesIndex? index;
   final thumbs = <String, PageData>{}; // primera página de cada cuaderno
@@ -218,9 +127,19 @@ class _LibraryState extends State<Library> {
     }
   }
 
-  List<Notebook> get sorted => [...index!.notebooks]..sort((a, b) => b.updated.compareTo(a.updated));
+  /// favoritos primero; después los más recientes
+  List<Notebook> get sorted => [...index!.notebooks]
+    ..sort((a, b) => a.favorite != b.favorite ? (a.favorite ? -1 : 1) : b.updated.compareTo(a.updated));
 
   Future<void> _open(Notebook nb) async {
+    if (nb.pin != null) {
+      final p = await askPin(context, nb.name, subtitle: 'Este cuaderno está bloqueado');
+      if (p == null || !mounted) return;
+      if (hashPin(p) != nb.pin) {
+        snack(context, 'PIN incorrecto');
+        return;
+      }
+    }
     await Navigator.of(context).push(PageRouteBuilder(
       transitionDuration: const Duration(milliseconds: 320),
       reverseTransitionDuration: const Duration(milliseconds: 240),
@@ -235,6 +154,11 @@ class _LibraryState extends State<Library> {
     ));
     // volvió: se guardó todo; refrescar miniatura y orden
     if (!mounted) return;
+    if (!index!.notebooks.contains(nb)) {
+      setState(() => thumbs.remove(nb.id)); // lo borraron desde adentro
+      snack(context, 'Cuaderno borrado');
+      return;
+    }
     setState(() {});
     if (nb.pages.isNotEmpty) {
       final p = await store.loadPage(nb.pages.first.id);
@@ -288,9 +212,7 @@ class _LibraryState extends State<Library> {
     await store.saveIndex(index!);
   }
 
-  void _snack(String m) => ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(m), width: 320));
+  void _snack(String m) => snack(context, m);
 
   /// mantener apretado un cuaderno: opciones
   Future<void> _options(Notebook nb) async {
@@ -406,6 +328,7 @@ class _LibraryState extends State<Library> {
     final on = pressed == nb.id;
     final n = nb.pages.length;
     return GestureDetector(
+      key: Key('nb-${nb.name}'),
       onTap: () => _open(nb),
       onLongPress: () => _options(nb),
       child: AnimatedScale(
@@ -425,9 +348,29 @@ class _LibraryState extends State<Library> {
                 borderRadius: BorderRadius.circular(13),
                 child: AspectRatio(
                   aspectRatio: kW / kSheetH,
-                  child: thumb == null
-                      ? Container(color: const Color(0xFFFFFEFB))
-                      : RepaintBoundary(child: CustomPaint(painter: SheetThumbPainter(thumb))),
+                  child: Stack(children: [
+                    Positioned.fill(
+                      child: nb.pin != null
+                          // bloqueado: no se muestra el contenido
+                          ? Container(
+                              color: cs.surfaceContainerHighest,
+                              child: Icon(Symbols.lock, size: 36, weight: 200, color: cs.onSurfaceVariant),
+                            )
+                          : thumb == null
+                              ? Container(color: const Color(0xFFFFFEFB))
+                              : RepaintBoundary(child: CustomPaint(painter: SheetThumbPainter(thumb))),
+                    ),
+                    if (nb.favorite)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(color: cs.surface.withValues(alpha: .9), shape: BoxShape.circle),
+                          child: Icon(Symbols.star, key: Key('fav-${nb.id}'), size: 16, fill: 1, color: cs.primary),
+                        ),
+                      ),
+                  ]),
                 ),
               ),
             ),
@@ -446,253 +389,3 @@ class _LibraryState extends State<Library> {
   }
 }
 
-// ======================================================================
-// Un cuaderno abierto: editor + lista de sus páginas
-// ======================================================================
-class NotebookScreen extends StatefulWidget {
-  final Storage store;
-  final NotesIndex index;
-  final Notebook nb;
-  final ToolState tools;
-  const NotebookScreen({super.key, required this.store, required this.index, required this.nb, required this.tools});
-  @override
-  State<NotebookScreen> createState() => _NotebookScreenState();
-}
-
-class _NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObserver {
-  Storage get store => widget.store;
-  Notebook get nb => widget.nb;
-  final scaffold = GlobalKey<ScaffoldState>();
-  PageData? page;
-  Timer? saveTimer, prefsTimer;
-  bool dirty = false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    final first = nb.pages.any((p) => p.id == nb.last) ? nb.last : (nb.pages.isEmpty ? null : nb.pages.first.id);
-    if (first != null) {
-      _open(first);
-    } else {
-      _addPage();
-    }
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState s) {
-    if (s != AppLifecycleState.resumed) _flush(); // al salir de la app, guardar ya
-  }
-
-  // ---------- guardado ----------
-  void _pageChanged() {
-    dirty = true;
-    saveTimer?.cancel();
-    saveTimer = Timer(const Duration(milliseconds: 600), _flush);
-  }
-
-  void _prefsChanged() {
-    prefsTimer?.cancel();
-    prefsTimer = Timer(const Duration(milliseconds: 500), () => store.savePrefs(widget.tools.toJson()));
-  }
-
-  Future<void> _flush() async {
-    saveTimer?.cancel();
-    saveTimer = null;
-    final p = page;
-    if (p != null && dirty) {
-      dirty = false;
-      nb.updated = DateTime.now().millisecondsSinceEpoch;
-      await store.savePage(p);
-      await store.saveIndex(widget.index);
-    }
-  }
-
-  /// al volver atrás: guardar todo
-  Future<void> _leave() async {
-    await _flush();
-    prefsTimer?.cancel();
-    await store.savePrefs(widget.tools.toJson());
-    await store.saveIndex(widget.index);
-  }
-
-  Future<void> _open(String id) async {
-    if (page?.id == id) return;
-    await _flush();
-    final p = await store.loadPage(id);
-    nb.last = id;
-    unawaited(store.saveIndex(widget.index));
-    if (mounted) setState(() => page = p);
-  }
-
-  // ---------- páginas ----------
-  Future<void> _addPage() async {
-    final p = PageData(newId('p'));
-    await store.savePage(p);
-    setState(() => nb.pages.add(PageRef(p.id, todayTitle())));
-    nb.updated = DateTime.now().millisecondsSinceEpoch;
-    await store.saveIndex(widget.index);
-    await _open(p.id);
-    _closeDrawer();
-  }
-
-  Future<void> _renamePage(PageRef p) async {
-    final n = (await askText(context, 'Título de la página', initial: p.title))?.trim();
-    if (n == null || n.isEmpty) return;
-    setState(() => p.title = n);
-    await store.saveIndex(widget.index);
-  }
-
-  Future<void> _deletePage(PageRef p) async {
-    if (!await confirmDelete(context, 'Borrar "${p.title}"', 'Se borra la página con todo lo que tiene.')) return;
-    await store.deletePage(p.id);
-    setState(() => nb.pages.remove(p));
-    await store.saveIndex(widget.index);
-    if (p.id == page?.id) {
-      saveTimer?.cancel();
-      dirty = false;
-      setState(() => page = null);
-      if (nb.pages.isNotEmpty) {
-        await _open(nb.pages.first.id);
-      } else {
-        await _addPage();
-      }
-    }
-  }
-
-  void _closeDrawer() {
-    if (scaffold.currentState?.isDrawerOpen ?? false) Navigator.of(context).pop();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final cur = nb.pages.where((p) => p.id == page?.id).firstOrNull;
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) async {
-        if (didPop) return;
-        if (scaffold.currentState?.isDrawerOpen ?? false) {
-          _closeDrawer();
-          return;
-        }
-        await _leave();
-        if (context.mounted) Navigator.of(context).pop();
-      },
-      child: Scaffold(
-        key: scaffold,
-        drawer: _drawer(),
-        body: SafeArea(
-          child: page == null
-              ? const Center(child: CircularProgressIndicator())
-              : PageEditor(
-                  key: ValueKey(page!.id),
-                  page: page!,
-                  tools: widget.tools,
-                  title: cur?.title ?? '',
-                  subtitle: nb.name,
-                  onChanged: _pageChanged,
-                  onPrefsChanged: _prefsChanged,
-                  onMenu: () => scaffold.currentState?.openDrawer(),
-                  onBack: () => Navigator.of(context).maybePop(),
-                ),
-        ),
-      ),
-    );
-  }
-
-  Widget _drawer() {
-    final cs = Theme.of(context).colorScheme;
-    return Drawer(
-      width: 320,
-      child: SafeArea(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(22, 18, 12, 4),
-            child: Text(nb.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500, color: cs.onSurface)),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(22, 0, 12, 12),
-            child: Text('${nb.pages.length} ${nb.pages.length == 1 ? 'página' : 'páginas'}', style: TextStyle(color: cs.onSurfaceVariant)),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            child: Row(children: [
-              Expanded(
-                child: FilledButton.tonalIcon(
-                  onPressed: _addPage,
-                  icon: const Icon(Symbols.note_add, weight: 300),
-                  label: const Text('Nueva página'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton.outlined(
-                tooltip: 'Exportar a PDF',
-                onPressed: () async {
-                  _closeDrawer();
-                  await _flush();
-                  if (mounted) await exportPdfFlow(context, store, nb);
-                },
-                icon: const Icon(Symbols.picture_as_pdf, weight: 300),
-              ),
-            ]),
-          ),
-          const SizedBox(height: 10),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(10, 0, 10, 20),
-              children: [
-                for (final p in nb.pages)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 2),
-                    child: ListTile(
-                      selected: p.id == page?.id,
-                      selectedTileColor: cs.secondaryContainer,
-                      selectedColor: cs.onSecondaryContainer,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      leading: Icon(Symbols.description, weight: 300, fill: p.id == page?.id ? 1 : 0),
-                      title: Text(p.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                      onTap: () async {
-                        await _open(p.id);
-                        _closeDrawer();
-                      },
-                      trailing: PopupMenuButton<String>(
-                        icon: Icon(Symbols.more_vert, weight: 300, color: cs.onSurfaceVariant),
-                        onSelected: (v) => v == 'rename' ? _renamePage(p) : _deletePage(p),
-                        itemBuilder: (_) => const [
-                          PopupMenuItem(value: 'rename', child: _MenuRow(Symbols.edit, 'Renombrar')),
-                          PopupMenuItem(value: 'delete', child: _MenuRow(Symbols.delete, 'Borrar', danger: true)),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ]),
-      ),
-    );
-  }
-}
-
-class _MenuRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool danger;
-  const _MenuRow(this.icon, this.label, {this.danger = false});
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final c = danger ? cs.error : cs.onSurfaceVariant;
-    return Row(children: [
-      Icon(icon, size: 20, weight: 300, color: c),
-      const SizedBox(width: 12),
-      Text(label, style: TextStyle(color: danger ? cs.error : cs.onSurface)),
-    ]);
-  }
-}

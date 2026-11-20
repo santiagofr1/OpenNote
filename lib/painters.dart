@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -134,14 +135,14 @@ List<Rect> sheetRects(double h) => [
 
 /// Fondo: cada hoja con su papel, sombra suave, renglones/cuadrícula/puntos y margen.
 class SheetPainter extends CustomPainter {
-  final String bg;
+  final String bg, paperColor;
   final double h, scale;
-  SheetPainter(this.bg, this.h, this.scale);
+  SheetPainter(this.bg, this.h, this.scale, [this.paperColor = '#fffefb']);
 
   @override
   void paint(Canvas c, Size size) {
     c.scale(scale);
-    final paper = Paint()..color = const Color(0xFFFFFEFB);
+    final paper = Paint()..color = parseColor(paperColor);
     final shadow = Paint()
       ..color = const Color(0x24000000)
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, 10 / scale);
@@ -182,7 +183,7 @@ class SheetPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(SheetPainter o) => o.bg != bg || o.h != h || o.scale != scale;
+  bool shouldRepaint(SheetPainter o) => o.bg != bg || o.h != h || o.scale != scale || o.paperColor != paperColor;
 }
 
 /// Todos los trazos guardados. Se repinta solo cuando cambia [version].
@@ -250,11 +251,11 @@ void dashedRect(Canvas c, Rect r, Paint p, double dash) {
 
 /// Dibuja la hoja [sheet] de una página, completa (papel, renglones, tinta y texto),
 /// en coordenadas lógicas con origen en la esquina de esa hoja. Para miniaturas y PDF.
-void paintSheet(Canvas c, PageData page, int sheet, double pxPerUnit) {
+void paintSheet(Canvas c, PageData page, int sheet, double pxPerUnit, {Map<String, ui.Image>? images}) {
   final top = sheet * kSheetStep;
   c.save();
   c.clipRect(const Rect.fromLTWH(0, 0, kW, kSheetH));
-  c.drawRect(const Rect.fromLTWH(0, 0, kW, kSheetH), Paint()..color = const Color(0xFFFFFEFB));
+  c.drawRect(const Rect.fromLTWH(0, 0, kW, kSheetH), Paint()..color = parseColor(page.paper));
   final rule = Paint()
     ..color = const Color(0xFFD5DFEE)
     ..strokeWidth = max(.6, 1 / pxPerUnit);
@@ -283,6 +284,9 @@ void paintSheet(Canvas c, PageData page, int sheet, double pxPerUnit) {
   }
   c.translate(0, -top);
   final visible = Rect.fromLTWH(0, top, kW, kSheetH);
+  for (final it in page.items.values) {
+    if (it.rect.overlaps(visible)) paintItem(c, it, images?[it.file]);
+  }
   final all = page.strokes.values.where((s) => s.bounds.overlaps(visible)).toList();
   for (final s in all) {
     if (s.k == 'hl') paintStroke(c, s);
@@ -305,7 +309,8 @@ void paintSheet(Canvas c, PageData page, int sheet, double pxPerUnit) {
 /// Miniatura de la primera hoja de una página
 class SheetThumbPainter extends CustomPainter {
   final PageData page;
-  SheetThumbPainter(this.page);
+  final int version; // cambia cuando se edita la página abierta
+  SheetThumbPainter(this.page, [this.version = 0]);
   @override
   void paint(Canvas c, Size size) {
     final k = size.width / kW;
@@ -314,5 +319,40 @@ class SheetThumbPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(SheetThumbPainter o) => o.page != page || o.page.rev != page.rev;
+  bool shouldRepaint(SheetThumbPainter o) => o.page != page || o.version != version || o.page.rev != page.rev;
+}
+
+/// Elemento insertado (para miniaturas y PDF; en el editor son widgets).
+void paintItem(Canvas c, Item it, ui.Image? img) {
+  final r = it.rect;
+  switch (it.type) {
+    case 'image':
+      if (img != null) {
+        c.drawImageRect(img, Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()), r, Paint()..filterQuality = FilterQuality.medium);
+      } else {
+        c.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(6)), Paint()..color = const Color(0xFFE6E3DA));
+      }
+    case 'sticky':
+      final rr = RRect.fromRectAndRadius(r, const Radius.circular(10));
+      c.drawRRect(rr.shift(const Offset(0, 3)), Paint()..color = const Color(0x22000000)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6));
+      c.drawRRect(rr, Paint()..color = parseColor(it.color));
+      final tp = TextPainter(
+        text: TextSpan(text: it.text, style: const TextStyle(fontSize: 20, height: 1.35, color: Color(0xFF2B2A27))),
+        textDirection: TextDirection.ltr,
+      )..layout(maxWidth: r.width - 32);
+      c.save();
+      c.clipRRect(rr);
+      tp.paint(c, r.topLeft + const Offset(16, 14));
+      c.restore();
+    case 'audio':
+      final rr = RRect.fromRectAndRadius(r, Radius.circular(r.height / 2));
+      c.drawRRect(rr, Paint()..color = const Color(0xFFE9E6F5));
+      c.drawCircle(Offset(r.left + r.height / 2, r.center.dy), r.height * .3, Paint()..color = const Color(0xFF5B4FC4));
+      final s = it.dur ~/ 1000;
+      final tp = TextPainter(
+        text: TextSpan(text: 'Audio ${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}', style: const TextStyle(fontSize: 20, color: Color(0xFF2B2A27))),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(c, Offset(r.left + r.height + 6, r.center.dy - tp.height / 2));
+  }
 }
