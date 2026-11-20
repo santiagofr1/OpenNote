@@ -9,9 +9,11 @@ import '../data/storage.dart';
 import '../domain/domain.dart';
 import '../rendering/ink_layers.dart';
 import '../rendering/paper.dart';
+import '../rendering/text_layout.dart';
 import '../widgets/dialogs.dart';
 import 'context_menu.dart';
 import 'dock_layout.dart';
+import 'format_bar.dart';
 import 'history.dart';
 import 'ink.dart';
 import 'items_layer.dart';
@@ -66,7 +68,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   final liveTick = ValueNotifier(0); // repinta la capa en vivo
   final history = History();
   final sel = Selection();
-  late final texts = TextFields(onFocusChange: _rebuild, onLeftEmpty: _removeText);
+  late final texts = TextFields(onFocusChange: _rebuild, onLeftEmpty: _removeText, onEdited: _textEdited);
   late final pull = PullToAddSheet(vsync: this, onComplete: _addSheetFromPull);
   final touch = TouchTracker();
   late final stillPress = StillPressTimer(_onStillPress);
@@ -339,7 +341,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       if (t == null) return;
       t.y = max(0.0, doc.snapTextY(t.y)); // que caiga sobre el renglón de su hoja
       t.x = t.x.clamp(0.0, kW - 60);
-      textBefore[id] = TextBlock(t.id, o.dx, o.dy, t.w, t.text);
+      textBefore[id] = t.copy(d: o - Offset(t.x, t.y));
       textAfter[id] = t.copy();
     });
     final itemBefore = <String, Item?>{}, itemAfter = <String, Item?>{};
@@ -401,7 +403,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final newStrokes = [for (final s in strokes) s.moved(d, id: newId('s'))];
     final newItems = [for (final it in items) it.copy(id: newId('i'), d: d)];
     final newTexts = [
-      for (final t in textBlocks) TextBlock(newId('t'), (t.x + d.dx).clamp(0.0, kW - 60), max(0.0, t.y + d.dy), t.w, t.text)
+      for (final t in textBlocks) t.copy(id: newId('t'), d: Offset((t.x + d.dx).clamp(0.0, kW - 60) - t.x, max(0.0, t.y + d.dy) - t.y))
     ];
     for (final it in newItems) {
       doc.items[it.id] = it;
@@ -476,16 +478,70 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     if (y % kSheetStep > kSheetH - doc.lineAt(y) && y ~/ kSheetStep < doc.sheetCount - 1) {
       y = doc.snapTextY((y ~/ kSheetStep + 1) * kSheetStep, floor: true);
     }
+    _placeText(x, y);
+  }
+
+  /// Un bloque nuevo y vacío en ([x], [y]) (y ya sobre el renglón), con el foco y el teclado.
+  void _placeText(double x, double y) {
     final t = TextBlock(newId('t'), x.roundToDouble(), y, (kW - x - 30).roundToDouble(), '');
     setState(() => texts.put(t.id, t));
-    WidgetsBinding.instance.addPostFrameCallback((_) => texts.focusOf(t.id)?.requestFocus());
+    texts.editor(t.id)?.focusAt(0, 0);
+    showKeyboard();
+    _growIfNeeded(y + doc.lineAt(y));
     _changed();
   }
 
-  void _textChanged(TextBlock t, String v) {
-    t.text = v;
+  /// El tecladito de la barra: renglón nuevo debajo de lo último que se ve en la hoja visible
+  /// (o en el primer renglón de la parte visible si no hay nada).
+  void _newTextAtVisible() {
+    final k = visibleSheet, sheetTop = k * kSheetStep, line = doc.lineAt(sheetTop + 1);
+    final vh = scroll.hasClients ? scroll.position.viewportDimension / scale : 600 / scale;
+    final top = scroll.hasClients ? max(0.0, (scroll.offset - kTopPad) / scale) : sheetTop;
+    final region = Rect.fromLTRB(0, max(top, sheetTop), kW, min(top + vh, sheetTop + kSheetH));
+    double? bottom;
+    void see(Rect r) {
+      if (r.overlaps(region)) bottom = max(bottom ?? r.bottom, r.bottom);
+    }
+
+    for (final s in doc.strokes.values) {
+      see(s.bounds);
+    }
+    for (final t in doc.texts.values) {
+      see(textRect(t, doc.lineAt(t.y)));
+    }
+    for (final it in doc.items.values) {
+      see(it.rect);
+    }
+    // el renglón de abajo de lo último (se sube un renglón menos un pelo: queda en el más cercano hacia abajo)
+    var y = bottom != null
+        ? doc.snapTextY(bottom! + line - 0.01, floor: true)
+        : doc.snapTextY(max(region.top + line * .5, sheetTop + mmToUnits(kTopMarginMm) - line) + line - 0.01, floor: true);
+    if (y - sheetTop > kSheetH - line && k < doc.sheetCount - 1) {
+      y = doc.snapTextY((k + 1) * kSheetStep + 1, floor: false); // no entra: a la hoja siguiente
+    }
+    _placeText(mmToUnits(kMarginMm) + 10, y);
+    if (scroll.hasClients && y + line > region.bottom) {
+      final to = (y * scale + kTopPad - scroll.position.viewportDimension * .4).clamp(0.0, scroll.position.maxScrollExtent);
+      scroll.animateTo(to, duration: const Duration(milliseconds: 300), curve: Curves.easeOutQuart);
+    }
+  }
+
+  /// Tocar el tecladito estando en modo texto: vuelve a abrir el teclado en el último bloque escrito.
+  void _reopenKeyboard() {
+    final id = texts.lastEdited;
+    if (id != null && doc.texts.containsKey(id)) {
+      texts.focusEnd(id);
+    } else {
+      _newTextAtVisible();
+    }
+  }
+
+  void _textEdited(TextBlock t) {
     // estimación de renglones (70 letras por renglón) para agregar hojas a tiempo
-    final lines = '\n'.allMatches(v).length + 1 + v.length ~/ 70;
+    var lines = 0;
+    for (final p in t.body.paras) {
+      lines += 1 + p.length ~/ 70;
+    }
     _growIfNeeded(t.y + lines * doc.lineAt(t.y));
     _saveSoon(t.id, const Duration(milliseconds: 300));
   }
@@ -498,6 +554,16 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   }
 
   void _toolTap(Tool t) {
+    if (t == Tool.text) {
+      if (ts.tool == Tool.text) {
+        _reopenKeyboard();
+      } else {
+        _setTool(t);
+        _newTextAtVisible();
+        widget.onPrefsChanged();
+      }
+      return;
+    }
     if (ts.tool == t && ts.drawing) {
       _openPanel(); // tocar de nuevo la herramienta elegida abre sus opciones
       return;
@@ -856,6 +922,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             ),
           ),
           Positioned(left: 0, right: 0, bottom: 28, child: Center(child: PullIndicator(pull))),
+          if (ts.tool == Tool.text && texts.anyFocused)
+            Positioned(left: 0, right: 0, bottom: 0, child: FormatBar(fields: texts)),
           Positioned(
             left: 0,
             right: 0,
@@ -958,17 +1026,15 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       doc: doc, scale: scale, sel: sel, live: live, eraserAt: eraserAt, eraserRadius: ts.eraserRadius);
 
   Widget _textBlock(TextBlock t, bool textMode) {
-    final c = texts.controller(t.id), f = texts.focusOf(t.id);
-    if (c == null || f == null) return const SizedBox.shrink();
+    final ed = texts.editor(t.id);
+    if (ed == null) return const SizedBox.shrink();
     return TextBlockView(
       block: t,
-      controller: c,
-      focus: f,
+      editor: ed,
       scale: scale,
       line: doc.lineAt(t.y),
       textMode: textMode,
       selected: sel.texts.contains(t.id),
-      onChanged: (v) => _textChanged(t, v),
       onHandleDrag: (delta) => setState(() {
         t.x = (t.x + delta.dx / scale).clamp(0.0, kW - 60);
         t.y = max(0.0, t.y + delta.dy / scale);
