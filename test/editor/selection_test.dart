@@ -43,6 +43,50 @@ void main() {
     });
   });
 
+  group('captura (derecha a izquierda)', () {
+    test('un trazo que cruza el rectángulo sin puntos adentro se toma en captura y no en ventana', () {
+      final p = NotebookDoc(Notebook.create('t'));
+      p.strokes['x'] = Stroke('x', 'pen', '#000000', 2, [0, 50, .5, 300, 50, .5]);
+      final sel = Selection();
+      const r = Rect.fromLTRB(100, 20, 200, 80);
+      sel.selectIn(p, r, capture: true);
+      expect(sel.strokes, {'x'});
+      sel.selectIn(p, r);
+      expect(sel.strokes, isEmpty);
+    });
+
+    test('parcialmente adentro: ventana no, captura sí', () {
+      final p = page(), sel = Selection();
+      const r = Rect.fromLTRB(-5, 0, 25, 100); // 3 de 11 puntos de "a"
+      sel.selectIn(p, r);
+      expect(sel.strokes, isEmpty);
+      sel.selectIn(p, r, capture: true);
+      expect(sel.strokes, {'a'});
+    });
+
+    test('textos y elementos por superposición', () {
+      final p = page(), sel = Selection();
+      const r = Rect.fromLTRB(80, 190, 650, 215); // toca el texto y la nota, sin sus centros
+      sel.selectIn(p, r);
+      expect(sel.texts, isEmpty);
+      sel.selectIn(p, const Rect.fromLTRB(650, 20, 900, 40), capture: true);
+      expect(sel.items, {'i'});
+      sel.selectIn(p, r, capture: true);
+      expect(sel.texts, {'t'});
+      expect(sel.strokes, isEmpty);
+    });
+
+    test('la dirección del arrastre define el modo', () {
+      final sel = Selection()..bandA = const Offset(100, 10);
+      sel.bandB = const Offset(200, 50);
+      expect(sel.capture, isFalse);
+      sel.bandB = const Offset(20, 50);
+      expect(sel.capture, isTrue);
+      sel.clear();
+      expect(sel.capture, isFalse);
+    });
+  });
+
   test('bounds: envuelve lo seleccionado con margen y, al arrastrar, queda en la posición original', () {
     final p = page(), sel = Selection();
     sel.replace(strokes: ['b'], items: ['i']);

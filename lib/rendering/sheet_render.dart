@@ -20,14 +20,20 @@ void paintSheet(Canvas c, NotebookDoc doc, int sheet, double pxPerUnit, {Map<Str
   paintPaperPattern(c, meta.bg, meta.spacing, ruleWidth: max(.6, 1 / pxPerUnit), marginWidth: max(.8, 1.2 / pxPerUnit));
   c.translate(0, -top);
   final visible = Rect.fromLTWH(0, top, kW, kSheetH);
-  for (final it in doc.items.values) {
-    if (it.rect.overlaps(visible)) paintItem(c, it, images?[it.file]);
-  }
-  paintStrokes(c, doc.strokes.values.where((s) => s.bounds.overlaps(visible)).toList());
-  for (final t in doc.texts.values) {
-    // kLine * 40: tope generoso del alto de un texto, para no medirlos todos
-    if (t.text.trim().isEmpty || t.y > top + kSheetH || t.y + kLine * 40 < top) continue;
-    layoutBlock(t, doc.lineAt(t.y)).paint(c, Offset(t.x, t.y));
+  // un solo orden de dibujo para todo; de cada tanda de trazos seguidos, los resaltadores van primero
+  for (final run in zRuns(doc.drawOrder())) {
+    final e = run.single;
+    if (run.strokes != null) {
+      final vis = [for (final s in run.strokes!) if (s.bounds.overlaps(visible)) s];
+      if (vis.isNotEmpty) paintStrokes(c, vis);
+    } else if (e is Item) {
+      if (e.rect.overlaps(visible)) paintItem(c, e, images?[e.file]);
+    } else if (e is TextBlock) {
+      final t = e;
+      // kLine * 40: tope generoso del alto de un texto, para no medirlos todos
+      if (t.text.trim().isEmpty || t.y > top + kSheetH || t.y + kLine * 40 < top) continue;
+      layoutBlock(t, doc.lineAt(t.y)).paint(c, Offset(t.x, t.y));
+    }
   }
   c.restore();
 }

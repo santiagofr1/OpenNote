@@ -13,3 +13,4 @@ export 'rich_text.dart';
 export 'stroke.dart';
 export 'tools.dart';
 export 'values.dart';
+export 'z_order.dart';

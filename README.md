@@ -18,7 +18,8 @@ guardan en tu tablet, sin cuentas ni servidores.
 - Borrá apretando el botón del S Pen.
 - Con el dedo te desplazás, pellizcás para hacer zoom, y podés bloquear el zoom.
 - Escribí con teclado cuando lo necesites: tocá el tecladito y se abre un renglón nuevo, con negrita, cursiva, colores, títulos, listas y alineación.
-- Seleccioná con un recuadro para mover, copiar, duplicar o eliminar.
+- Seleccioná con un recuadro: arrastrando hacia la derecha tomás lo que queda adentro; hacia la izquierda, todo lo que el recuadro toca. Después podés mover, copiar, duplicar o eliminar.
+- Cambiá el orden de lo seleccionado: traerlo al frente o enviarlo al fondo.
 - Insertá imágenes, notas adhesivas y grabaciones de voz.
 
 **Cuadernos**

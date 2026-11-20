@@ -33,8 +33,24 @@ void paintLiveLayer(
     ..strokeWidth = 1.5 / scale;
   final band = sel.band;
   if (band != null) {
-    c.drawRect(band, Paint()..color = const Color(0x142F5BD3));
-    dashedRect(c, band, border, 6 / scale);
+    if (sel.capture) {
+      // captura (derecha a izquierda): punteado y verde
+      final green = Paint()
+        ..color = kCapture
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5 / scale;
+      c.drawRect(band, Paint()..color = const Color(0x1A2E9E5B));
+      dashedRect(c, band, green, 6 / scale);
+    } else {
+      // ventana (izquierda a derecha): línea continua y azul
+      c.drawRect(band, Paint()..color = const Color(0x142F5BD3));
+      c.drawRect(
+          band,
+          Paint()
+            ..color = kAccent
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.5 / scale);
+    }
   }
   final drag = sel.drag;
   if (drag != null) {

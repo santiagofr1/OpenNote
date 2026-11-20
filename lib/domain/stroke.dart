@@ -3,11 +3,14 @@ import 'dart:ui';
 
 import 'geometry.dart';
 import 'values.dart';
+import 'z_order.dart';
 
 /// Trazo: puntos guardados planos como [x, y, presión, x, y, presión, ...]
-class Stroke {
+class Stroke extends Layered {
   // k = punta: pen | fountain | pencil | fine | calli | hl
-  final String id, k, c;
+  @override
+  final String id;
+  final String k, c;
   final double w, o; // grosor y opacidad (0..1)
   final List<double> pts;
   late final Color color = parseColor(c);
@@ -40,7 +43,19 @@ class Stroke {
       p[i] += d.dx;
       p[i + 1] += d.dy;
     }
-    return Stroke(id ?? this.id, k, c, w, p, o);
+    return Stroke(id ?? this.id, k, c, w, p, o)..z = z;
+  }
+
+  /// ¿El trazo toca el rectángulo [r]? Real: algún tramo del recorrido, engordado la mitad del grosor,
+  /// cruza el rectángulo (no alcanza con que se superpongan los rectángulos que envuelven).
+  bool touchesRect(Rect r) {
+    if (!bounds.overlaps(r)) return false;
+    final g = r.inflate(w / 2), p = pts;
+    if (n == 1) return g.contains(Offset(p[0], p[1]));
+    for (var i = 1; i < n; i++) {
+      if (segmentIntersectsRect(Offset(p[i * 3 - 3], p[i * 3 - 2]), Offset(p[i * 3], p[i * 3 + 1]), g)) return true;
+    }
+    return false;
   }
 
   /// Corre el trazo [dy] hacia abajo, en el lugar (lo usan las operaciones de hojas).
