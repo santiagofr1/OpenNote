@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
-/// Barrita oscura sobre la selección: copiar, cortar, duplicar, eliminar, deseleccionar.
+import '../domain/domain.dart';
+
+/// Barrita oscura sobre la selección: copiar, cortar, duplicar, orden (capas), eliminar, deseleccionar.
 class SelectionMenu extends StatelessWidget {
   final VoidCallback onCopy, onCut, onDuplicate, onDelete, onClose;
+  final ValueChanged<ZMove> onOrder;
   const SelectionMenu({
     super.key,
     required this.onCopy,
@@ -11,6 +14,7 @@ class SelectionMenu extends StatelessWidget {
     required this.onDuplicate,
     required this.onDelete,
     required this.onClose,
+    required this.onOrder,
   });
 
   @override
@@ -29,6 +33,26 @@ class SelectionMenu extends StatelessWidget {
             ]),
           ),
         );
+    Widget order() => PopupMenuButton<ZMove>(
+          key: const Key('selOrder'),
+          tooltip: 'Orden',
+          onSelected: onOrder,
+          position: PopupMenuPosition.under,
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: ZMove.front, child: Text('Traer al frente')),
+            PopupMenuItem(value: ZMove.up, child: Text('Subir uno')),
+            PopupMenuItem(value: ZMove.down, child: Text('Bajar uno')),
+            PopupMenuItem(value: ZMove.back, child: Text('Enviar al fondo')),
+          ],
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Symbols.layers, size: 19, weight: 300, color: fg),
+              const SizedBox(width: 6),
+              Text('Orden', style: TextStyle(color: fg, fontSize: 14)),
+            ]),
+          ),
+        );
     return Material(
       color: cs.inverseSurface,
       elevation: 4,
@@ -39,6 +63,7 @@ class SelectionMenu extends StatelessWidget {
           b(Symbols.content_copy, 'Copiar', onCopy),
           b(Symbols.content_cut, 'Cortar', onCut),
           b(Symbols.control_point_duplicate, 'Duplicar', onDuplicate),
+          order(),
           b(Symbols.delete, 'Eliminar', onDelete),
           IconButton(
               onPressed: onClose,

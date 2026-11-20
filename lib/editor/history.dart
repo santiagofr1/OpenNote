@@ -6,6 +6,9 @@ class EditAction {
   final List<Stroke> removed, added;
   final Map<String, TextBlock?> textBefore, textAfter;
   final Map<String, Item?> itemBefore, itemAfter;
+
+  /// Cambios de orden de dibujo: [z] de cada elemento (por id) antes y después.
+  final Map<String, int> zBefore, zAfter;
   const EditAction({
     this.removed = const [],
     this.added = const [],
@@ -13,6 +16,8 @@ class EditAction {
     this.textAfter = const {},
     this.itemBefore = const {},
     this.itemAfter = const {},
+    this.zBefore = const {},
+    this.zAfter = const {},
   });
 
   /// Vuelve la página a como estaba antes ([undo]) o después de la acción.
@@ -27,6 +32,7 @@ class EditAction {
     // se aplican copias: lo guardado en la acción no se toca al seguir editando
     (undo ? textBefore : textAfter).forEach((id, t) => putText(id, t?.copy()));
     (undo ? itemBefore : itemAfter).forEach((id, it) => it == null ? doc.items.remove(id) : doc.items[id] = it.copy());
+    (undo ? zBefore : zAfter).forEach(doc.setZ);
   }
 }
 

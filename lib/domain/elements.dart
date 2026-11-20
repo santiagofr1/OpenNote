@@ -2,9 +2,11 @@ import 'dart:ui';
 
 import 'rich_text.dart';
 import 'values.dart';
+import 'z_order.dart';
 
 /// Bloque de texto escrito con teclado: párrafos con formato ([RichBody]). [y] queda 4 por debajo del renglón.
-class TextBlock {
+class TextBlock extends Layered {
+  @override
   final String id;
   double x, y, w;
   RichBody body;
@@ -14,12 +16,13 @@ class TextBlock {
   String get text => body.plainText;
   set text(String v) => body = RichBody.plain(v);
 
-  TextBlock copy({String? id, Offset d = Offset.zero}) => TextBlock(id ?? this.id, x + d.dx, y + d.dy, w, '', body: body);
+  TextBlock copy({String? id, Offset d = Offset.zero}) => TextBlock(id ?? this.id, x + d.dx, y + d.dy, w, '', body: body)..z = z;
 
   /// Los textos viejos traen solo `text`: se leen como párrafos normales (uno por línea).
   factory TextBlock.fromJson(Map j) => TextBlock(
       j['id'] as String, jsonDouble(j['x']), jsonDouble(j['y']), jsonDouble(j['w'], 800), (j['text'] ?? '') as String,
-      body: j['rich'] is List ? RichBody.fromJson(j['rich'] as List) : null);
+      body: j['rich'] is List ? RichBody.fromJson(j['rich'] as List) : null)
+        ..z = (j['z'] as num? ?? 0).toInt();
 
   /// Sin formato se guarda igual que antes (solo `text`); con formato, `rich` y además `text` como respaldo.
   Map<String, dynamic> toJson() =>
@@ -27,7 +30,8 @@ class TextBlock {
 }
 
 /// Elemento insertado en una hoja: imagen, nota adhesiva o audio.
-class Item {
+class Item extends Layered {
+  @override
   final String id;
   final String type; // image | sticky | audio
   double x, y, w, h;
@@ -40,7 +44,7 @@ class Item {
 
   Rect get rect => Rect.fromLTWH(x, y, w, h);
   Item copy({String? id, Offset d = Offset.zero}) =>
-      Item(id ?? this.id, type, x + d.dx, y + d.dy, w, h, file: file, text: text, color: color, dur: dur);
+      Item(id ?? this.id, type, x + d.dx, y + d.dy, w, h, file: file, text: text, color: color, dur: dur)..z = z;
 
   factory Item.fromJson(Map j) => Item(
         j['id'] as String,
@@ -53,7 +57,7 @@ class Item {
         text: (j['text'] ?? '') as String,
         color: (j['color'] ?? '#fde68a') as String,
         dur: (j['dur'] ?? 0) as int,
-      );
+      )..z = (j['z'] as num? ?? 0).toInt();
   Map<String, dynamic> toJson() => {
         'id': id,
         'type': type,

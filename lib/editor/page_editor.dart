@@ -207,7 +207,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     }
     final band = sel.band;
     if (band != null) {
-      sel.selectIn(doc, band);
+      sel.selectIn(doc, band, capture: sel.capture);
       sel.bandA = sel.bandB = null;
       setState(() {});
       liveTick.value++;
@@ -232,6 +232,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   void _commitStroke(Stroke s) {
     if (s.n < 2) return;
     s.smooth();
+    s.z = doc.nextZ(); // arriba de todo
     doc.strokes[s.id] = s;
     inkVersion.value++;
     _pushUndo(EditAction(added: [s]));
@@ -405,6 +406,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final newTexts = [
       for (final t in textBlocks) t.copy(id: newId('t'), d: Offset((t.x + d.dx).clamp(0.0, kW - 60) - t.x, max(0.0, t.y + d.dy) - t.y))
     ];
+    // las copias quedan arriba de todo, en el mismo orden que tenían entre sí
+    doc.stackOnTop([...newStrokes, ...newTexts, ...newItems]);
     for (final it in newItems) {
       doc.items[it.id] = it;
     }
@@ -433,6 +436,23 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     _changed();
     setState(() {});
   }
+
+  /// Menú "Orden": mueve la selección en el orden de dibujo (con deshacer).
+  void _reorderSel(ZMove m) {
+    final ch = doc.reorder(sel.allIds, m, _rectOf);
+    if (ch == null) return;
+    _pushUndo(EditAction(zBefore: ch.before, zAfter: ch.after));
+    inkVersion.value++;
+    liveTick.value++;
+    _changed();
+  }
+
+  Rect _rectOf(Layered e) => switch (e) {
+        Stroke s => s.bounds,
+        Item it => it.rect,
+        TextBlock t => textRect(t, doc.lineAt(t.y)),
+        _ => Rect.zero,
+      };
 
   void _duplicateSel() => _insert(sel.strokesOf(doc), sel.textsOf(doc), const Offset(30, 30), sel.itemsOf(doc));
 
@@ -483,7 +503,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   /// Un bloque nuevo y vacío en ([x], [y]) (y ya sobre el renglón), con el foco y el teclado.
   void _placeText(double x, double y) {
-    final t = TextBlock(newId('t'), x.roundToDouble(), y, (kW - x - 30).roundToDouble(), '');
+    final t = TextBlock(newId('t'), x.roundToDouble(), y, (kW - x - 30).roundToDouble(), '')..z = doc.nextZ();
     setState(() => texts.put(t.id, t));
     texts.editor(t.id)?.focusAt(0, 0);
     showKeyboard();
@@ -795,6 +815,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final c = viewCenter;
     it.x = (c.dx - it.w / 2).clamp(10.0, max(10.0, kW - it.w - 10));
     it.y = max(0.0, c.dy - it.h / 2);
+    it.z = doc.nextZ();
     doc.items[it.id] = it;
     _pushUndo(EditAction(itemBefore: {it.id: null}, itemAfter: {it.id: it.copy()}));
     _setTool(Tool.select);
@@ -960,6 +981,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             onDuplicate: _duplicateSel,
             onDelete: _deleteSel,
             onClose: _clearSel,
+            onOrder: _reorderSel,
           ),
         ),
       if (resizable != null)
@@ -975,8 +997,16 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     ]);
   }
 
-  /// De abajo hacia arriba: papel, elementos, textos, tinta y capa en vivo.
+  /// De abajo hacia arriba: papel, y después todo en el orden de dibujo (un solo orden para trazos,
+  /// textos y elementos), y arriba la capa en vivo.
+  ///
+  /// Rendimiento: la tinta no se dibuja trazo por trazo en widgets. Los trazos seguidos en el orden forman
+  /// una tanda ([ZRun]) y cada tanda es una capa con caché ([RepaintBoundary]) que solo se repinta cuando
+  /// cambian sus trazos. Una página normal (cientos de trazos y los textos/imágenes de siempre) es una
+  /// sola tanda, igual que antes; cada imagen, nota o texto que quede "en el medio" de la tinta suma una
+  /// capa más. Los widgets llevan clave para conservar su estado (campos de texto, audio) al reordenarse.
   Widget _layers(bool textMode) {
+    final runs = zRuns(doc.drawOrder());
     return Listener(
       onPointerDown: _down,
       onPointerMove: _move,
@@ -987,28 +1017,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         onTapUp: textMode ? _tapPage : null,
         child: Stack(clipBehavior: Clip.none, children: [
           Positioned.fill(child: CustomPaint(painter: SheetPainter(doc.sheets, scale))),
-          for (final it in doc.items.values)
-            ItemView(
-              item: it,
-              file: widget.store.media(it.file ?? ''),
-              scale: scale,
-              textMode: textMode,
-              selected: sel.items.contains(it.id),
-              onStickyChanged: (v) {
-                it.text = v;
-                _saveSoon(it.id, const Duration(milliseconds: 350));
-              },
-            ),
-          for (final t in doc.texts.values) _textBlock(t, textMode),
-          Positioned.fill(
-            child: IgnorePointer(
-              child: RepaintBoundary(
-                child: CustomPaint(
-                    painter: InkPainter(doc, scale, inkVersion, () => sel.moving ? sel.strokes : const {}),
-                    isComplex: true),
-              ),
-            ),
-          ),
+          for (var i = 0; i < runs.length; i++) _run(runs[i], i, textMode),
           Positioned.fill(
             child: IgnorePointer(
               child: CustomPaint(
@@ -1022,6 +1031,38 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     );
   }
 
+  Widget _run(ZRun run, int i, bool textMode) {
+    final strokes = run.strokes;
+    if (strokes != null) {
+      return Positioned.fill(
+        key: ValueKey('ink-$i'),
+        child: IgnorePointer(
+          child: RepaintBoundary(
+            child: CustomPaint(
+                painter: InkPainter(doc, strokes, scale, inkVersion, () => sel.moving ? sel.strokes : const {}),
+                isComplex: true),
+          ),
+        ),
+      );
+    }
+    final e = run.single;
+    if (e is Item) {
+      return ItemView(
+        key: ValueKey('item-${e.id}'),
+        item: e,
+        file: widget.store.media(e.file ?? ''),
+        scale: scale,
+        textMode: textMode,
+        selected: sel.items.contains(e.id),
+        onStickyChanged: (v) {
+          e.text = v;
+          _saveSoon(e.id, const Duration(milliseconds: 350));
+        },
+      );
+    }
+    return _textBlock(e as TextBlock, textMode);
+  }
+
   void _paintLive(Canvas c) => paintLiveLayer(c,
       doc: doc, scale: scale, sel: sel, live: live, eraserAt: eraserAt, eraserRadius: ts.eraserRadius);
 
@@ -1029,6 +1070,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final ed = texts.editor(t.id);
     if (ed == null) return const SizedBox.shrink();
     return TextBlockView(
+      key: ValueKey('text-${t.id}'),
       block: t,
       editor: ed,
       scale: scale,

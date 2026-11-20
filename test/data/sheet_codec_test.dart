@@ -197,4 +197,45 @@ void main() {
     final c = syntheticSheet(lines: 5);
     expect(encodeSheet(c), encodeSheet(decodeSheet(encodeSheet(c))), reason: 'releer y reescribir no cambia nada');
   });
+
+  group('orden de dibujo', () {
+    List<String> order(SheetContent c) => [for (final e in sortByZ([...c.items, ...c.strokes, ...c.texts])) e.id];
+
+    test('se guarda y se lee igual', () {
+      final c = syntheticSheet(lines: 2, lettersPerLine: 3);
+      // la nota y el texto, entre los trazos
+      c.items.single.z = 2;
+      c.texts.single.z = 4;
+      for (var i = 0; i < c.strokes.length; i++) {
+        c.strokes[i].z = i < 2 ? i : i + 10;
+      }
+      final before = order(c);
+      final back = decodeSheet(encodeSheet(c));
+      expect(order(back), before);
+      expect(back.items.single.z, 2, reason: 'se guarda el lugar dentro de la hoja, no el z global');
+      expect(encodeSheet(back), encodeSheet(c), reason: 'mismos bytes');
+    });
+
+    test('un archivo viejo (sin z) se ve como antes: imágenes, tinta y textos', () {
+      final c = syntheticSheet(lines: 1, lettersPerLine: 2);
+      final bytes = encodeSheet(c);
+      // se reescribe el JSON sin las claves z, como lo hacía la versión anterior
+      final body = Uint8List.fromList(ZLibCodec().decode(Uint8List.sublistView(bytes, 4)));
+      final len = ByteData.sublistView(body).getUint32(0, Endian.little);
+      final j = jsonDecode(utf8.decode(Uint8List.sublistView(body, 4, 4 + len))) as Map;
+      for (final k in ['texts', 'items', 'strokes']) {
+        for (final e in j[k] as List) {
+          (e as Map).remove('z');
+        }
+      }
+      final json = utf8.encode(jsonEncode(j));
+      final nb = BytesBuilder()
+        ..add((ByteData(4)..setUint32(0, json.length, Endian.little)).buffer.asUint8List())
+        ..add(json)
+        ..add(Uint8List.sublistView(body, 4 + len));
+      final old = Uint8List.fromList([...bytes.sublist(0, 4), ...ZLibCodec().encode(nb.takeBytes())]);
+      final back = decodeSheet(old);
+      expect(order(back), ['i1', ...c.strokes.map((s) => s.id), 't1']);
+    });
+  });
 }
