@@ -9,9 +9,6 @@ como alternativa a Samsung Notes, que solo funciona en Samsung y no te deja usar
 lado. OpenNote es gratis, es de código abierto, funciona sin conexión y tus apuntes son tuyos: se
 guardan en tu tablet, sin cuentas ni servidores.
 
-Una versión para PC y la sincronización entre dispositivos están en camino. Todavía no están
-disponibles.
-
 ## Funciones
 
 **Escritura**
@@ -59,7 +56,7 @@ Pronto.
 ## Instalación
 
 Por ahora, la forma más fácil es bajar el APK desde la página de
-[Releases](https://github.com/santiagofr1/OpenNote/releases) cuando esté disponible:
+[Releases](https://github.com/santiagofr1/OpenNote/releases):
 
 1. Descargá el archivo `.apk` de la última versión.
 2. Abrilo desde tu tablet. Si Android lo pide, habilitá **"Instalar apps desconocidas"** para el
@@ -68,9 +65,6 @@ Por ahora, la forma más fácil es bajar el APK desde la página de
 
 Si preferís compilarlo vos mismo, mirá la guía en [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Las actualizaciones automáticas están en camino: en el futuro OpenNote te avisará cuando haya una
-versión nueva.
-
 ## Compatibilidad
 
 OpenNote fue probado en una **Samsung Galaxy Tab S6 Lite (SM-P620) con Android 16** y el S Pen.
@@ -78,21 +72,6 @@ OpenNote fue probado en una **Samsung Galaxy Tab S6 Lite (SM-P620) con Android 1
 Debería funcionar en otras tablets Android con lápiz activo, como la gama Galaxy Tab S o tablets con
 lápiz USI, pero todavía no las probamos. Si tenés una y la probás, contanos en un issue: nos sirve
 mucho saber qué anda y qué no.
-
-## Hoja de ruta
-
-Lo que viene, sin fecha fija:
-
-- Exportar y respaldar un cuaderno completo en un solo archivo.
-- Mover hojas arrastrándolas en el panel.
-- Poder deshacer también las operaciones con hojas (agregar, duplicar, mover, borrar).
-- Ordenar capas: traer al frente, enviar al fondo, subir o bajar elementos.
-- Abrir el teclado al tocar la herramienta de texto.
-- Barra de formato al escribir con teclado: negrita, cursiva, listas, tamaños y alineación.
-- Un ícono nuevo para la app.
-- Actualizaciones automáticas de la app.
-- Versiones publicadas automáticamente en Releases.
-- Publicación en Google Play, más adelante.
 
 ## ¿Querés ayudar?
 
