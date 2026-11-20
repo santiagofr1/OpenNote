@@ -1,0 +1,477 @@
+# App de PC y sincronización
+
+Investigación para el punto 17 de [PENDIENTES.md](../PENDIENTES.md). No implementa nada todavía.
+Fecha de la investigación: 2026-11-20.
+
+Las fuentes están listadas al final (sección 6) con números entre corchetes, por ejemplo `[2]`.
+Lo que no pude confirmar con una fuente leída está marcado **(sin confirmar)**.
+
+## Punto de partida: cómo se guarda hoy
+
+Lo que hay en el código (`lib/data/storage.dart`, `lib/data/sheet_codec.dart`) y que condiciona todo lo demás:
+
+- **Un cuaderno es una carpeta.** Adentro hay `notebook.json` (orden de hojas, `rev`, `updated`, marcador,
+  fondo, papel, espaciado) y `sheets/<hoja>.sheet` (binario, un archivo por hoja). Las imágenes y audios van en
+  `media/`, compartidos por todos los cuadernos. Hay que sincronizar `media/` también, no solo las hojas.
+- **`rev` y `updated` son locales.** `rev` sube en cada guardado de ese dispositivo (`_saveNow`) y `updated`
+  es la hora del reloj de ese dispositivo. Dos tablets pueden tener la misma hoja con `rev` 5 y contenidos
+  distintos. Solos no sirven para detectar un conflicto: falta saber sobre qué versión editó cada lado.
+- **Ya hay hash por hoja.** `Storage` guarda el md5 de cada `.sheet` como se escribió por última vez
+  (`_DiskState`). Sirve para saber qué cambió de este lado sin releer todo.
+- **Los trazos tienen `id`** (prefijo `s` + 12 hex al azar, `values.dart`). La goma quita trazos enteros
+  (`page_editor.dart`, `_eraseAt`): no los parte. Eso simplifica mucho el borrado entre dispositivos.
+- **La escritura es atómica** (archivo temporal + rename) y solo se escriben las hojas que cambiaron.
+- **En PC la carpeta base es `Documentos/apuntes`.** `_defaultBase()` usa `getExternalStorageDirectory` solo en
+  Android; en el resto cae en `getApplicationDocumentsDirectory()`. La ruta exacta por sistema operativo no la
+  confirmé con la doc de `path_provider` [14].
+- **El repo tiene solo las carpetas `android/` y `linux/`.** No hay `windows/` ni `macos/`: habría que
+  agregarlas (`flutter create --platforms=...`, sin confirmar el comando exacto contra la doc).
+
+---
+
+## 1. App de PC con Flutter desktop
+
+### 1.1 Entrada: lápiz, mouse y tabletas
+
+El punto crítico para OpenNote es que el lápiz de una tableta Wacom/Huion en PC llegue como
+`PointerDeviceKind.stylus` y con presión. Hoy en Android funciona porque `ink.dart` lo decide por ese tipo.
+
+**Linux (mejoró mucho en 2026).**
+- El issue #63209 de Flutter pedía presión y `PointerDeviceKind` para el lápiz en Linux desde 2020. Se cerró el
+  28/08/2026 citando el PR #186831, "Improve stylus support on linux", que entró en el roll-up del 1/07/2026. El
+  PR agrega presión, inclinación, rotación y botones del lápiz en Linux [1][2].
+- Lo probó su autor con un Wacom en Fedora/KDE sobre Wayland [2]. **(sin confirmar)**: X11, GNOME, tabletas
+  Huion y si esa versión ya está en el canal que usa el proyecto (revisar `flutter --version`).
+- Antes, Saber (app Flutter) reportó en Linux que el lápiz se detectaba como dedo y que no había presión. Se
+  cerró como "not planned" en 2022 [3]. Es historia, pero muestra por qué hay que probar en cada máquina.
+
+**Windows (sin solución confirmada).**
+- No encontré un cambio en el engine. Una consulta de abril de 2024 en `dart-windows/win32` dice que el soporte
+  oficial de Flutter en Windows no incluye tabletas. No tuvo respuestas [4].
+- Stylet (paquete de terceros) saca la presión en Windows del driver Wintab, no de los eventos de puntero [6].
+- Conclusión: en Windows hay que probar el lápiz real antes de decidir. Puede llegar como mouse o sin presión
+  **(sin confirmar)**. Si no llega, la opción es un plugin de terceros o código nativo.
+
+**macOS (sin solución confirmada).**
+- Saber #1218 (macOS Sonoma, Wacom Intuos BT): la presión no funciona y el lápiz se comporta como clic izquierdo.
+  Se cerró como "not planned" en junio de 2024 [5].
+- Stylet dice que la presión sale de AppKit [6]. No encontré un issue de Flutter sobre macOS **(sin confirmar)**.
+
+**Android (para comparar, no es la PC).** El issue #196867 (noviembre de 2026) reporta que en Android se pierden
+muestras históricas del trazo y la curva se ve recta. El PR de arreglo seguía abierto en la fecha del issue [7].
+Es un tema de la tablet que conviene seguir porque afecta la calidad del trazo.
+
+**Mouse.** El botón derecho ya borra (`TECNICO.md`, "Tablets y lápices"). Con mouse la presión vale 1
+**(sin confirmar)**.
+
+**Recomendación de entrada:** Linux primero. Para Windows y macOS, probar con un lápiz real y decidir después
+entre un plugin (Stylet es nuevo: publicado hace 43 días, 0 likes [6]) o código nativo.
+
+### 1.2 Atajos de teclado
+
+- Ya existen Ctrl+B/I/U y Tab/Shift+Tab en el texto (`TECNICO.md`).
+- Falta relevar cuáles existen para deshacer/rehacer, guardar, borrar la selección, copiar y pegar. No lo hice.
+- Flutter resuelve atajos con `Shortcuts` y `Actions` **(sin confirmar: no leí la doc)**.
+
+### 1.3 Rutas de datos
+
+- `path_provider` declara soporte en Linux (cualquier versión), Windows 10+ y macOS 10.15+ [14].
+- Lo que cambia para el usuario: en Android los datos están en el almacenamiento externo de la app (se
+  respaldan por USB). En PC quedan en Documentos. Eso es bueno: una carpeta visible que Syncthing, Drive o
+  Nextcloud pueden sincronizar sin tocar la app.
+- Las rutas concretas por sistema (por ejemplo `~/Documents` en Linux) **(sin confirmar)**: hay que imprimirlas
+  en una prueba.
+
+### 1.4 Plugins de `pubspec.yaml` en desktop
+
+Estado según la página de cada paquete en pub.dev [14]. "Sin confirmar" significa que no lo revisé.
+
+| Paquete (pubspec) | Linux | Windows | macOS | Notas |
+|---|---|---|---|---|
+| `material_ui` ^1.1.0 | sí | sí | sí | Oficial de Flutter. |
+| `path_provider` ^2.1.6 | sí | sí | sí | Rutas: ver 1.3. |
+| `file_picker` ^13.4.0 | sí | sí | sí | Carpeta: no en web. |
+| `image_picker` ^1.2.4 | parcial | parcial | parcial | Desktop va por `image_picker_linux/windows/macos` (0.2.x). Sin ancho/alto máximo en desktop. |
+| `printing` ^5.15.1 | sí | sí | sí | PDF. |
+| `share_plus` ^13.3.1 | parcial | parcial | sí | Linux: solo texto y URL, **no archivos**. Windows: URL como texto. |
+| `record` ^7.2.0 | parcial | parcial | parcial | Linux necesita `parecord`, `pactl` y `ffmpeg` instalados. Windows y macOS por paquetes aparte; macOS sin confirmar. |
+| `audioplayers` ^6.8.1 | sí | sí | sí | |
+| `dynamic_color` ^2.1.0 | sí | sí | sí | En Linux toma el color del portal XDG o del tema GTK. |
+| `package_info_plus` ^10.2.2 | sin confirmar | sin confirmar | sin confirmar | No lo revisé. |
+| `pdf`, `crypto`, `material_symbols_icons`, `cupertino_icons` | sin confirmar | sin confirmar | sin confirmar | No los revisé. `pdf` y `crypto` deberían ser Dart puro (sin confirmar). |
+
+Lo que bloquea o cambia algo: `share_plus` en Linux (no se puede compartir un archivo) y `record` en Linux (hay
+que pedir `ffmpeg`). Ninguno de los dos impide la versión para PC; hay que avisar o desactivar la función.
+
+### 1.5 Empaquetado
+
+**Linux.**
+- La doc de Flutter describe el empaquetado con Snap (`snapcraft`) [15]. AppImage, deb y rpm aparecen solo como
+  herramientas de terceros (fastforge) y Flatpak como otra herramienta (flatpak-flutter) [15].
+- Sugerencia: AppImage primero (un archivo, sin tienda ni permisos de sistema). Después Flathub, si se quiere.
+  **(sin confirmar)**: el mejor formato para esta app; no revisé `linux/` por dentro (ID de la app, etc.).
+
+**Windows.**
+- La doc de Flutter describe MSIX (con el paquete `msix`, configurado con `msix_config` en `pubspec.yaml`) y
+  publicación en Microsoft Store con la CLI `msstore` [16].
+- Instalador clásico (MSI o Inno Setup): no está en la doc **(sin confirmar)**.
+- La doc no menciona firma de código [16]. Sin firma, Windows muestra advertencias al instalar **(sin confirmar)**.
+
+**macOS.**
+- La doc de Flutter cubre firma con Xcode y App Store, pero no notarización ni DMG [17].
+- Apple documenta la notarización con `notarytool` y `stapler` para software fuera de la App Store, firmado con
+  Developer ID [18]. Esto lo leí por resumen de búsqueda, no la página completa **(sin confirmar detalles)**.
+- Requiere cuenta de Apple Developer **(sin confirmar costo)**.
+
+**GitHub Actions.**
+- Runners disponibles: `ubuntu-latest`, `windows-latest` y `macos-latest` (arm64) [19].
+- Hoy el workflow de releases solo hace Android (`docs/RELEASES.md`). Se pueden agregar jobs por sistema con
+  `flutter build linux --release`, `flutter build windows` y `flutter build macos`.
+- Firma de Windows y macOS: los certificados van como secretos del repo **(sin confirmar detalles)**.
+
+### 1.6 Esfuerzo estimado
+
+- **Linux: medio.** Build de release, prueba del lápiz con la versión de Flutter del proyecto, AppImage, job de CI.
+- **Windows: grande.** Agregar la carpeta `windows/`, resolver el lápiz (probablemente con un plugin), MSIX y firma.
+- **macOS: grande.** Cuenta de Apple, firma Developer ID, notarización, prueba del lápiz (dudosa) y un Mac
+  para probar **(sin confirmar qué Mac hay disponible)**.
+
+---
+
+## 2. Sincronización en la LAN (red de casa) segura
+
+Requisito: nadie más en la misma red puede ver el contenido ni conectarse. Un dispositivo no emparejado no
+puede ni establecer la conexión.
+
+### 2.1 Cómo lo resuelven otros
+
+**KDE Connect.**
+- Cada dispositivo tiene un certificado autofirmado. La identidad es la clave pública y la firma del certificado,
+  no el nombre. Desde la versión 1.0 usa *trust on first use* (TOFU), como SSH [7].
+- El emparejamiento depende de que el usuario compare las huellas en los dos equipos. Esa comparación no está
+  forzada por la app [7].
+- CVE-2020-26164: el nombre del dispositivo se anuncia en UDP sin cifrar. Un atacante en la LAN puede hacerse pasar
+  por un equipo conocido y pedir emparejamiento. La corrección muestra el SHA-256 de las dos claves públicas
+  juntas: primero 8 caracteres hex y el resto detrás de "ver clave" [8].
+- Lección: el primer emparejamiento es el punto débil. No confiar en el nombre ni en el descubrimiento.
+- Un paquete Go de terceros dice que los certificados son RSA 2048 con 10 años de validez y CN igual al ID del
+  dispositivo [9]. Es una implementación de terceros; no lo confirmé contra el código oficial.
+
+**Syncthing.**
+- El Device ID es el SHA-256 del certificado TLS. Cada conexión compara ese ID contra una lista fija de equipos
+  aceptados; si no está, corta [10].
+- El descubrimiento local manda cada 30 s el ID y el puerto por broadcast/multicast. Un atacante en la LAN ve qué
+  equipos corren Syncthing y sus IDs, pero no puede conectarse sin estar en la lista [10].
+- Quien tenga las claves TLS y el archivo de configuración puede hacerse pasar por el equipo. Por eso recomiendan
+  proteger la carpeta de configuración [10].
+
+**LocalSend.**
+- En modo HTTPS, la huella es el SHA-256 del certificado [11].
+- El descubrimiento va por UDP multicast al grupo `224.0.0.167`, puerto `53317` [11].
+- La especificación marca el fingerprint como "ignorado" en `/register` y `/prepare-upload` en HTTPS, y no
+  describe que el receptor verifique la huella [11]. Es decir: cifra, pero no ata la identidad.
+- Lección: la verificación de la huella tiene que hacerse en los dos lados. Hay un PIN opcional para las
+  transferencias [11].
+
+### 2.2 Diseño propuesto para OpenNote
+
+**Identidad (una vez por instalación).**
+- Se genera un certificado X.509 autofirmado con `basic_utils`, que genera certificados autofirmados RSA y EC en
+  Dart puro [20]. EC P-256 es lo más liviano **(sin confirmar que dart:io lo acepte en todas las plataformas)**.
+- El certificado y su clave quedan en la carpeta privada de la app. En Android no evalué el almacén seguro
+  (Keystore) **(sin confirmar)**.
+- El ID del dispositivo es el SHA-256 del certificado, igual que Syncthing y LocalSend.
+- Vencimiento largo: la implementación de terceros de [9] usa 10 años. Recomendación de vencimiento **(sin confirmar)**.
+
+**Emparejamiento (una sola vez por par de dispositivos).**
+1. En el dispositivo A, "Emparejar otro dispositivo" muestra un QR con: versión, nombre, huella SHA-256 del
+   certificado de A, un secreto de un solo uso de 128 bits, y IP:puerto de A. Vence a los 2 minutos.
+2. El dispositivo B escanea el QR. **Quien escanea tiene que ser Android, iOS o macOS**, porque `mobile_scanner`
+   no soporta Linux ni Windows [21]. Si B es una PC, es A (la tablet) la que escanea el QR que muestra la PC.
+   Si las dos son PC, hace falta otro camino (pegar un texto o un código de 8 dígitos). No está diseñado todavía.
+3. B abre TLS hacia A y compara el certificado de A con la huella del QR. Si no coincide, corta. Esto evita el
+   intermediario.
+4. B manda su certificado y un HMAC-SHA256 del secreto sobre las dos huellas. A verifica el HMAC y, si es válido,
+   guarda la huella de B. A responde con su propio HMAC y B guarda la de A **(diseño, sin confirmar contra un
+   protocolo existente)**. El paquete `crypto`, que ya está en `pubspec.yaml`, trae HMAC y SHA-256 **(sin
+   confirmar la API exacta)**.
+5. El secreto se quema al usarlo o al vencer. Un atacante en la LAN ve solo el tráfico TLS: no puede hacerse
+   pasar por A (huella distinta) ni completar el HMAC (no conoce el secreto).
+6. Riesgo que queda: quien fotografía el QR puede emparejarse durante los 2 minutos. Mitigación: el QR se muestra
+   solo cuando el usuario entra a "Emparejar", y A pide confirmar "¿Aceptar a <nombre>?" antes de guardar.
+
+**Conexión diaria (TLS mutuo con certificados fijados).**
+- Servidor: `HttpServer.bindSecure` con `requestClientCertificate: true` [12]. El `SecurityContext` lleva el
+  certificado propio y los certificados de todos los emparejados como raíces de confianza
+  (`setTrustedCertificatesBytes`) [13].
+  **(sin confirmar)**: que dart:io verifique el certificado del cliente contra esa lista. Hay que probarlo con
+  dos equipos.
+- Cliente: `HttpClient` con el certificado propio (`useCertificateChainBytes` y `usePrivateKeyBytes` [13]) y
+  `badCertificateCallback`. Ese callback se llama cuando el certificado del servidor no se puede validar contra
+  las raíces de confianza, y devuelve `true` para aceptar la conexión [13]. Ahí se compara la huella del servidor
+  con la guardada.
+- Para ver la huella del cliente después del handshake del lado servidor hace falta `HttpRequest.certificate`
+  **(sin confirmar)**.
+- Un equipo no emparejado no está en la lista: el handshake falla.
+
+**Descubrimiento (mDNS / DNS-SD).**
+- `bonsoir` anuncia y busca servicios (Android, iOS, Linux, macOS y Windows) [22].
+- El anuncio lleva un nombre aleatorio por emparejamiento, nunca la huella.
+- El descubrimiento da IP y puerto, nunca confianza. Si mDNS no funciona, el QR ya trae IP:puerto.
+- En Android el Wi-Fi filtra los paquetes multicast por defecto. Para recibirlos hace falta un `MulticastLock`
+  [23]. No revisé si `bonsoir` lo hace solo **(sin confirmar)**.
+
+**Revocar (desde ajustes).**
+- Ajustes > Dispositivos: se borra la huella de la lista, se reconstruye el `SecurityContext` y se cortan las
+  conexiones activas.
+- Si se pierde una tablet, se revoca desde la otra. Eso no alcanza para la clave de la nube (sección 3): hay que
+  rotarla.
+- "Restablecer identidad" rompe todos los emparejamientos: hay que volver a emparejar.
+
+### 2.3 Riesgos
+
+- **Android en segundo plano.** Según el resumen de la doc de energía de Android, las apps en primer plano no
+  tienen límites de ejecución; en segundo plano aplican Doze y App Standby [24]. La sincronización va al abrir y
+  al cerrar la app. Para sincronizar en continuo haría falta un servicio en primer plano con notificación
+  **(sin confirmar cómo lo trata el sistema en la práctica)**.
+- **Redes que bloquean multicast.** Wi-Fi de invitados, puntos de acceso con aislamiento de clientes
+  **(sin confirmar: no lo busqué)**. Fallback: IP:puerto en el QR o escribir la IP a mano.
+- **Robo de la clave.** La carpeta privada de la app es el único lugar con la identidad. En PC, el archivo debe
+  tener permisos solo del usuario **(sin confirmar en Windows)**.
+- **Certificado nuevo rompe el emparejamiento.** Si se regenera, hay que emparejar de nuevo. Por eso el
+  vencimiento tiene que ser largo y la app debe avisar antes.
+
+### 2.4 Paquetes Dart/Flutter para cada pieza (estado)
+
+| Pieza | Paquete | Plataformas | Estado (según pub.dev) |
+|---|---|---|---|
+| Descubrimiento | `bonsoir` 7.1.6 | Android, iOS, Linux, macOS, Windows [22] | Publicado hace 26 días, 150 puntos. |
+| Descubrimiento | `nsd` 5.0.1 | Android, iOS, macOS, Windows. **Sin Linux** [25] | Publicado hace 7 meses. |
+| Descubrimiento | `multicast_dns` 0.3.3+1 | Android, iOS, Linux, macOS, Windows [26] | Publicado hace 5 meses, publisher verificado (flutter.dev). Si registra servicios: **(sin confirmar)**. |
+| TLS | `dart:io` (SDK) | Todas | No es paquete: `SecurityContext`, `bindSecure`, `badCertificateCallback` [12][13]. |
+| Certificados | `basic_utils` 5.8.2 | Dart puro [20] | Publicado hace 21 meses. Genera certificados autofirmados RSA y EC. |
+| Criptografía | `pointycastle` 4.0.0 | Android, iOS, Linux, macOS, web, Windows [27] | Publicado hace unos 21 meses, publisher verificado (bouncycastle.org). HKDF, Argon2, ECDSA. |
+| Criptografía | `cryptography` 2.9.0 | Nativo en Android, iOS, macOS y web; Dart puro como respaldo [28] | Publicado hace unos 12 meses, publisher verificado (dint.dev). Argon2id, XChaCha20-Poly1305, Ed25519, X25519, HKDF. Revisar si hay 3.x. |
+| HMAC / SHA-256 | `crypto` 3.0.8 (ya en `pubspec.yaml`) | **(sin confirmar)** | Para huellas y el HMAC del emparejamiento. |
+| Escanear QR | `mobile_scanner` 7.5.0 | Android, iOS, macOS, web. **Sin Linux ni Windows** [21] | Publicado hace 19 días, publisher verificado. |
+| Mostrar QR | `qr_flutter` 4.1.0 | Android, iOS, Linux, macOS, web, Windows [29] | Publicado hace 3 años. Estable, pero sin releases recientes. |
+
+---
+
+## 3. Fuera de casa
+
+Hay tres caminos. Syncthing ya es un camino seguro de dispositivo a dispositivo (sección 2). Google Drive y
+WebDAV son nubes, y en ellas hace falta cifrado de extremo a extremo.
+
+### 3.1 Opciones
+
+**Google Drive.**
+- `googleapis` 19.0.0 trae Drive v3 y está publicado hace 8 días [30].
+- `google_sign_in` soporta Android, iOS, macOS y web. Linux y Windows no figuran en su página [31]. En PC hay
+  que hacer el login por navegador: cliente de tipo "Desktop app", PKCE y redirección a un loopback
+  (`http://127.0.0.1:puerto`). Google rechaza los webviews embebidos [32]. Eso son dos caminos de login.
+- `appDataFolder`: carpeta oculta, solo para la app que la creó; el usuario no la ve en Drive y otras apps no la
+  leen. Usa el scope `drive.appdata`, que no es sensible [33].
+- Google igual puede leer lo que se sube sin cifrado propio: hace falta la capa E2E.
+- Pros: cuenta que muchos ya tienen, sin servidor propio. Contras: dependencia de Google, dos caminos
+  de login, y la verificación del cliente OAuth **(sin confirmar)**.
+
+**WebDAV (Nextcloud).**
+- Endpoint: `https://<servidor>/remote.php/dav/files/<usuario>/`. Recomiendan contraseña de aplicación y HTTPS
+  [34].
+- `webdav_client` 1.2.2 soporta Android, iOS, Linux, macOS y Windows [35]. Su última versión es de hace unos 2 años
+  y el publisher no está verificado: riesgo de mantenimiento. Podría ser más simple hacer las llamadas WebDAV
+  directo con `dio` o `http` **(sin confirmar)**.
+- Pros: el servidor es del usuario, no hay OAuth. Contras: hay que tener servidor. Sin E2E, el servidor ve el
+  contenido.
+
+**Syncthing instalado aparte.**
+- OpenNote solo usa una carpeta; Syncthing sincroniza entre equipos con TLS y lista de IDs [10].
+- No hay nube de por medio, así que no hace falta E2E. Syncthing tiene un modo de dispositivos "no confiables"
+  con cifrado **(sin confirmar: no lo leí)**.
+- Contras: hay que configurarlo en cada equipo. En Android corre como app aparte **(sin confirmar cómo se
+  comporta en segundo plano)**. La carpeta privada de OpenNote en Android puede no ser accesible desde otra app
+  **(sin confirmar: hay que probarlo con la ruta actual)**.
+- Conflictos: Syncthing, cuando dos equipos cambian el mismo archivo, guarda una copia con nombre
+  `*.sync-conflict-*` **(sin confirmar: no leí la doc de conflictos)**. OpenNote tendría que ignorarlos o
+  tratarlos (sección 4).
+
+### 3.2 Cifrado de extremo a extremo para Drive y WebDAV
+
+Esquema propuesto:
+
+- **Frase de paso** que elige el usuario, y de ahí una **clave maestra de 32 bytes** con **Argon2id**. RFC 9106
+  recomienda Argon2id si no sabés cuál usar, y da dos opciones: `t=1, m=2 GiB, p=4` (muy pesada para una tablet) y
+  `t=3, m=64 MiB, p=4` para equipos con poca memoria [36]. Para la tablet, la segunda. Hay que medirla en la
+  Galaxy Tab S6 Lite antes de fijarla **(sin confirmar la RAM de esa tablet)**.
+- **Sal** aleatoria de 16 bytes, guardada en un archivo público `vault.json` en la nube. La sal no es secreta.
+- **Por cada archivo:** XChaCha20-Poly1305 con nonce aleatorio de 24 bytes. libsodium dice que los 192 bits del
+  nonce permiten nonces aleatorios sin riesgo práctico de repetición [37]. `cryptography` trae ese algoritmo
+  [28].
+- **Datos asociados (AAD):** ID del archivo y número de versión. Así un archivo cifrado no sirve en otro lugar
+  **(diseño, sin confirmar contra una implementación)**.
+- **Nombres:** los archivos se llaman por ID aleatorio. El índice (nombres de cuadernos, orden) va cifrado en un
+  archivo propio.
+- **Lo que la nube ve igual:** cantidad de archivos, tamaños y fechas.
+- **Lo que la nube no puede leer:** el contenido ni los nombres.
+- **Limitación:** la nube puede devolver una versión vieja que sigue siendo válida (rollback). Mitigación posible:
+  número de versión en el AAD y un manifiesto firmado. **Sin resolver.**
+- **Pérdida de la frase = pérdida de los datos en la nube.** No hay recuperación. Esto hay que decirlo en la
+  pantalla de configuración.
+- **Encaja con lo que ya existe:** solo se suben las hojas que cambiaron (el guardado ya lo calcula). Cada
+  `.sheet` se cifra entero, así que una hoja cambiada se sube completa.
+
+### 3.3 Cómo se comparte la clave entre dispositivos
+
+Respuesta corta: **el QR no debe llevar la clave maestra en claro.**
+
+Opciones:
+
+- **(a) Dentro de la LAN:** el emparejamiento ya tiene un canal TLS verificado (sección 2). La clave maestra viaja
+  por ese canal, una vez. **Recomendada para la LAN.**
+- **(b) Fuera de la LAN o sin emparejar:** el dispositivo nuevo escribe la frase de paso, deriva la clave con
+  Argon2id y lee la sal de `vault.json`. **Recomendada para la nube.**
+- **(c) QR con la clave envuelta:** el QR lleva la clave cifrada con una clave derivada de la frase. Sola, una
+  foto del QR no alcanza. Pero no suma nada frente a (b): si el dispositivo nuevo ya tiene la frase, puede derivar
+  la clave sin QR. **No recomendada.**
+
+---
+
+## 4. Conflictos
+
+### 4.1 Qué pasa hoy si se edita la misma hoja en los dos lados
+
+Con el formato actual no hay forma confiable de saber si los dos lados editaron sobre la misma versión. `rev` y
+`updated` son locales (sección "Punto de partida"). Una sincronización de carpeta simple dejaría que el último
+archivo que llega pise al otro, sin avisar.
+
+Para detectarlo hace falta guardar, por hoja, **la última versión que se sincronizó** (su hash, o el `rev` del
+otro equipo). Eso es un campo nuevo y opcional en `notebook.json`, como ya se hizo con `z` y `spacing`.
+
+### 4.2 Opciones
+
+**(a) Guardar las dos versiones (copia de conflicto).**
+- Si los dos lados cambiaron respecto a la última versión sincronizada, la versión que llega del otro se guarda
+  como hoja nueva "(conflicto)". La local queda donde estaba.
+- Pro: no se pierde nada. Simple. Se resuelve con la UI que ya existe (una hoja más).
+- Contra: hojas duplicadas que el usuario limpia a mano. Dos cambios en partes distintas de la misma hoja también
+  se toman como conflicto.
+
+**(b) Última escritura gana (por `updated`).**
+- Pro: no hay que hacer nada.
+- Contra: se pierden trazos en silencio. Depende de los relojes de cada tablet, que pueden estar desfasados. **No
+  recomendada.**
+
+**(c) Fusionar por id de trazo, con lápidas.**
+- Se unen los trazos de los dos lados. Los borrados se guardan como una lista de ids borrados (lápidas). Como la
+  goma borra trazos enteros, la lápida es solo el id.
+- Contra: hay varios problemas que resolver antes:
+  - El orden de capas (`z`) es la posición 0..n-1 y se renumera en cada guardado (`encodeSheet`). No es estable
+    entre dispositivos; hay que pasarlo a un orden estable **(diseño pendiente)**.
+  - Un texto con formato (`TextBlock`) es un objeto entero. Dos ediciones del mismo bloque son un conflicto a nivel
+    bloque.
+  - El fondo, el papel, el espaciado, el marcador y el título viven en `notebook.json`: harían falta reglas por
+    campo.
+  - Una hoja borrada en un lado y editada en el otro.
+  - El deshacer no se sincroniza.
+  - Los medios (`media/`) tienen nombres con id único, así que no chocan. Pero hay que sincronizarlos también.
+
+### 4.3 Recomendación
+
+- **Para empezar: (a).** No pierde datos, es simple y la UI ya sabe mostrar hojas.
+- **A futuro: (c) para los trazos**, cuando estén resueltos el orden estable de capas y el criterio para textos y
+  hojas. Los ids de trazo son únicos (prefijo + 12 hex) y el borrado es de trazo entero, así que la parte de
+  trazos es la más barata.
+
+Esfuerzo de (a): campo de base por hoja en `notebook.json`, detección al cargar y al guardar, hoja "(conflicto)",
+y el manejo de los `*.sync-conflict-*` de Syncthing **(sin confirmar)**.
+
+---
+
+## 5. Tabla comparativa
+
+| Opción | Seguridad | Comodidad | Esfuerzo | Dependencias y riesgos |
+|---|---|---|---|---|
+| **Carpeta + Syncthing** (instalado aparte) | Alta: TLS y lista de IDs [10]. Se ve que el equipo corre Syncthing. | Media: parear una vez en Syncthing, sin cuentas. Fuera de casa, depende de que los equipos se encuentren **(sin confirmar)**. | Chico a medio (OpenNote: elegir carpeta y conflictos). | Syncthing en todos los equipos. Carpeta accesible desde Android **(sin confirmar)**. |
+| **LAN propia** (QR + TLS mutuo + mDNS) | Alta si se hace bien. El punto débil es el primer emparejamiento (CVE-2020-26164 [8]). | Alta: QR una vez, sin cuentas. Solo en la misma red y con la app abierta. | Grande. | `bonsoir`, `basic_utils`, `crypto` o `cryptography`, `dart:io`, `mobile_scanner` (no escanea en PC), `qr_flutter`. |
+| **Google Drive + E2E** | Google no lee el contenido; sí ve metadatos. | Alta: sin servidor, login con Google. | Grande. | `googleapis`; login propio en PC; `cryptography`. |
+| **WebDAV (Nextcloud) + E2E** | Igual que Drive, pero el servidor es propio. | Media: hay que tener un servidor. | Grande. | `webdav_client` (poco mantenido) o HTTP directo. |
+| **Exportar/importar `.opennote`** (ya en PENDIENTES) | Alta: archivo local, sin red. | Baja: manual. | Medio. | ZIP. Complementa a las demás, no las reemplaza. |
+
+---
+
+## 6. Recomendación
+
+Pasos chicos, cada uno entregable por separado.
+
+1. **Paso 1: app de PC para Linux (esfuerzo medio).** Build de release, prueba del lápiz con la versión de
+   Flutter del proyecto (que tenga el PR #186831), AppImage y un job de GitHub Actions. Criterio: se dibuja con
+   presión en una tableta Wacom. No depende de la sincronización.
+   Antes: arreglar `share_plus` y `record` en Linux, o desactivar esas funciones ahí.
+
+2. **Paso 2: carpeta de sincronización + conflictos (esfuerzo chico a medio).** El usuario elige la carpeta de
+   datos (en PC, por defecto `Documentos/apuntes`). La sincroniza Syncthing, o el cliente de Drive o Nextcloud,
+   por fuera de la app. OpenNote suma la base por hoja y la copia de conflicto. Esto ya cubre "en casa" y
+   "fuera de casa" con transporte probado, sin escribir criptografía propia.
+   Antes: probar en la tablet si la carpeta es accesible desde Syncthing (sin confirmar).
+
+3. **Paso 3: LAN propia (esfuerzo grande).** Solo si no se quiere depender de Syncthing. Entregable en dos
+   partes: primero emparejar y revocar, sin sincronizar contenido. Después la sincronización. Pruebas previas:
+   que `dart:io` verifique el certificado del cliente contra la lista (sin confirmar), `bonsoir` en Android con
+   `MulticastLock`, y `mobile_scanner` en la tablet.
+
+4. **Paso 4: nube con cifrado de extremo a extremo (esfuerzo grande).** Primero Nextcloud (WebDAV): el servidor es
+   del usuario y no hace falta OAuth. Después Google Drive, porque en PC exige un login propio.
+
+Decisiones que hacen falta antes de empezar: si la carpeta de datos en Android puede ser accesible por Syncthing o
+si hay que cambiarla, y si la pérdida de la frase de paso es aceptable para el usuario.
+
+---
+
+## 7. Fuentes
+
+Leídas directamente:
+
+1. https://github.com/flutter/flutter/issues/63209 (presión y PointerDeviceKind en Linux, cerrado 2026)
+2. https://github.com/flutter/flutter/pull/186831 ("Improve stylus support on linux", mergeado)
+3. https://github.com/adil192/saber/issues/90 (Saber, lápiz en Linux)
+4. https://github.com/dart-windows/win32/discussions/843 (tabletas en Flutter Windows)
+5. https://www.github.com/saber-notes/saber/issues/1218 (Saber, presión en macOS)
+6. https://pub.dev/packages/stylet (Stylet, presión por plataforma)
+7. https://github.com/flutter/flutter/issues/196867 (muestras de trazo perdidas en Android)
+8. https://seclists.org/oss-sec/2020/q4/169 (CVE-2020-26164, KDE Connect)
+9. https://pkg.go.dev/github.com/bethropolis/kcd/internal/cert (implementación de terceros, sin confirmar)
+10. https://docs.syncthing.net/users/security (Syncthing: IDs, TLS, descubrimiento)
+11. https://github.com/localsend/protocol (LocalSend: huella, multicast, HTTPS)
+12. https://api.dart.dev/dart-io/HttpServer/bindSecure.html
+13. https://api.dart.dev/dart-io/SecurityContext-class.html y https://api.dart.dev/dart-io/HttpClient/badCertificateCallback.html
+14. https://pub.dev/packages/path_provider (y las páginas de los paquetes de la sección 1.4, listadas abajo)
+15. https://docs.flutter.dev/deployment/linux
+16. https://docs.flutter.dev/deployment/windows
+17. https://docs.flutter.dev/deployment/macos
+18. https://developer.apple.com/documentation/security/customizing-the-notarization-workflow (leída por resumen de búsqueda)
+19. https://docs.github.com/en/actions/reference/runners/github-hosted-runners
+20. https://pub.dev/packages/basic_utils
+21. https://pub.dev/packages/mobile_scanner
+22. https://pub.dev/packages/bonsoir
+23. https://developer.android.com/reference/android/net/wifi/WifiManager.MulticastLock
+24. https://developer.android.com/topic/performance/power/power-details (por resumen de búsqueda)
+25. https://pub.dev/packages/nsd
+26. https://pub.dev/packages/multicast_dns
+27. https://pub.dev/packages/pointycastle
+28. https://pub.dev/packages/cryptography
+29. https://pub.dev/packages/qr_flutter
+30. https://pub.dev/packages/googleapis
+31. https://pub.dev/packages/google_sign_in
+32. https://developers.google.com/identity/protocols/oauth2/native-app
+33. https://developers.google.com/workspace/drive/api/guides/appdata
+34. https://docs.nextcloud.com/server/latest/user_manual/en/files/access_webdav.html
+35. https://pub.dev/packages/webdav_client
+36. https://www.rfc-editor.org/rfc/rfc9106.html
+37. https://doc.libsodium.org/secret-key_cryptography/aead/chacha20-poly1305/xchacha20-poly1305_construction
+
+Páginas de paquetes de pub.dev consultadas para la tabla de la sección 1.4 (todas de `https://pub.dev/packages/<nombre>`):
+`path_provider`, `file_picker`, `image_picker`, `printing`, `share_plus`, `record`, `audioplayers`, `dynamic_color`,
+`material_ui`.
+
+Referencia que salió solo de búsqueda (no leída completa): https://docs.syncthing.net/dev/device-ids
