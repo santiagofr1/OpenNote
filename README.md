@@ -5,6 +5,7 @@ App de apuntes a mano (S Pen) y con teclado. Flutter: Android (tablet) y Linux (
 - El lápiz dibuja (con presión), el dedo scrollea, el botón del S Pen borra.
 - Cada cuaderno es una tira continua de hojas A4 (como Samsung Notes): se scrollea de una a otra,
   el título muestra "2 / 5" y el panel lateral tiene una miniatura por hoja.
+- La biblioteca tiene carpetas (anidadas, con migas y "Mover a…") y una búsqueda por nombre en todas las carpetas, sin importar tildes.
 - Todo se guarda local, una carpeta por cuaderno y un archivo por hoja (ver "Almacenamiento").
 
 ## Compilar e instalar en la tablet
@@ -19,7 +20,7 @@ Requiere Flutter en `~/flutter`, Android SDK en `~/Android/Sdk` y JDK 21 en `~/A
 
 Por capas (cada una usa solo las de arriba):
 
-- `lib/domain/`    — datos puros: medidas de la hoja, trazos, cuadernos (`Notebook`, `SheetMeta`), el cuaderno abierto
+- `lib/domain/`    — datos puros: medidas de la hoja, trazos, cuadernos (`Notebook`, `SheetMeta`), carpetas (`Folder`, mover/borrar/buscar), el cuaderno abierto
   en memoria (`NotebookDoc`, con las operaciones de hojas) y herramientas
 - `lib/data/`      — archivos (`Storage`, códec binario `sheet_codec`, migración), exportar PDF/PNG, importar imágenes/audio/PDF
 - `lib/rendering/` — dibujo de trazos, papel, hojas completas (miniaturas y PDF) y capas del editor
@@ -33,7 +34,7 @@ Por capas (cada una usa solo las de arriba):
 ## Almacenamiento (formato 3)
 
 ```
-apuntes/index.json                          cuadernos: id, nombre, favorito, PIN, fondo y papel por defecto, última hoja  ("format": 3)
+apuntes/index.json                          cuadernos (id, nombre, favorito, PIN, fondo y papel por defecto, última hoja, carpeta) y carpetas (id, nombre, padre)  ("format": 3)
 apuntes/notebooks/<cuaderno>/notebook.json  orden de las hojas: id, título, marcador, fondo, papel, rev, updated
 apuntes/notebooks/<cuaderno>/sheets/<hoja>.sheet   contenido de cada hoja (binario)
 apuntes/media/                              imágenes y audios (compartidos por todos los cuadernos)
