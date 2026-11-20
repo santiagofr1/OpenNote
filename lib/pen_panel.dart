@@ -60,6 +60,7 @@ class ToolState {
   List<String> penRecent = ['#22211e', '#1d4ed8', '#b91c1c', '#15803d', '#c2410c', '#7e22ce'];
   List<String> hlRecent = ['#f7d22c', '#5ee08a', '#ff86c8', '#5bc8ff'];
   int eraserSize = 1;
+  String dock = 'top'; // top | left | right
 
   // portapapeles de la selección (sirve entre páginas)
   List<Stroke> clipStrokes = [];
@@ -83,6 +84,7 @@ class ToolState {
         'penRecent': penRecent,
         'hlRecent': hlRecent,
         'eraserSize': eraserSize,
+        'dock': dock,
       };
 
   void load(Map? j) {
@@ -93,6 +95,7 @@ class ToolState {
     if (j['penRecent'] is List) penRecent = List<String>.from(j['penRecent'] as List);
     if (j['hlRecent'] is List) hlRecent = List<String>.from(j['hlRecent'] as List);
     eraserSize = ((j['eraserSize'] ?? 1) as int).clamp(0, 2);
+    if (const ['top', 'left', 'right'].contains(j['dock'])) dock = j['dock'] as String;
   }
 }
 
@@ -119,16 +122,20 @@ class _SamplePainter extends CustomPainter {
   bool shouldRepaint(_SamplePainter x) => x.tip != tip || x.color != color || x.w != w || x.o != o;
 }
 
-Future<void> showPenPanel(BuildContext context, ToolState ts, VoidCallback onChange) {
+Future<void> showPenPanel(BuildContext context, ToolState ts, VoidCallback onChange, [Alignment align = Alignment.topCenter]) {
   return showDialog(
     context: context,
     barrierColor: Colors.black12,
     builder: (ctx) => Align(
-      alignment: Alignment.topCenter,
+      alignment: align,
       child: Padding(
-        padding: const EdgeInsets.only(top: 64),
+        padding: align == Alignment.topCenter
+            ? const EdgeInsets.only(top: 64)
+            : align == Alignment.centerLeft
+                ? const EdgeInsets.only(left: 70)
+                : const EdgeInsets.only(right: 70),
         child: Material(
-          color: kPanel,
+          color: Theme.of(ctx).colorScheme.surfaceContainerLow,
           elevation: 12,
           borderRadius: BorderRadius.circular(18),
           child: ConstrainedBox(
@@ -185,9 +192,9 @@ class _PenPanelState extends State<_PenPanel> {
                     margin: const EdgeInsets.symmetric(horizontal: 3),
                     padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
                     decoration: BoxDecoration(
-                      color: p.tip == id ? Colors.white : const Color(0x08000000),
+                      color: p.tip == id ? Theme.of(context).colorScheme.surfaceContainerHighest : Theme.of(context).colorScheme.onSurface.withValues(alpha: .04),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: p.tip == id ? kAccent : Colors.transparent, width: 1.5),
+                      border: Border.all(color: p.tip == id ? Theme.of(context).colorScheme.primary : Colors.transparent, width: 1.5),
                     ),
                     child: Column(children: [
                       SizedBox(
@@ -196,7 +203,7 @@ class _PenPanelState extends State<_PenPanel> {
                         child: CustomPaint(painter: _SamplePainter(id, p.color, id == 'fine' ? 2.5 : 3.2, 1)),
                       ),
                       const SizedBox(height: 4),
-                      Text(name, style: TextStyle(fontSize: 11.5, color: p.tip == id ? kAccent : kText), overflow: TextOverflow.ellipsis),
+                      Text(name, style: TextStyle(fontSize: 11.5, color: p.tip == id ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface), overflow: TextOverflow.ellipsis),
                     ]),
                   ),
                 ),
@@ -308,11 +315,11 @@ class _PenPanelState extends State<_PenPanel> {
 
   Widget _label(String t) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
-        child: Text(t, style: const TextStyle(fontSize: 13, color: kMuted, fontWeight: FontWeight.w600)),
+        child: Text(t, style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
       );
 
   Widget _sliderRow(String label, String value, Widget slider) => Row(children: [
-        SizedBox(width: 72, child: Text(label, style: const TextStyle(fontSize: 13, color: kMuted, fontWeight: FontWeight.w600))),
+        SizedBox(width: 72, child: Text(label, style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600))),
         Expanded(child: slider),
         SizedBox(width: 44, child: Text(value, textAlign: TextAlign.right, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]))),
       ]);

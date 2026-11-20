@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 
 import 'editor.dart';
@@ -15,15 +16,19 @@ void main() {
 class ApuntesApp extends StatelessWidget {
   const ApuntesApp({super.key});
   @override
-  Widget build(BuildContext context) => MaterialApp(
-        title: 'Apuntes',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: kAccent, surface: kPanel),
-          scaffoldBackgroundColor: kDesk,
-          useMaterial3: true,
+  Widget build(BuildContext context) => DynamicColorBuilder(
+        // colores del sistema (Material You) y modo claro/oscuro del dispositivo
+        builder: (light, dark) => MaterialApp(
+          title: 'Apuntes',
+          debugShowCheckedModeBanner: false,
+          themeMode: ThemeMode.system,
+          theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: light?.primary ?? kAccent), useMaterial3: true),
+          darkTheme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(seedColor: dark?.primary ?? light?.primary ?? kAccent, brightness: Brightness.dark),
+            useMaterial3: true,
+          ),
+          home: const Home(),
         ),
-        home: const Home(),
       );
 }
 
@@ -222,7 +227,6 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     final cur = idx?.find(page?.id);
     return Scaffold(
       key: scaffold,
-      backgroundColor: kDesk,
       drawer: idx == null ? null : _drawer(idx),
       body: SafeArea(
         child: idx == null
@@ -253,7 +257,6 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       );
 
   Widget _drawer(NotesIndex idx) => Drawer(
-        backgroundColor: kPanel,
         width: 320,
         shape: const RoundedRectangleBorder(),
         child: SafeArea(
@@ -287,7 +290,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
             AnimatedRotation(
               turns: open ? 0 : -.25,
               duration: const Duration(milliseconds: 150),
-              child: const Icon(Icons.expand_more, size: 20, color: Color(0xFF7A776E)),
+              child: Icon(Icons.expand_more, size: 20, color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
             const SizedBox(width: 4),
             Expanded(child: Text(nb.name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15))),
@@ -308,7 +311,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
           Padding(
             padding: const EdgeInsets.only(left: 22, bottom: 2),
             child: Material(
-              color: p.id == page?.id ? const Color(0x1A2F5BD3) : Colors.transparent,
+              color: p.id == page?.id ? Theme.of(context).colorScheme.secondaryContainer : Colors.transparent,
               borderRadius: BorderRadius.circular(10),
               child: InkWell(
                 borderRadius: BorderRadius.circular(10),
@@ -324,13 +327,13 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                         p.title,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: p.id == page?.id ? kAccent : kText,
+                          color: p.id == page?.id ? Theme.of(context).colorScheme.onSecondaryContainer : Theme.of(context).colorScheme.onSurface,
                           fontWeight: p.id == page?.id ? FontWeight.w600 : FontWeight.w400,
                         ),
                       ),
                     ),
                     PopupMenuButton<String>(
-                      icon: const Icon(Icons.more_horiz, size: 18, color: Color(0xFF7A776E)),
+                      icon: Icon(Icons.more_horiz, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
                       onSelected: (v) => v == 'rename' ? _renamePage(p) : _deletePage(nb, p),
                       itemBuilder: (_) => const [
                         PopupMenuItem(value: 'rename', child: Text('Renombrar')),
