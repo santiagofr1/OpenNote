@@ -58,7 +58,10 @@ void main() {
     await store.saveNotebook(d);
     final idx = NotesIndex(notebooks: [d.nb], folders: [f]);
     await store.saveIndex(idx);
-    await store.deleteFolder(idx, f, FolderDelete.deleteContents);
+    for (final nb in idx.deleteFolder(f, FolderDelete.deleteContents)) {
+      await store.removeNotebookFiles(nb.id);
+    }
+    await store.saveIndex(idx);
     expect(await store.nbDir(d.nb.id).exists(), isFalse);
     final back = await store.loadIndex();
     expect(back.notebooks, isEmpty);
