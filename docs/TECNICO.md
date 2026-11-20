@@ -98,6 +98,23 @@ Requisitos:
 - Android SDK en `~/Android/Sdk`.
 - JDK 21 en `~/Android/jdk21`.
 
+## Actualizaciones
+
+`lib/domain/version.dart` parsea y compara versiones (`v1.0.12`; prereleases y tags raros se ignoran).
+`lib/data/updates.dart` consulta `GET https://api.github.com/repos/santiagofr1/OpenNote/releases/latest`
+(sin autenticación, `User-Agent: OpenNote-app`, con `dart:io`), elige el asset `.apk` y compara el tag con
+`versionName` (`package_info_plus`). Cualquier error o un 404 (repo privado) es "sin información" y no muestra nada.
+
+- Automático: al abrir la biblioteca, solo Android release (no en debug `.test` ni en tests), si está activado y
+  pasaron 24 h. `updLastCheck`, `updSkipped` y `updAuto` se guardan en `prefs.json` (`Storage.savePrefs` mezcla
+  las claves, así no pisa las de las herramientas).
+- Manual: ⋮ de la biblioteca → "Buscar actualizaciones" (ignora el plazo y la versión omitida).
+- Actualizar: descarga a `cache/updates/` con progreso cancelable, verifica el tamaño y abre el instalador por el
+  canal `opennote/updater` (`MainActivity.kt`) con un `FileProvider` (`res/xml/file_paths.xml`). Si falta el permiso
+  "instalar apps desconocidas" abre esa pantalla para OpenNote. Permisos: `INTERNET`, `REQUEST_INSTALL_PACKAGES`.
+- Los tests reemplazan `Updates.check/download/install` (como `Pickers`).
+- Android exige que el APK nuevo esté firmado con la misma clave que el instalado (ver `docs/RELEASES.md`).
+
 ## Tests
 
 - `flutter test test/`: lógica pura, en la PC. No necesita la tablet.
