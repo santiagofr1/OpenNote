@@ -45,6 +45,19 @@ Para hacer después de pasar la reorganización del código (rama `refactor/arqu
     - de derecha a izquierda (recuadro de "captura", línea punteada y otro color): todo lo que el recuadro toca,
       aunque quede una parte afuera (para trazos, intersección real con el recorrido, no solo con su rectángulo).
     Que se vea cuál de los dos modos está activo mientras se arrastra.
+17. **App de PC + sincronización (A INVESTIGAR, no implementar todavía)**:
+    - PC: Flutter desktop compila el mismo código para Linux, Windows y macOS. Investigar qué cambia: entrada
+      (mouse/teclado y tabletas Wacom en PC), atajos de teclado, rutas de datos, empaquetado (AppImage/Flatpak/.deb,
+      instalador .msi/MSIX en Windows).
+    - Sincronizar en la LAN sin que otros en la misma red vean nada: emparejar una sola vez escaneando un QR
+      (como KDE Connect / Syncthing). Cada dispositivo tiene su propia clave; el QR lleva la huella de la clave del otro,
+      y después todo va por TLS mutuo con certificados fijados. Un dispositivo no emparejado no puede ni conectarse.
+      No hace falta Google Authenticator ni cuentas. Descubrimiento con mDNS. Revocar dispositivos desde ajustes.
+    - Fuera de casa: opción por nube (Google Drive / WebDAV / Syncthing) con cifrado de extremo a extremo (la nube
+      solo ve archivos cifrados).
+    - Conflictos: el formato por hojas (una hoja = un archivo con rev/updated) ya ayuda; definir qué pasa si se
+      edita la misma hoja en los dos lados (guardar las dos versiones, o fusionar trazos por id).
+    Entregable: un documento comparando opciones (seguridad, comodidad, esfuerzo) y una recomendación.
 15. **LaTeX**: lo hace el usuario; no tocar.
 
 ## Hecho
