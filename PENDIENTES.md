@@ -24,6 +24,13 @@
     - Conflictos: el formato por hojas (una hoja = un archivo con rev/updated) ya ayuda; definir qué pasa si se
       edita la misma hoja en los dos lados (guardar las dos versiones, o fusionar trazos por id).
     Entregable: un documento comparando opciones (seguridad, comodidad, esfuerzo) y una recomendación.
+    Investigación hecha: docs/SINCRONIZACION.md (rama `docs/sincronizacion`).
+    **Idea que le interesa al usuario (2026-11-20): Google Drive como en Colab.** Conectar con Google una vez,
+    la app crea una carpeta `OpenNote` en "Mi unidad" (permiso drive.file: solo ve lo que crea ella) y sube ahí
+    solo las hojas que cambiaron (ya hay seguimiento de hojas sucias); la otra punta baja lo cambiado con la API de
+    cambios de Drive. Conflicto en la misma hoja: guardar las dos versiones. La app de PC habla directo con Drive
+    (en Linux no hay cliente oficial). Hace falta un proyecto de Google Cloud para el login; confirmar si drive.file
+    exige verificación de Google. Orden: 1) Drive en la tablet, 2) app Linux, 3) en segundo plano, 4) cifrado opcional.
 19. **Selección: resaltador y tocar afuera** (reportado por el usuario en la 1.0.9):
     - Una palabra escrita y resaltada encima: con seleccionar no se puede agarrar solo el resaltador; agarra la tinta,
       o las dos juntas. Hace falta una forma de elegir solo uno (p. ej. un toque sobre el resaltador elige el de arriba
