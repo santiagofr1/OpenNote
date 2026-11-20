@@ -34,6 +34,10 @@ class Selection {
   bool get moving => drag != null;
   Rect? get band => bandA == null || bandB == null ? null : Rect.fromPoints(bandA!, bandB!);
 
+  /// El rectángulo se estira de derecha a izquierda: es de "captura" (toma todo lo que toca);
+  /// de izquierda a derecha es de "ventana" (solo lo que queda adentro).
+  bool get capture => bandA != null && bandB != null && bandB!.dx < bandA!.dx;
+
   /// Un solo elemento y nada más: se puede agrandar con la esquina.
   bool get singleItem => items.length == 1 && strokes.isEmpty && texts.isEmpty;
 
@@ -57,6 +61,9 @@ class Selection {
       ..clear()
       ..addAll(items);
   }
+
+  /// Ids de todo lo seleccionado (trazos, textos y elementos).
+  Set<String> get allIds => {...strokes, ...texts, ...items};
 
   void selectAll(NotebookDoc p) => replace(strokes: p.strokes.keys, texts: p.texts.keys, items: p.items.keys);
 
@@ -84,11 +91,25 @@ class Selection {
         {for (final it in itemsOf(doc)) it.id: Offset(it.x, it.y)},
       );
 
-  /// Selecciona lo que queda dentro de [r]: trazos con la mitad o más de sus puntos adentro;
-  /// textos y elementos, si su centro cae adentro. Un rectángulo mínimo (un toque) no elige nada.
-  void selectIn(NotebookDoc doc, Rect r) {
+  /// Selecciona lo que queda dentro de [r] ("ventana"): trazos con la mitad o más de sus puntos adentro;
+  /// textos y elementos, si su centro cae adentro. Con [capture], todo lo que [r] toca: trazos cuyo
+  /// recorrido cruza el rectángulo (ver [Stroke.touchesRect]), textos y elementos que se superponen.
+  /// Un rectángulo mínimo (un toque) no elige nada.
+  void selectIn(NotebookDoc doc, Rect r, {bool capture = false}) {
     replace();
     if (r.width < 4 && r.height < 4) return;
+    if (capture) {
+      for (final s in doc.strokes.values) {
+        if (s.touchesRect(r)) strokes.add(s.id);
+      }
+      for (final t in doc.texts.values) {
+        if (r.overlaps(textRect(t, doc.lineAt(t.y)))) texts.add(t.id);
+      }
+      for (final it in doc.items.values) {
+        if (r.overlaps(it.rect)) items.add(it.id);
+      }
+      return;
+    }
     for (final s in doc.strokes.values) {
       if (!r.overlaps(s.bounds)) continue;
       var inside = 0;

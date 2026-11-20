@@ -46,3 +46,28 @@ double distToSegment(Offset p, Offset a, Offset b) {
   final t = l == 0 ? 0.0 : (((p - a).dx * d.dx + (p - a).dy * d.dy) / l).clamp(0.0, 1.0);
   return (p - (a + d * t)).distance;
 }
+
+/// ¿El segmento [a]-[b] toca el rectángulo [r] (bordes incluidos)? Sirve aunque ninguno de los
+/// extremos esté adentro (el segmento lo atraviesa). Recorte de Liang-Barsky.
+bool segmentIntersectsRect(Offset a, Offset b, Rect r) {
+  var t0 = 0.0, t1 = 1.0;
+  final d = b - a;
+  bool clip(double p, double q) {
+    // p = 0: paralelo a ese borde; q < 0: está del lado de afuera
+    if (p == 0) return q >= 0;
+    final t = q / p;
+    if (p < 0) {
+      if (t > t1) return false;
+      if (t > t0) t0 = t;
+    } else {
+      if (t < t0) return false;
+      if (t < t1) t1 = t;
+    }
+    return true;
+  }
+
+  return clip(-d.dx, a.dx - r.left) &&
+      clip(d.dx, r.right - a.dx) &&
+      clip(-d.dy, a.dy - r.top) &&
+      clip(d.dy, r.bottom - a.dy);
+}

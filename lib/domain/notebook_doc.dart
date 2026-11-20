@@ -6,6 +6,7 @@ import 'notebook.dart';
 import 'paper_layout.dart' as paper;
 import 'stroke.dart';
 import 'values.dart';
+import 'z_order.dart';
 
 /// Lo que hay en una hoja, con coordenadas LOCALES (y = 0 es el borde de arriba de esa hoja).
 /// Es lo que se guarda en cada archivo `.sheet`.
@@ -27,7 +28,7 @@ class SheetContent {
 /// y de `k * kSheetStep` a `k * kSheetStep + kSheetH`), así el editor, la selección, la tinta
 /// y el deshacer funcionan igual que con una sola página larga.
 /// Cada elemento pertenece a la hoja que contiene su borde de arriba ([sheetOfY]).
-/// Un solo mapa ordenado por tipo: el orden de inserción es el orden de dibujo.
+/// El orden de dibujo es uno solo para todo (ver [Layered]): [drawOrder]. El orden de los mapas no cuenta.
 class NotebookDoc {
   final Notebook nb;
   final Map<String, Stroke> strokes;
@@ -68,6 +69,47 @@ class NotebookDoc {
   double snapTextY(double y, {bool floor = false}) {
     final k = sheetOfY(y), m = sheets[k];
     return k * kSheetStep + paper.snapTextY(y - k * kSheetStep, m.bg, m.spacing, floor: floor);
+  }
+
+  // ================= orden de dibujo =================
+  /// Todo lo que se dibuja, de abajo hacia arriba.
+  List<Layered> drawOrder() => sortByZ([...items.values, ...strokes.values, ...texts.values]);
+
+  /// [z] para un elemento nuevo: arriba de todo.
+  int nextZ() {
+    var m = -1;
+    for (final e in items.values) {
+      if (e.z > m) m = e.z;
+    }
+    for (final e in strokes.values) {
+      if (e.z > m) m = e.z;
+    }
+    for (final e in texts.values) {
+      if (e.z > m) m = e.z;
+    }
+    return m + 1;
+  }
+
+  /// Pone [els] arriba de todo, conservando el orden que tenían entre sí.
+  void stackOnTop(Iterable<Layered> els) {
+    var z = nextZ();
+    for (final e in sortByZ(els)) {
+      e.z = z++;
+    }
+  }
+
+  /// Cambia el [z] del elemento [id] (trazo, texto o elemento), donde esté.
+  void setZ(String id, int z) {
+    final e = strokes[id] ?? texts[id] ?? items[id];
+    if (e != null) e.z = z;
+  }
+
+  /// Mueve en el orden de dibujo lo que tenga alguno de los ids de [ids] (ver [computeReorder]).
+  /// Aplica el cambio y lo devuelve para poder deshacerlo; null si no cambia nada.
+  ZChange? reorder(Set<String> ids, ZMove move, Rect Function(Layered) rectOf) {
+    final ch = computeReorder(drawOrder(), ids, move, rectOf);
+    if (ch != null) ch.after.forEach(setZ);
+    return ch;
   }
 
   int _sheetOfStroke(Stroke s) => sheetOfY(s.bounds.top);
@@ -200,7 +242,7 @@ class NotebookDoc {
 
   /// Parte el documento en el contenido de cada hoja, en coordenadas locales (copias).
   /// Cada elemento va a la hoja que contiene el borde de arriba de su rectángulo.
-  /// Se recorre una sola vez, manteniendo el orden de inserción dentro de cada hoja.
+  /// Cada copia conserva su [Layered.z]: dentro de cada hoja queda el orden de dibujo.
   List<SheetContent> splitBySheet() {
     final out = List.generate(sheets.length, (_) => SheetContent());
     for (final s in strokes.values) {
@@ -230,7 +272,12 @@ class NotebookDoc {
   }
 
   /// Agrega [c] (coordenadas locales) corrido [top] hacia abajo, sin copiar.
+  /// Los elementos quedan arriba de todo, en el orden de [Layered.z] que traía la hoja.
   void _place(SheetContent c, double top) {
+    var z = nextZ();
+    for (final e in sortByZ([...c.items, ...c.strokes, ...c.texts])) {
+      e.z = z++;
+    }
     for (final s in c.strokes) {
       if (top != 0) s.translateY(top);
       strokes[s.id] = s;

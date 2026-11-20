@@ -14,6 +14,11 @@ import '../domain/domain.dart';
 //           como delta de delta, todos en zigzag-varint (una curva suave da casi todo 0)
 //     presión: un byte (0..255)
 //
+// Orden de dibujo: cada elemento lleva 'z' (su lugar dentro de la hoja, 0..n-1, de abajo hacia arriba;
+// ver [Layered]). Los archivos viejos no lo tienen y se leen con z = 0 para todo: el desempate por
+// tipo da imágenes/notas/audio, tinta y textos, igual que se veían. Es una clave opcional del JSON, por
+// eso la versión del formato sigue siendo 1 (una app vieja lee estos archivos y solo ignora el orden).
+//
 // Idea tomada de ISF (OneNote): coordenadas enteras + delta de delta + compresión.
 
 const _magic = [0x4F, 0x4E, 0x53]; // "ONS"
@@ -56,12 +61,17 @@ void _writePlane(BytesBuilder b, List<double> pts, int off, int n) {
 
 /// Hoja → bytes. Los puntos se redondean a décimas y la presión a 1/255.
 Uint8List encodeSheet(SheetContent c) {
+  // se guarda el lugar dentro de la hoja (no el z global): el archivo no cambia si otra hoja se reordena
+  final rank = <String, int>{};
+  for (final e in sortByZ([...c.items, ...c.strokes, ...c.texts])) {
+    rank[e.id] = rank.length;
+  }
   final meta = jsonEncode({
-    'texts': [for (final t in c.texts) t.toJson()],
-    'items': [for (final i in c.items) i.toJson()],
+    'texts': [for (final t in c.texts) {...t.toJson(), 'z': rank[t.id]}],
+    'items': [for (final i in c.items) {...i.toJson(), 'z': rank[i.id]}],
     'strokes': [
       for (final s in c.strokes)
-        {'id': s.id, 'k': s.k, 'c': s.c, 'w': s.w, if (s.o < 1) 'o': round2(s.o), 'n': s.n}
+        {'id': s.id, 'k': s.k, 'c': s.c, 'w': s.w, if (s.o < 1) 'o': round2(s.o), 'n': s.n, 'z': rank[s.id]}
     ],
   });
   final json = utf8.encode(meta);
@@ -148,7 +158,8 @@ SheetContent decodeSheet(Uint8List bytes) {
         pts[i * 3 + 2] = r.b[r.pos++] / 255;
       }
       strokes.add(Stroke(s['id'] as String, (s['k'] ?? 'pen') as String, (s['c'] ?? '#22211e') as String,
-          jsonDouble(s['w'], 2), pts, jsonDouble(s['o'], 1)));
+          jsonDouble(s['w'], 2), pts, jsonDouble(s['o'], 1))
+        ..z = (s['z'] as num? ?? 0).toInt());
     }
     return SheetContent(
       strokes: strokes,

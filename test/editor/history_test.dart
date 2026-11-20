@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui';
 
 import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/editor/history.dart';
@@ -93,6 +94,19 @@ void main() {
       a.apply(page, undo: true, putText: (id, t) => put(page, id, t));
       expect(page.texts, isEmpty);
       expect(page.items, isEmpty);
+    });
+
+    test('cambio de orden: deshacer y rehacer devuelven los z', () {
+      final page = NotebookDoc(Notebook.create('t'));
+      page.items['a'] = Item('a', 'image', 0, 0, 100, 100)..z = 0;
+      page.items['b'] = Item('b', 'image', 0, 0, 100, 100)..z = 1;
+      final ch = page.reorder({'a'}, ZMove.front, (e) => e is Item ? e.rect : Rect.zero)!;
+      final a = EditAction(zBefore: ch.before, zAfter: ch.after);
+      expect(page.drawOrder().map((e) => e.id), ['b', 'a']);
+      a.apply(page, undo: true, putText: (id, t) => put(page, id, t));
+      expect(page.drawOrder().map((e) => e.id), ['a', 'b']);
+      a.apply(page, undo: false, putText: (id, t) => put(page, id, t));
+      expect(page.drawOrder().map((e) => e.id), ['b', 'a']);
     });
   });
 }
