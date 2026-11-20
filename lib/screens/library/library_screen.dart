@@ -5,9 +5,11 @@ import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../data/storage.dart';
+import '../../data/updates.dart';
 import '../../domain/domain.dart';
 import '../../widgets/dialogs.dart';
 import '../../widgets/pdf_progress.dart';
+import '../../widgets/update_dialog.dart';
 import '../notebook/notebook_screen.dart';
 import 'folder_card.dart';
 import 'move_dialog.dart';
@@ -26,6 +28,7 @@ class _LibraryState extends State<Library> {
   late final store = Storage(root: widget.root);
   final tools = ToolState();
   NotesIndex? index;
+  UpdatePrefs updPrefs = UpdatePrefs();
   final thumbs = <String, NotebookDoc>{}; // primera hoja de cada cuaderno
   String? pressed; // cuaderno o carpeta mantenido (resaltado)
   String? current; // carpeta abierta (null = inicio)
@@ -48,14 +51,86 @@ class _LibraryState extends State<Library> {
 
   Future<void> _load() async {
     await store.init();
-    tools.load(await store.loadPrefs());
+    final prefs = await store.loadPrefs();
+    tools.load(prefs);
+    updPrefs = UpdatePrefs.from(prefs);
     final idx = await store.loadIndex();
     setState(() => index = idx);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _autoUpdateCheck());
     for (final nb in idx.notebooks) {
       final t = await store.loadSheetDoc(nb, 0);
       if (!mounted) return;
       if (t != null) setState(() => thumbs[nb.id] = t);
     }
+  }
+
+  /// Búsqueda automática al abrir: solo Android release, si está activada y pasaron 24 h. No bloquea nada.
+  Future<void> _autoUpdateCheck() async {
+    if (!Updates.autoSupported() || !updPrefs.due(DateTime.now())) return;
+    final r = await Updates.check();
+    if (r.failed) return; // sin info: en silencio, se reintenta en la próxima apertura
+    updPrefs.lastCheck = DateTime.now().millisecondsSinceEpoch;
+    await store.savePrefs(updPrefs.toJson());
+    final u = r.update;
+    if (u == null || u.version.toString() == updPrefs.skipped || !mounted) return;
+    await _offer(u);
+  }
+
+  Future<void> _offer(UpdateInfo u) => offerUpdate(context, u, onSkip: () async {
+        updPrefs.skipped = u.version.toString();
+        await store.savePrefs(updPrefs.toJson());
+      });
+
+  /// "Buscar actualizaciones" a mano: ignora el plazo de 24 h y la versión omitida.
+  Future<void> _manualUpdateCheck() async {
+    snack(context, 'Buscando actualizaciones…', duration: const Duration(seconds: 2));
+    final r = await Updates.check();
+    if (!mounted) return;
+    if (r.failed) {
+      snack(context, 'No se pudo buscar actualizaciones ahora');
+      return;
+    }
+    updPrefs.lastCheck = DateTime.now().millisecondsSinceEpoch;
+    await store.savePrefs(updPrefs.toJson());
+    if (!mounted) return;
+    if (r.update == null) {
+      snack(context, 'Ya tenés la última versión');
+    } else {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      await _offer(r.update!);
+    }
+  }
+
+  Future<void> _settings() async {
+    final check = await showSafeSheet<bool>(
+      context,
+      (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            ListTile(
+              key: const Key('checkUpdates'),
+              leading: const Icon(Symbols.system_update, weight: 300),
+              title: const Text('Buscar actualizaciones'),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              onTap: () => Navigator.pop(ctx, true),
+            ),
+            SwitchListTile(
+              key: const Key('autoUpdates'),
+              secondary: const Icon(Symbols.update, weight: 300),
+              title: const Text('Buscar actualizaciones automáticamente'),
+              value: updPrefs.auto,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              onChanged: (v) {
+                setS(() => updPrefs.auto = v);
+                store.savePrefs(updPrefs.toJson());
+              },
+            ),
+          ]),
+        ),
+      ),
+    );
+    if (check == true && mounted) await _manualUpdateCheck();
   }
 
   /// favoritos primero; después los más recientes
@@ -479,6 +554,12 @@ class _LibraryState extends State<Library> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w500, color: cs.onSurface)),
+        ),
+        IconButton(
+          key: const Key('libraryMenu'),
+          tooltip: 'Más opciones',
+          icon: const Icon(Symbols.more_vert, weight: 400),
+          onPressed: _settings,
         ),
       ]),
       if (folder != null) _breadcrumb(idx, cs),

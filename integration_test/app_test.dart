@@ -286,6 +286,38 @@ void main() {
     expect(editor(t).selI, contains(items.first.id), reason: 'al tocar el resultado queda seleccionado');
   });
 
+  testWidgets('texto: el teclado abre al tocar la herramienta y la barra de formato aplica negrita', (t) async {
+    await start(t);
+    await createNotebook(t, 'Texto');
+    await t.tap(find.byTooltip('Texto con teclado'));
+    await settle(t, 600);
+    final ed = editor(t);
+    expect(ed.doc.texts.length, 1, reason: 'el tecladito crea el renglón solo');
+    final b = ed.doc.texts.values.single;
+    expect(ed.texts.editor(b.id)!.hasFocus, isTrue, reason: 'y lo enfoca: se abre el teclado');
+    expect(find.byKey(const Key('fmt-bold')), findsOneWidget);
+
+    final field = find.byKey(Key('para-${b.id}-0'));
+    await t.enterText(field, 'hola mundo');
+    await settle(t, 300);
+    ed.texts.editor(b.id)!.fields[0].ctl.selection = const TextSelection(baseOffset: 1, extentOffset: 5);
+    await t.pump();
+    await t.tap(find.byKey(const Key('fmt-bold')));
+    await settle(t, 300);
+    expect(b.body.paras[0].runs.first.style.bold, isTrue);
+    expect(b.body.paras[0].runs.first.text, 'hola');
+
+    // volver y entrar: el formato quedó guardado
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1500);
+    final nb = await savedNotebook('Texto');
+    final s = Storage(root: root);
+    await s.init();
+    final saved = (await s.loadNotebook(nb)).texts.values.single;
+    expect(saved.text, 'hola mundo');
+    expect(saved.body.paras[0].runs.first.style.bold, isTrue);
+  });
+
   testWidgets('insertar imagen (selector simulado) mantiene la proporción', (t) async {
     final img = await fakeImage(400, 300);
     Pickers.image = (_) async => img;
@@ -525,5 +557,16 @@ void main() {
     await settle(t, 600);
     expect(find.byKey(const Key('nb-Álgebra lineal')), findsNothing);
     expect(find.byKey(const Key('folder-Análisis')), findsOneWidget);
+  });
+
+  testWidgets('ajustes: buscar actualizaciones a mano y el interruptor automático', (t) async {
+    await start(t);
+    await t.tap(find.byKey(const Key('libraryMenu')));
+    await settle(t, 600);
+    expect(find.byKey(const Key('checkUpdates')), findsOneWidget);
+    expect(t.widget<SwitchListTile>(find.byKey(const Key('autoUpdates'))).value, isTrue);
+    await t.tap(find.byKey(const Key('autoUpdates')));
+    await settle(t, 400);
+    expect(t.widget<SwitchListTile>(find.byKey(const Key('autoUpdates'))).value, isFalse);
   });
 }
