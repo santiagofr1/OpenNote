@@ -1,0 +1,107 @@
+# Documentación técnica de OpenNote
+
+Este documento describe cómo está organizado OpenNote por dentro: el código, el formato de los
+archivos, las medidas de la hoja y cómo se corren los tests. Para compilar y contribuir, ver
+[CONTRIBUTING.md](../CONTRIBUTING.md).
+
+## Plataformas
+
+OpenNote está hecho con Flutter. Apunta a Android (tablet) y a Linux (PC).
+
+## Estructura del código
+
+El código está dividido por capas. Cada capa usa solo las de arriba:
+
+- `lib/domain/` — datos puros: medidas de la hoja, trazos, cuadernos (`Notebook`, `SheetMeta`),
+  carpetas (`Folder`, mover/borrar/buscar), el cuaderno abierto en memoria (`NotebookDoc`, con las
+  operaciones de hojas) y herramientas.
+- `lib/data/` — archivos (`Storage`, códec binario `sheet_codec`, migración), exportar PDF/PNG,
+  importar imágenes/audio/PDF.
+- `lib/rendering/` — dibujo de trazos, papel, hojas completas (miniaturas y PDF) y capas del editor.
+- `lib/editor/` — editor del cuaderno (toda la tira): `page_editor.dart` coordina; entrada del lápiz
+  (`ink`), selección, deshacer (`history`), textos, elementos, zoom (`viewport`, `touch_gestures`),
+  tirar para agregar hoja, barra acoplable (`dock_layout`, `toolbar`) y menús.
+- `lib/screens/` — biblioteca y cuaderno abierto (panel de hojas, búsqueda, estilo, menús).
+- `lib/widgets/`, `lib/theme/` — diálogos compartidos y tema.
+- `lib/main.dart`, `lib/app.dart` — arranque.
+
+## Fondos en milímetros de A4
+
+La hoja mide 1000 x 1414 unidades lógicas = 210 x 297 mm (1 mm = 1000/210 unidades;
+`lib/domain/geometry.dart`).
+
+El rayado (7 / 8 / 10 mm, margen rojo a 25 mm) y la cuadrícula / puntos (5 / 7 mm, centrados) salen
+de `lib/domain/paper_layout.dart`. El mismo dibujo se usa en el editor, en las miniaturas, en los PNG
+y en el PDF (página A4 llena), así que al imprimir al 100 % las medidas son reales.
+
+El texto con teclado se apoya en el renglón de su propia hoja.
+
+## Almacenamiento (formato 3)
+
+### Estructura de carpetas
+
+```
+apuntes/index.json                                  cuadernos y carpetas
+apuntes/notebooks/<cuaderno>/notebook.json          orden de las hojas y sus datos
+apuntes/notebooks/<cuaderno>/sheets/<hoja>.sheet    contenido de cada hoja (binario)
+apuntes/media/                                      imágenes y audios (compartidos por todos los cuadernos)
+apuntes/prefs.json                                  herramientas
+```
+
+- `index.json` (`"format": 3`): cuadernos (id, nombre, favorito, PIN, fondo, papel y espaciado por
+  defecto, última hoja, carpeta) y carpetas (id, nombre, padre).
+- `notebook.json`: por cada hoja, id, título, marcador, fondo, papel, espaciado (`spacing`, en mm;
+  opcional), `rev` y `updated`.
+
+### Modelo en memoria
+
+En memoria el cuaderno es un solo `NotebookDoc`: trazos, textos y elementos en coordenadas globales de
+la tira. La hoja `k` ocupa `y` de `k * kSheetStep` a `k * kSheetStep + kSheetH`. Cada elemento
+pertenece a la hoja que contiene su borde de arriba.
+
+Al guardar se parte por hoja (coordenadas locales), y al leer se rearma la tira.
+
+### Formato `.sheet`
+
+- Cabecera `"ONS"` + versión + `zlib( JSON )`. El JSON tiene los textos, los elementos y los atributos
+  de los trazos, más los puntos.
+- Puntos: x e y enteros en décimas, primero en zigzag-varint y después delta de delta; la presión va en
+  1 byte.
+- Una hoja llena de letra ronda 2 bytes por punto, unas 10 veces menos que el JSON anterior.
+
+### Guardado
+
+- Guardar codifica las hojas en otro isolate y escribe solo las que cambiaron (compara un hash con el
+  último guardado), más `notebook.json` si cambió algo de las hojas.
+- Las hojas borradas se eliminan.
+- Escritura atómica (temporal + rename). Los guardados de un mismo cuaderno se hacen de a uno y se
+  juntan.
+
+### Migración
+
+Al leer un índice viejo (`pages/<id>.json`) se migra automáticamente: cada página se aplana en sus
+hojas. El título de la página pasa a la primera hoja, salvo "Primera página", "Página N" o la fecha por
+defecto.
+
+La carpeta `pages/` queda en `legacy_pages_backup/`. Si la migración se corta, se rehace desde cero (el
+índice nuevo se escribe al final).
+
+## Compilar e instalar en la tablet
+
+```
+./build_install.sh
+```
+
+Requisitos:
+
+- Flutter en `~/flutter`.
+- Android SDK en `~/Android/Sdk`.
+- JDK 21 en `~/Android/jdk21`.
+
+## Tests
+
+- `flutter test test/`: lógica pura, en la PC. No necesita la tablet.
+- `./run_tests.sh`: tests de integración en la tablet. Corren con el build debug
+  (`com.apuntes.apuntes.test`, "OpenNote Test"), que es otra app con datos propios. Antes y después
+  verifica que OpenNote y sus cuadernos sigan intactos.
+- `BACKUP=1 ./run_tests.sh` además baja un backup a `~/apuntes_app_backup/`.
