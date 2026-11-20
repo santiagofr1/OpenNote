@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'model.dart';
@@ -38,7 +39,7 @@ class PageEditor extends StatefulWidget {
   State<PageEditor> createState() => _PageEditorState();
 }
 
-class _PageEditorState extends State<PageEditor> {
+class _PageEditorState extends State<PageEditor> with SingleTickerProviderStateMixin {
   PageData get page => widget.page;
   ToolState get ts => widget.tools;
 
@@ -87,6 +88,7 @@ class _PageEditorState extends State<PageEditor> {
       f.dispose();
     }
     scroll.dispose();
+    pullCtrl.dispose();
     super.dispose();
   }
 
@@ -618,7 +620,10 @@ class _PageEditorState extends State<PageEditor> {
       FocusScope.of(context).unfocus(); // primer toque afuera: solo cierra el texto
       return;
     }
-    final p = _logical(d.localPosition);
+    _createTextAt(_logical(d.localPosition));
+  }
+
+  void _createTextAt(Offset p) {
     final x = p.dx.clamp(16.0, kW - 120);
     final y = max(0.0, (p.dy / kLine).floorToDouble() * kLine + 4);
     final t = TextBlock(newId('t'), x.roundToDouble(), y, (kW - x - 30).roundToDouble(), '');
@@ -645,58 +650,214 @@ class _PageEditorState extends State<PageEditor> {
     if (t != Tool.text) FocusScope.of(context).unfocus();
   }
 
+  ColorScheme get cs => Theme.of(context).colorScheme;
+
+  // ---- barra acoplable: arriba / izquierda / derecha ----
+  final _editorKey = GlobalKey();
+  String? _dockPreview; // mientras se arrastra la barra
+
+  String _dockFor(Offset global) {
+    final box = _editorKey.currentContext!.findRenderObject() as RenderBox;
+    final p = box.globalToLocal(global), s = box.size;
+    if (p.dy < s.height * .22 && p.dx > s.width * .2 && p.dx < s.width * .8) return 'top';
+    return p.dx < s.width / 2 ? 'left' : 'right';
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Column(children: [
-      _toolbar(),
-      Expanded(child: _canvasArea()),
+    final dock = ts.dock;
+    final bar = _toolbar(vertical: dock != 'top');
+    final canvas = Expanded(child: _canvasArea());
+    final body = dock == 'top'
+        ? Column(children: [bar, canvas])
+        : Row(children: dock == 'left' ? [bar, canvas] : [canvas, bar]);
+    return Stack(key: _editorKey, children: [
+      body,
+      if (_dockPreview != null) Positioned.fill(child: IgnorePointer(child: _dockGhost(_dockPreview!))),
     ]);
+  }
+
+  /// zona resaltada donde va a quedar la barra al soltarla
+  Widget _dockGhost(String d) {
+    final zone = Container(
+      decoration: BoxDecoration(
+        color: cs.primary.withValues(alpha: .12),
+        border: Border.all(color: cs.primary.withValues(alpha: .5), width: 1.5),
+        borderRadius: BorderRadius.circular(14),
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.all(6),
+      child: switch (d) {
+        'top' => Align(alignment: Alignment.topCenter, child: SizedBox(height: 56, width: double.infinity, child: zone)),
+        'left' => Align(alignment: Alignment.centerLeft, child: SizedBox(width: 64, height: double.infinity, child: zone)),
+        _ => Align(alignment: Alignment.centerRight, child: SizedBox(width: 64, height: double.infinity, child: zone)),
+      },
+    );
+  }
+
+  // ---- hoja nueva: tirar hacia arriba al final y mantener ----
+  late final pullCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 750))
+    ..addStatusListener((s) {
+      if (s == AnimationStatus.completed) _pullDone();
+    });
+  double pullAccum = 0;
+  int touches = 0;
+  bool pullJustAdded = false;
+
+  bool _onScrollNote(ScrollNotification n) {
+    if (n.depth != 0) return false;
+    if (n is OverscrollNotification && n.overscroll > 0 && n.dragDetails != null && touches > 0) {
+      pullAccum += n.overscroll;
+      if (pullAccum > 28 && !pullCtrl.isAnimating && pullCtrl.value == 0) {
+        HapticFeedback.selectionClick();
+        pullCtrl.forward();
+      }
+    } else if (n is ScrollUpdateNotification && n.metrics.extentAfter > 4 && pullCtrl.value > 0 && !pullJustAdded) {
+      _pullCancel(); // volvió a subir: se cancela
+    }
+    return false;
+  }
+
+  void _pullCancel() {
+    pullAccum = 0;
+    if (pullCtrl.value > 0 && pullCtrl.value < 1) pullCtrl.reverse();
+  }
+
+  void _pullDone() {
+    HapticFeedback.mediumImpact();
+    final oldH = page.h;
+    setState(() {
+      page.h += kSheetH;
+      pullJustAdded = true;
+    });
+    _changed();
+    // lleva a la hoja nueva
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      scroll.animateTo(min(scroll.position.maxScrollExtent, oldH * scale), duration: const Duration(milliseconds: 420), curve: Curves.easeOutQuart);
+    });
+    Future.delayed(const Duration(milliseconds: 900), () {
+      if (!mounted) return;
+      pullCtrl.value = 0;
+      pullAccum = 0;
+      setState(() => pullJustAdded = false);
+    });
+  }
+
+  Widget _pullIndicator() {
+    return AnimatedBuilder(
+      animation: pullCtrl,
+      builder: (context, _) {
+        final v = pullCtrl.value;
+        final visible = v > 0 || pullJustAdded;
+        return IgnorePointer(
+          child: AnimatedOpacity(
+            opacity: visible ? 1 : 0,
+            duration: const Duration(milliseconds: 150),
+            child: AnimatedScale(
+              scale: visible ? 1 : .8,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutQuart,
+              child: Material(
+                color: cs.surfaceContainerHigh,
+                elevation: 3,
+                shape: const StadiumBorder(),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 8, 18, 8),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    SizedBox(
+                      width: 36,
+                      height: 36,
+                      child: Stack(alignment: Alignment.center, children: [
+                        CircularProgressIndicator(
+                          value: pullJustAdded ? 1 : v,
+                          strokeWidth: 3,
+                          strokeCap: StrokeCap.round,
+                          backgroundColor: cs.outlineVariant.withValues(alpha: .5),
+                          color: cs.primary,
+                        ),
+                        Icon(pullJustAdded ? Symbols.check : Symbols.note_add, size: 18, weight: 400, color: cs.primary),
+                      ]),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      pullJustAdded ? 'Hoja agregada' : 'Mantené para agregar una hoja',
+                      style: TextStyle(color: cs.onSurface, fontSize: 14),
+                    ),
+                  ]),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Widget _canvasArea() {
     return Container(
-      color: kDesk,
+      color: cs.surfaceContainerLow,
       child: LayoutBuilder(builder: (context, box) {
         final sw = min(box.maxWidth - (box.maxWidth < 700 ? 12 : 48), 1100.0);
         scale = sw / kW;
         final sheetH = page.h * scale;
-        return ScrollConfiguration(
-          // el lápiz NO scrollea: solo dedo y touchpad
-          behavior: ScrollConfiguration.of(context).copyWith(
-            dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.trackpad},
-            scrollbars: true,
-          ),
-          child: SingleChildScrollView(
-            controller: scroll,
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 16, bottom: 24),
-              child: Column(children: [
-                Center(
-                  child: Container(
-                    width: sw,
-                    height: sheetH,
-                    decoration: const BoxDecoration(boxShadow: [
-                      BoxShadow(color: Color(0x22000000), blurRadius: 3, offset: Offset(0, 1)),
-                      BoxShadow(color: Color(0x10000000), blurRadius: 24, offset: Offset(0, 6)),
+        return Stack(children: [
+          Listener(
+            onPointerDown: (e) {
+              if (e.kind == PointerDeviceKind.touch) touches++;
+            },
+            onPointerUp: (e) {
+              if (e.kind != PointerDeviceKind.touch) return;
+              touches = max(0, touches - 1);
+              if (touches == 0) _pullCancel(); // soltó antes de completar: vuelve
+            },
+            onPointerCancel: (e) {
+              if (e.kind != PointerDeviceKind.touch) return;
+              touches = max(0, touches - 1);
+              if (touches == 0) _pullCancel();
+            },
+            child: NotificationListener<ScrollNotification>(
+              onNotification: _onScrollNote,
+              child: ScrollConfiguration(
+                // el lápiz NO scrollea: solo dedo y touchpad
+                behavior: ScrollConfiguration.of(context).copyWith(
+                  dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.trackpad},
+                  scrollbars: true,
+                ),
+                child: SingleChildScrollView(
+                  controller: scroll,
+                  physics: const ClampingScrollPhysics(),
+                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 16, bottom: 24),
+                    child: Column(children: [
+                      Center(
+                        child: Container(
+                          width: sw,
+                          height: sheetH,
+                          decoration: const BoxDecoration(boxShadow: [
+                            BoxShadow(color: Color(0x22000000), blurRadius: 3, offset: Offset(0, 1)),
+                            BoxShadow(color: Color(0x10000000), blurRadius: 24, offset: Offset(0, 6)),
+                          ]),
+                          child: _sheet(Size(sw, sheetH)),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 22, 16, 70),
+                        child: Text(
+                          'Al final, deslizá hacia arriba y mantené para agregar una hoja',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: cs.onSurfaceVariant.withValues(alpha: .7), fontSize: 13),
+                        ),
+                      ),
                     ]),
-                    child: _sheet(Size(sw, sheetH)),
                   ),
                 ),
-                const SizedBox(height: 18),
-                OutlinedButton.icon(
-                  onPressed: () {
-                    setState(() => page.h += kSheetH);
-                    _changed();
-                  },
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Hoja'),
-                ),
-                const SizedBox(height: 60),
-              ]),
+              ),
             ),
           ),
-        );
+          Positioned(left: 0, right: 0, bottom: 28, child: Center(child: _pullIndicator())),
+        ]);
       }),
     );
   }
@@ -716,39 +877,100 @@ class _PageEditorState extends State<PageEditor> {
   }
 
   Widget _selMenu() {
+    final fg = cs.onInverseSurface;
     Widget b(IconData i, String label, VoidCallback f) => InkWell(
           onTap: f,
           borderRadius: BorderRadius.circular(8),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(i, size: 19, color: Colors.white),
+              Icon(i, size: 19, weight: 300, color: fg),
               const SizedBox(width: 6),
-              Text(label, style: const TextStyle(color: Colors.white, fontSize: 14)),
+              Text(label, style: TextStyle(color: fg, fontSize: 14)),
             ]),
           ),
         );
     return Material(
-      color: const Color(0xFF2B2A27),
-      elevation: 6,
+      color: cs.inverseSurface,
+      elevation: 4,
       borderRadius: BorderRadius.circular(12),
       child: Padding(
         padding: const EdgeInsets.all(3),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          b(Icons.content_copy, 'Copiar', () {
+          b(Symbols.content_copy, 'Copiar', () {
             _copySel();
             _toast('Copiado');
           }),
-          b(Icons.content_cut, 'Cortar', () {
+          b(Symbols.content_cut, 'Cortar', () {
             _copySel();
             _deleteSel();
           }),
-          b(Icons.control_point_duplicate, 'Duplicar', _duplicateSel),
-          b(Icons.delete_outline, 'Eliminar', _deleteSel),
-          IconButton(onPressed: _clearSel, icon: const Icon(Icons.close, size: 19, color: Colors.white70), tooltip: 'Deseleccionar'),
+          b(Symbols.control_point_duplicate, 'Duplicar', _duplicateSel),
+          b(Symbols.delete, 'Eliminar', _deleteSel),
+          IconButton(onPressed: _clearSel, icon: Icon(Symbols.close, size: 19, weight: 300, color: fg.withValues(alpha: .75)), tooltip: 'Deseleccionar'),
         ]),
       ),
     );
+  }
+
+  // ---- mantener el dedo sobre la hoja: menú contextual ----
+  Future<void> _longPressMenu(LongPressStartDetails d) async {
+    HapticFeedback.mediumImpact();
+    final p = _logical(d.localPosition);
+    final g = d.globalPosition;
+    PopupMenuItem<String> item(String v, IconData i, String label, {bool enabled = true}) => PopupMenuItem(
+          value: v,
+          enabled: enabled,
+          child: Row(children: [
+            Icon(i, size: 20, weight: 300, color: enabled ? cs.onSurfaceVariant : cs.onSurface.withValues(alpha: .3)),
+            const SizedBox(width: 12),
+            Text(label),
+          ]),
+        );
+    final v = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(g.dx, g.dy, g.dx + 1, g.dy + 1),
+      items: [
+        item('paste', Symbols.content_paste, 'Pegar acá', enabled: ts.hasClip),
+        item('text', Symbols.keyboard, 'Escribir acá'),
+        item('all', Symbols.select_all, 'Seleccionar todo', enabled: page.strokes.isNotEmpty || page.texts.isNotEmpty),
+        item('sheet', Symbols.note_add, 'Agregar hoja al final'),
+      ],
+    );
+    if (!mounted) return;
+    switch (v) {
+      case 'paste':
+        _pasteAt(p);
+      case 'text':
+        _setTool(Tool.text);
+        _createTextAt(p);
+      case 'all':
+        _setTool(Tool.select);
+        setState(() {
+          selS
+            ..clear()
+            ..addAll(page.strokes.keys);
+          selT
+            ..clear()
+            ..addAll(page.texts.keys);
+        });
+        liveTick.value++;
+      case 'sheet':
+        setState(() => page.h += kSheetH);
+        _changed();
+    }
+  }
+
+  void _pasteAt(Offset p) {
+    if (!ts.hasClip) return;
+    Rect? r;
+    for (final s in ts.clipStrokes) {
+      r = r == null ? s.bounds : r.expandToInclude(s.bounds);
+    }
+    for (final t in ts.clipTexts) {
+      r = r == null ? _textRect(t) : r.expandToInclude(_textRect(t));
+    }
+    _insert(ts.clipStrokes, ts.clipTexts, p - r!.topLeft);
   }
 
   Widget _sheetInput(bool textMode) {
@@ -758,25 +980,30 @@ class _PageEditorState extends State<PageEditor> {
       onPointerUp: _up,
       onPointerCancel: _up,
       child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapUp: textMode ? _tapPage : null,
-        child: Stack(clipBehavior: Clip.none, children: [
-          Positioned.fill(child: CustomPaint(painter: SheetPainter(page.bg, page.h, scale))),
-          // textos (solo se tocan en modo texto)
-          ...page.texts.values.map((t) => _textBlock(t, textMode)),
-          Positioned.fill(
-            child: IgnorePointer(
-              child: RepaintBoundary(
-                child: CustomPaint(painter: InkPainter(page, scale, inkVersion, () => moving ? selS : const {}), isComplex: true),
+        // mantener apretado con el dedo
+        supportedDevices: const {PointerDeviceKind.touch},
+        onLongPressStart: _longPressMenu,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapUp: textMode ? _tapPage : null,
+          child: Stack(clipBehavior: Clip.none, children: [
+            Positioned.fill(child: CustomPaint(painter: SheetPainter(page.bg, page.h, scale))),
+            // textos (solo se tocan en modo texto)
+            ...page.texts.values.map((t) => _textBlock(t, textMode)),
+            Positioned.fill(
+              child: IgnorePointer(
+                child: RepaintBoundary(
+                  child: CustomPaint(painter: InkPainter(page, scale, inkVersion, () => moving ? selS : const {}), isComplex: true),
+                ),
               ),
             ),
-          ),
-          Positioned.fill(
-            child: IgnorePointer(
-              child: CustomPaint(painter: LivePainter(_paintLive, scale, liveTick)),
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(painter: LivePainter(_paintLive, scale, liveTick)),
+              ),
             ),
-          ),
-        ]),
+          ]),
+        ),
       ),
     );
   }
@@ -826,7 +1053,7 @@ class _PageEditorState extends State<PageEditor> {
                 child: SizedBox(
                   width: 26,
                   height: max(kLine * scale, 28),
-                  child: const Icon(Icons.drag_indicator, size: 20, color: Color(0x99777777)),
+                  child: const Icon(Symbols.drag_indicator, size: 20, color: Color(0x99777777)),
                 ),
               ),
             ),
@@ -846,26 +1073,25 @@ class _PageEditorState extends State<PageEditor> {
   }
 
   Future<void> _openPanel() async {
+    final align = switch (ts.dock) { 'left' => Alignment.centerLeft, 'right' => Alignment.centerRight, _ => Alignment.topCenter };
     await showPenPanel(context, ts, () {
       setState(() {});
       widget.onPrefsChanged();
-    });
+    }, align);
     if (mounted) setState(() {});
   }
 
-  // Barra: zonas de ancho fijo para que nada salte al cambiar de herramienta.
-  // [menú][título ......][herramientas] | [colores][grosor] | [pegar][deshacer][rehacer][fondo]
-  static const _ink = Color(0xFF4A4741); // íconos en reposo
-  static const _hair = Color(0xFFE3E0D7); // líneas finas
-  static const _bar = Color(0xFFF8F7F3);
-
-  Widget _toolbar() {
+  // Barra: zonas de tamaño fijo para que nada salte al cambiar de herramienta.
+  // Arriba:   [mover][menú][título ......][herramientas] | [colores][grosor] | [deshacer][rehacer][fondo][pegar]
+  // Costado:  lo mismo, en columna.
+  Widget _toolbar({required bool vertical}) {
     final drawing = ts.tool == Tool.pen || ts.tool == Tool.hl;
     final cur = ts.current;
+    final axis = vertical ? Axis.vertical : Axis.horizontal;
     return LayoutBuilder(builder: (context, box) {
-      final compact = box.maxWidth < 820;
+      final room = vertical ? box.maxHeight : box.maxWidth;
+      final compact = room < 820;
       final nColors = compact ? 4 : 6;
-      // los colores que se muestran: recientes de la herramienta, completados con la paleta
       final base = ts.tool == Tool.hl ? ts.hlRecent : ts.penRecent;
       final fill = ts.tool == Tool.hl ? hlPalette : palette;
       final colors = <String>[...base];
@@ -873,66 +1099,118 @@ class _PageEditorState extends State<PageEditor> {
         if (colors.length >= nColors) break;
         if (!colors.contains(c)) colors.add(c);
       }
-      return Container(
-        height: 56,
-        decoration: const BoxDecoration(color: _bar, border: Border(bottom: BorderSide(color: _hair))),
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: Row(children: [
-          _icon(Symbols.menu, 'Cuadernos', widget.onMenu),
-          const SizedBox(width: 6),
+      final side = BorderSide(color: cs.outlineVariant.withValues(alpha: .6));
+      final children = <Widget>[
+        _grip(vertical),
+        _icon(Symbols.menu, 'Cuadernos', widget.onMenu),
+        if (!vertical) const SizedBox(width: 6),
+        if (!vertical)
           Expanded(
             child: compact
                 ? const SizedBox()
                 : Text.rich(
                     TextSpan(children: [
-                      TextSpan(text: widget.title, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 15, color: kText)),
-                      TextSpan(text: '   ${widget.subtitle}', style: const TextStyle(color: kMuted, fontSize: 13)),
+                      TextSpan(text: widget.title, style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15, color: cs.onSurface)),
+                      TextSpan(text: '   ${widget.subtitle}', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13)),
                     ]),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
           ),
-          _toolBtn(Tool.pen, Symbols.stylus, 'Lápiz · tocá de nuevo para opciones', ts.pen),
-          _toolBtn(Tool.hl, Symbols.ink_highlighter, 'Resaltador · tocá de nuevo para opciones', ts.hl),
-          _toolBtn(Tool.text, Symbols.text_fields, 'Texto', null),
-          _toolBtn(Tool.select, Symbols.highlight_alt, 'Seleccionar', null),
-          _divider(),
-          // colores y grosor: siempre presentes; atenuados si la herramienta no dibuja
-          AnimatedOpacity(
-            opacity: drawing ? 1 : .38,
+        if (vertical) const SizedBox(height: 4),
+        _toolBtn(Tool.pen, Symbols.stylus, 'Lápiz · tocá de nuevo para opciones', ts.pen),
+        _toolBtn(Tool.hl, Symbols.ink_highlighter, 'Resaltador · tocá de nuevo para opciones', ts.hl),
+        _toolBtn(Tool.text, Symbols.keyboard, 'Texto con teclado', null),
+        _toolBtn(Tool.select, Symbols.highlight_alt, 'Seleccionar', null),
+        _divider(vertical),
+        AnimatedOpacity(
+          opacity: drawing ? 1 : .38,
+          duration: const Duration(milliseconds: 160),
+          child: Flex(direction: axis, mainAxisSize: MainAxisSize.min, children: [
+            for (final c in colors.take(nColors)) _swatch(c, drawing && cur.color == c, vertical),
+            _moreColors(vertical),
+            _widthBtn(cur, vertical),
+          ]),
+        ),
+        _divider(vertical),
+        _icon(Symbols.undo, 'Deshacer', undo.isEmpty ? null : () => _undoRedo(undo, redo)),
+        _icon(Symbols.redo, 'Rehacer', redo.isEmpty ? null : () => _undoRedo(redo, undo)),
+        _bgMenu(),
+        IgnorePointer(
+          ignoring: !ts.hasClip,
+          child: AnimatedOpacity(
+            opacity: ts.hasClip ? 1 : 0,
             duration: const Duration(milliseconds: 160),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              for (final c in colors.take(nColors)) _swatch(c, drawing && cur.color == c),
-              _moreColors(),
-              _widthBtn(cur),
-            ]),
+            child: _icon(Symbols.content_paste, 'Pegar', _paste),
           ),
-          _divider(),
-          _icon(Symbols.undo, 'Deshacer', undo.isEmpty ? null : () => _undoRedo(undo, redo)),
-          _icon(Symbols.redo, 'Rehacer', redo.isEmpty ? null : () => _undoRedo(redo, undo)),
-          _bgMenu(),
-          // pegar ocupa su lugar siempre (al final); solo se ve cuando hay algo copiado
-          IgnorePointer(
-            ignoring: !ts.hasClip,
-            child: AnimatedOpacity(
-              opacity: ts.hasClip ? 1 : 0,
-              duration: const Duration(milliseconds: 160),
-              child: _icon(Symbols.content_paste, 'Pegar', _paste),
-            ),
+        ),
+      ];
+      return Container(
+        width: vertical ? 60 : null,
+        height: vertical ? null : 56,
+        decoration: BoxDecoration(
+          color: cs.surfaceContainer,
+          border: Border(
+            bottom: ts.dock == 'top' ? side : BorderSide.none,
+            right: ts.dock == 'left' ? side : BorderSide.none,
+            left: ts.dock == 'right' ? side : BorderSide.none,
           ),
-        ]),
+        ),
+        padding: vertical ? const EdgeInsets.symmetric(vertical: 6) : const EdgeInsets.symmetric(horizontal: 6),
+        child: vertical
+            ? SingleChildScrollView(child: Column(children: children))
+            : Row(children: children),
       );
     });
   }
 
-  Widget _divider() => Container(width: 1, height: 22, margin: const EdgeInsets.symmetric(horizontal: 8), color: _hair);
+  /// agarradera para mover la barra (arrastrala a un costado o arriba)
+  Widget _grip(bool vertical) => Tooltip(
+        message: 'Arrastrá para mover la barra',
+        waitDuration: const Duration(milliseconds: 600),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onPanStart: (d) => setState(() => _dockPreview = _dockFor(d.globalPosition)),
+          onPanUpdate: (d) {
+            final t = _dockFor(d.globalPosition);
+            if (t != _dockPreview) {
+              HapticFeedback.selectionClick();
+              setState(() => _dockPreview = t);
+            }
+          },
+          onPanEnd: (_) {
+            final t = _dockPreview;
+            setState(() {
+              _dockPreview = null;
+              if (t != null) ts.dock = t;
+            });
+            widget.onPrefsChanged();
+          },
+          onPanCancel: () => setState(() => _dockPreview = null),
+          child: SizedBox(
+            width: vertical ? 60 : 26,
+            height: vertical ? 26 : 56,
+            child: RotatedBox(
+              quarterTurns: vertical ? 1 : 0,
+              child: Icon(Symbols.drag_indicator, size: 18, weight: 300, color: cs.onSurfaceVariant.withValues(alpha: .6)),
+            ),
+          ),
+        ),
+      );
+
+  Widget _divider(bool vertical) => Container(
+        width: vertical ? 22 : 1,
+        height: vertical ? 1 : 22,
+        margin: vertical ? const EdgeInsets.symmetric(vertical: 8) : const EdgeInsets.symmetric(horizontal: 8),
+        color: cs.outlineVariant,
+      );
 
   Widget _icon(IconData icon, String tip, VoidCallback? onTap) => IconButton(
         onPressed: onTap,
         tooltip: tip,
         icon: Icon(icon, size: 22, weight: 300, opticalSize: 24),
-        color: _ink,
-        disabledColor: const Color(0x4D4A4741),
+        color: cs.onSurfaceVariant,
+        disabledColor: cs.onSurface.withValues(alpha: .28),
         style: IconButton.styleFrom(
           minimumSize: const Size(44, 44),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -958,14 +1236,13 @@ class _PageEditorState extends State<PageEditor> {
           curve: Curves.easeOutQuart,
           width: 46,
           height: 44,
-          margin: const EdgeInsets.symmetric(horizontal: 1),
+          margin: const EdgeInsets.all(1),
           decoration: BoxDecoration(
-            color: on ? const Color(0x142F5BD3) : Colors.transparent,
+            color: on ? cs.secondaryContainer : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Stack(alignment: Alignment.center, children: [
-            Icon(icon, size: 22, weight: on ? 400 : 300, opticalSize: 24, fill: 0, color: on ? kAccent : _ink),
-            // puntito con el color de la herramienta
+            Icon(icon, size: 22, weight: on ? 400 : 300, opticalSize: 24, color: on ? cs.onSecondaryContainer : cs.onSurfaceVariant),
             if (preset != null)
               Positioned(
                 bottom: 5,
@@ -975,6 +1252,7 @@ class _PageEditorState extends State<PageEditor> {
                   decoration: BoxDecoration(
                     color: parseColor(preset.color).withValues(alpha: max(preset.opacity, .45)),
                     shape: BoxShape.circle,
+                    border: Border.all(color: cs.outlineVariant.withValues(alpha: .6), width: .5),
                   ),
                 ),
               ),
@@ -991,12 +1269,13 @@ class _PageEditorState extends State<PageEditor> {
     widget.onPrefsChanged();
   }
 
-  Widget _swatch(String c, bool on) => InkWell(
+  Size _slot(bool vertical) => vertical ? const Size(48, 34) : const Size(32, 44);
+
+  Widget _swatch(String c, bool on, bool vertical) => InkWell(
         customBorder: const CircleBorder(),
         onTap: () => _pickQuick(c),
-        child: SizedBox(
-          width: 32,
-          height: 44,
+        child: SizedBox.fromSize(
+          size: _slot(vertical),
           child: Center(
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 140),
@@ -1005,13 +1284,13 @@ class _PageEditorState extends State<PageEditor> {
               padding: EdgeInsets.all(on ? 2.5 : 0),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: on ? Border.all(color: kAccent, width: 1.5) : null,
+                border: on ? Border.all(color: cs.primary, width: 1.5) : null,
               ),
               child: Container(
                 decoration: BoxDecoration(
                   color: parseColor(c),
                   shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0x1F000000), width: .8),
+                  border: Border.all(color: cs.outline.withValues(alpha: .6), width: .8),
                 ),
               ),
             ),
@@ -1019,7 +1298,7 @@ class _PageEditorState extends State<PageEditor> {
         ),
       );
 
-  Widget _moreColors() => Tooltip(
+  Widget _moreColors(bool vertical) => Tooltip(
         message: 'Más colores',
         child: InkWell(
           customBorder: const CircleBorder(),
@@ -1027,13 +1306,12 @@ class _PageEditorState extends State<PageEditor> {
             if (ts.tool != Tool.pen && ts.tool != Tool.hl) _setTool(Tool.pen);
             _openPanel();
           },
-          child: SizedBox(
-            width: 32,
-            height: 44,
+          child: SizedBox.fromSize(
+            size: _slot(vertical),
             child: Center(
               child: Container(
-                width: 18,
-                height: 18,
+                width: 16,
+                height: 16,
                 decoration: const BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: SweepGradient(colors: [
@@ -1046,8 +1324,7 @@ class _PageEditorState extends State<PageEditor> {
         ),
       );
 
-  /// grosor actual (punto proporcional); abre el panel
-  Widget _widthBtn(PenPreset p) {
+  Widget _widthBtn(PenPreset p, bool vertical) {
     final hl = ts.tool == Tool.hl;
     final d = hl ? (p.width / 60 * 18).clamp(5.0, 18.0) : (p.width / 16 * 16).clamp(2.5, 16.0);
     return Tooltip(
@@ -1059,14 +1336,14 @@ class _PageEditorState extends State<PageEditor> {
           _openPanel();
         },
         child: SizedBox(
-          width: 40,
-          height: 44,
+          width: vertical ? 48 : 40,
+          height: vertical ? 40 : 44,
           child: Center(
             child: Container(
               width: d,
               height: hl ? d * .6 : d,
               decoration: BoxDecoration(
-                color: _ink,
+                color: cs.onSurfaceVariant,
                 shape: hl ? BoxShape.rectangle : BoxShape.circle,
                 borderRadius: hl ? BorderRadius.circular(1.5) : null,
               ),
@@ -1079,7 +1356,7 @@ class _PageEditorState extends State<PageEditor> {
 
   Widget _bgMenu() => PopupMenuButton<String>(
         tooltip: 'Fondo de la hoja',
-        icon: const Icon(Symbols.background_grid_small, size: 22, weight: 300, color: _ink),
+        icon: Icon(Symbols.background_grid_small, size: 22, weight: 300, color: cs.onSurfaceVariant),
         initialValue: page.bg,
         position: PopupMenuPosition.under,
         onSelected: (v) {
