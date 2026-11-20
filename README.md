@@ -48,6 +48,20 @@ guardan en tu tablet, sin cuentas ni servidores.
 
 - Sigue el tema de tu tablet, con los colores de Material You.
 
+## Capturas
+
+![Un cuaderno de Física con escritura a mano, un diagrama de una lente, resaltador y una nota adhesiva](docs/img/01_cuaderno.png)
+
+*Un cuaderno abierto: escritura a mano con presión, texto con teclado, resaltador, diagramas y notas adhesivas.*
+
+![El panel de hojas con las miniaturas de cada hoja del cuaderno](docs/img/02_panel_hojas.png)
+
+*El panel de hojas, con miniaturas para saltar, mover o marcar cada una.*
+
+![La biblioteca con carpetas y cuadernos](docs/img/03_biblioteca.png)
+
+*La biblioteca: carpetas, favoritos y miniaturas de tus cuadernos.*
+
 ## Instalación
 
 Por ahora, la forma más fácil es bajar el APK desde la página de
