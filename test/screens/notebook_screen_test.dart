@@ -4,8 +4,11 @@ import 'package:apuntes/app.dart';
 import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/editor/page_editor.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+Matcher containsRect(Rect inner) => isA<Rect>().having((r) => r.inflate(1).contains(inner.topLeft) && r.inflate(1).contains(inner.bottomRight), 'contiene', true);
 
 /// El cuaderno abierto con un Storage real en una carpeta temporal (sin tablet).
 /// El guardado y la lectura usan isolates, que necesitan tiempo real: de ahí runAsync.
@@ -150,5 +153,99 @@ void main() {
       expect(doc.texts.length, 3);
       expect(Directory('${root.path}/notebooks/${nb.id}/sheets').listSync().where((e) => e.path.endsWith('.sheet')).length, 4);
     });
+  });
+
+  // El menú de una miniatura tiene que verse entero (y poder tocarse) en vertical y en horizontal.
+  for (final (name, size) in [('vertical 800x1333', const Size(800, 1333)), ('horizontal 1333x800', const Size(1333, 800))]) {
+    testWidgets('menú de la miniatura visible: $name', (t) async {
+      t.view.physicalSize = size;
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.reset);
+      final prev = FlutterError.onError;
+      FlutterError.onError = (d) {
+        if (!d.exceptionAsString().contains('overflowed')) prev?.call(d);
+      };
+      addTearDown(() => FlutterError.onError = prev);
+      await t.runAsync(seed);
+      await t.pumpWidget(ApuntesApp(root: root));
+      await until(t, find.byKey(const Key('nb-Prueba')));
+      await t.tap(find.byKey(const Key('nb-Prueba')));
+      await until(t, find.byType(PageEditor));
+      await t.tap(find.byKey(const Key('pagesBtn')));
+      await settle(t);
+      for (final n in [1, 2, 3]) {
+        await t.longPress(find.byKey(Key('thumb-$n')));
+        await settle(t, 500);
+        final labels = ['Renombrar', 'Hoja nueva después', 'Duplicar', 'Borrar', if (n > 1) 'Mover antes', if (n < 3) 'Mover después'];
+        for (final l in labels) {
+          final f = find.text(l);
+          expect(f, findsOneWidget, reason: 'thumb-$n: falta "$l"');
+          final r = t.getRect(f);
+          expect(Offset.zero & size, containsRect(r), reason: 'thumb-$n: "$l" fuera de pantalla ($r)');
+        }
+        await t.tap(find.text('Borrar')); // tiene que poder tocarse
+        await settle(t, 400);
+        expect(find.byKey(const Key('confirmDelete')), findsOneWidget, reason: 'thumb-$n: Borrar no abrió la confirmación');
+        await t.tap(find.text('Cancelar'));
+        await settle(t, 400);
+      }
+    });
+  }
+
+  testWidgets('escenario de integración: agregar, mover y borrar desde el panel (vertical)', (t) async {
+    t.view.physicalSize = const Size(800, 1333);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    final prev = FlutterError.onError;
+    FlutterError.onError = (d) {
+      if (!d.exceptionAsString().contains('overflowed')) prev?.call(d);
+    };
+    addTearDown(() => FlutterError.onError = prev);
+    await t.runAsync(() async {
+      final s = Storage(root: root);
+      await s.init();
+      final nb = Notebook.create('Hojas');
+      await s.saveNotebook(NotebookDoc(nb));
+      await s.saveIndex(NotesIndex(notebooks: [nb]));
+    });
+    await t.pumpWidget(ApuntesApp(root: root));
+    await until(t, find.byKey(const Key('nb-Hojas')));
+    await t.tap(find.byKey(const Key('nb-Hojas')));
+    await until(t, find.byType(PageEditor));
+    await settle(t, 800);
+    final c = t.getCenter(find.byType(PageEditor));
+    final g = await t.createGesture(kind: PointerDeviceKind.stylus);
+    await g.down(c);
+    for (var i = 1; i <= 12; i++) {
+      await g.moveTo(c + Offset(i * 16.0, 0));
+      await t.pump(const Duration(milliseconds: 8));
+    }
+    await g.up();
+    await settle(t, 200);
+    final strokeId = editor(t).doc.strokes.keys.single;
+    await t.tap(find.byKey(const Key('pagesBtn')));
+    await settle(t, 600);
+    for (var i = 0; i < 2; i++) {
+      await t.tap(find.byKey(const Key('addPage')));
+      await settle(t, 900);
+    }
+    Future<void> longPressThumb(int n, String item) async {
+      await t.longPress(find.byKey(Key('thumb-$n')));
+      await settle(t, 500);
+      expect(find.text(item), findsOneWidget, reason: 'menú de thumb-$n sin "$item"; hojas=${editor(t).doc.sheetCount}');
+      await t.tap(find.text(item));
+      await settle(t, 900);
+    }
+
+    await longPressThumb(1, 'Mover después');
+    await longPressThumb(2, 'Borrar');
+    await t.tap(find.byKey(const Key('confirmDelete')));
+    await settle(t, 900);
+    expect(editor(t).doc.sheetCount, 2);
+    expect(editor(t).doc.strokes.containsKey(strokeId), isFalse);
+    await longPressThumb(2, 'Borrar');
+    await t.tap(find.byKey(const Key('confirmDelete')));
+    await settle(t, 900);
+    expect(editor(t).doc.sheetCount, 1);
   });
 }

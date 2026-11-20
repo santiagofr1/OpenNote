@@ -5,7 +5,6 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import '../../domain/domain.dart';
 import '../../rendering/sheet_render.dart';
-import '../../widgets/menu_row.dart';
 
 enum SheetAction { rename, addAfter, duplicate, moveUp, moveDown, delete }
 
@@ -112,25 +111,9 @@ class PagesPanel extends StatelessWidget {
     return GestureDetector(
       key: Key('thumb-$n'),
       onTap: () => onOpen(k),
-      onLongPressStart: (d) async {
+      onLongPress: () async {
         HapticFeedback.mediumImpact();
-        final g = d.globalPosition;
-        final v = await showMenu<SheetAction>(
-          context: context,
-          position: RelativeRect.fromLTRB(g.dx, g.dy, g.dx + 1, g.dy + 1),
-          items: [
-            const PopupMenuItem(value: SheetAction.rename, child: MenuRow(Symbols.edit, 'Renombrar')),
-            const PopupMenuItem(value: SheetAction.addAfter, child: MenuRow(Symbols.note_add, 'Hoja nueva después')),
-            const PopupMenuItem(value: SheetAction.duplicate, child: MenuRow(Symbols.content_copy, 'Duplicar')),
-            if (k > 0) const PopupMenuItem(value: SheetAction.moveUp, child: MenuRow(Symbols.arrow_upward, 'Mover antes')),
-            if (k < doc.sheetCount - 1)
-              const PopupMenuItem(value: SheetAction.moveDown, child: MenuRow(Symbols.arrow_downward, 'Mover después')),
-            if (doc.sheetCount > 1) ...const [
-              PopupMenuDivider(),
-              PopupMenuItem(value: SheetAction.delete, child: MenuRow(Symbols.delete, 'Borrar', danger: true)),
-            ],
-          ],
-        );
+        final v = await _sheetMenu(context, k);
         if (v != null) onAction(k, v);
       },
       child: Column(children: [
@@ -179,6 +162,39 @@ class PagesPanel extends StatelessWidget {
                 color: isCur ? cs.primary : cs.onSurfaceVariant,
                 fontWeight: isCur ? FontWeight.w600 : FontWeight.w400)),
       ]),
+    );
+  }
+
+  /// Menú de una hoja como hoja inferior: se ve entero en vertical y en horizontal (si no entra, scrollea).
+  Future<SheetAction?> _sheetMenu(BuildContext context, int k) {
+    final cs = Theme.of(context).colorScheme;
+    Widget tile(SheetAction a, IconData i, String t, {bool danger = false}) => ListTile(
+          key: Key('sheetAction-${a.name}'),
+          leading: Icon(i, weight: 300, color: danger ? cs.error : cs.onSurfaceVariant),
+          title: Text(t, style: TextStyle(color: danger ? cs.error : cs.onSurface)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          onTap: () => Navigator.pop(context, a),
+        );
+    return showModalBottomSheet<SheetAction>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: Text('Hoja ${k + 1}${doc.sheets[k].title.isEmpty ? '' : ' · ${doc.sheets[k].title}'}',
+                    style: Theme.of(ctx).textTheme.titleMedium)),
+            tile(SheetAction.rename, Symbols.edit, 'Renombrar'),
+            tile(SheetAction.addAfter, Symbols.note_add, 'Hoja nueva después'),
+            tile(SheetAction.duplicate, Symbols.content_copy, 'Duplicar'),
+            if (k > 0) tile(SheetAction.moveUp, Symbols.arrow_upward, 'Mover antes'),
+            if (k < doc.sheetCount - 1) tile(SheetAction.moveDown, Symbols.arrow_downward, 'Mover después'),
+            if (doc.sheetCount > 1) tile(SheetAction.delete, Symbols.delete, 'Borrar', danger: true),
+          ]),
+        ),
+      ),
     );
   }
 }
