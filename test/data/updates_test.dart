@@ -53,4 +53,18 @@ void main() {
     expect(back.lastCheck, p.lastCheck);
     expect(back.skipped, '1.0.7');
   });
+
+  group('userNotes', () {
+    test('filtra metadatos, merges de main, tests y docs; limpia Merge feat/x', () {
+      const body =
+          '- Merge feat/zoom: arregla el zoom\n'
+          '- Merge fix/pdf: Exporta mejor\n'
+          '- Merge main into feat/a\n- Merge branch x\n- Tests de zoom\n- test: algo\n'
+          '- Pendientes al día\n- README nuevo\n- docs: guía\n- Docs varias\n'
+          '- Arregla el zoom\n- Arregla el zoom\n\n'
+          '**APK:** OpenNote-v1.0.6.apk\n**Código de versión:** 7';
+      expect(userNotes(body), ['Arregla el zoom', 'Exporta mejor']);
+    });
+    test('vacío', () => expect(userNotes('**APK:** x\n\ntexto suelto'), isEmpty));
+  });
 }

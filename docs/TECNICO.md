@@ -147,6 +147,9 @@ Requisitos:
 - Actualizar: descarga a `cache/updates/` con progreso cancelable, verifica el tamaño y abre el instalador por el
   canal `opennote/updater` (`MainActivity.kt`) con un `FileProvider` (`res/xml/file_paths.xml`). Si falta el permiso
   "instalar apps desconocidas" abre esa pantalla para OpenNote. Permisos: `INTERNET`, `REQUEST_INSTALL_PACKAGES`.
+- Notas: el workflow arma el cuerpo del Release con `git log --first-parent` (en main, un renglón por merge de rama).
+  `userNotes` (`updates.dart`) lo limpia para el diálogo: deja solo los renglones "- ", quita metadatos, merges de
+  main, tests y docs, y le saca el prefijo "Merge feat/xxx: ".
 - Los tests reemplazan `Updates.check/download/install` (como `Pickers`).
 - Android exige que el APK nuevo esté firmado con la misma clave que el instalado (ver `docs/RELEASES.md`).
 
