@@ -14,7 +14,7 @@ class EditorToolbar extends StatelessWidget {
   final bool vertical;
   final Widget grip; // agarradera para mover la barra (la pone DockLayout)
   final bool canUndo, canRedo;
-  final String bg; // fondo de la página abierta
+  final String bg; // fondo de la hoja que se está viendo
   final ValueChanged<Tool> onToolTap, onToolLongPress;
   final ValueChanged<String> onPickColor, onBg;
   final VoidCallback onOpenPanel, onUndo, onRedo, onToggleZoomLock, onPaste;

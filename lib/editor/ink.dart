@@ -50,5 +50,5 @@ void appendInkPoint(Stroke s, Offset p, double pressure) {
 }
 
 /// Trazos que toca la goma de radio [r] en [pt].
-List<Stroke> strokesHit(PageData page, Offset pt, double r) =>
-    [for (final s in page.strokes.values) if (s.hitBy(pt, r)) s];
+List<Stroke> strokesHit(NotebookDoc doc, Offset pt, double r) =>
+    [for (final s in doc.strokes.values) if (s.hitBy(pt, r)) s];

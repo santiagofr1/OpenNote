@@ -8,8 +8,9 @@ import '../data/storage.dart';
 import '../domain/domain.dart';
 
 /// Exporta con un diálogo de progreso; después el sistema pregunta carpeta y nombre.
-Future<void> exportPdfFlow(BuildContext context, Storage store, Notebook nb, {List<String>? only, String? name}) async {
-  final bytes = await buildPdfWithProgress(context, store, nb, only: only);
+Future<void> exportPdfFlow(BuildContext context, Storage store, NotebookDoc doc, {List<int>? only, String? name}) async {
+  final nb = doc.nb;
+  final bytes = await buildPdfWithProgress(context, store, doc, only: only);
   if (bytes == null || !context.mounted) return;
   final messenger = ScaffoldMessenger.of(context);
   final ok = await savePdf(bytes, name ?? nb.name);
@@ -17,7 +18,7 @@ Future<void> exportPdfFlow(BuildContext context, Storage store, Notebook nb, {Li
 }
 
 /// Genera el PDF mostrando "Hoja n de total". Null si falló (ya se avisó).
-Future<Uint8List?> buildPdfWithProgress(BuildContext context, Storage store, Notebook nb, {List<String>? only}) async {
+Future<Uint8List?> buildPdfWithProgress(BuildContext context, Storage store, NotebookDoc doc, {List<int>? only}) async {
   final progress = ValueNotifier<(int, int)>((0, 1));
   final nav = Navigator.of(context);
   final messenger = ScaffoldMessenger.of(context);
@@ -37,7 +38,7 @@ Future<Uint8List?> buildPdfWithProgress(BuildContext context, Storage store, Not
     ),
   ));
   try {
-    final bytes = await buildNotebookPdf(store, nb, only: only, onProgress: (a, b) => progress.value = (a, b));
+    final bytes = await buildNotebookPdf(store, doc, only: only, onProgress: (a, b) => progress.value = (a, b));
     nav.pop();
     return bytes;
   } catch (e) {

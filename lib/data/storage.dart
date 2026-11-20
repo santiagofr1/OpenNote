@@ -22,6 +22,10 @@ class Storage {
   /// [root]: carpeta propia (los tests usan una temporal para no tocar tus cuadernos)
   Storage({this.root});
   final Directory? root;
+
+  /// Codificar y decodificar hojas en otro isolate. Solo los tests de widgets lo apagan
+  /// (Isolate.run no anda dentro del reloj falso de testWidgets).
+  static bool useIsolates = true;
   late final Directory dir;
 
   // lo último que hay en disco de cada cuaderno, para guardar solo lo que cambió
@@ -62,12 +66,23 @@ class Storage {
   Directory _sheetsDir(String id) => Directory('${nbDir(id).path}/sheets');
   File sheetFile(String nbId, String sheetId) => File('${_sheetsDir(nbId).path}/$sheetId.sheet');
 
+  // escrituras en curso por archivo: dos a la vez pisarían el mismo temporal
+  final _writing = <String, Future<void>>{};
+
   /// Escribe a un temporal y renombra: si se corta a la mitad, el archivo viejo queda entero.
-  Future<void> _writeBytes(File f, List<int> data) async {
-    await f.parent.create(recursive: true);
-    final tmp = File('${f.path}.tmp');
-    await tmp.writeAsBytes(data, flush: true);
-    await tmp.rename(f.path);
+  /// Las escrituras al mismo archivo se hacen una después de la otra.
+  Future<void> _writeBytes(File f, List<int> data) {
+    final prev = _writing[f.path] ?? Future.value();
+    final run = prev.catchError((_) {}).then((_) async {
+      await f.parent.create(recursive: true);
+      final tmp = File('${f.path}.tmp');
+      await tmp.writeAsBytes(data, flush: true);
+      await tmp.rename(f.path);
+    });
+    _writing[f.path] = run;
+    return run.whenComplete(() {
+      if (identical(_writing[f.path], run)) _writing.remove(f.path);
+    });
   }
 
   Future<void> _writeJson(File f, Object data) => _writeBytes(f, utf8.encode(jsonEncode(data)));
@@ -267,13 +282,15 @@ class Storage {
   Future<void> savePrefs(Map<String, dynamic> p) => _writeJson(_prefs, p);
 }
 
+Future<R> _compute<R>(R Function() f) => Storage.useIsolates ? Isolate.run(f) : Future.sync(f);
+
 // Los isolates se lanzan desde funciones sueltas: así el mensaje no arrastra a la [Storage].
-Future<List<SheetContent?>> _decodeInIsolate(List<Uint8List?> raw) => Isolate.run(() => [
+Future<List<SheetContent?>> _decodeInIsolate(List<Uint8List?> raw) => _compute(() => [
       for (final b in raw)
         if (b == null) null else _tryDecode(b)
     ]);
 
-Future<List<(Uint8List, String)>> _encodeInIsolate(List<SheetContent> contents) => Isolate.run(() => [
+Future<List<(Uint8List, String)>> _encodeInIsolate(List<SheetContent> contents) => _compute(() => [
       for (final c in contents) _encodeHashed(c),
     ]);
 

@@ -5,8 +5,8 @@ import 'package:apuntes/editor/selection.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  PageData page() {
-    final p = PageData('p');
+  NotebookDoc page() {
+    final p = NotebookDoc(Notebook.create('t'));
     // horizontal de 0 a 100 en y = 50, puntos cada 10
     p.strokes['a'] = Stroke('a', 'pen', '#000000', 2, [for (var x = 0; x <= 100; x += 10) ...[x.toDouble(), 50, .5]]);
     p.strokes['b'] = Stroke('b', 'pen', '#000000', 2, [500, 500, .5, 510, 510, .5]);

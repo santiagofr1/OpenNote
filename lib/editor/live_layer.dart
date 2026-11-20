@@ -10,7 +10,7 @@ import 'selection.dart';
 /// y los trazos seleccionados mientras se arrastran (en la capa fija quedan ocultos).
 void paintLiveLayer(
   Canvas c, {
-  required PageData page,
+  required NotebookDoc doc,
   required double scale,
   required Selection sel,
   Stroke? live,
@@ -40,12 +40,12 @@ void paintLiveLayer(
   if (drag != null) {
     c.save();
     c.translate(drag.delta.dx, drag.delta.dy);
-    for (final s in sel.strokesOf(page)) {
+    for (final s in sel.strokesOf(doc)) {
       paintStroke(c, s);
     }
     c.restore();
   }
-  final r = sel.bounds(page);
+  final r = sel.bounds(doc);
   if (r != null) {
     final rr = r.shift(drag?.delta ?? Offset.zero);
     c.drawRect(rr, Paint()..color = const Color(0x0F2F5BD3));

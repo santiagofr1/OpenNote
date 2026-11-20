@@ -19,8 +19,8 @@ import 'pages_panel.dart';
 import 'search.dart';
 import 'style_dialog.dart';
 
-/// Un cuaderno abierto: barra de arriba, panel de páginas y el editor.
-/// Guarda la página un rato después de cada cambio, al salir y cuando la app pasa a segundo plano.
+/// Un cuaderno abierto: barra de arriba, panel de hojas y el editor con toda la tira de hojas.
+/// Guarda un rato después de cada cambio (solo las hojas que cambiaron), al salir y cuando la app pasa a segundo plano.
 class NotebookScreen extends StatefulWidget {
   final Storage store;
   final NotesIndex index;
@@ -35,12 +35,12 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
   Storage get store => widget.store;
   Notebook get nb => widget.nb;
   final editorKey = GlobalKey<PageEditorState>();
-  PageData? page;
+  NotebookDoc? doc; // null mientras se lee del disco
   Timer? _saveTimer, _prefsTimer;
-  bool _dirty = false;
+  bool _dirty = false, _indexDirty = false, _deleted = false;
 
   // vista
-  bool panel = false; // panel de páginas
+  bool panel = false; // panel de hojas
   bool reading = false; // modo lectura
   bool fullscreen = false;
   bool onlyBookmarks = false;
@@ -51,20 +51,27 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
   List<SearchHit> hits = [];
   Timer? _searchTimer;
 
-  // miniaturas: páginas ya cargadas (la abierta se toma de [page])
-  final _thumbs = <String, PageData>{};
-  final _liveVersion = ValueNotifier(0);
+  /// Hoja que se está viendo (la actualiza el editor al scrollear).
+  final sheetNotifier = ValueNotifier(0);
+  final _liveVersion = ValueNotifier(0); // cambió algo en la hoja abierta
+  final _structure = ValueNotifier(0); // cambió el orden, la cantidad o el estilo de las hojas
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    final first = nb.pages.any((p) => p.id == nb.last) ? nb.last : (nb.pages.isEmpty ? null : nb.pages.first.id);
-    if (first != null) {
-      _open(first);
-    } else {
-      _addPage();
-    }
+    sheetNotifier.addListener(() {
+      nb.last = sheetNotifier.value;
+      _indexDirty = true;
+    });
+    _load();
+  }
+
+  Future<void> _load() async {
+    final d = await store.loadNotebook(nb);
+    if (!mounted) return;
+    sheetNotifier.value = nb.last.clamp(0, d.sheetCount - 1);
+    setState(() => doc = d);
   }
 
   @override
@@ -82,7 +89,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
   }
 
   // ================= guardado =================
-  void _pageChanged() {
+  void _docChanged() {
     _dirty = true;
     _liveVersion.value++;
     _saveTimer?.cancel();
@@ -97,22 +104,29 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
   Future<void> _flush() async {
     _saveTimer?.cancel();
     _saveTimer = null;
-    final p = page;
-    if (p != null && _dirty) {
+    if (_deleted) return;
+    final d = doc;
+    if (d != null && _dirty) {
       _dirty = false;
       nb.touch();
-      await store.savePage(p);
-      await store.saveIndex(widget.index);
+      await store.saveNotebook(d); // en otro isolate; solo escribe lo que cambió
+      await _saveIndex();
+    } else if (_indexDirty) {
+      await _saveIndex();
     }
   }
 
-  /// Lo pendiente de la página abierta ya no se guarda (se está borrando).
+  /// Lo pendiente ya no se guarda (se está borrando el cuaderno).
   void _discardPending() {
     _saveTimer?.cancel();
     _dirty = false;
+    _indexDirty = false;
   }
 
-  Future<void> _saveIndex() => store.saveIndex(widget.index);
+  Future<void> _saveIndex() {
+    _indexDirty = false;
+    return store.saveIndex(widget.index);
+  }
 
   /// salir del cuaderno: guarda todo y vuelve a la biblioteca
   Future<void> leave([Object? result]) async {
@@ -124,112 +138,78 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     if (mounted) Navigator.of(context).pop(result);
   }
 
-  Future<void> _open(String id) async {
-    if (page?.id == id) return;
-    await _flush();
-    if (page != null) _thumbs[page!.id] = page!;
-    final p = await store.loadPage(id);
-    nb.last = id;
-    unawaited(_saveIndex());
-    if (mounted) setState(() => page = p);
+  // ================= hojas =================
+  int get curSheet => doc == null ? 0 : sheetNotifier.value.clamp(0, doc!.sheetCount - 1);
+
+  /// Lleva la vista a la hoja [k].
+  void _goTo(int k) {
+    sheetNotifier.value = k;
+    editorKey.currentState?.scrollToSheet(k);
   }
 
-  // ================= páginas =================
-  int get curIndex => nb.pages.indexWhere((p) => p.id == page?.id);
-
-  Future<void> _addPage({int? at}) async {
-    final p = PageData(newId('p'), bg: page?.bg ?? 'lined', paper: page?.paper ?? '#fffefb');
-    await store.savePage(p);
-    setState(() => nb.pages.insert(at ?? nb.pages.length, PageRef(p.id, todayTitle())));
-    _thumbs[p.id] = p;
-    nb.touch();
-    await _saveIndex();
-    await _open(p.id);
-  }
-
-  Future<void> _renamePage(PageRef p) async {
-    final n = (await askText(context, 'Título de la página', initial: p.title))?.trim();
-    if (n == null || n.isEmpty) return;
-    setState(() => p.title = n);
-    await _saveIndex();
-  }
-
-  Future<void> _duplicatePage(PageRef ref) async {
-    await _flush();
-    final src = ref.id == page?.id ? page! : await store.loadPage(ref.id);
-    final dup = src.duplicate();
-    await store.savePage(dup);
-    _thumbs[dup.id] = dup;
-    setState(() => nb.pages.insert(nb.pages.indexOf(ref) + 1, PageRef(dup.id, '${ref.title} (copia)')));
-    await _saveIndex();
-  }
-
-  Future<void> _movePage(PageRef ref, int delta) async {
-    final i = nb.pages.indexOf(ref), j = i + delta;
-    if (j < 0 || j >= nb.pages.length) return;
-    setState(() {
-      nb.pages.removeAt(i);
-      nb.pages.insert(j, ref);
-    });
-    await _saveIndex();
-  }
-
-  Future<void> _deletePage(PageRef p) async {
-    if (!await confirmDelete(context, 'Borrar "${p.title}"', 'Se borra la página con todo lo que tiene.')) return;
-    await store.deletePage(p.id);
-    final i = nb.pages.indexOf(p);
-    setState(() => nb.pages.remove(p));
-    _thumbs.remove(p.id);
-    await _saveIndex();
-    if (p.id == page?.id) {
-      _discardPending();
-      setState(() => page = null);
-      if (nb.pages.isNotEmpty) {
-        await _open(nb.pages[i.clamp(0, nb.pages.length - 1)].id);
-      } else {
-        await _addPage();
-      }
+  /// Aplica una operación que cambia las hojas de lugar (los elementos corren) y va a la hoja [goTo].
+  void _sheetOp(void Function(NotebookDoc d) op, {int? goTo}) {
+    final d = doc!;
+    op(d);
+    _structure.value++;
+    editorKey.currentState?.sheetsChanged();
+    if (goTo != null) {
+      sheetNotifier.value = goTo;
+      // el scroll mide el nuevo largo recién después de este cuadro
+      WidgetsBinding.instance.addPostFrameCallback((_) => editorKey.currentState?.scrollToSheet(goTo));
     }
+    setState(() {});
   }
 
-  Future<void> _toggleBookmark(PageRef p) async {
-    setState(() => p.bookmark = !p.bookmark);
+  /// Cambios que no mueven elementos (título, marcador): no tocan el deshacer.
+  void _metaChanged() {
+    _structure.value++;
+    _docChanged();
+    setState(() {});
+  }
+
+  void _addSheetAfter(int k) => _sheetOp((d) => d.insertSheet(k + 1), goTo: k + 1);
+
+  Future<void> _renameSheet(int k) async {
+    final m = doc!.sheets[k];
+    final n = await askText(context, 'Nombre de la hoja ${k + 1}', initial: m.title, hint: 'Opcional');
+    if (n == null) return;
+    m.title = n.trim();
+    _metaChanged();
+  }
+
+  Future<void> _deleteSheet(int k) async {
+    final d = doc!;
+    if (d.sheetCount < 2) {
+      snack(context, 'No se puede borrar la única hoja del cuaderno');
+      return;
+    }
+    if (!await confirmDelete(context, 'Borrar la hoja ${k + 1}', 'Se borra la hoja con todo lo que tiene.')) return;
+    _sheetOp((d) => d.deleteSheet(k), goTo: k.clamp(0, d.sheetCount - 2));
+  }
+
+  void _toggleBookmark(int k) {
+    final m = doc!.sheets[k];
+    m.bookmark = !m.bookmark;
     HapticFeedback.selectionClick();
-    await _saveIndex();
+    _metaChanged();
   }
 
-  void _pageAction(PageRef ref, PageAction a) {
+  void _sheetAction(int k, SheetAction a) {
     switch (a) {
-      case PageAction.rename:
-        _renamePage(ref);
-      case PageAction.duplicate:
-        _duplicatePage(ref);
-      case PageAction.moveUp:
-        _movePage(ref, -1);
-      case PageAction.moveDown:
-        _movePage(ref, 1);
-      case PageAction.delete:
-        _deletePage(ref);
+      case SheetAction.rename:
+        _renameSheet(k);
+      case SheetAction.addAfter:
+        _addSheetAfter(k);
+      case SheetAction.duplicate:
+        _sheetOp((d) => d.duplicateSheet(k), goTo: k + 1);
+      case SheetAction.moveUp:
+        _sheetOp((d) => d.moveSheet(k, k - 1), goTo: k - 1);
+      case SheetAction.moveDown:
+        _sheetOp((d) => d.moveSheet(k, k + 1), goTo: k + 1);
+      case SheetAction.delete:
+        _deleteSheet(k);
     }
-  }
-
-  Future<PageData> _thumb(String id) async {
-    if (id == page?.id) return page!;
-    return _thumbs[id] ??= await store.loadPage(id);
-  }
-
-  /// Agrega páginas ya guardadas después de la actual y abre la primera.
-  Future<void> _insertPages(List<(PageData, String)> pages) async {
-    final at = curIndex + 1;
-    setState(() {
-      for (var i = 0; i < pages.length; i++) {
-        nb.pages.insert(at + i, PageRef(pages[i].$1.id, pages[i].$2));
-        _thumbs[pages[i].$1.id] = pages[i].$1;
-      }
-    });
-    nb.touch();
-    await _saveIndex();
-    await _open(pages.first.$1.id);
   }
 
   // ================= insertar (+) =================
@@ -249,8 +229,8 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         case 'voice':
           final it = await recordVoice(context, store);
           if (it != null) ed?.insertItem(it);
-        case 'page':
-          await _addPage(at: curIndex + 1);
+        case 'sheet':
+          _addSheetAfter(curSheet);
         case 'pdf':
           await _importPdf();
       }
@@ -277,11 +257,17 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         ),
       ),
     ));
-    final pages = await importPdf(store, onPage: (n) => progress.value = n);
+    final sheets = await importPdf(store, onPage: (n) => progress.value = n);
     if (mounted) Navigator.of(context).pop();
-    if (pages.isEmpty) return;
-    await _insertPages(pages);
-    if (mounted) snack(context, '${pages.length} ${pages.length == 1 ? 'hoja importada' : 'hojas importadas'}');
+    if (sheets.isEmpty || !mounted) return;
+    // después de la hoja actual
+    final at = curSheet + 1;
+    _sheetOp((d) {
+      for (var i = 0; i < sheets.length; i++) {
+        d.insertSheet(at + i, meta: sheets[i].$1, content: sheets[i].$2);
+      }
+    }, goTo: at);
+    if (mounted) snack(context, '${sheets.length} ${sheets.length == 1 ? 'hoja importada' : 'hojas importadas'}');
   }
 
   // ================= menú ⋮ =================
@@ -294,9 +280,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
           hits = [];
         });
       case 'style':
-        await _styleDialog(all: true);
-      case 'page':
-        await _styleDialog(all: false);
+        await _styleDialog();
       case 'saveas':
         await _saveAs();
       case 'fav':
@@ -306,9 +290,9 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
       case 'lock':
         await _toggleLock();
       case 'share':
-        await _flush();
-        if (!mounted) return;
-        final bytes = await buildPdfWithProgress(context, store, nb);
+        final d = doc;
+        if (d == null) return;
+        final bytes = await buildPdfWithProgress(context, store, d);
         if (bytes == null) return;
         await SharePlus.instance.share(ShareParams(
           files: [XFile.fromData(bytes, mimeType: 'application/pdf', name: '${nb.name}.pdf')],
@@ -316,10 +300,12 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
           title: nb.name,
         ));
       case 'print':
-        await _flush();
-        await Printing.layoutPdf(name: nb.name, onLayout: (_) => buildNotebookPdf(store, nb));
+        final d = doc;
+        if (d == null) return;
+        await Printing.layoutPdf(name: nb.name, onLayout: (_) => buildNotebookPdf(store, d));
       case 'delete':
         if (!await confirmDeleteNotebook(context, nb)) return;
+        _deleted = true;
         _discardPending();
         await store.deleteNotebook(widget.index, nb);
         if (mounted) Navigator.of(context).pop('deleted');
@@ -357,64 +343,60 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
   }
 
   Future<void> _saveAs() async {
-    final p = page;
-    final title = p == null ? '' : nb.pages[curIndex].title;
-    final v = await showSaveAsSheet(context, pageTitle: title);
+    final d = doc;
+    if (d == null) return;
+    final k = curSheet, meta = d.sheets[k];
+    final sheetName = 'Hoja ${k + 1}${meta.title.isEmpty ? '' : ' · ${meta.title}'}';
+    final v = await showSaveAsSheet(context, sheetName: sheetName);
     if (v == null || !mounted) return;
-    await _flush();
-    if (!mounted || p == null) return;
     switch (v) {
       case 'nb':
-        await exportPdfFlow(context, store, nb);
-      case 'page':
-        await exportPdfFlow(context, store, nb, only: [p.id], name: '${nb.name} - $title');
+        await exportPdfFlow(context, store, d);
+      case 'sheet':
+        await exportPdfFlow(context, store, d, only: [k], name: '${nb.name} - hoja ${k + 1}');
       case 'png':
-        final sheet = editorKey.currentState?.visibleSheet ?? 0;
-        final ok = await saveSheetPng(store, p, sheet, '${nb.name} - $title - hoja ${sheet + 1}');
+        final ok = await saveSheetPng(store, d, k, '${nb.name} - hoja ${k + 1}');
         if (ok && mounted) snack(context, 'Imagen guardada');
     }
   }
 
-  /// Estilo (todo el cuaderno) o configuración de página (solo esta)
-  Future<void> _styleDialog({required bool all}) async {
-    final p = page;
-    if (p == null) return;
-    final r = await showStyleDialog(context, p, all: all);
+  /// Estilo del cuaderno: fondo y papel de todas las hojas y de las que se agreguen.
+  Future<void> _styleDialog() async {
+    final d = doc;
+    if (d == null) return;
+    final r = await showStyleDialog(context, d);
     if (r != null && mounted) {
-      p.bg = r.bg;
-      p.paper = r.paper;
+      nb.bg = r.bg;
+      nb.paper = r.paper;
+      _indexDirty = true;
+      for (final m in d.sheets) {
+        m.bg = r.bg;
+        m.paper = r.paper;
+      }
     }
-    // aunque se cancele: las hojas agregadas o quitadas ya quedaron en la página
-    _pageChanged();
+    // aunque se cancele: las hojas agregadas o quitadas ya quedaron en el cuaderno
+    _structure.value++;
+    _docChanged();
     editorKey.currentState?.refresh();
-    if (r == null || !mounted || !all) return;
-    await _flush();
-    for (final ref in nb.pages) {
-      if (ref.id == p.id) continue;
-      final other = await store.loadPage(ref.id);
-      other.bg = r.bg;
-      other.paper = r.paper;
-      await store.savePage(other);
-      _thumbs[ref.id] = other;
-    }
     if (mounted) setState(() {});
   }
 
   // ================= búsqueda =================
   void _search(String q) {
     _searchTimer?.cancel();
-    _searchTimer = Timer(const Duration(milliseconds: 220), () async {
-      final out = await searchNotebook(nb, _thumb, q);
-      if (mounted) setState(() => hits = out);
+    _searchTimer = Timer(const Duration(milliseconds: 220), () {
+      final d = doc;
+      if (d != null && mounted) setState(() => hits = searchNotebook(d, q));
     });
   }
 
-  Future<void> _goHit(SearchHit h) async {
-    await _open(h.page.id);
+  void _goHit(SearchHit h) {
     setState(() => searching = false);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (h.id != null) editorKey.currentState?.reveal(h.id!);
-    });
+    if (h.id == null) {
+      _goTo(h.sheet);
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) => editorKey.currentState?.reveal(h.id!));
+    }
   }
 
   void _closeSearch() => setState(() {
@@ -461,15 +443,17 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
                     child: panel && !fullscreen ? _pagesPanel() : const SizedBox(width: 0),
                   ),
                   Expanded(
-                    child: page == null
+                    child: doc == null
                         ? const Center(child: CircularProgressIndicator())
                         : PageEditor(
                             key: editorKey,
-                            page: page!,
+                            doc: doc!,
+                            initialSheet: sheetNotifier.value,
+                            sheetNotifier: sheetNotifier,
                             tools: widget.tools,
                             store: store,
                             readOnly: reading,
-                            onChanged: _pageChanged,
+                            onChanged: _docChanged,
                             onPrefsChanged: _prefsChanged,
                           ),
                   ),
@@ -504,21 +488,20 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
   }
 
   Widget _pagesPanel() => PagesPanel(
-        nb: nb,
-        currentId: page?.id,
-        onlyBookmarks: onlyBookmarks,
-        thumb: _thumb,
+        doc: doc!,
+        current: sheetNotifier,
+        structure: _structure,
         liveVersion: _liveVersion,
+        onlyBookmarks: onlyBookmarks,
         onToggleBookmarksFilter: () => setState(() => onlyBookmarks = !onlyBookmarks),
         onSearch: () => setState(() => searching = true),
-        onAddPage: () => _addPage(at: curIndex + 1),
-        onOpen: (ref) => _open(ref.id),
+        onAdd: () => _addSheetAfter(curSheet),
+        onOpen: _goTo,
         onToggleBookmark: _toggleBookmark,
-        onAction: _pageAction,
+        onAction: _sheetAction,
       );
 
   Widget _topBar(ColorScheme cs) {
-    final cur = curIndex >= 0 ? nb.pages[curIndex] : null;
     Widget act(IconData i, String tip, VoidCallback? f, {bool on = false, Key? key}) => Padding(
           padding: const EdgeInsets.symmetric(horizontal: 1),
           child: IconButton(
@@ -552,7 +535,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
           icon: Icon(Symbols.arrow_back, weight: 300, color: cs.onSurface),
         ),
         const SizedBox(width: 4),
-        Expanded(child: searching ? _searchField() : _title(cs, cur)),
+        Expanded(child: searching ? _searchField() : _title(cs)),
         if (searching)
           act(Symbols.close, 'Cerrar búsqueda', _closeSearch)
         else ...[
@@ -562,7 +545,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
             final v = await showInsertMenu(context, at);
             if (v != null && mounted) await runInsert(v);
           }),
-          act(Symbols.view_sidebar, 'Páginas', () => setState(() => panel = !panel), on: panel, key: const Key('pagesBtn')),
+          act(Symbols.view_sidebar, 'Hojas', () => setState(() => panel = !panel), on: panel, key: const Key('pagesBtn')),
           act(Symbols.open_in_full, 'Pantalla completa', _toggleFullscreen),
           menuBtn(Symbols.more_vert, 'Más opciones', const Key('more'), (at) async {
             final v = await showMoreMenu(context, at, nb);
@@ -586,8 +569,8 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         onChanged: _search,
       );
 
-  /// Nombre del cuaderno (siempre arriba a la izquierda) y la página actual.
-  Widget _title(ColorScheme cs, PageRef? cur) =>
+  /// Nombre del cuaderno (siempre arriba a la izquierda) y la hoja que se ve: "2 / 5".
+  Widget _title(ColorScheme cs) =>
       Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Flexible(
@@ -604,8 +587,17 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
                 padding: const EdgeInsets.only(left: 4),
                 child: Icon(Symbols.lock, size: 16, weight: 400, color: cs.onSurfaceVariant)),
         ]),
-        if (cur != null)
-          Text('${cur.title} · ${curIndex + 1} de ${nb.pages.length}',
-              maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: cs.onSurfaceVariant)),
+        if (doc != null)
+          ListenableBuilder(
+            listenable: Listenable.merge([sheetNotifier, _structure]),
+            builder: (_, _) {
+              final k = curSheet, t = doc!.sheets[k].title;
+              return Text('${t.isEmpty ? '' : '$t · '}${k + 1} / ${doc!.sheetCount}',
+                  key: const Key('sheetCounter'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12.5, color: cs.onSurfaceVariant));
+            },
+          ),
       ]);
 }

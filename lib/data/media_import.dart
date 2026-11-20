@@ -75,13 +75,13 @@ Future<Item?> makeAudioFileItem(Storage store) async {
   return makeAudioItem(name, await audioDuration(store.media(name)));
 }
 
-/// PDF → una página nueva por cada hoja del PDF, con la hoja como imagen de fondo.
-/// Devuelve las páginas creadas (ya guardadas) y sus títulos.
-Future<List<(PageData, String)>> importPdf(Storage store, {void Function(int)? onPage}) async {
+/// PDF → una hoja nueva por cada página del PDF, con la página como imagen. Cada hoja viene con su
+/// contenido (coordenadas locales) y se titula "archivo · n"; quien llama la pone en el cuaderno.
+Future<List<(SheetMeta, SheetContent)>> importPdf(Storage store, {void Function(int)? onPage}) async {
   final picked = await Pickers.pdf();
   if (picked == null) return [];
   final (bytes, name) = picked;
-  final out = <(PageData, String)>[];
+  final out = <(SheetMeta, SheetContent)>[];
   var n = 0;
   await for (final raster in Printing.raster(bytes, dpi: 150)) {
     final png = await raster.toPng();
@@ -92,12 +92,9 @@ Future<List<(PageData, String)>> importPdf(Storage store, {void Function(int)? o
       h = kSheetH;
       w = kSheetH * raster.width / raster.height;
     }
-    final page = PageData(newId('p'), bg: 'blank');
     final it = Item(newId('i'), 'image', (kW - w) / 2, (kSheetH - h) / 2, w, h, file: file);
-    page.items[it.id] = it;
-    await store.savePage(page);
     n++;
-    out.add((page, '$name · $n'));
+    out.add((SheetMeta(newId('h'), title: '$name · $n', bg: 'blank'), SheetContent(items: [it])));
     onPage?.call(n);
   }
   return out;

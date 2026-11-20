@@ -8,22 +8,23 @@ import 'paper.dart';
 import 'stroke_painter.dart';
 import 'text_layout.dart';
 
-/// Dibuja la hoja [sheet] de una página, completa (papel, renglones, elementos, tinta y texto),
+/// Dibuja la hoja [sheet] del cuaderno [doc], completa (papel, renglones, elementos, tinta y texto),
 /// en coordenadas lógicas con origen en la esquina de esa hoja. Para miniaturas, PNG y PDF.
-void paintSheet(Canvas c, PageData page, int sheet, double pxPerUnit, {Map<String, ui.Image>? images}) {
+void paintSheet(Canvas c, NotebookDoc doc, int sheet, double pxPerUnit, {Map<String, ui.Image>? images}) {
   final top = sheet * kSheetStep;
+  final meta = doc.sheets[sheet];
   c.save();
   c.clipRect(const Rect.fromLTWH(0, 0, kW, kSheetH));
-  c.drawRect(const Rect.fromLTWH(0, 0, kW, kSheetH), Paint()..color = parseColor(page.paper));
+  c.drawRect(const Rect.fromLTWH(0, 0, kW, kSheetH), Paint()..color = parseColor(meta.paper));
   // en miniaturas chicas las líneas no pueden ser más finas que esto o desaparecen
-  paintPaperPattern(c, page.bg, ruleWidth: max(.6, 1 / pxPerUnit), marginWidth: max(.8, 1.2 / pxPerUnit));
+  paintPaperPattern(c, meta.bg, ruleWidth: max(.6, 1 / pxPerUnit), marginWidth: max(.8, 1.2 / pxPerUnit));
   c.translate(0, -top);
   final visible = Rect.fromLTWH(0, top, kW, kSheetH);
-  for (final it in page.items.values) {
+  for (final it in doc.items.values) {
     if (it.rect.overlaps(visible)) paintItem(c, it, images?[it.file]);
   }
-  paintStrokes(c, page.strokes.values.where((s) => s.bounds.overlaps(visible)).toList());
-  for (final t in page.texts.values) {
+  paintStrokes(c, doc.strokes.values.where((s) => s.bounds.overlaps(visible)).toList());
+  for (final t in doc.texts.values) {
     // kLine * 40: tope generoso del alto de un texto, para no medirlos todos
     if (t.text.trim().isEmpty || t.y > top + kSheetH || t.y + kLine * 40 < top) continue;
     final tp = TextPainter(
@@ -36,20 +37,21 @@ void paintSheet(Canvas c, PageData page, int sheet, double pxPerUnit, {Map<Strin
   c.restore();
 }
 
-/// Miniatura de la primera hoja de una página
+/// Miniatura de la hoja [sheet] (por defecto la primera)
 class SheetThumbPainter extends CustomPainter {
-  final PageData page;
-  final int version; // cambia cuando se edita la página abierta
-  SheetThumbPainter(this.page, [this.version = 0]);
+  final NotebookDoc doc;
+  final int sheet;
+  final int version; // cambia cuando se edita el cuaderno abierto
+  SheetThumbPainter(this.doc, {this.sheet = 0, this.version = 0});
   @override
   void paint(Canvas c, Size size) {
     final k = size.width / kW;
     c.scale(k);
-    paintSheet(c, page, 0, k);
+    if (sheet < doc.sheetCount) paintSheet(c, doc, sheet, k);
   }
 
   @override
-  bool shouldRepaint(SheetThumbPainter o) => o.page != page || o.version != version || o.page.rev != page.rev;
+  bool shouldRepaint(SheetThumbPainter o) => o.doc != doc || o.sheet != sheet || o.version != version;
 }
 
 const _stickyText = Color(0xFF2B2A27);

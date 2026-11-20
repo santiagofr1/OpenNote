@@ -39,31 +39,32 @@ void paintPaperPattern(Canvas c, String bg, {required double ruleWidth, required
   }
 }
 
-/// Fondo del editor: cada hoja con su papel, sombra suave y su patrón.
+/// Fondo del editor: cada hoja con su papel, sombra suave y su patrón (cada una con el suyo).
 class SheetPainter extends CustomPainter {
-  final String bg, paperColor;
-  final double h, scale;
-  SheetPainter(this.bg, this.h, this.scale, [this.paperColor = '#fffefb']);
+  final List<SheetMeta> sheets;
+  final double scale;
+  final String _sig; // cómo estaban los estilos al crearse (la lista se modifica en el lugar)
+  SheetPainter(this.sheets, this.scale) : _sig = sheets.map((s) => '${s.bg}${s.paper}').join('|');
 
   @override
   void paint(Canvas c, Size size) {
     c.scale(scale);
-    final paper = Paint()..color = parseColor(paperColor);
     final shadow = Paint()
       ..color = const Color(0x24000000)
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, 10 / scale);
-    for (final r in sheetRects(h)) {
+    for (var k = 0; k < sheets.length; k++) {
+      final r = Rect.fromLTWH(0, k * kSheetStep, kW, kSheetH);
       c.drawRect(r.shift(Offset(0, 4 / scale)), shadow);
-      c.drawRect(r, paper);
+      c.drawRect(r, Paint()..color = parseColor(sheets[k].paper));
       c.save();
       c.clipRect(r);
       c.translate(0, r.top);
       // líneas de un píxel de pantalla, sin importar el zoom
-      paintPaperPattern(c, bg, ruleWidth: 1 / scale, marginWidth: 1.2 / scale);
+      paintPaperPattern(c, sheets[k].bg, ruleWidth: 1 / scale, marginWidth: 1.2 / scale);
       c.restore();
     }
   }
 
   @override
-  bool shouldRepaint(SheetPainter o) => o.bg != bg || o.h != h || o.scale != scale || o.paperColor != paperColor;
+  bool shouldRepaint(SheetPainter o) => o._sig != _sig || o.scale != scale;
 }

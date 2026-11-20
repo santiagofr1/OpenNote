@@ -3,32 +3,38 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import '../../domain/domain.dart';
 
-/// Un resultado: texto o nota adhesiva ([id]) o el título de la página ([id] null).
+/// Un resultado: texto o nota adhesiva ([id]) o el título de la hoja ([id] null).
 class SearchHit {
-  final PageRef page;
+  final int sheet; // índice de la hoja
+  final SheetMeta meta;
   final String? id;
   final String snippet;
-  SearchHit(this.page, this.id, this.snippet);
+  SearchHit(this.sheet, this.meta, this.id, this.snippet);
 }
 
-/// Busca [query] (sin importar mayúsculas) en los textos, notas adhesivas y títulos del cuaderno.
-Future<List<SearchHit>> searchNotebook(Notebook nb, Future<PageData> Function(String id) load, String query) async {
+/// Busca [query] (sin importar mayúsculas) en los textos, notas adhesivas y títulos de las hojas
+/// del cuaderno, en el orden en que aparecen.
+List<SearchHit> searchNotebook(NotebookDoc doc, String query) {
   final q = query.trim().toLowerCase();
   if (q.isEmpty) return [];
-  final out = <SearchHit>[];
-  for (final ref in nb.pages) {
-    final p = await load(ref.id);
-    for (final t in p.texts.values) {
-      final i = t.text.toLowerCase().indexOf(q);
-      if (i >= 0) out.add(SearchHit(ref, t.id, snippet(t.text, i, q.length)));
-    }
-    for (final it in p.items.values) {
-      final i = it.text.toLowerCase().indexOf(q);
-      if (it.type == 'sticky' && i >= 0) out.add(SearchHit(ref, it.id, snippet(it.text, i, q.length)));
-    }
-    if (ref.title.toLowerCase().contains(q)) out.add(SearchHit(ref, null, 'Título: ${ref.title}'));
+  // [orden en la hoja, y, hit]: dentro de cada hoja, de arriba hacia abajo
+  final found = <(int, double, SearchHit)>[];
+  for (final t in doc.texts.values) {
+    final i = t.text.toLowerCase().indexOf(q);
+    final k = doc.sheetOfY(t.y);
+    if (i >= 0) found.add((k, t.y, SearchHit(k, doc.sheets[k], t.id, snippet(t.text, i, q.length))));
   }
-  return out;
+  for (final it in doc.items.values) {
+    final i = it.text.toLowerCase().indexOf(q);
+    final k = doc.sheetOfY(it.y);
+    if (it.type == 'sticky' && i >= 0) found.add((k, it.y, SearchHit(k, doc.sheets[k], it.id, snippet(it.text, i, q.length))));
+  }
+  for (var k = 0; k < doc.sheetCount; k++) {
+    final m = doc.sheets[k];
+    if (m.title.toLowerCase().contains(q)) found.add((k, -1, SearchHit(k, m, null, 'Título: ${m.title}')));
+  }
+  found.sort((a, b) => a.$1 != b.$1 ? a.$1.compareTo(b.$1) : a.$2.compareTo(b.$2));
+  return [for (final f in found) f.$3];
 }
 
 /// Pedacito de [s] alrededor de lo encontrado (en [i], de largo [n]), en una línea.
@@ -57,7 +63,7 @@ class SearchResults extends StatelessWidget {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxHeight: 420),
         child: q.isEmpty
-            ? note('Buscá en los textos, notas adhesivas y títulos de páginas')
+            ? note('Buscá en los textos, notas adhesivas y títulos de hojas')
             : hits.isEmpty
                 ? note('Sin resultados para "$q"')
                 : ListView(
@@ -66,10 +72,11 @@ class SearchResults extends StatelessWidget {
                     children: [
                       for (final h in hits)
                         ListTile(
-                          key: Key('hit-${h.id ?? h.page.id}'),
+                          key: Key('hit-${h.id ?? h.meta.id}'),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           leading: Icon(Symbols.description, weight: 300, color: cs.onSurfaceVariant),
-                          title: Text(h.page.title, style: const TextStyle(fontWeight: FontWeight.w500)),
+                          title: Text('Hoja ${h.sheet + 1}${h.meta.title.isEmpty ? '' : ' · ${h.meta.title}'}',
+              style: const TextStyle(fontWeight: FontWeight.w500)),
                           subtitle: Text(h.snippet, maxLines: 2, overflow: TextOverflow.ellipsis),
                           onTap: () => onTap(h),
                         ),

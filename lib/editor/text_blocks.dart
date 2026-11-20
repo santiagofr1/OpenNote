@@ -18,17 +18,17 @@ class TextFields {
   /// Se salió de un bloque vacío: hay que borrarlo.
   final void Function(String id) onLeftEmpty;
 
-  late PageData page;
+  late NotebookDoc doc;
   final _ctrls = <String, TextEditingController>{};
   final _focus = <String, FocusNode>{};
   final _saveTimers = <String, Timer>{};
 
   /// Arma los campos de todos los textos de [p] (y suelta los de la página anterior).
-  void attach(PageData p) {
+  void attach(NotebookDoc p) {
     for (final id in _ctrls.keys.toList()) {
       _unbind(id);
     }
-    page = p;
+    doc = p;
     for (final t in p.texts.values) {
       _bind(t);
     }
@@ -42,7 +42,7 @@ class TextFields {
     final c = TextEditingController(text: t.text);
     final f = FocusNode();
     f.addListener(() {
-      if (!f.hasFocus && c.text.trim().isEmpty && page.texts.containsKey(t.id)) {
+      if (!f.hasFocus && c.text.trim().isEmpty && doc.texts.containsKey(t.id)) {
         WidgetsBinding.instance.addPostFrameCallback((_) => onLeftEmpty(t.id));
       }
       onFocusChange();
@@ -64,11 +64,11 @@ class TextFields {
   /// Pone (o saca, si [t] es null) un bloque de texto en la página, con su campo de edición.
   void put(String id, TextBlock? t) {
     if (t == null) {
-      page.texts.remove(id);
+      doc.texts.remove(id);
       _unbind(id);
       return;
     }
-    page.texts[id] = t;
+    doc.texts[id] = t;
     final c = _ctrls[id];
     if (c == null) {
       _bind(t);

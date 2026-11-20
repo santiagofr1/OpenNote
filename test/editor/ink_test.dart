@@ -58,7 +58,7 @@ void main() {
   });
 
   test('strokesHit: solo los trazos que toca la goma', () {
-    final p = PageData('p');
+    final p = NotebookDoc(Notebook.create('t'));
     p.strokes['a'] = Stroke('a', 'pen', '#000000', 2, [0, 0, .5, 100, 0, .5]);
     p.strokes['b'] = Stroke('b', 'pen', '#000000', 2, [0, 100, .5, 100, 100, .5]);
     expect(strokesHit(p, const Offset(50, 5), 8).map((s) => s.id), ['a']);
