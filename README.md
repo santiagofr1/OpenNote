@@ -47,12 +47,6 @@ guardan en tu tablet, sin cuentas ni servidores.
 
 - Sigue el tema de tu tablet, con los colores de Material You.
 
-## Capturas
-
-<!-- capturas: docs/img/... -->
-
-Pronto.
-
 ## Instalación
 
 Por ahora, la forma más fácil es bajar el APK desde la página de
