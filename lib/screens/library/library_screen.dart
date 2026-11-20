@@ -102,7 +102,7 @@ class _LibraryState extends State<Library> {
 
   Future<void> _duplicate(Notebook nb) async {
     final src = await store.loadNotebook(nb);
-    final copy = Notebook(newId('n'), '${nb.name} (copia)', bg: nb.bg, paper: nb.paper)
+    final copy = Notebook(newId('n'), '${nb.name} (copia)', bg: nb.bg, paper: nb.paper, spacing: nb.spacing)
       ..sheets.addAll(nb.sheets.map((s) => s.copy()))
       ..touch();
     final doc = NotebookDoc.fromSheets(copy, src.splitBySheet()); // copias: no comparte nada con el original

@@ -102,6 +102,7 @@ class TextBlockView extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode focus;
   final double scale;
+  final double line; // alto del renglón (unidades de la hoja donde está)
   final bool textMode, selected;
   final ValueChanged<String> onChanged;
   final ValueChanged<Offset> onHandleDrag; // delta en píxeles de pantalla
@@ -112,6 +113,7 @@ class TextBlockView extends StatelessWidget {
     required this.controller,
     required this.focus,
     required this.scale,
+    required this.line,
     required this.textMode,
     required this.selected,
     required this.onChanged,
@@ -122,7 +124,6 @@ class TextBlockView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = block;
-    final fs = kFont * scale;
     return Positioned(
       left: t.x * scale,
       top: t.y * scale,
@@ -143,8 +144,8 @@ class TextBlockView extends StatelessWidget {
               controller: controller,
               focusNode: focus,
               maxLines: null,
-              style: TextStyle(fontSize: fs, color: kInk, height: kLine / kFont),
-              strutStyle: StrutStyle(fontSize: fs, height: kLine / kFont, forceStrutHeight: true),
+              style: textStyle(line, scale: scale, color: kInk),
+              strutStyle: textStrut(line, scale: scale),
               decoration: const InputDecoration.collapsed(hintText: ''),
               cursorColor: kAccent,
               onChanged: onChanged,
@@ -159,7 +160,7 @@ class TextBlockView extends StatelessWidget {
                 onPanEnd: (_) => onHandleDragEnd(),
                 child: SizedBox(
                   width: 26,
-                  height: max(kLine * scale, 28),
+                  height: max(line * scale, 28),
                   child: const Icon(Symbols.drag_indicator, size: 20, color: Color(0x99777777)),
                 ),
               ),
