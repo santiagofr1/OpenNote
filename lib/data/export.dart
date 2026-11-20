@@ -12,41 +12,36 @@ import 'storage.dart';
 /// Resolución de cada hoja exportada (ancho en píxeles): ~200 ppp en A4.
 const _pxWidth = 1654.0;
 
-/// Arma el PDF de un cuaderno: cada hoja de cada página es una hoja A4.
-/// [only]: ids de las páginas a incluir (todas si es null). [onProgress] recibe (hechas, total).
-Future<Uint8List> buildNotebookPdf(Storage store, Notebook nb,
-    {void Function(int, int)? onProgress, List<String>? only}) async {
-  final pages = <PageData>[
-    for (final ref in nb.pages)
-      if (only == null || only.contains(ref.id)) await store.loadPage(ref.id)
+/// Arma el PDF del cuaderno: una hoja A4 por cada hoja, cada una con su fondo y su papel.
+/// [only]: índices de las hojas a incluir (todas si es null). [onProgress] recibe (hechas, total).
+Future<Uint8List> buildNotebookPdf(Storage store, NotebookDoc nb,
+    {void Function(int, int)? onProgress, List<int>? only}) async {
+  final sheets = [
+    for (var k = 0; k < nb.sheetCount; k++)
+      if (only == null || only.contains(k)) k
   ];
-  final images = await loadImages(store, pages);
-  final total = pages.fold<int>(0, (n, p) => n + sheetCount(p.h));
-  final doc = pw.Document(title: nb.name, creator: 'Apuntes');
+  final images = await loadImages(store, nb);
+  final pdf = pw.Document(title: nb.nb.name, creator: 'Apuntes');
   var done = 0;
-  for (final page in pages) {
-    for (var k = 0; k < sheetCount(page.h); k++) {
-      final png = await renderSheetPng(page, k, images: images);
-      doc.addPage(pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        margin: pw.EdgeInsets.zero,
-        build: (_) => pw.Image(pw.MemoryImage(png), fit: pw.BoxFit.fill),
-      ));
-      onProgress?.call(++done, total);
-    }
+  for (final k in sheets) {
+    final png = await renderSheetPng(nb, k, images: images);
+    pdf.addPage(pw.Page(
+      pageFormat: PdfPageFormat.a4,
+      margin: pw.EdgeInsets.zero,
+      build: (_) => pw.Image(pw.MemoryImage(png), fit: pw.BoxFit.fill),
+    ));
+    onProgress?.call(++done, sheets.length);
   }
-  return doc.save();
+  return pdf.save();
 }
 
-/// Imágenes insertadas en [pages], decodificadas, por nombre de archivo (las que faltan se saltean).
-Future<Map<String, ui.Image>> loadImages(Storage store, Iterable<PageData> pages) async {
+/// Imágenes insertadas en [doc], decodificadas, por nombre de archivo (las que faltan se saltean).
+Future<Map<String, ui.Image>> loadImages(Storage store, NotebookDoc doc) async {
   final images = <String, ui.Image>{};
-  for (final p in pages) {
-    for (final it in p.items.values) {
-      if (it.type == 'image' && it.file != null && !images.containsKey(it.file)) {
-        final f = store.media(it.file!);
-        if (await f.exists()) images[it.file!] = await decodeImage(await f.readAsBytes());
-      }
+  for (final it in doc.items.values) {
+    if (it.type == 'image' && it.file != null && !images.containsKey(it.file)) {
+      final f = store.media(it.file!);
+      if (await f.exists()) images[it.file!] = await decodeImage(await f.readAsBytes());
     }
   }
   return images;
@@ -57,12 +52,12 @@ Future<ui.Image> decodeImage(Uint8List bytes) async {
   return (await codec.getNextFrame()).image;
 }
 
-Future<Uint8List> renderSheetPng(PageData page, int sheet, {Map<String, ui.Image>? images}) async {
+Future<Uint8List> renderSheetPng(NotebookDoc doc, int sheet, {Map<String, ui.Image>? images}) async {
   const k = _pxWidth / kW;
   final rec = ui.PictureRecorder();
   final c = ui.Canvas(rec);
   c.scale(k);
-  paintSheet(c, page, sheet, k, images: images);
+  paintSheet(c, doc, sheet, k, images: images);
   final img = await rec.endRecording().toImage(_pxWidth.round(), (kSheetH * k).round());
   final data = await img.toByteData(format: ui.ImageByteFormat.png);
   img.dispose();
@@ -86,8 +81,8 @@ Future<bool> savePdf(Uint8List bytes, String name) async {
 }
 
 /// Guarda la hoja [sheet] como PNG, preguntando dónde. Devuelve false si el usuario canceló.
-Future<bool> saveSheetPng(Storage store, PageData page, int sheet, String name) async {
-  final png = await renderSheetPng(page, sheet, images: await loadImages(store, [page]));
+Future<bool> saveSheetPng(Storage store, NotebookDoc doc, int sheet, String name) async {
+  final png = await renderSheetPng(doc, sheet, images: await loadImages(store, doc));
   final uri = await FilePicker.saveFile(
     dialogTitle: 'Guardar imagen',
     fileName: safeFileName('$name.png'),

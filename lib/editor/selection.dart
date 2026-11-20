@@ -52,15 +52,15 @@ class Selection {
       ..addAll(items);
   }
 
-  void selectAll(PageData p) => replace(strokes: p.strokes.keys, texts: p.texts.keys, items: p.items.keys);
+  void selectAll(NotebookDoc p) => replace(strokes: p.strokes.keys, texts: p.texts.keys, items: p.items.keys);
 
   // lo seleccionado que sigue existiendo en la página
-  List<Stroke> strokesOf(PageData p) => [for (final id in strokes) ?p.strokes[id]];
-  List<TextBlock> textsOf(PageData p) => [for (final id in texts) ?p.texts[id]];
-  List<Item> itemsOf(PageData p) => [for (final id in items) ?p.items[id]];
+  List<Stroke> strokesOf(NotebookDoc p) => [for (final id in strokes) ?p.strokes[id]];
+  List<TextBlock> textsOf(NotebookDoc p) => [for (final id in texts) ?p.texts[id]];
+  List<Item> itemsOf(NotebookDoc p) => [for (final id in items) ?p.items[id]];
 
   /// Rectángulo de lo seleccionado en su posición original (sin el arrastre en curso), con margen.
-  Rect? bounds(PageData p) {
+  Rect? bounds(NotebookDoc p) {
     final d = drag;
     Offset back(Offset? orig, double x, double y) => orig == null ? Offset.zero : orig - Offset(x, y);
     return contentBounds(
@@ -71,18 +71,18 @@ class Selection {
   }
 
   /// Empieza a mover lo seleccionado desde [p].
-  void startDrag(PageData page, Offset p) => drag = MoveDrag(
+  void startDrag(NotebookDoc doc, Offset p) => drag = MoveDrag(
         p,
-        {for (final t in textsOf(page)) t.id: Offset(t.x, t.y)},
-        {for (final it in itemsOf(page)) it.id: Offset(it.x, it.y)},
+        {for (final t in textsOf(doc)) t.id: Offset(t.x, t.y)},
+        {for (final it in itemsOf(doc)) it.id: Offset(it.x, it.y)},
       );
 
   /// Selecciona lo que queda dentro de [r]: trazos con la mitad o más de sus puntos adentro;
   /// textos y elementos, si su centro cae adentro. Un rectángulo mínimo (un toque) no elige nada.
-  void selectIn(PageData page, Rect r) {
+  void selectIn(NotebookDoc doc, Rect r) {
     replace();
     if (r.width < 4 && r.height < 4) return;
-    for (final s in page.strokes.values) {
+    for (final s in doc.strokes.values) {
       if (!r.overlaps(s.bounds)) continue;
       var inside = 0;
       for (var i = 0; i < s.pts.length; i += 3) {
@@ -90,10 +90,10 @@ class Selection {
       }
       if (inside * 2 >= s.n) strokes.add(s.id);
     }
-    for (final t in page.texts.values) {
+    for (final t in doc.texts.values) {
       if (r.contains(textRect(t).center)) texts.add(t.id);
     }
-    for (final it in page.items.values) {
+    for (final it in doc.items.values) {
       if (r.contains(it.rect.center)) items.add(it.id);
     }
   }

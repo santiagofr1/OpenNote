@@ -8,7 +8,7 @@ import '../../rendering/sheet_render.dart';
 /// Quien la arma le pone la key `nb-<nombre>` (la usan los tests).
 class NotebookCard extends StatelessWidget {
   final Notebook nb;
-  final PageData? thumb; // primera página, null mientras carga
+  final NotebookDoc? thumb; // primera hoja, null mientras carga
   final bool pressed; // resaltada mientras está abierto su menú
   final VoidCallback onTap, onLongPress;
   const NotebookCard(
@@ -17,7 +17,7 @@ class NotebookCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final n = nb.pages.length;
+    final n = nb.sheets.length;
     return GestureDetector(
       onTap: onTap,
       onLongPress: onLongPress,
@@ -63,7 +63,7 @@ class NotebookCard extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15, color: cs.onSurface)),
           const SizedBox(height: 2),
           Text(
-            '$n ${n == 1 ? 'página' : 'páginas'}${nb.updated > 0 ? ' · ${fmtDate(nb.updated)}' : ''}',
+            '$n ${n == 1 ? 'hoja' : 'hojas'}${nb.updated > 0 ? ' · ${fmtDate(nb.updated)}' : ''}',
             maxLines: 1,
             style: TextStyle(fontSize: 12.5, color: cs.onSurfaceVariant),
           ),

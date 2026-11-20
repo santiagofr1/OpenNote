@@ -5,8 +5,12 @@ import 'package:apuntes/editor/history.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  String snapshot(PageData p) => jsonEncode(p.toJson());
-  void put(PageData p, String id, TextBlock? t) => t == null ? p.texts.remove(id) : p.texts[id] = t;
+  String snapshot(NotebookDoc p) => jsonEncode({
+        'strokes': [for (final s in p.strokes.values) s.toJson()],
+        'texts': [for (final t in p.texts.values) t.toJson()],
+        'items': [for (final i in p.items.values) i.toJson()],
+      });
+  void put(NotebookDoc p, String id, TextBlock? t) => t == null ? p.texts.remove(id) : p.texts[id] = t;
 
   group('History', () {
     test('deshacer y rehacer van y vuelven entre las pilas', () {
@@ -44,7 +48,7 @@ void main() {
 
   group('EditAction.apply', () {
     test('mover trazo, texto y elemento: deshacer y rehacer son simétricos', () {
-      final page = PageData('p');
+      final page = NotebookDoc(Notebook.create('t'));
       final s = Stroke('s', 'pen', '#000000', 2, [0, 0, .5, 10, 10, .5]);
       page.strokes['s'] = s;
       page.texts['t'] = TextBlock('t', 90, 44, 800, 'hola');
@@ -78,7 +82,7 @@ void main() {
     });
 
     test('borrar y pegar: null = no existe', () {
-      final page = PageData('p');
+      final page = NotebookDoc(Notebook.create('t'));
       final t = TextBlock('t', 1, 2, 3, 'x');
       final it = Item('i', 'image', 0, 0, 10, 10, file: 'a.png');
       final a = EditAction(textBefore: absent(['t']), textAfter: {'t': t}, itemBefore: absent(['i']), itemAfter: {'i': it});

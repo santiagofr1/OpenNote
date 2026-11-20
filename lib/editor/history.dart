@@ -17,16 +17,16 @@ class EditAction {
 
   /// Vuelve la página a como estaba antes ([undo]) o después de la acción.
   /// Los textos pasan por [putText] para que sus campos de edición se enteren.
-  void apply(PageData page, {required bool undo, required void Function(String id, TextBlock? t) putText}) {
+  void apply(NotebookDoc doc, {required bool undo, required void Function(String id, TextBlock? t) putText}) {
     for (final s in undo ? added : removed) {
-      page.strokes.remove(s.id);
+      doc.strokes.remove(s.id);
     }
     for (final s in undo ? removed : added) {
-      page.strokes[s.id] = s;
+      doc.strokes[s.id] = s;
     }
     // se aplican copias: lo guardado en la acción no se toca al seguir editando
     (undo ? textBefore : textAfter).forEach((id, t) => putText(id, t?.copy()));
-    (undo ? itemBefore : itemAfter).forEach((id, it) => it == null ? page.items.remove(id) : page.items[id] = it.copy());
+    (undo ? itemBefore : itemAfter).forEach((id, it) => it == null ? doc.items.remove(id) : doc.items[id] = it.copy());
   }
 }
 

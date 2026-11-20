@@ -26,25 +26,29 @@ import 'touch_gestures.dart';
 import 'viewport.dart';
 import 'zoom_indicator.dart';
 
-/// Editor de una página: hojas, tinta, textos y elementos, con su barra de herramientas.
+/// Editor del cuaderno: la tira continua de hojas, con tinta, textos y elementos y su barra de herramientas.
 ///
 /// Quién hace qué con cada puntero:
 /// - lápiz (y mouse): dibuja, borra (botón del S Pen, punta goma o clic derecho) o selecciona;
 /// - dedo: scrollea; dos dedos hacen zoom; uno quieto abre el menú de la hoja;
 ///   tirar hacia arriba al final agrega una hoja.
 class PageEditor extends StatefulWidget {
-  final PageData page;
+  final NotebookDoc doc;
   final ToolState tools;
   final Storage store;
   final bool readOnly; // modo lectura: no se edita y no hay barra de herramientas
-  final VoidCallback onChanged; // cambió la página (hay que guardarla)
+  final int initialSheet; // hoja a la que se va al abrir
+  final ValueNotifier<int>? sheetNotifier; // hoja que se está viendo (la actualiza el editor al scrollear)
+  final VoidCallback onChanged; // cambió el cuaderno (hay que guardarlo)
   final VoidCallback onPrefsChanged; // cambiaron las herramientas (prefs.json)
   const PageEditor({
     super.key,
-    required this.page,
+    required this.doc,
     required this.tools,
     required this.store,
     this.readOnly = false,
+    this.initialSheet = 0,
+    this.sheetNotifier,
     required this.onChanged,
     required this.onPrefsChanged,
   });
@@ -54,7 +58,7 @@ class PageEditor extends StatefulWidget {
 }
 
 class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMixin {
-  PageData get page => widget.page;
+  NotebookDoc get doc => widget.doc;
   ToolState get ts => widget.tools;
 
   final scroll = ScrollController(), hscroll = ScrollController();
@@ -86,15 +90,17 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   @override
   void initState() {
     super.initState();
-    texts.attach(page);
+    texts.attach(doc);
+    scroll.addListener(_scheduleVisibleSheet);
+    WidgetsBinding.instance.addPostFrameCallback((_) => scrollToSheet(widget.initialSheet, animate: false));
   }
 
   @override
   void didUpdateWidget(PageEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // otra página en el mismo editor: lo de la anterior (deshacer, selección, campos) no sirve acá
-    if (oldWidget.page != widget.page) {
-      texts.attach(page);
+    // otro cuaderno en el mismo editor: lo de la anterior (deshacer, selección, campos) no sirve acá
+    if (oldWidget.doc != widget.doc) {
+      texts.attach(doc);
       history.clear();
       sel.clear();
       pointer = null;
@@ -136,11 +142,9 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   Offset _toPage(Offset local) => local / scale;
 
-  /// Agrega hojas si [y] quedó cerca del final de la página.
+  /// Agrega hojas si [y] quedó cerca del final del cuaderno.
   void _growIfNeeded(double y) {
-    if (y > page.h - 250) {
-      setState(() => page.h = heightFor(y ~/ kSheetStep + 2));
-    }
+    if (y > doc.h - 250) setState(() => doc.growFor(y));
   }
 
   // ---------------- lápiz: dibujar, borrar, seleccionar ----------------
@@ -201,7 +205,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     }
     final band = sel.band;
     if (band != null) {
-      sel.selectIn(page, band);
+      sel.selectIn(doc, band);
       sel.bandA = sel.bandB = null;
       setState(() {});
       liveTick.value++;
@@ -226,7 +230,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   void _commitStroke(Stroke s) {
     if (s.n < 2) return;
     s.smooth();
-    page.strokes[s.id] = s;
+    doc.strokes[s.id] = s;
     inkVersion.value++;
     _pushUndo(EditAction(added: [s]));
     _growIfNeeded(s.bounds.bottom);
@@ -241,10 +245,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   }
 
   void _eraseAt(Offset pt) {
-    final hits = strokesHit(page, pt, ts.eraserRadius);
+    final hits = strokesHit(doc, pt, ts.eraserRadius);
     if (hits.isEmpty) return;
     for (final s in hits) {
-      page.strokes.remove(s.id);
+      doc.strokes.remove(s.id);
     }
     erased!.addAll(hits);
     inkVersion.value++;
@@ -260,7 +264,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   void _undoRedo({required bool undo}) {
     final a = undo ? history.undo() : history.redo();
     if (a == null) return;
-    a.apply(page, undo: undo, putText: texts.put);
+    a.apply(doc, undo: undo, putText: texts.put);
     _clearSel();
     inkVersion.value++;
     _changed();
@@ -277,9 +281,9 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   /// Lápiz abajo con "seleccionar": dentro de la selección la mueve; afuera estira un rectángulo nuevo.
   void _selDown(Offset p) {
-    final r = sel.bounds(page);
+    final r = sel.bounds(doc);
     if (r != null && r.inflate(12).contains(p)) {
-      sel.startDrag(page, p);
+      sel.startDrag(doc, p);
       inkVersion.value++; // oculta los seleccionados de la capa fija
       setState(() {});
       return;
@@ -294,14 +298,14 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final d = drag.delta = p - drag.from;
     setState(() {
       drag.textOrig.forEach((id, o) {
-        final t = page.texts[id];
+        final t = doc.texts[id];
         if (t != null) {
           t.x = o.dx + d.dx;
           t.y = o.dy + d.dy;
         }
       });
       drag.itemOrig.forEach((id, o) {
-        final it = page.items[id];
+        final it = doc.items[id];
         if (it != null) {
           it.x = o.dx + d.dx;
           it.y = o.dy + d.dy;
@@ -322,16 +326,16 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     }
     final removed = <Stroke>[], added = <Stroke>[];
     for (final id in sel.strokes) {
-      final s = page.strokes.remove(id);
+      final s = doc.strokes.remove(id);
       if (s == null) continue;
       final m = s.moved(d);
       removed.add(s);
       added.add(m);
-      page.strokes[id] = m;
+      doc.strokes[id] = m;
     }
     final textBefore = <String, TextBlock?>{}, textAfter = <String, TextBlock?>{};
     drag.textOrig.forEach((id, o) {
-      final t = page.texts[id];
+      final t = doc.texts[id];
       if (t == null) return;
       t.y = max(0.0, snapTextY(t.y)); // que caiga sobre el renglón
       t.x = t.x.clamp(0.0, kW - 60);
@@ -340,7 +344,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     });
     final itemBefore = <String, Item?>{}, itemAfter = <String, Item?>{};
     drag.itemOrig.forEach((id, o) {
-      final it = page.items[id];
+      final it = doc.items[id];
       if (it == null) return;
       itemBefore[id] = it.copy(d: o - Offset(it.x, it.y));
       itemAfter[id] = it.copy();
@@ -353,7 +357,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         itemBefore: itemBefore,
         itemAfter: itemAfter));
     inkVersion.value++;
-    final r = sel.bounds(page);
+    final r = sel.bounds(doc);
     if (r != null) _growIfNeeded(r.bottom);
     _changed();
     setState(() {});
@@ -361,24 +365,24 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   void _copySel() {
     final c = ts.clipboard;
-    c.strokes = sel.strokesOf(page);
-    c.texts = [for (final t in sel.textsOf(page)) t.copy()];
-    c.items = [for (final it in sel.itemsOf(page)) it.copy()];
+    c.strokes = sel.strokesOf(doc);
+    c.texts = [for (final t in sel.textsOf(doc)) t.copy()];
+    c.items = [for (final it in sel.itemsOf(doc)) it.copy()];
     setState(() {});
   }
 
   void _deleteSel() {
-    final removed = sel.strokesOf(page);
-    final textBefore = {for (final t in sel.textsOf(page)) t.id: t.copy()};
-    final itemBefore = {for (final it in sel.itemsOf(page)) it.id: it.copy()};
+    final removed = sel.strokesOf(doc);
+    final textBefore = {for (final t in sel.textsOf(doc)) t.id: t.copy()};
+    final itemBefore = {for (final it in sel.itemsOf(doc)) it.id: it.copy()};
     for (final s in removed) {
-      page.strokes.remove(s.id);
+      doc.strokes.remove(s.id);
     }
     for (final id in textBefore.keys) {
       texts.put(id, null);
     }
     for (final id in itemBefore.keys) {
-      page.items.remove(id);
+      doc.items.remove(id);
     }
     _pushUndo(EditAction(
       removed: removed,
@@ -400,10 +404,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       for (final t in textBlocks) TextBlock(newId('t'), (t.x + d.dx).clamp(0.0, kW - 60), max(0.0, t.y + d.dy), t.w, t.text)
     ];
     for (final it in newItems) {
-      page.items[it.id] = it;
+      doc.items[it.id] = it;
     }
     for (final s in newStrokes) {
-      page.strokes[s.id] = s;
+      doc.strokes[s.id] = s;
     }
     for (final t in newTexts) {
       texts.put(t.id, t);
@@ -422,13 +426,13 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       items: newItems.map((it) => it.id),
     );
     inkVersion.value++;
-    final r = sel.bounds(page);
+    final r = sel.bounds(doc);
     if (r != null) _growIfNeeded(r.bottom);
     _changed();
     setState(() {});
   }
 
-  void _duplicateSel() => _insert(sel.strokesOf(page), sel.textsOf(page), const Offset(30, 30), sel.itemsOf(page));
+  void _duplicateSel() => _insert(sel.strokesOf(doc), sel.textsOf(doc), const Offset(30, 30), sel.itemsOf(doc));
 
   /// Pegar desde la barra: si lo copiado está a la vista, corrido; si no, arriba de lo que se ve.
   void _paste() {
@@ -527,8 +531,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   // ---------------- hoja nueva tirando ----------------
   void _addSheetFromPull() {
-    final oldH = page.h;
-    setState(() => page.addSheets(1));
+    final oldH = doc.h;
+    setState(doc.addSheet);
     _changed();
     // lleva a la hoja nueva
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -628,7 +632,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       context,
       global,
       canPaste: !ts.clipboard.isEmpty,
-      canSelectAll: !page.isEmpty,
+      canSelectAll: !doc.isEmpty,
       canResetZoom: !ts.zoomLocked && (ts.zoom - 1).abs() > .01,
     );
     if (!mounted) return;
@@ -640,10 +644,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         _createTextAt(p);
       case SheetMenuAction.selectAll:
         _setTool(Tool.select);
-        setState(() => sel.selectAll(page));
+        setState(() => sel.selectAll(doc));
         liveTick.value++;
       case SheetMenuAction.addSheet:
-        setState(() => page.addSheets(1));
+        setState(doc.addSheet);
         _changed();
       case SheetMenuAction.zoomToWidth:
         _setZoom(1);
@@ -659,18 +663,71 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final vw = hscroll.hasClients ? hscroll.position.viewportDimension : kW * scale;
     final vh = scroll.hasClients ? scroll.position.viewportDimension : 600.0;
     final c = layout.toPage(Offset(vw / 2, vh / 2), _scrollOffset);
-    return Offset(c.dx.clamp(0, kW), c.dy.clamp(0, page.h));
+    return Offset(c.dx.clamp(0, kW), c.dy.clamp(0, doc.h));
   }
 
   /// Hoja que se está viendo (0, 1, 2...).
-  int get visibleSheet => (viewCenter.dy / kSheetStep).floor().clamp(0, sheetCount(page.h) - 1);
+  int get visibleSheet => doc.sheetOfY(viewCenter.dy);
+
+  bool _sheetCheckPending = false;
+
+  /// El scroll puede avisar en pleno armado de pantalla: se mira recién después del cuadro.
+  void _scheduleVisibleSheet() {
+    if (_sheetCheckPending) return;
+    _sheetCheckPending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _sheetCheckPending = false;
+      if (mounted) _updateVisibleSheet();
+    });
+  }
+
+  /// Avisa a la pantalla qué hoja se ve ahora (y refresca la barra, que muestra el fondo de esa hoja).
+  void _updateVisibleSheet() {
+    final k = visibleSheet, n = widget.sheetNotifier;
+    if (n != null && n.value != k) {
+      n.value = k;
+      if (mounted) setState(() {});
+    }
+  }
+
+  /// Lleva la vista al principio de la hoja [k].
+  void scrollToSheet(int k, {bool animate = true}) {
+    if (!mounted) return;
+    if (!scroll.hasClients || !scroll.position.hasContentDimensions) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => scrollToSheet(k, animate: animate));
+      return;
+    }
+    final y = (k.clamp(0, doc.sheetCount - 1) * kSheetStep * scale).clamp(0.0, scroll.position.maxScrollExtent);
+    if (animate) {
+      scroll.animateTo(y, duration: const Duration(milliseconds: 380), curve: Curves.easeOutQuart);
+    } else {
+      scroll.jumpTo(y);
+    }
+  }
+
+  /// Después de agregar, duplicar, mover o borrar hojas desde afuera: lo que dependía del orden
+  /// anterior (deshacer, selección, campos de texto) ya no sirve. Las operaciones de hojas no se deshacen.
+  void sheetsChanged() {
+    texts.attach(doc);
+    history.clear();
+    sel.clear();
+    pointer = null;
+    live = null;
+    erased = null;
+    eraserAt = null;
+    _changed();
+    setState(() {});
+    inkVersion.value++;
+    liveTick.value++;
+    _updateVisibleSheet();
+  }
 
   /// Agrega un elemento centrado en lo que se está viendo y lo deja seleccionado.
   void insertItem(Item it) {
     final c = viewCenter;
     it.x = (c.dx - it.w / 2).clamp(10.0, max(10.0, kW - it.w - 10));
     it.y = max(0.0, c.dy - it.h / 2);
-    page.items[it.id] = it;
+    doc.items[it.id] = it;
     _pushUndo(EditAction(itemBefore: {it.id: null}, itemAfter: {it.id: it.copy()}));
     _setTool(Tool.select);
     sel.replace(items: [it.id]);
@@ -682,7 +739,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   /// Lleva la vista a un texto o elemento y lo deja seleccionado (búsqueda).
   void reveal(String id) {
-    final t = page.texts[id], it = page.items[id];
+    final t = doc.texts[id], it = doc.items[id];
     final y = t?.y ?? it?.y;
     if (y == null) return;
     _setTool(Tool.select);
@@ -714,7 +771,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
           grip: grip,
           canUndo: history.canUndo,
           canRedo: history.canRedo,
-          bg: page.bg,
+          bg: doc.sheets[visibleSheet].bg,
           onToolTap: _toolTap,
           onToolLongPress: (t) {
             _setTool(t);
@@ -722,7 +779,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
           },
           onPickColor: _pickQuick,
           onBg: (v) {
-            setState(() => page.bg = v);
+            setState(() => doc.sheets[visibleSheet].bg = v); // la hoja que se está viendo
             _changed();
           },
           onOpenPanel: _openPanelForDrawing,
@@ -744,7 +801,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       color: cs.surfaceContainerLow,
       child: LayoutBuilder(builder: (context, box) {
         layout = SheetLayout(box.maxWidth, ts.zoom);
-        final sheetSize = Size(layout.sheetWidth, page.h * scale);
+        final sheetSize = Size(layout.sheetWidth, doc.h * scale);
         // durante el pellizco no scrollea: si no, el zoom tironea
         final physics = touch.pinching ? const NeverScrollableScrollPhysics() : const ClampingScrollPhysics();
         return Stack(children: [
@@ -813,8 +870,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   /// La página: capas + menú de la selección + esquina para agrandar un elemento.
   Widget _sheet() {
     final textMode = ts.tool == Tool.text;
-    final r = !sel.isEmpty && !sel.moving ? sel.bounds(page) : null;
-    final resizable = r != null && sel.singleItem ? page.items[sel.items.first] : null;
+    final r = !sel.isEmpty && !sel.moving ? sel.bounds(doc) : null;
+    final resizable = r != null && sel.singleItem ? doc.items[sel.items.first] : null;
     return Stack(clipBehavior: Clip.none, children: [
       _layers(textMode),
       if (r != null)
@@ -859,8 +916,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         behavior: HitTestBehavior.opaque,
         onTapUp: textMode ? _tapPage : null,
         child: Stack(clipBehavior: Clip.none, children: [
-          Positioned.fill(child: CustomPaint(painter: SheetPainter(page.bg, page.h, scale, page.paper))),
-          for (final it in page.items.values)
+          Positioned.fill(child: CustomPaint(painter: SheetPainter(doc.sheets, scale))),
+          for (final it in doc.items.values)
             ItemView(
               item: it,
               file: widget.store.media(it.file ?? ''),
@@ -872,12 +929,12 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
                 _saveSoon(it.id, const Duration(milliseconds: 350));
               },
             ),
-          for (final t in page.texts.values) _textBlock(t, textMode),
+          for (final t in doc.texts.values) _textBlock(t, textMode),
           Positioned.fill(
             child: IgnorePointer(
               child: RepaintBoundary(
                 child: CustomPaint(
-                    painter: InkPainter(page, scale, inkVersion, () => sel.moving ? sel.strokes : const {}),
+                    painter: InkPainter(doc, scale, inkVersion, () => sel.moving ? sel.strokes : const {}),
                     isComplex: true),
               ),
             ),
@@ -896,7 +953,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   }
 
   void _paintLive(Canvas c) => paintLiveLayer(c,
-      page: page, scale: scale, sel: sel, live: live, eraserAt: eraserAt, eraserRadius: ts.eraserRadius);
+      doc: doc, scale: scale, sel: sel, live: live, eraserAt: eraserAt, eraserRadius: ts.eraserRadius);
 
   Widget _textBlock(TextBlock t, bool textMode) {
     final c = texts.controller(t.id), f = texts.focusOf(t.id);

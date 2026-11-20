@@ -23,7 +23,7 @@ class _LibraryState extends State<Library> {
   late final store = Storage(root: widget.root);
   final tools = ToolState();
   NotesIndex? index;
-  final thumbs = <String, PageData>{}; // primera página de cada cuaderno
+  final thumbs = <String, NotebookDoc>{}; // primera hoja de cada cuaderno
   String? pressed; // cuaderno mantenido (resaltado)
 
   @override
@@ -38,10 +38,9 @@ class _LibraryState extends State<Library> {
     final idx = await store.loadIndex();
     setState(() => index = idx);
     for (final nb in idx.notebooks) {
-      if (nb.pages.isEmpty) continue;
-      final p = await store.loadPage(nb.pages.first.id);
+      final t = await store.loadSheetDoc(nb, 0);
       if (!mounted) return;
-      setState(() => thumbs[nb.id] = p);
+      if (t != null) setState(() => thumbs[nb.id] = t);
     }
   }
 
@@ -78,21 +77,19 @@ class _LibraryState extends State<Library> {
       return;
     }
     setState(() {});
-    if (nb.pages.isNotEmpty) {
-      final p = await store.loadPage(nb.pages.first.id);
-      if (mounted) setState(() => thumbs[nb.id] = p);
-    }
+    final t = await store.loadSheetDoc(nb, 0);
+    if (mounted && t != null) setState(() => thumbs[nb.id] = t);
   }
 
   Future<void> _create() async {
     final name = (await askText(context, 'Nuevo cuaderno', hint: 'Ej: Análisis II', ok: 'Crear'))?.trim();
     if (name == null || name.isEmpty) return;
-    final page = PageData(newId('p'));
-    await store.savePage(page);
-    final nb = Notebook(newId('n'), name, [PageRef(page.id, todayTitle())])..touch();
+    final nb = Notebook.create(name)..touch();
+    final doc = NotebookDoc(nb);
+    await store.saveNotebook(doc);
     index!.notebooks.add(nb);
     await store.saveIndex(index!);
-    setState(() => thumbs[nb.id] = page);
+    setState(() => thumbs[nb.id] = doc);
     await _open(nb);
   }
 
@@ -104,17 +101,22 @@ class _LibraryState extends State<Library> {
   }
 
   Future<void> _duplicate(Notebook nb) async {
-    final copy = Notebook(newId('n'), '${nb.name} (copia)', [])..touch();
-    for (final ref in nb.pages) {
-      final dup = (await store.loadPage(ref.id)).duplicate();
-      await store.savePage(dup);
-      copy.pages.add(PageRef(dup.id, ref.title));
-      if (copy.pages.length == 1) thumbs[copy.id] = dup;
-    }
+    final src = await store.loadNotebook(nb);
+    final copy = Notebook(newId('n'), '${nb.name} (copia)', bg: nb.bg, paper: nb.paper)
+      ..sheets.addAll(nb.sheets.map((s) => s.copy()))
+      ..touch();
+    final doc = NotebookDoc.fromSheets(copy, src.splitBySheet()); // copias: no comparte nada con el original
+    await store.saveNotebook(doc);
+    thumbs[copy.id] = doc;
     index!.notebooks.add(copy);
     await store.saveIndex(index!);
     setState(() {});
     if (mounted) snack(context, 'Cuaderno duplicado');
+  }
+
+  Future<void> _exportPdf(Notebook nb) async {
+    final doc = await store.loadNotebook(nb);
+    if (mounted) await exportPdfFlow(context, store, doc);
   }
 
   Future<void> _delete(Notebook nb) async {
@@ -165,7 +167,7 @@ class _LibraryState extends State<Library> {
       case 'dup':
         _duplicate(nb);
       case 'pdf':
-        exportPdfFlow(context, store, nb);
+        _exportPdf(nb);
       case 'delete':
         _delete(nb);
     }

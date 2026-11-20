@@ -19,7 +19,7 @@ Future<String?> showInsertMenu(BuildContext context, Offset at) => showMenu<Stri
         PopupMenuItem(value: 'camera', child: MenuRow(Symbols.photo_camera, 'Cámara')),
         PopupMenuItem(value: 'audio', child: MenuRow(Symbols.music_note, 'Archivo de audio')),
         PopupMenuItem(value: 'sticky', child: MenuRow(Symbols.sticky_note_2, 'Nota adhesiva')),
-        PopupMenuItem(value: 'page', child: MenuRow(Symbols.note_add, 'Página nueva')),
+        PopupMenuItem(value: 'sheet', child: MenuRow(Symbols.note_add, 'Hoja nueva')),
       ],
     );
 
@@ -30,7 +30,6 @@ Future<String?> showMoreMenu(BuildContext context, Offset at, Notebook nb) => sh
       items: [
         const PopupMenuItem(value: 'search', child: MenuRow(Symbols.search, 'Buscar')),
         const PopupMenuItem(value: 'style', child: MenuRow(Symbols.palette, 'Estilo del cuaderno')),
-        const PopupMenuItem(value: 'page', child: MenuRow(Symbols.tune, 'Configuración de página')),
         const PopupMenuDivider(),
         const PopupMenuItem(value: 'saveas', child: MenuRow(Symbols.save_as, 'Guardar como')),
         const PopupMenuDivider(),
@@ -79,8 +78,8 @@ class _IconRowState extends State<_IconRow> {
   }
 }
 
-/// "Guardar como": PDF del cuaderno ('nb'), PDF de la página ('page') o PNG de la hoja ('png').
-Future<String?> showSaveAsSheet(BuildContext context, {required String pageTitle}) {
+/// "Guardar como": PDF del cuaderno ('nb'), PDF de la hoja que se ve ('sheet') o PNG de esa hoja ('png').
+Future<String?> showSaveAsSheet(BuildContext context, {required String sheetName}) {
   final cs = Theme.of(context).colorScheme;
   Widget tile(IconData i, String t, String sub, String v) => ListTile(
         leading: Icon(i, weight: 300, color: cs.onSurfaceVariant),
@@ -98,8 +97,8 @@ Future<String?> showSaveAsSheet(BuildContext context, {required String pageTitle
           Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
               child: Text('Guardar como', style: Theme.of(ctx).textTheme.titleLarge)),
-          tile(Symbols.picture_as_pdf, 'PDF del cuaderno', 'Todas las páginas', 'nb'),
-          tile(Symbols.description, 'PDF de esta página', pageTitle, 'page'),
+          tile(Symbols.picture_as_pdf, 'PDF del cuaderno', 'Todas las hojas', 'nb'),
+          tile(Symbols.description, 'PDF de esta hoja', sheetName, 'sheet'),
           tile(Symbols.image, 'Imagen (PNG)', 'La hoja que estás viendo', 'png'),
         ]),
       ),

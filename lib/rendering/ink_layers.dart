@@ -9,27 +9,27 @@ import 'stroke_painter.dart';
 /// Todos los trazos guardados. Se repinta solo cuando cambia [version].
 /// [hidden]: trazos que no se dibujan acá (los que se están moviendo).
 class InkPainter extends CustomPainter {
-  final PageData page;
+  final NotebookDoc doc;
   final double scale;
   final ValueNotifier<int> version;
   final Set<String> Function() hidden;
-  InkPainter(this.page, this.scale, this.version, this.hidden) : super(repaint: version);
+  InkPainter(this.doc, this.scale, this.version, this.hidden) : super(repaint: version);
 
   @override
   void paint(Canvas c, Size size) {
     c.scale(scale);
     // la tinta solo se ve sobre las hojas, no en el espacio entre ellas
     final clip = Path();
-    for (final r in sheetRects(page.h)) {
+    for (final r in sheetRects(doc.h)) {
       clip.addRect(r);
     }
     c.clipPath(clip);
     final skip = hidden();
-    paintStrokes(c, page.strokes.values.where((s) => !skip.contains(s.id)));
+    paintStrokes(c, doc.strokes.values.where((s) => !skip.contains(s.id)));
   }
 
   @override
-  bool shouldRepaint(InkPainter o) => o.page != page || o.scale != scale;
+  bool shouldRepaint(InkPainter o) => o.doc != doc || o.scale != scale;
 }
 
 /// Capa de lo que pasa "ahora": trazo en curso, goma, selección.

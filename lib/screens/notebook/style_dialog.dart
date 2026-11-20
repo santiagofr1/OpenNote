@@ -14,11 +14,11 @@ const papers = [
   ('#eef6ec', 'Verde'),
 ];
 
-/// Estilo del cuaderno ([all]) o configuración de una página: fondo, papel y (solo página) hojas.
-/// Devuelve el fondo y papel elegidos, o null si se canceló. Agregar/quitar hojas se aplica
-/// a [p] en el momento, aunque después se cancele.
-Future<({String bg, String paper})?> showStyleDialog(BuildContext context, PageData p, {required bool all}) async {
-  var bg = p.bg, paper = p.paper;
+/// Estilo del cuaderno: fondo y color de papel de TODAS las hojas (y de las nuevas).
+/// Devuelve lo elegido, o null si se canceló. Agregar/quitar hojas al final se aplica a [doc]
+/// en el momento, aunque después se cancele.
+Future<({String bg, String paper})?> showStyleDialog(BuildContext context, NotebookDoc doc) async {
+  var bg = doc.nb.bg, paper = doc.nb.paper;
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => StatefulBuilder(builder: (ctx, set) {
@@ -41,11 +41,11 @@ Future<({String bg, String paper})?> showStyleDialog(BuildContext context, PageD
           );
       final title = TextStyle(fontWeight: FontWeight.w500, color: cs.onSurface);
       return AlertDialog(
-        title: Text(all ? 'Estilo del cuaderno' : 'Configuración de página'),
+        title: const Text('Estilo del cuaderno'),
         content: SizedBox(
           width: 420,
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(all ? 'Se aplica a todas las páginas' : 'Solo a esta página', style: TextStyle(color: cs.onSurfaceVariant)),
+            Text('Se aplica a todas las hojas', style: TextStyle(color: cs.onSurfaceVariant)),
             const SizedBox(height: 16),
             Text('Fondo', style: title),
             const SizedBox(height: 8),
@@ -62,23 +62,21 @@ Future<({String bg, String paper})?> showStyleDialog(BuildContext context, PageD
             Text('Color del papel', style: title),
             const SizedBox(height: 8),
             Wrap(spacing: 10, children: [for (final (c, label) in papers) paperOpt(c, label)]),
-            if (!all) ...[
-              const SizedBox(height: 18),
-              Text('Hojas en esta página: ${sheetCount(p.h)}', style: title),
-              const SizedBox(height: 8),
-              Wrap(spacing: 8, children: [
-                OutlinedButton.icon(
-                  onPressed: () => set(() => p.addSheets(1)),
-                  icon: const Icon(Symbols.add, size: 18),
-                  label: const Text('Agregar hoja'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: sheetCount(p.h) > 1 && p.lastSheetEmpty ? () => set(() => p.addSheets(-1)) : null,
-                  icon: const Icon(Symbols.remove, size: 18),
-                  label: const Text('Quitar la última (vacía)'),
-                ),
-              ]),
-            ],
+            const SizedBox(height: 18),
+            Text('Hojas del cuaderno: ${doc.sheetCount}', style: title),
+            const SizedBox(height: 8),
+            Wrap(spacing: 8, children: [
+              OutlinedButton.icon(
+                onPressed: () => set(doc.addSheet),
+                icon: const Icon(Symbols.add, size: 18),
+                label: const Text('Agregar hoja al final'),
+              ),
+              OutlinedButton.icon(
+                onPressed: doc.sheetCount > 1 && doc.lastSheetEmpty ? () => set(doc.removeLastSheetIfEmpty) : null,
+                icon: const Icon(Symbols.remove, size: 18),
+                label: const Text('Quitar la última (vacía)'),
+              ),
+            ]),
           ]),
         ),
         actions: [
