@@ -1,11 +1,12 @@
-/// Datos puros de la app: medidas de la hoja, trazos, páginas, cuadernos y herramientas.
+/// Datos puros de la app: medidas de la hoja, trazos, hojas, cuadernos y herramientas.
 /// Sin widgets; todo se puede probar en la PC.
 library;
 
 export 'format.dart';
+export 'elements.dart';
 export 'geometry.dart';
 export 'notebook.dart';
-export 'page.dart';
+export 'notebook_doc.dart';
 export 'stroke.dart';
 export 'tools.dart';
 export 'values.dart';
