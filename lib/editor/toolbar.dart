@@ -47,11 +47,13 @@ class EditorToolbar extends StatelessWidget {
     final hasClip = !ts.clipboard.isEmpty;
     return LayoutBuilder(builder: (context, box) {
       final room = vertical ? box.maxHeight : box.maxWidth;
-      final nColors = room < 700 ? 4 : 6;
+      // Arriba se muestran tantos colores rápidos como entren (hasta 6); al costado, 4 o 6 según el alto.
+      final nColors = vertical ? (room < 700 ? 4 : 6) : ((room - _fixedWidth) / _slot.width).floor().clamp(0, 6);
+      // Muy angosto: 'Pegar' sin portapapeles (invisible) no ocupa lugar.
+      final narrow = !vertical && room < _fixedWidth + 2 * _slot.width;
       final side = BorderSide(color: cs.outlineVariant.withValues(alpha: .6));
       final children = <Widget>[
         grip,
-        if (!vertical) const Spacer(),
         if (vertical) const SizedBox(height: 4),
         _toolBtn(cs, Tool.pen, Symbols.stylus, 'Lápiz · tocá de nuevo para opciones', ts.pen),
         _toolBtn(cs, Tool.hl, Symbols.ink_highlighter, 'Resaltador · tocá de nuevo para opciones', ts.hl),
@@ -72,6 +74,7 @@ class EditorToolbar extends StatelessWidget {
         _icon(cs, Symbols.redo, 'Rehacer', canRedo ? onRedo : null),
         _lockBtn(cs),
         _bgMenu(cs),
+        if (!(narrow && !hasClip))
         IgnorePointer(
           ignoring: !hasClip,
           child: AnimatedOpacity(
@@ -80,7 +83,6 @@ class EditorToolbar extends StatelessWidget {
             child: _icon(cs, Symbols.content_paste, 'Pegar', onPaste),
           ),
         ),
-        if (!vertical) const Spacer(),
       ];
       return Container(
         width: vertical ? 60 : null,
@@ -94,10 +96,23 @@ class EditorToolbar extends StatelessWidget {
           ),
         ),
         padding: vertical ? const EdgeInsets.symmetric(vertical: 6) : const EdgeInsets.symmetric(horizontal: 6),
-        child: vertical ? SingleChildScrollView(child: Column(children: children)) : Row(children: children),
+        child: vertical
+            ? SingleChildScrollView(child: Column(children: children))
+            // Centrada si sobra lugar; si no entra (pantalla muy angosta) se desplaza en vez de desbordar.
+            : SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Container(
+                  constraints: BoxConstraints(minWidth: max(0, box.maxWidth - 12)),
+                  alignment: Alignment.center,
+                  child: Row(mainAxisSize: MainAxisSize.min, children: children),
+                ),
+              ),
       );
     });
   }
+
+  /// Ancho (dp) de la barra horizontal sin los colores rápidos. Medido: 560 de contenido + 12 de padding + margen.
+  static const _fixedWidth = 580.0;
 
   /// Los recientes primero; si faltan, se completa con la paleta.
   List<String> _quickColors(int n) {
