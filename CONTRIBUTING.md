@@ -40,9 +40,14 @@ flutter test           # tests de lógica pura, en la PC (no necesita tablet)
 nunca toca tus cuadernos reales: el script verifica al final que la app real siga igual.
 Con `BACKUP=1 ./run_tests.sh` además guarda una copia de tus cuadernos antes de correr.
 
+Para compilar el APK e instalarlo en la tablet con `./build_install.sh` hacen falta Flutter, el Android
+SDK y JDK 21 en las rutas que indica la documentación técnica. Los detalles de cada test y del
+formato de archivos están en [docs/TECNICO.md](docs/TECNICO.md).
+
 ## Estilo de código
 
-El código está separado en capas. Cada capa usa solo las de arriba:
+El código está separado en capas (la descripción completa está en
+[docs/TECNICO.md](docs/TECNICO.md)). Cada capa usa solo las de arriba:
 
 - `lib/domain/`    — datos puros y lógica sin Flutter (medidas, trazos, páginas, cuadernos, herramientas, JSON).
 - `lib/data/`      — almacenamiento (`Storage`), exportar PDF/PNG, importar imágenes/audio/PDF.
