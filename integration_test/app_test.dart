@@ -28,6 +28,19 @@ void main() {
   });
 
   // ---------------- ayudas ----------------
+  /// Mantener apretado de verdad: en la tablet `t.longPress` no espera tiempo real
+  /// y a veces suelta antes de los 500 ms del long-press.
+  Future<void> holdOn(WidgetTester t, Finder f) async {
+    final g = await t.startGesture(t.getCenter(f));
+    final end = DateTime.now().add(const Duration(milliseconds: 750));
+    while (DateTime.now().isBefore(end)) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await t.pump();
+    }
+    await g.up();
+    await t.pump();
+  }
+
   Future<void> settle(WidgetTester t, [int ms = 400]) async {
     for (var i = 0; i < ms ~/ 50; i++) {
       await t.pump(const Duration(milliseconds: 50));
@@ -204,7 +217,7 @@ void main() {
 
     // mover la hoja 1 (con el trazo) después de la 2: el trazo baja una hoja
     Future<void> longPressThumb(int n, String item) async {
-      await t.longPress(find.byKey(Key('thumb-$n')));
+      await holdOn(t, find.byKey(Key('thumb-$n')));
       await settle(t, 500);
       await t.tap(find.text(item));
       await settle(t, 900);
@@ -226,7 +239,7 @@ void main() {
     await longPressThumb(2, 'Borrar');
     await t.tap(find.byKey(const Key('confirmDelete')));
     await settle(t, 900);
-    await t.longPress(find.byKey(const Key('thumb-1')));
+    await holdOn(t, find.byKey(const Key('thumb-1')));
     await settle(t, 500);
     expect(find.text('Borrar'), findsNothing, reason: 'con una sola hoja no hay "Borrar"');
     await t.tapAt(const Offset(5, 5)); // cierra el menú
