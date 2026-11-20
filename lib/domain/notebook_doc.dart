@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:ui';
 
 import 'elements.dart';
@@ -22,6 +23,53 @@ class SheetContent {
   bool get isEmpty => strokes.isEmpty && texts.isEmpty && items.isEmpty;
 }
 
+/// Mapa de elementos que avisa cada vez que se agrega, reemplaza o saca uno (para saber qué hoja cambió).
+class _TrackedMap<V extends Layered> extends MapBase<String, V> {
+  final Map<String, V> inner;
+  final void Function(V) _touch;
+  _TrackedMap(this.inner, this._touch);
+
+  @override
+  V? operator [](Object? key) => inner[key];
+  @override
+  void operator []=(String key, V value) {
+    final old = inner[key];
+    if (old != null) _touch(old); // la hoja donde estaba
+    inner[key] = value;
+    _touch(value); // y la hoja donde queda
+  }
+
+  @override
+  V? remove(Object? key) {
+    final old = inner.remove(key);
+    if (old != null) _touch(old);
+    return old;
+  }
+
+  @override
+  void clear() {
+    inner.values.forEach(_touch);
+    inner.clear();
+  }
+
+  @override
+  Iterable<String> get keys => inner.keys;
+  @override
+  Iterable<V> get values => inner.values;
+  @override
+  Iterable<MapEntry<String, V>> get entries => inner.entries;
+  @override
+  int get length => inner.length;
+  @override
+  bool get isEmpty => inner.isEmpty;
+  @override
+  bool get isNotEmpty => inner.isNotEmpty;
+  @override
+  bool containsKey(Object? key) => inner.containsKey(key);
+  @override
+  void forEach(void Function(String, V) action) => inner.forEach(action);
+}
+
 /// El cuaderno abierto en memoria: una tira continua de hojas.
 ///
 /// Trazos, textos y elementos viven en coordenadas GLOBALES de la tira (la hoja k ocupa
@@ -29,16 +77,28 @@ class SheetContent {
 /// y el deshacer funcionan igual que con una sola página larga.
 /// Cada elemento pertenece a la hoja que contiene su borde de arriba ([sheetOfY]).
 /// El orden de dibujo es uno solo para todo (ver [Layered]): [drawOrder]. El orden de los mapas no cuenta.
+///
+/// Hojas sucias (para guardar solo lo que cambió): agregar, reemplazar o sacar de [strokes] / [texts] / [items]
+/// marca solo la hoja de antes y la de después. Lo que se cambia EN EL LUGAR (x, y, tamaño, texto, z)
+/// hay que marcarlo a mano con [markDirtyElement] antes y después del cambio. El contenido de cada hoja
+/// no incluye sus datos (título, fondo...): eso va en notebook.json y se compara aparte al guardar.
 class NotebookDoc {
   final Notebook nb;
-  final Map<String, Stroke> strokes;
-  final Map<String, TextBlock> texts;
-  final Map<String, Item> items;
+  final Map<String, Stroke> _rawStrokes;
+  final Map<String, TextBlock> _rawTexts;
+  final Map<String, Item> _rawItems;
+  late final Map<String, Stroke> strokes = _TrackedMap(_rawStrokes, markDirtyElement);
+  late final Map<String, TextBlock> texts = _TrackedMap(_rawTexts, markDirtyElement);
+  late final Map<String, Item> items = _TrackedMap(_rawItems, markDirtyElement);
+
+  // ids (SheetMeta.id, no el índice: las hojas se mueven) de las hojas con cambios sin guardar
+  final _dirty = <String>{};
+  bool _allDirty = false;
 
   NotebookDoc(this.nb, {Map<String, Stroke>? strokes, Map<String, TextBlock>? texts, Map<String, Item>? items})
-      : strokes = strokes ?? {},
-        texts = texts ?? {},
-        items = items ?? {} {
+      : _rawStrokes = strokes ?? {},
+        _rawTexts = texts ?? {},
+        _rawItems = items ?? {} {
     if (nb.sheets.isEmpty) nb.sheets.add(nb.newSheet()); // un cuaderno siempre tiene al menos una hoja
   }
 
@@ -71,6 +131,50 @@ class NotebookDoc {
     return k * kSheetStep + paper.snapTextY(y - k * kSheetStep, m.bg, m.spacing, floor: floor);
   }
 
+  // ================= hojas sucias =================
+  /// Hoja (índice) a la que se guarda [e]: la de su borde de arriba, igual que en [splitBySheet].
+  int sheetOfElement(Layered e) => switch (e) {
+        Stroke s => _sheetOfStroke(s),
+        TextBlock t => sheetOfY(t.y),
+        Item i => sheetOfY(i.y),
+        _ => 0,
+      };
+
+  /// Marca la hoja que contiene la altura [y].
+  void markDirtyAt(double y) => _dirty.add(sheets[sheetOfY(y)].id);
+
+  /// Marca todas las hojas que toca el rectángulo [r].
+  void markDirtyRect(Rect r) {
+    for (var k = sheetOfY(r.top); k <= sheetOfY(r.bottom); k++) {
+      _dirty.add(sheets[k].id);
+    }
+  }
+
+  /// Marca la hoja donde está ahora [e]. Si lo cambiás en el lugar, llamalo ANTES y DESPUÉS del cambio.
+  void markDirtyElement(Layered e) => _dirty.add(sheets[sheetOfElement(e)].id);
+
+  /// Marca la hoja de índice [k].
+  void markDirtySheet(int k) => _dirty.add(sheets[k].id);
+
+  /// Todo cambió (operaciones de hojas): se guarda todo.
+  void markAllDirty() => _allDirty = true;
+
+  bool get hasDirty => _allDirty || _dirty.isNotEmpty;
+
+  /// Lo sucio hasta ahora, y lo deja limpio (lo usa el guardado; lo que se marque después queda para el próximo).
+  ({Set<String> ids, bool all}) takeDirty() {
+    final r = (ids: Set<String>.of(_dirty), all: _allDirty);
+    _dirty.clear();
+    _allDirty = false;
+    return r;
+  }
+
+  /// Vuelve a marcar lo que [takeDirty] devolvió (el guardado falló).
+  void restoreDirty(({Set<String> ids, bool all}) d) {
+    _dirty.addAll(d.ids);
+    if (d.all) _allDirty = true;
+  }
+
   // ================= orden de dibujo =================
   /// Todo lo que se dibuja, de abajo hacia arriba.
   List<Layered> drawOrder() => sortByZ([...items.values, ...strokes.values, ...texts.values]);
@@ -94,6 +198,7 @@ class NotebookDoc {
   void stackOnTop(Iterable<Layered> els) {
     var z = nextZ();
     for (final e in sortByZ(els)) {
+      markDirtyElement(e);
       e.z = z++;
     }
   }
@@ -101,7 +206,10 @@ class NotebookDoc {
   /// Cambia el [z] del elemento [id] (trazo, texto o elemento), donde esté.
   void setZ(String id, int z) {
     final e = strokes[id] ?? texts[id] ?? items[id];
-    if (e != null) e.z = z;
+    if (e != null) {
+      markDirtyElement(e);
+      e.z = z;
+    }
   }
 
   /// Mueve en el orden de dibujo lo que tenga alguno de los ids de [ids] (ver [computeReorder]).
@@ -116,7 +224,10 @@ class NotebookDoc {
 
   // ================= hojas al final =================
   /// Agrega una hoja al final con el estilo del cuaderno.
-  void addSheet() => sheets.add(nb.newSheet());
+  void addSheet() {
+    markDirtySheet(sheets.length - 1); // lo que estaba pasado del final de la última puede caer en la nueva
+    sheets.add(nb.newSheet());
+  }
 
   /// Agrega hojas hasta que [y] quede a menos de una hoja del final (escribir o pegar abajo).
   void growFor(double y) {
@@ -165,6 +276,11 @@ class NotebookDoc {
   /// [content] (coordenadas locales) se pone adentro; se usa tal cual, sin copiar.
   SheetMeta insertSheet(int at, {SheetMeta? meta, SheetContent? content}) {
     at = at.clamp(0, sheets.length);
+    if (at < sheets.length) {
+      markAllDirty(); // corre las de abajo
+    } else {
+      markDirtySheet(sheets.length - 1);
+    }
     _shiftWhere((k) => k >= at, kSheetStep);
     final m = meta ?? nb.newSheet();
     sheets.insert(at, m);
@@ -184,6 +300,7 @@ class NotebookDoc {
   /// Borra la hoja [i] con todo lo que tiene; lo de abajo sube. No se puede borrar la última que queda.
   bool deleteSheet(int i) {
     if (sheets.length < 2 || i < 0 || i >= sheets.length) return false;
+    markAllDirty();
     strokes.removeWhere((_, s) => _sheetOfStroke(s) == i);
     texts.removeWhere((_, t) => sheetOfY(t.y) == i);
     items.removeWhere((_, it) => sheetOfY(it.y) == i);
@@ -196,6 +313,7 @@ class NotebookDoc {
   void moveSheet(int from, int to) {
     final n = sheets.length;
     if (from < 0 || from >= n || to < 0 || to >= n || from == to) return;
+    markAllDirty();
     // nueva posición de cada hoja vieja
     final order = List.generate(n, (i) => i)
       ..removeAt(from)
@@ -260,6 +378,28 @@ class NotebookDoc {
     return out;
   }
 
+  /// Como [splitBySheet] pero solo de las hojas con id en [ids] (copias; clave: id de la hoja).
+  /// No copia el resto del cuaderno. Las hojas pedidas sin nada devuelven un contenido vacío.
+  Map<String, SheetContent> splitSheets(Set<String> ids) {
+    final out = <int, SheetContent>{};
+    for (var k = 0; k < sheets.length; k++) {
+      if (ids.contains(sheets[k].id)) out[k] = SheetContent();
+    }
+    for (final s in strokes.values) {
+      final k = _sheetOfStroke(s);
+      out[k]?.strokes.add(s.moved(Offset(0, -k * kSheetStep)));
+    }
+    for (final t in texts.values) {
+      final k = sheetOfY(t.y);
+      out[k]?.texts.add(t.copy(d: Offset(0, -k * kSheetStep)));
+    }
+    for (final it in items.values) {
+      final k = sheetOfY(it.y);
+      out[k]?.items.add(it.copy(d: Offset(0, -k * kSheetStep)));
+    }
+    return {for (final e in out.entries) sheets[e.key].id: e.value};
+  }
+
   /// Arma el documento global del cuaderno [nb] con el contenido local de cada hoja
   /// (inverso de [splitBySheet]). [sheets] tiene que tener una entrada por hoja de [nb].
   factory NotebookDoc.fromSheets(Notebook nb, List<SheetContent> sheets) {
@@ -280,15 +420,15 @@ class NotebookDoc {
     }
     for (final s in c.strokes) {
       if (top != 0) s.translateY(top);
-      strokes[s.id] = s;
+      _rawStrokes[s.id] = s;
     }
     for (final t in c.texts) {
       t.y += top;
-      texts[t.id] = t;
+      _rawTexts[t.id] = t;
     }
     for (final i in c.items) {
       i.y += top;
-      items[i.id] = i;
+      _rawItems[i.id] = i;
     }
   }
 }

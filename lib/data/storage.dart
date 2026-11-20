@@ -172,8 +172,8 @@ class Storage {
     }
   }
 
-  /// Guarda el cuaderno: codifica las hojas en otro isolate y escribe SOLO las que cambiaron
-  /// (más notebook.json si cambió algún dato de las hojas). Los guardados de un mismo cuaderno
+  /// Guarda el cuaderno: codifica en otro isolate SOLO las hojas sucias (ver [NotebookDoc.takeDirty]) y escribe
+  /// las que cambiaron (más notebook.json si cambió algún dato de las hojas). Los guardados de un mismo cuaderno
   /// se hacen de a uno; si llegan varios mientras se guarda, se juntan en uno solo.
   Future<void> saveNotebook(NotebookDoc doc) {
     final q = _queues.putIfAbsent(doc.id, _SaveQueue.new);
@@ -208,38 +208,49 @@ class Storage {
 
   Future<void> _saveNow(NotebookDoc doc) async {
     final nb = doc.nb;
-    final contents = doc.splitBySheet(); // copia lo que hay ahora: se puede seguir editando
-    final sheets = List.of(nb.sheets);
-    final encoded = await _encodeInIsolate(contents);
-    final disk = _disk.putIfAbsent(nb.id, () => _DiskState({}, ''));
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final written = <String, String>{};
-    for (var k = 0; k < sheets.length; k++) {
-      final m = sheets[k];
-      final (bytes, hash) = encoded[k];
-      if (disk.hashes[m.id] == hash && await sheetFile(nb.id, m.id).exists()) {
-        written[m.id] = hash;
-        continue;
+    // lo sucio se toma y se copia SIN esperar nada en el medio: lo que se edite desde ahora
+    // se marca de nuevo y queda para el próximo guardado
+    final taken = doc.takeDirty();
+    try {
+      final sheets = List.of(nb.sheets);
+      final disk = _disk[nb.id];
+      // sin estado en disco (primer guardado) o todo sucio: se guardan todas las hojas.
+      // Si no, las sucias y las que nunca se escribieron (hojas nuevas, o una rota que se apartó).
+      final ids = <String>{
+        for (final m in sheets)
+          if (disk == null || taken.all || taken.ids.contains(m.id) || !disk.hashes.containsKey(m.id)) m.id
+      };
+      final contents = doc.splitSheets(ids); // copia solo esas hojas: se puede seguir editando
+      final order = [for (final m in sheets) if (ids.contains(m.id)) m];
+      final encoded = await _encodeInIsolate([for (final m in order) contents[m.id]!]);
+      final state = _disk.putIfAbsent(nb.id, () => _DiskState({}, ''));
+      final now = DateTime.now().millisecondsSinceEpoch;
+      for (var k = 0; k < order.length; k++) {
+        final m = order[k];
+        final (bytes, hash) = encoded[k];
+        if (state.hashes[m.id] == hash && await sheetFile(nb.id, m.id).exists()) continue;
+        m
+          ..rev += 1
+          ..updated = now;
+        await _writeBytes(sheetFile(nb.id, m.id), bytes);
+        state.hashes[m.id] = hash; // ya está en disco: si algo falla más adelante, el hash es el cierto
       }
-      m
-        ..rev += 1
-        ..updated = now;
-      await _writeBytes(sheetFile(nb.id, m.id), bytes);
-      written[m.id] = hash;
+      final metaJson = jsonEncode(nb.sheetsJson());
+      if (metaJson != state.meta || !await _nbFile(nb.id).exists()) {
+        await _writeBytes(_nbFile(nb.id), utf8.encode(metaJson));
+        state.meta = metaJson;
+      }
+      // las hojas borradas, al final: si se corta antes, solo sobran archivos
+      final alive = {for (final m in sheets) m.id};
+      for (final gone in state.hashes.keys.where((id) => !alive.contains(id)).toList()) {
+        final f = sheetFile(nb.id, gone);
+        if (await f.exists()) await f.delete();
+        state.hashes.remove(gone);
+      }
+    } catch (_) {
+      doc.restoreDirty(taken); // no se guardó: sigue sucio
+      rethrow;
     }
-    final metaJson = jsonEncode(nb.sheetsJson());
-    if (metaJson != disk.meta || !await _nbFile(nb.id).exists()) {
-      await _writeBytes(_nbFile(nb.id), utf8.encode(metaJson));
-      disk.meta = metaJson;
-    }
-    // las hojas borradas, al final: si se corta antes, solo sobran archivos
-    for (final gone in disk.hashes.keys.where((id) => !written.containsKey(id))) {
-      final f = sheetFile(nb.id, gone);
-      if (await f.exists()) await f.delete();
-    }
-    disk.hashes
-      ..clear()
-      ..addAll(written);
   }
 
   /// Borra los archivos sueltos de una hoja que ya no está en el cuaderno ni en el disco cache.
