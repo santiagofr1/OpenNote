@@ -5,6 +5,12 @@ import 'dart:ui';
 // igual en cualquier dispositivo (tablet, PC).
 const double kW = 1000, kSheetH = 1414, kLine = 40, kFont = 21;
 
+// Entre hoja y hoja queda un espacio. Hoja + espacio = 1480, múltiplo de kLine,
+// así los renglones de todas las hojas caen en la misma grilla.
+const double kGap = 66, kSheetStep = kSheetH + kGap;
+int sheetCount(double h) => max(1, ((h + kGap) / kSheetStep).round());
+double heightFor(int sheets) => sheets * kSheetH + (sheets - 1) * kGap;
+
 final _rnd = Random.secure();
 String newId(String prefix) =>
     prefix + List.generate(6, (_) => _rnd.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
@@ -90,7 +96,28 @@ class PageData {
       : strokes = strokes ?? {},
         texts = texts ?? {};
 
-  factory PageData.fromJson(Map j) => PageData(
+  factory PageData.fromJson(Map j) {
+    final p = PageData._fromJson(j);
+    if (((j['layout'] ?? 1) as int) < 2) p._addGaps();
+    return p;
+  }
+
+  /// páginas viejas (hojas pegadas): corre todo para dejar el espacio entre hojas
+  void _addGaps() {
+    double shift(double y) => y + (y ~/ kSheetH) * kGap;
+    for (final s in strokes.values) {
+      for (var i = 1; i < s.pts.length; i += 3) {
+        s.pts[i] = shift(s.pts[i]);
+      }
+      s.invalidate();
+    }
+    for (final t in texts.values) {
+      t.y = shift(t.y);
+    }
+    h = heightFor((h / kSheetH).ceil());
+  }
+
+  factory PageData._fromJson(Map j) => PageData(
         j['id'] as String,
         rev: (j['rev'] ?? 0) as int,
         h: _num(j['h'], kSheetH),
@@ -106,6 +133,7 @@ class PageData {
         'h': h,
         'bg': bg,
         'updated': updated,
+        'layout': 2,
         'strokes': {for (final s in strokes.values) s.id: s.toJson()},
         'texts': {for (final t in texts.values) t.id: t.toJson()},
       };
