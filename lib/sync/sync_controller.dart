@@ -436,6 +436,9 @@ class SyncController extends ChangeNotifier {
     await whenIdle();
     final s = _session;
     if (s == null) return 'Conectá con Google primero';
+    // la migración no se puede mezclar con una pasada de la tarea de fondo
+    final l = lock;
+    if (l != null && !await l.tryAcquire()) return 'Hay una sincronización en segundo plano en curso; probá de nuevo en unos segundos';
     final done = Completer<void>();
     _running = done.future; // los pedidos de pasada que lleguen mientras tanto esperan (_again)
     error = null;
@@ -450,6 +453,7 @@ class SyncController extends ChangeNotifier {
       }
     } finally {
       c.clearProgress();
+      await l?.release();
       _running = null;
       done.complete();
     }

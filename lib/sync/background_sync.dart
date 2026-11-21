@@ -5,8 +5,11 @@ import 'package:flutter/widgets.dart';
 import 'package:workmanager/workmanager.dart';
 
 import '../data/storage.dart';
+import 'encrypted_remote_store.dart';
 import 'google_auth.dart';
+import 'remote_store.dart';
 import 'sync_backend.dart';
+import 'sync_crypto.dart';
 import 'sync_engine.dart';
 import 'sync_lock.dart';
 
@@ -22,7 +25,7 @@ bool bgSyncEnabled(Map? prefs) => prefs?[kBgSyncPref] != false;
 const _kTaskName = 'opennote.sync.background';
 const _kTaskTag = 'opennote-sync';
 
-enum BackgroundOutcome { synced, disabled, notConfigured, appInForeground, locked, noSession, failed }
+enum BackgroundOutcome { synced, disabled, notConfigured, appInForeground, locked, noSession, cryptoLocked, failed }
 
 class BackgroundResult {
   const BackgroundResult(this.outcome, {this.report, this.error});
@@ -39,6 +42,7 @@ Future<BackgroundResult> runBackgroundPass(
   SyncBackend backend, {
   DateTime Function()? now,
   Duration lockTtl = const Duration(minutes: 10),
+  SyncCrypto? crypto,
 }) async {
   if (!bgSyncEnabled(await store.loadPrefs())) return const BackgroundResult(BackgroundOutcome.disabled);
   if (!backend.configured) return const BackgroundResult(BackgroundOutcome.notConfigured);
@@ -57,7 +61,14 @@ Future<BackgroundResult> runBackgroundPass(
     if (s == null) return const BackgroundResult(BackgroundOutcome.noSession);
     // los cuadernos que quedaron abiertos en el editor cuando la app pasó a segundo plano: solo se les sube
     final busy = await marks.readBusy();
-    final rep = await SyncEngine(store, s.store, busy: () => busy, account: s.account).sync();
+    // misma capa de cifrado que la app: con la nube cifrada y sin la clave guardada no se toca nada
+    final RemoteStore remote;
+    try {
+      remote = await (crypto ?? SyncCrypto(store: store)).wrap(s.store);
+    } on CryptoLockedException catch (e) {
+      return BackgroundResult(BackgroundOutcome.cryptoLocked, error: e);
+    }
+    final rep = await SyncEngine(store, remote, busy: () => busy, account: s.account).sync();
     if (rep.localChanged) await marks.markBackgroundChanged();
     return BackgroundResult(BackgroundOutcome.synced, report: rep);
   } catch (e) {

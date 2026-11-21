@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/domain/domain.dart';
+import 'package:apuntes/sync/background_sync.dart';
 import 'package:apuntes/sync/e2e_crypto.dart';
 import 'package:apuntes/sync/encrypted_remote_store.dart';
 import 'package:apuntes/sync/fake_backend.dart';
@@ -427,6 +428,47 @@ void main() {
       await a.disconnect();
       expect(tokensA.map, isEmpty);
       expect(crypto.state, CryptoState.unknown);
+    });
+  });
+
+  group('pasada de fondo con la nube cifrada', () {
+    test('con la clave guardada descifra y sube cifrado; sin la clave no toca nada', () async {
+      final remote = FakeRemoteStore();
+      final tokensA = _MemTokens();
+      // A activa el cifrado con un cuaderno
+      final sa = await device();
+      await create(sa, 'Cifrado desde A');
+      final cryptoA = SyncCrypto(store: sa, tokens: tokensA, kdf: KdfParams.fast);
+      final a = SyncController(store: sa, backend: FakeBackend(remote), crypto: cryptoA);
+      await a.connect();
+      await a.whenIdle();
+      expect(await a.enableEncryption('frase del fondo 1'), isNull);
+      await a.whenIdle();
+      a.dispose();
+
+      // B tiene la misma clave guardada (ya ingresó la frase antes): la pasada de fondo baja y descifra
+      final sb = await device();
+      await create(sb, 'Local de B');
+      final backendB = FakeBackend(remote);
+      await backendB.signIn();
+      final tokensB = _MemTokens()..map.addAll(tokensA.map);
+      final r = await runBackgroundPass(sb, backendB, crypto: SyncCrypto(store: sb, tokens: tokensB, kdf: KdfParams.fast));
+      expect(r.outcome, BackgroundOutcome.synced, reason: '${r.error}');
+      expect((await sb.loadIndex()).notebooks.map((n) => n.name), containsAll(['Cifrado desde A', 'Local de B']));
+      for (final p in remote.paths.where((p) => p != kCryptoFile)) {
+        expect(hasEncryptedHeader(remote.bytesOf(p)!), isTrue, reason: 'lo que subió el fondo va cifrado: $p');
+      }
+
+      // C sin la clave: no sincroniza ni sube nada en claro
+      final sc = await device();
+      await create(sc, 'Local de C');
+      final backendC = FakeBackend(remote);
+      await backendC.signIn();
+      final before = remote.paths.toSet();
+      final rc = await runBackgroundPass(sc, backendC, crypto: SyncCrypto(store: sc, tokens: _MemTokens(), kdf: KdfParams.fast));
+      expect(rc.outcome, BackgroundOutcome.cryptoLocked);
+      expect(remote.paths.toSet(), before);
+      expect((await sc.loadIndex()).notebooks.map((n) => n.name), ['Local de C']);
     });
   });
 }
