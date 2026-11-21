@@ -467,7 +467,12 @@ Future<List<(SheetContent, String)?>> _decodeDigestInIsolate(List<Uint8List?> ra
 
 (SheetContent, String)? _tryDecodeDigest(Uint8List b) {
   final c = _tryDecode(b);
-  return c == null ? null : (c, sheetDigest(c));
+  if (c == null) return null;
+  // las mallas de los trazos se arman acá, fuera del hilo de la UI (los buffers viajan sin copiarse)
+  for (final s in c.strokes) {
+    s.mesh = buildStrokeMesh(s);
+  }
+  return (c, sheetDigest(c));
 }
 
 Future<List<String>> _digestInIsolate(List<SheetContent> contents) => _compute(() => [for (final c in contents) sheetDigest(c)]);

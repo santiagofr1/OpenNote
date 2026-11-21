@@ -193,7 +193,11 @@ class NotebookDoc {
   bool _detachSheet(String id) {
     final k = indexOfSheet(id);
     if (k < 0 || !_loaded.contains(id) || isSheetDirty(id)) return false;
-    _rawStrokes.removeWhere((_, s) => _sheetOfStroke(s) == k);
+    _rawStrokes.removeWhere((_, s) {
+      if (_sheetOfStroke(s) != k) return false;
+      s.releaseMesh(); // las mallas se sueltan con la hoja
+      return true;
+    });
     _rawTexts.removeWhere((_, t) => sheetOfY(t.y) == k);
     _rawItems.removeWhere((_, it) => sheetOfY(it.y) == k);
     _loaded.remove(id);

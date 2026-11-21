@@ -11,6 +11,7 @@ export 'notebook_doc.dart';
 export 'paper_layout.dart';
 export 'rich_text.dart';
 export 'stroke.dart';
+export 'stroke_mesh.dart';
 export 'tools.dart';
 export 'values.dart';
 export 'z_order.dart';

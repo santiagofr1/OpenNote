@@ -244,6 +244,50 @@ defecto.
 La carpeta `pages/` queda en `legacy_pages_backup/`. Si la migración se corta, se rehace desde cero (el
 índice nuevo se escribe al final).
 
+## Trazos como mallas (etapa 5)
+
+Antes cada trazo era un `drawLine` por tramo (bolígrafo/pluma), dos (lápiz) o un `Path` y una línea por punto
+(caligrafía): una hoja densa (~46k puntos) eran ~46k llamadas, que Impeller tesela una por una. Ahora cada trazo es
+una **malla de triángulos** (`lib/domain/stroke_mesh.dart`, `buildStrokeMesh`) y se dibuja con `drawVertices`.
+
+- **Geometría** (misma fórmula de grosor, presión y velocidad de la pluma que el dibujo de antes, que queda como
+  `paintStrokeLegacy` solo para los tests):
+  - Bolígrafo/pluma: tira de 2 vértices por punto con el semiancho de cada punto. Uniones por bisectriz (el giro
+    máximo suave es de 60°, el escalado de la esquina queda en <= 1,15); en un giro más cerrado se corta la tira y se
+    agrega un círculo de 10 lados en el punto. Tapas redondas de 8 pasos por mitad; un punto solo es un círculo de 16.
+  - Fibra/resaltador: igual con ancho constante; la curva suave se aproxima con el mismo criterio de curvas
+    cuadráticas por los puntos medios (hasta 8 pasos por tramo). Resaltador con tapa recta.
+  - Lápiz: dos tiras con **colores por vértice** (alfa según la presión): la principal y el grano corrido. Se dibuja
+    con `BlendMode.dst` (solo cuentan los colores de los vértices). El dibujo viejo apilaba alfa en cada unión de tramos
+    (se veían cuentas); la malla es continua, así que el lápiz queda un poco más parejo.
+  - Caligrafía: cinta con la punta plana a 45° (2 vértices por punto) más una tira fina que mantiene el trazo visible
+    cuando se mueve en la dirección de la punta.
+- **Opacidad < 1** (todas las puntas menos el lápiz): el trazo va en un `saveLayer` con el alfa, como antes, para que
+  no se oscurezcan sus uniones. Esto incluye a fibra y resaltador, que antes usaban un `Path` sin capa.
+- **Lotes**: `paintStrokes` junta los trazos seguidos opacos del mismo color (y las mallas de colores entre sí) en
+  lotes de hasta `kBatchVertices` (12000 vértices, unos 6000 puntos) y los dibuja con UN `drawVertices`; una hoja
+  densa son ~10 llamadas. El lote vive en `Stroke.batchCache` del primer trazo y se rehace si cambia cualquier
+  miembro (`meshGen`). Se recorta por zona con `cull:` en vez de filtrar la lista: así las franjas de
+  `SheetImageCache` reusan los mismos lotes.
+- **Dónde se calcula**: al cargar hojas, `Storage.loadSheets` arma las mallas en el isolate de decodificación (los
+  buffers típicos viajan sin copiar, con `Isolate.exit`) y `attachSheet` solo las corre de lugar (`translateY` mueve
+  la malla en vez de recalcularla). Los trazos nuevos y los que no la tienen la arman al primer dibujo (un trazo es
+  barato: 46k puntos tardan ~13 ms en la PC). El `ui.Vertices` se construye en el hilo de UI y envuelve los buffers.
+- **Invalidación**: `Stroke.invalidate()` (que ya había que llamar al tocar los puntos) descarta la malla, el lote
+  y los `Vertices`. Mover o pegar crea trazos nuevos (`moved`), que no heredan la malla. `detachSheet` llama a
+  `releaseMesh()` en cada trazo que suelta.
+- **Memoria** (Float32 de posiciones, Uint16 de índices, Int32 de colores donde hay): bolígrafo, pluma, fibra y
+  resaltador ~28 B/punto (medido 28-32 con las tapas de trazos de 57 puntos); caligrafía ~56; lápiz ~72 (colores). Una
+  hoja de 46k puntos de bolígrafo son 1,4 MB. Mientras se dibuja hay además la copia nativa del lote (otro tanto).
+  Los trazos de más de 6000 puntos se parten en partes (índices de 16 bits).
+- **Antialias**: `kMeshFeather` (por defecto 0, apagado). Impeller en Android usa MSAA 4x en pantalla y en `toImage`,
+  y en la PC los bordes salen bien. Si en la tablet se ven serruchos, ponerlo en 1: cada borde de las tiras lleva una
+  franja exterior de alfa 0 (4 vértices por punto con colores, ~84 B/punto); las tapas y uniones no se difuminan.
+- **`SheetImageCache`**: con la hoja vectorial barata, `defaultMinPoints` sube de 1500 a 12000 y `maxPointsPerStrip` de
+  3000 a 8000 (una hoja de 46k puntos son ~6 franjas en vez de ~16). Hay que medir en la tablet y ajustar.
+- **Microbenchmark** (`test/rendering/stroke_bench_test.dart`, PC con rasterizador por software, orientativo; 46k
+  puntos): grabar 15,8 ms -> 0,8 ms (mallas ya armadas), rasterizar 80 ms -> 9,4 ms.
+
 ## Compilar e instalar en la tablet
 
 ```

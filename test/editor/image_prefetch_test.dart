@@ -19,7 +19,7 @@ void main() {
     SheetImageCache.defaultMinPoints = 0;
   });
   tearDown(() {
-    SheetImageCache.defaultMinPoints = 1500;
+    SheetImageCache.defaultMinPoints = 12000;
     root.deleteSync(recursive: true);
   });
 

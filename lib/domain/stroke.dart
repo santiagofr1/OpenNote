@@ -2,6 +2,7 @@ import 'dart:math';
 import 'dart:ui';
 
 import 'geometry.dart';
+import 'stroke_mesh.dart';
 import 'values.dart';
 import 'z_order.dart';
 
@@ -18,8 +19,30 @@ class Stroke extends Layered {
 
   Stroke(this.id, this.k, this.c, this.w, this.pts, [this.o = 1]);
 
-  /// Hay que llamarlo después de tocar [pts] (el rectángulo se cachea).
-  void invalidate() => _bounds = null;
+  /// Malla de triángulos del trazo (ver stroke_mesh.dart): se arma una vez (en el isolate al cargar la hoja, o al
+  /// primer dibujo) y se descarta en [invalidate]. [batchCache] es el lote de trazos que el painter arma con éste
+  /// como primero (opaco para el dominio).
+  StrokeMesh? mesh;
+  NativeHandle? batchCache;
+  int meshGen = 0;
+
+  /// La malla, calculándola si hace falta (null si no hay puntos).
+  StrokeMesh? ensureMesh() => mesh ??= buildStrokeMesh(this);
+
+  /// Suelta la malla y lo que se armó con ella (al descargar la hoja o al cambiar el trazo).
+  void releaseMesh() {
+    mesh?.dispose();
+    mesh = null;
+    batchCache?.dispose();
+    batchCache = null;
+  }
+
+  /// Hay que llamarlo después de tocar [pts] (el rectángulo y la malla se cachean).
+  void invalidate() {
+    _bounds = null;
+    meshGen++;
+    releaseMesh();
+  }
 
   int get n => pts.length ~/ 3;
 
@@ -59,11 +82,22 @@ class Stroke extends Layered {
   }
 
   /// Corre el trazo [dy] hacia abajo, en el lugar (lo usan las operaciones de hojas).
+  /// La malla (si ya está armada, p. ej. en el isolate de carga, en coordenadas de la hoja) se corre igual en vez
+  /// de recalcularse.
   void translateY(double dy) {
     for (var i = 1; i < pts.length; i += 3) {
       pts[i] += dy;
     }
+    final m = mesh;
     invalidate();
+    if (m != null) {
+      for (final p in m.parts) {
+        for (var i = 1; i < p.pos.length; i += 2) {
+          p.pos[i] += dy;
+        }
+      }
+      mesh = m;
+    }
   }
 
   /// ¿La goma de radio [r] en [pt] toca este trazo?
