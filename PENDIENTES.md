@@ -25,6 +25,18 @@
     cambios de Drive. Conflicto en la misma hoja: guardar las dos versiones. La app de PC habla directo con Drive
     (en Linux no hay cliente oficial). Hace falta un proyecto de Google Cloud para el login; confirmar si drive.file
     exige verificación de Google. Orden: 1) Drive en la tablet, 2) app Linux, 3) en segundo plano, 4) cifrado opcional.
+21. **Sync con Drive: bugs vistos en la primera prueba real** (2026-11-21, tablet + Linux, rama `feat/drive-sync`):
+    - **Borrar un cuaderno no se propaga si el otro dispositivo reinició la app**: al arrancar, `DriveRemoteStore.changes()`
+      carga el listado actual (que ya no tiene lo borrado) y lo usa como "antes", así el delta nunca reporta el borrado.
+      Arreglo: el primer `changes()` de cada proceso hace un listado completo (`full: true`) y el motor recalcula.
+      Test que reproduzca: proceso nuevo + borrado hecho antes en el otro dispositivo.
+    - **"Mi cuaderno" duplicado**: cada dispositivo crea su cuaderno de ejemplo al primer arranque y al sincronizar
+      quedan dos. Arreglo: en la primera sync, si el de ejemplo local está intacto y el remoto ya tiene cuadernos,
+      descartarlo sin subirlo.
+    - **Tarda en sincronizar si no se toca el botón** (solo al abrir, al cerrar cuaderno y cada 10 min). Arreglo en curso:
+      subir ~5 s después de guardar, consultar cambios cada 30–60 s con la app abierta, al volver a primer plano, e
+      indicador de estado en la barra.
+    - Ojo al probar en PC: no abrir dos copias de la app sobre la misma carpeta de datos (`~/Documents/apuntes`).
 15. **LaTeX**: lo hace el usuario; no tocar.
 
 ## Hecho
