@@ -7,7 +7,7 @@
 //
 // Qué mide cada número:
 //   puntos / disco        puntos de tinta del cuaderno y tamaño de su carpeta (hojas + notebook.json)
-//   leer+decodificar      Storage.loadNotebook (TODO el cuaderno, como se abría antes de la carga perezosa; hoy solo lo usan
+//   leer+decodificar      (solo hasta 100 hojas; después SALTEADO) Storage.loadNotebook (TODO el cuaderno, como se abría antes de la carga perezosa; hoy solo lo usan
 //                         duplicar y los tests, queda para comparar): leer los .sheet, descomprimir y armar el NotebookDoc.
 //                         Mediana de 3 corridas con Storage nuevo (el sistema ya tiene los archivos en caché).
 //   abrir perezoso        Storage.openNotebook (lo que hace la app al abrir): notebook.json y solo las hojas de la mitad
@@ -23,6 +23,7 @@
 //   PDF                   buildNotebookPdf del cuaderno de 100 hojas (se saltea si se estima > 2 min)
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
@@ -30,12 +31,14 @@ import 'dart:ui';
 
 import 'package:apuntes/app.dart';
 import 'package:apuntes/data/export.dart';
+import 'package:apuntes/data/sheet_codec.dart';
 import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/editor/page_editor.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
@@ -43,6 +46,12 @@ import 'hershey_script.dart';
 
 const _sizesEnv = String.fromEnvironment('PERF_SIZES', defaultValue: '50,100,200,400');
 const _pdfSheets = 100; // tamaño con el que se prueba la exportación
+const _fullLoadMax = 100; // por encima de esto no se decodifica el cuaderno entero (la app ya no abre así; en la tablet muere)
+
+// Modo comparación con Samsung Notes (tool/comparar.sh): --dart-define=PERF_COMPARE=34 corre SOLO ese caso (en horizontal,
+// sin scrollear solo: mide FrameTiming mientras un script externo hace swipes con adb) y no los tamaños.
+const _compareEnv = String.fromEnvironment('PERF_COMPARE', defaultValue: '');
+const _compareWindowSeconds = 40;
 
 const _phrases = [
   'La ley de Snell relaciona los angulos de incidencia',
@@ -61,7 +70,8 @@ const _phrases = [
 
 // ---------------------------------------------------------------- generación (en otro isolate)
 /// Escribe en [path] un cuaderno de [n] hojas con ~25 renglones a mano y 3 resaltados por hoja.
-/// Corre en un isolate aparte: así los trazos nunca pasan por la memoria del proceso que se mide.
+/// Corre en un isolate aparte y hoja por hoja: cada hoja se codifica y se escribe a disco apenas se genera, así
+/// nunca hay más de una en memoria (ni en este proceso ni en el isolate).
 /// Devuelve (puntos, trazos).
 Future<(int, int)> generateNotebookAsync(Directory root, int n, String name) {
   final path = root.path; // el Directory no se puede mandar a otro isolate: solo la ruta
@@ -72,11 +82,11 @@ Future<(int, int)> _generate(String path, int n, String name) async {
   final s = Storage(root: Directory(path));
   await s.init();
   final nb = Notebook(newId('n'), name);
-  final contents = <SheetContent>[];
   var points = 0, strokes = 0;
   for (var k = 0; k < n; k++) {
     final r = Random(1000 + k);
-    nb.sheets.add(nb.newSheet());
+    final meta = nb.newSheet();
+    nb.sheets.add(meta);
     final c = SheetContent();
     for (var i = 0; i < 25; i++) {
       final base = 90.0 + i * 38.1;
@@ -95,9 +105,12 @@ Future<(int, int)> _generate(String path, int n, String name) async {
       points += st.n;
     }
     strokes += c.strokes.length;
-    contents.add(c);
+    // el contenido de cada hoja es local (como lo guarda Storage): se escribe directo, sin armar el NotebookDoc global
+    final f = s.sheetFile(nb.id, meta.id);
+    await f.parent.create(recursive: true);
+    await f.writeAsBytes(encodeSheet(c), flush: true);
   }
-  await s.saveNotebook(NotebookDoc.fromSheets(nb, contents));
+  await File('${s.nbDir(nb.id).path}/notebook.json').writeAsString(jsonEncode(nb.sheetsJson()), flush: true);
   await s.saveIndex(NotesIndex(last: nb.id, notebooks: [nb]));
   return (points, strokes);
 }
@@ -152,13 +165,16 @@ class FrameRecorder {
     return {
       'frames': fr.length,
       'build_prom_ms': r1(avg(build)),
+      'build_p50_ms': r1(pct(build, .5)),
       'build_p90_ms': r1(pct(build, .9)),
       'build_p99_ms': r1(pct(build, .99)),
       'raster_prom_ms': r1(avg(raster)),
+      'raster_p50_ms': r1(pct(raster, .5)),
       'raster_p90_ms': r1(pct(raster, .9)),
       'raster_p99_ms': r1(pct(raster, .99)),
       'total_peor_ms': r1(total.isEmpty ? 0 : total.last),
       'frames_mas_16ms': total.where((t) => t > 16.7).length,
+      'frames_mas_16ms_pct': total.isEmpty ? 0.0 : r1(100 * total.where((t) => t > 16.7).length / total.length),
       'frames_mas_33ms': total.where((t) => t > 33.4).length,
     };
   }
@@ -177,8 +193,10 @@ String modo() => kReleaseMode ? 'release' : (kProfileMode ? 'profile' : 'debug')
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-  final sizes = [for (final s in _sizesEnv.split(',')) int.parse(s.trim())];
+  final compare = _compareEnv.isEmpty ? null : int.parse(_compareEnv.trim());
+  final sizes = compare != null ? <int>[] : [for (final s in _sizesEnv.split(',')) int.parse(s.trim())];
   final results = <String, Object>{'modo': modo(), 'tamanios': sizes};
+  if (compare != null) results['comparar_hojas'] = compare;
   final frames = FrameRecorder();
   final lines = <String>[];
 
@@ -202,178 +220,218 @@ void main() {
   setUpAll(frames.attach);
   tearDownAll(() {
     frames.detach();
-    // tabla resumen entre tamaños
-    say('');
-    say('===== RESUMEN (modo ${modo()}) =====');
-    say('hojas | puntos | disco MB | leer+decod ms | abrir perezoso ms | abrir UI ms | guardar 1 trazo ms | scroll build p90 | '
-        'scroll raster p90 | >16ms % | RSS abierto MB | maxRSS MB');
-    for (final n in sizes) {
-      final m = results['$n'];
-      if (m is! Map) continue;
-      final sc = [for (final z in ['inicio', 'medio', 'final']) m['scroll_$z']].whereType<Map>().toList();
-      double worst(String k) => sc.isEmpty ? 0 : sc.map((e) => (e[k] as num).toDouble()).reduce(max);
-      final fr = sc.fold<int>(0, (a, e) => a + (e['frames'] as int));
-      final slow = sc.fold<int>(0, (a, e) => a + (e['frames_mas_16ms'] as int));
-      say('$n | ${m['puntos']} | ${m['disco_mb']} | ${m['leer_decodificar_ms']} | ${m['abrir_perezoso_ms']} | ${m['abrir_ui_ms']} | '
-          '${m['guardar_1_trazo_ms']} | ${worst('build_p90_ms')} | ${worst('raster_p90_ms')} | '
-          '${fr == 0 ? '-' : r1(100 * slow / fr)} | ${m['rss_abierto_mb']} | ${m['rss_max_mb']}');
+    if (compare == null) {
+      // tabla resumen entre tamaños
+      say('');
+      say('===== RESUMEN (modo ${modo()}) =====');
+      say('hojas | puntos | disco MB | leer+decod ms | abrir perezoso ms | abrir UI ms | guardar 1 trazo ms | scroll build p90 | '
+          'scroll raster p90 | >16ms % | RSS abierto MB | maxRSS MB');
+      for (final n in sizes) {
+        final m = results['$n'];
+        if (m is! Map) continue;
+        final sc = [for (final z in ['inicio', 'medio', 'final']) m['scroll_$z']].whereType<Map>().toList();
+        double worst(String k) => sc.isEmpty ? 0 : sc.map((e) => (e[k] as num).toDouble()).reduce(max);
+        final fr = sc.fold<int>(0, (a, e) => a + (e['frames'] as int));
+        final slow = sc.fold<int>(0, (a, e) => a + (e['frames_mas_16ms'] as int));
+        say('$n | ${m['puntos']} | ${m['disco_mb']} | ${m['leer_decodificar_ms'] ?? '-'} | ${m['abrir_perezoso_ms']} | '
+            '${m['abrir_ui_ms']} | ${m['guardar_1_trazo_ms']} | ${worst('build_p90_ms')} | ${worst('raster_p90_ms')} | '
+            '${fr == 0 ? '-' : r1(100 * slow / fr)} | ${m['rss_abierto_mb']} | ${m['rss_max_mb']}');
+      }
     }
     publish();
   });
 
+  /// Genera el cuaderno de [n] hojas en [root] (hoja por hoja, en otro isolate) y deja sus números en [out].
+  Future<void> generate(int n, Directory root, Map<String, Object?> out) async {
+    final sw = Stopwatch()..start();
+    final (points, strokes) = await generateNotebookAsync(root, n, 'Perf $n');
+    final bytes = dirBytes(root);
+    out['puntos'] = points;
+    out['trazos'] = strokes;
+    out['disco_mb'] = mb(bytes);
+    say('--- $n hojas: $points puntos en $strokes trazos (${r1(points / n)} puntos/hoja), '
+        'disco ${mb(bytes)} MB (generar: ${r1(ms(sw.elapsed) / 1000)} s) ---');
+    await Future<void>.delayed(const Duration(seconds: 1));
+    out['rss_inicio_mb'] = mb(ProcessInfo.currentRss);
+  }
+
+  /// Los pasos de Storage (leer, abrir perezoso, guardar, PDF). Es una función aparte para que, al volver, no quede
+  /// ninguna referencia viva a los documentos (el RSS que se mide después es el de la UI, no el de estos pasos).
+  Future<void> storageSteps(int n, Directory root, Map<String, Object?> out) async {
+    final skipFull = n > _fullLoadMax;
+    var sw = Stopwatch();
+    NotebookDoc? doc;
+    late Storage s;
+
+    // ---------- (a) leer + decodificar con Storage (solo hasta _fullLoadMax hojas) ----------
+    if (skipFull) {
+      out['leer_decodificar_ms'] = null;
+      out['leer_decodificar_corridas_ms'] = null;
+      out['leer_decodificar_bloqueo_ms'] = null;
+      say('leer+decodificar: SALTEADO (n > $_fullLoadMax, la app ya no abre así)');
+    } else {
+      final reads = <double>[];
+      var stall = 0.0;
+      for (var i = 0; i < 3; i++) {
+        s = Storage(root: root);
+        await s.init();
+        final idx = await s.loadIndex();
+        sw = Stopwatch()..start();
+        final (dd, st) = await withStall(() => s.loadNotebook(idx.notebooks.first));
+        reads.add(ms(sw.elapsed));
+        stall = max(stall, st);
+        doc = dd;
+      }
+      out['leer_decodificar_ms'] = r1(median(reads));
+      out['leer_decodificar_corridas_ms'] = [for (final v in reads) r1(v)];
+      out['leer_decodificar_bloqueo_ms'] = r1(stall);
+      say('leer+decodificar (Storage): mediana ${out['leer_decodificar_ms']} ms (corridas ${out['leer_decodificar_corridas_ms']}), '
+          'bloqueo máx del hilo principal ${r1(stall)} ms');
+    }
+
+    // ---------- (a ter) abrir perezoso con Storage.openNotebook (como la app) ----------
+    final lazyReads = <double>[];
+    var lazyStall = 0.0;
+    var lazyLoaded = 0;
+    for (var i = 0; i < 3; i++) {
+      final s2 = Storage(root: root);
+      await s2.init();
+      final idx = await s2.loadIndex();
+      sw = Stopwatch()..start();
+      final (dd, st) = await withStall(() => s2.openNotebook(idx.notebooks.first, around: n ~/ 2));
+      lazyReads.add(ms(sw.elapsed));
+      lazyStall = max(lazyStall, st);
+      lazyLoaded = dd.loadedSheets.length;
+    }
+    out['abrir_perezoso_ms'] = r1(median(lazyReads));
+    out['abrir_perezoso_corridas_ms'] = [for (final v in lazyReads) r1(v)];
+    out['abrir_perezoso_hojas_cargadas'] = lazyLoaded;
+    out['abrir_perezoso_bloqueo_ms'] = r1(lazyStall);
+    say('abrir perezoso (Storage.openNotebook, $lazyLoaded hojas): mediana ${out['abrir_perezoso_ms']} ms '
+        '(corridas ${out['abrir_perezoso_corridas_ms']}), bloqueo máx ${r1(lazyStall)} ms');
+
+    // ---------- (b) guardar después de agregar UN trazo ----------
+    // hasta _fullLoadMax: con el documento entero (codifica todas las hojas); después: con el perezoso, que es lo que
+    // hace la app (solo se codifican las hojas cargadas y sucias)
+    if (skipFull) {
+      s = Storage(root: root);
+      await s.init();
+      final idx = await s.loadIndex();
+      doc = await s.openNotebook(idx.notebooks.first, around: n ~/ 2);
+      say('guardar y PDF: con el documento perezoso (hojas cargadas: ${doc.loadedSheets.length}), no con el cuaderno entero');
+    }
+    final d = doc!;
+    final k = n ~/ 2;
+    Stroke newStroke(int i) {
+      final y = k * kSheetStep + 300 + i * 40;
+      final pts = <double>[for (var j = 0; j < 40; j++) ...[200 + j * 8.0, y + sin(j / 4) * 6, .6]];
+      return Stroke(newId('s'), 'pen', '#22211e', 2.2, pts)..z = d.nextZ();
+    }
+
+    final saves = <double>[], splits = <double>[];
+    var saveStall = 0.0;
+    for (var i = 0; i < 3; i++) {
+      final st = newStroke(i);
+      d.strokes[st.id] = st;
+      final revs = [for (final m in d.sheets) m.rev];
+      if (!skipFull) {
+        sw = Stopwatch()..start();
+        d.splitBySheet(); // necesita todas las hojas cargadas
+        splits.add(ms(sw.elapsed));
+      }
+      sw = Stopwatch()..start();
+      final (_, stl) = await withStall(() => s.saveNotebook(d));
+      saves.add(ms(sw.elapsed));
+      saveStall = max(saveStall, stl);
+      final tocadas = [for (var j = 0; j < d.sheets.length; j++) d.sheets[j].rev != revs[j]].where((x) => x).length;
+      out['guardar_hojas_escritas'] = tocadas;
+    }
+    sw = Stopwatch()..start();
+    await s.saveNotebook(d);
+    final noChange = ms(sw.elapsed);
+    out['guardar_1_trazo_ms'] = r1(median(saves));
+    out['guardar_corridas_ms'] = [for (final v in saves) r1(v)];
+    out['guardar_split_ms'] = splits.isEmpty ? null : r1(median(splits));
+    out['guardar_sin_cambios_ms'] = r1(noChange);
+    out['guardar_bloqueo_ms'] = r1(saveStall);
+    say('guardar tras 1 trazo${skipFull ? ' (documento perezoso)' : ''}: mediana ${out['guardar_1_trazo_ms']} ms '
+        '(corridas ${out['guardar_corridas_ms']}; splitBySheet ${out['guardar_split_ms'] ?? '-'} ms; '
+        'hojas escritas ${out['guardar_hojas_escritas']}), sin cambios ${r1(noChange)} ms, bloqueo máx ${r1(saveStall)} ms');
+
+    // ---------- (e) exportar a PDF ----------
+    if (n == _pdfSheets) {
+      final store = s;
+      sw = Stopwatch()..start();
+      await buildNotebookPdf(store, d, only: [0, 1, 2]);
+      final per = ms(sw.elapsed) / 3;
+      final est = per * n / 1000;
+      out['pdf_ms_por_hoja_estimado'] = r1(per);
+      if (est > 120) {
+        out['pdf'] = 'salteado: estimado ${r1(est)} s (> 2 min)';
+        say('PDF de $n hojas: SALTEADO, estimado ${r1(est)} s (> 2 min)');
+      } else {
+        sw = Stopwatch()..start();
+        try {
+          final pdf = await buildNotebookPdf(store, d).timeout(const Duration(seconds: 150));
+          out['pdf_ms'] = r1(ms(sw.elapsed));
+          out['pdf_mb'] = mb(pdf.length);
+          out['rss_tras_pdf_mb'] = mb(ProcessInfo.currentRss);
+          say('PDF de $n hojas: ${r1(ms(sw.elapsed) / 1000)} s (estimado ${r1(est)} s), ${mb(pdf.length)} MB, '
+              'RSS después ${out['rss_tras_pdf_mb']} MB');
+        } on TimeoutException {
+          out['pdf'] = 'cortado a los 150 s';
+          say('PDF de $n hojas: pasó de 150 s, abandonado');
+        }
+      }
+    } else if (n > _pdfSheets) {
+      say('PDF: solo se prueba con $_pdfSheets hojas');
+    }
+  }
+
+  /// Abre el cuaderno "Perf [n]" por la UI (biblioteca, toque, PageEditor) y mide. Devuelve con el editor abierto.
+  Future<void> openByUi(WidgetTester t, int n, Directory root, Map<String, Object?> out) async {
+    await t.pumpWidget(ApuntesApp(root: root));
+    await settle(t, 2000); // biblioteca y miniaturas
+    out['rss_antes_abrir_mb'] = mb(ProcessInfo.currentRss); // justo antes de abrir: ya sin documentos de los pasos
+    await frames.mark();
+    final sw = Stopwatch()..start();
+    await t.tap(find.byKey(Key('nb-Perf $n')));
+    while (find.byType(PageEditor).evaluate().isEmpty) {
+      await t.pump(const Duration(milliseconds: 16));
+      if (sw.elapsed > const Duration(minutes: 3)) fail('el cuaderno no abrió en 3 min');
+    }
+    await t.pump();
+    out['abrir_ui_ms'] = r1(ms(sw.elapsed));
+    await settle(t, 1500);
+    out['abrir_ui_frames'] = await frames.take();
+    final open = out['abrir_ui_frames']! as Map;
+    out['rss_abierto_mb'] = mb(ProcessInfo.currentRss);
+    out['rss_max_mb'] = mb(ProcessInfo.maxRss);
+    say('abrir por la UI: ${out['abrir_ui_ms']} ms hasta el PageEditor; en esa ventana ${open['frames']} frames, '
+        'peor ${open['total_peor_ms']} ms, ${open['frames_mas_16ms']} > 16 ms');
+    say('RSS: antes de abrir ${out['rss_antes_abrir_mb']} MB, abierto ${out['rss_abierto_mb']} MB, '
+        'maxRSS ${out['rss_max_mb']} MB');
+  }
+
   for (final n in sizes) {
     testWidgets('perf: cuaderno de $n hojas', timeout: const Timeout(Duration(minutes: 40)), (t) async {
-      final out = <String, Object>{};
+      final out = <String, Object?>{};
       results['$n'] = out;
       final root = await Directory.systemTemp.createTemp('apuntes_perf$n');
       try {
-        // ---------- datos ----------
-        var sw = Stopwatch()..start();
-        final (points, strokes) = await generateNotebookAsync(root, n, 'Perf $n');
-        final bytes = dirBytes(root);
-        out['puntos'] = points;
-        out['trazos'] = strokes;
-        out['disco_mb'] = mb(bytes);
-        say('--- $n hojas: $points puntos en $strokes trazos (${r1(points / n)} puntos/hoja), '
-            'disco ${mb(bytes)} MB (generar: ${r1(ms(sw.elapsed) / 1000)} s) ---');
-        await Future<void>.delayed(const Duration(seconds: 1));
-        out['rss_inicio_mb'] = mb(ProcessInfo.currentRss);
-
-        // ---------- (a) leer + decodificar con Storage ----------
-        final reads = <double>[];
-        var stall = 0.0;
-        NotebookDoc? doc;
-        late Storage s;
-        for (var i = 0; i < 3; i++) {
-          s = Storage(root: root);
-          await s.init();
-          final idx = await s.loadIndex();
-          sw = Stopwatch()..start();
-          final (dd, st) = await withStall(() => s.loadNotebook(idx.notebooks.first));
-          reads.add(ms(sw.elapsed));
-          stall = max(stall, st);
-          doc = dd;
-        }
-        out['leer_decodificar_ms'] = r1(median(reads));
-        out['leer_decodificar_corridas_ms'] = [for (final v in reads) r1(v)];
-        out['leer_decodificar_bloqueo_ms'] = r1(stall);
-        say('leer+decodificar (Storage): mediana ${out['leer_decodificar_ms']} ms (corridas ${out['leer_decodificar_corridas_ms']}), '
-            'bloqueo máx del hilo principal ${r1(stall)} ms');
-
-        // ---------- (a ter) abrir perezoso con Storage.openNotebook (como la app) ----------
-        final lazyReads = <double>[];
-        var lazyStall = 0.0;
-        var lazyLoaded = 0;
-        for (var i = 0; i < 3; i++) {
-          final s2 = Storage(root: root);
-          await s2.init();
-          final idx = await s2.loadIndex();
-          sw = Stopwatch()..start();
-          final (dd, st) = await withStall(() => s2.openNotebook(idx.notebooks.first, around: n ~/ 2));
-          lazyReads.add(ms(sw.elapsed));
-          lazyStall = max(lazyStall, st);
-          lazyLoaded = dd.loadedSheets.length;
-        }
-        out['abrir_perezoso_ms'] = r1(median(lazyReads));
-        out['abrir_perezoso_corridas_ms'] = [for (final v in lazyReads) r1(v)];
-        out['abrir_perezoso_hojas_cargadas'] = lazyLoaded;
-        out['abrir_perezoso_bloqueo_ms'] = r1(lazyStall);
-        say('abrir perezoso (Storage.openNotebook, $lazyLoaded hojas): mediana ${out['abrir_perezoso_ms']} ms '
-            '(corridas ${out['abrir_perezoso_corridas_ms']}), bloqueo máx ${r1(lazyStall)} ms');
-
-        // ---------- (b) guardar después de agregar UN trazo ----------
-        final d = doc!;
-        final k = n ~/ 2;
-        Stroke newStroke(int i) {
-          final y = k * kSheetStep + 300 + i * 40;
-          final pts = <double>[for (var j = 0; j < 40; j++) ...[200 + j * 8.0, y + sin(j / 4) * 6, .6]];
-          return Stroke(newId('s'), 'pen', '#22211e', 2.2, pts)..z = d.nextZ();
-        }
-
-        final saves = <double>[], splits = <double>[];
-        var saveStall = 0.0;
-        for (var i = 0; i < 3; i++) {
-          final st = newStroke(i);
-          d.strokes[st.id] = st;
-          final revs = [for (final m in d.sheets) m.rev];
-          sw = Stopwatch()..start();
-          d.splitBySheet();
-          splits.add(ms(sw.elapsed));
-          sw = Stopwatch()..start();
-          final (_, stl) = await withStall(() => s.saveNotebook(d));
-          saves.add(ms(sw.elapsed));
-          saveStall = max(saveStall, stl);
-          final tocadas = [for (var j = 0; j < d.sheets.length; j++) d.sheets[j].rev != revs[j]].where((x) => x).length;
-          out['guardar_hojas_escritas'] = tocadas;
-        }
-        sw = Stopwatch()..start();
-        await s.saveNotebook(d);
-        final noChange = ms(sw.elapsed);
-        out['guardar_1_trazo_ms'] = r1(median(saves));
-        out['guardar_corridas_ms'] = [for (final v in saves) r1(v)];
-        out['guardar_split_ms'] = r1(median(splits));
-        out['guardar_sin_cambios_ms'] = r1(noChange);
-        out['guardar_bloqueo_ms'] = r1(saveStall);
-        say('guardar tras 1 trazo: mediana ${out['guardar_1_trazo_ms']} ms (corridas ${out['guardar_corridas_ms']}; '
-            'splitBySheet ${out['guardar_split_ms']} ms; hojas escritas ${out['guardar_hojas_escritas']}), '
-            'sin cambios ${r1(noChange)} ms, bloqueo máx ${r1(saveStall)} ms');
-
-        // ---------- (e) exportar a PDF ----------
-        if (n == _pdfSheets) {
-          final store = s;
-          sw = Stopwatch()..start();
-          await buildNotebookPdf(store, d, only: [0, 1, 2]);
-          final per = ms(sw.elapsed) / 3;
-          final est = per * n / 1000;
-          out['pdf_ms_por_hoja_estimado'] = r1(per);
-          if (est > 120) {
-            out['pdf'] = 'salteado: estimado ${r1(est)} s (> 2 min)';
-            say('PDF de $n hojas: SALTEADO, estimado ${r1(est)} s (> 2 min)');
-          } else {
-            sw = Stopwatch()..start();
-            try {
-              final pdf = await buildNotebookPdf(store, d).timeout(const Duration(seconds: 150));
-              out['pdf_ms'] = r1(ms(sw.elapsed));
-              out['pdf_mb'] = mb(pdf.length);
-              out['rss_tras_pdf_mb'] = mb(ProcessInfo.currentRss);
-              say('PDF de $n hojas: ${r1(ms(sw.elapsed) / 1000)} s (estimado ${r1(est)} s), ${mb(pdf.length)} MB, '
-                  'RSS después ${out['rss_tras_pdf_mb']} MB');
-            } on TimeoutException {
-              out['pdf'] = 'cortado a los 150 s';
-              say('PDF de $n hojas: pasó de 150 s, abandonado');
-            }
-          }
-        }
-        doc = null;
+        await generate(n, root, out);
+        await storageSteps(n, root, out);
+        out['rss_tras_pasos_mb'] = mb(ProcessInfo.currentRss);
+        await Future<void>.delayed(const Duration(seconds: 1)); // sin referencias vivas: que el GC pueda soltar lo suyo
 
         // ---------- (a bis) abrir por la UI ----------
-        await t.pumpWidget(ApuntesApp(root: root));
-        await settle(t, 2000); // biblioteca y miniaturas
-        final rssBefore = ProcessInfo.currentRss;
-        await frames.mark();
-        sw = Stopwatch()..start();
-        await t.tap(find.byKey(Key('nb-Perf $n')));
-        while (find.byType(PageEditor).evaluate().isEmpty) {
-          await t.pump(const Duration(milliseconds: 16));
-          if (sw.elapsed > const Duration(minutes: 3)) fail('el cuaderno no abrió en 3 min');
-        }
-        await t.pump();
-        out['abrir_ui_ms'] = r1(ms(sw.elapsed));
-        await settle(t, 1500);
-        out['abrir_ui_frames'] = await frames.take();
-        final open = out['abrir_ui_frames']! as Map;
-        out['rss_antes_abrir_mb'] = mb(rssBefore);
-        out['rss_abierto_mb'] = mb(ProcessInfo.currentRss);
-        out['rss_max_mb'] = mb(ProcessInfo.maxRss);
-        say('abrir por la UI: ${out['abrir_ui_ms']} ms hasta el PageEditor; en esa ventana ${open['frames']} frames, '
-            'peor ${open['total_peor_ms']} ms, ${open['frames_mas_16ms']} > 16 ms');
-        say('RSS: antes de abrir ${out['rss_antes_abrir_mb']} MB, abierto ${out['rss_abierto_mb']} MB, '
-            'maxRSS ${out['rss_max_mb']} MB');
+        await openByUi(t, n, root, out);
 
         // ---------- (c) scroll con el dedo ----------
         final ed = t.state<PageEditorState>(find.byType(PageEditor));
         final scroll = ed.scroll;
         say('alto del cuaderno: ${r1(scroll.position.maxScrollExtent)} px, escala ${r1(ed.scale)} px/unidad');
+        var sw = Stopwatch();
 
         Future<void> flings(String zone, Offset dir, int count) async {
           await frames.mark();
@@ -420,6 +478,58 @@ void main() {
         say('ERROR en $n hojas: $e');
         rethrow;
       } finally {
+        publish();
+        await t.pumpWidget(const SizedBox());
+        if (await root.exists()) await root.delete(recursive: true);
+      }
+    });
+  }
+
+  // ---------- caso aparte: comparación con Samsung Notes (tool/comparar.sh) ----------
+  if (compare != null) {
+    testWidgets('perf: comparación con Samsung Notes ($compare hojas, horizontal)',
+        timeout: const Timeout(Duration(minutes: 20)), (t) async {
+      final out = <String, Object?>{};
+      results['comparar'] = out;
+      final root = await Directory.systemTemp.createTemp('apuntes_perf_cmp');
+      try {
+        await generate(compare, root, out);
+        await SystemChrome.setPreferredOrientations(
+            [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
+        await Future<void>.delayed(const Duration(seconds: 2)); // que el sistema termine de girar
+        await openByUi(t, compare, root, out);
+
+        // ventana de medición: el test NO scrollea; solo mira los frames mientras tool/comparar.sh hace swipes con adb
+        final ed = t.state<PageEditorState>(find.byType(PageEditor));
+        final p0 = ed.scroll.offset;
+        await frames.mark();
+        final sw = Stopwatch()..start();
+        say('LISTO_PARA_SWIPES');
+        // sin pump: los frames los pide el motor con los toques reales (un pump forzado agregaría frames vacíos)
+        while (sw.elapsed < const Duration(seconds: _compareWindowSeconds)) {
+          await Future<void>.delayed(const Duration(milliseconds: 250));
+        }
+        final f = await frames.take();
+        f['recorrido_px'] = r1((ed.scroll.offset - p0).abs());
+        f['ventana_s'] = _compareWindowSeconds;
+        out['swipes'] = f;
+        out['rss_tras_swipes_mb'] = mb(ProcessInfo.currentRss);
+        out['rss_max_mb'] = mb(ProcessInfo.maxRss);
+        say('swipes ($compare hojas, horizontal, ventana $_compareWindowSeconds s): ${f['frames']} frames totales, '
+            '${f['recorrido_px']} px recorridos | '
+            'build prom/p50/p90/p99 ${f['build_prom_ms']}/${f['build_p50_ms']}/${f['build_p90_ms']}/${f['build_p99_ms']} ms | '
+            'raster prom/p50/p90/p99 ${f['raster_prom_ms']}/${f['raster_p50_ms']}/${f['raster_p90_ms']}/${f['raster_p99_ms']} ms | '
+            '>16 ms: ${f['frames_mas_16ms']} (${f['frames_mas_16ms_pct']} %), peor ${f['total_peor_ms']} ms');
+        say('RSS tras swipes ${out['rss_tras_swipes_mb']} MB, maxRSS ${out['rss_max_mb']} MB');
+
+        await t.tap(find.byKey(const Key('back')));
+        await settle(t, 1500);
+      } catch (e) {
+        out['error'] = '$e';
+        say('ERROR en comparación: $e');
+        rethrow;
+      } finally {
+        await SystemChrome.setPreferredOrientations([]);
         publish();
         await t.pumpWidget(const SizedBox());
         if (await root.exists()) await root.delete(recursive: true);

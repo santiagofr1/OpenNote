@@ -59,7 +59,13 @@ R=${PIPESTATUS[0]}
 set -e
 
 FALLO=0
-if ! instalada; then
+# adb puede fallar un instante cuando muere la app de prueba: se reintenta 3 veces (3 s entre intentos) antes de dar el error
+OK_INST=0
+for i in 1 2 3; do
+  if instalada; then OK_INST=1; break; fi
+  [ $i = 3 ] || sleep 3
+done
+if [ $OK_INST = 0 ]; then
   echo "ERROR: la app real ($PKG) DESAPARECIÓ"; FALLO=1
 fi
 DESPUES=$(snapshot)
