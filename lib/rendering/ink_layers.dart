@@ -46,44 +46,94 @@ class InkPainter extends CustomPainter {
   void paint(Canvas c, Size size) {
     final skip = hidden();
     final img = _img;
+    Path? onlyVector; // zona (en coordenadas de la capa) que falta dibujar trazo por trazo; null: toda la capa
     if (img != null && cache != null) {
       final w = (size.width * dpr).round(), h = (size.height * dpr).round();
       _points ??= strokes.fold<int>(0, (a, s) => a + s.n);
+      img.cacheable = _points! >= cache!.minPoints;
       // con trazos arrastrándose (ocultos), muy ampliada o con poca tinta: vectorial y sin imagen
-      if (skip.isNotEmpty || w > maxPx || _points! < cache!.minPoints) {
+      if (skip.isNotEmpty || w > maxPx || !img.cacheable) {
         img.invalidate();
+        img.mode = img.cacheable ? InkPaintMode.vector : InkPaintMode.small;
       } else {
-        if (img.image != null && !InkImage.sameStrokes(img.imageStrokes, strokes)) img.invalidate();
+        if (img.hasImage && !InkImage.sameStrokes(img.imageStrokes, strokes)) img.invalidate();
         img.want(w, h);
-        img.record = _record;
+        final first = img.record == null;
+        img.record = recordStrip;
         img.recStrokes = strokes;
-        final im = img.image;
-        if (im != null) {
-          // la imagen es de la hoja entera; si el zoom cambió se estira la vieja hasta que se regenere
-          c.drawImageRect(im, Rect.fromLTWH(0, 0, im.width.toDouble(), im.height.toDouble()), Offset.zero & size,
+        if (first) cache!.kick(); // si la hoja es de las del prefetch, ya hay con qué generarla
+        img.blocked = false;
+        img.ensureStrips();
+        cache!.touch(img);
+        final n = img.strips.length;
+        // cada franja lista va como imagen (si el zoom cambió se estira la vieja hasta que se regenere)
+        final missing = <int>[];
+        for (var i = 0; i < n; i++) {
+          final s = img.strips[i];
+          if (s == null) {
+            missing.add(i);
+            continue;
+          }
+          final (y0, y1) = SheetImageCache.stripRange(s.fullH, n, i);
+          c.drawImageRect(s.image, Rect.fromLTWH(0, 0, s.image.width.toDouble(), s.image.height.toDouble()),
+              Rect.fromLTRB(0, size.height * y0 / s.fullH, size.width, size.height * y1 / s.fullH),
               Paint()..filterQuality = FilterQuality.low);
-          img.schedule();
-          return;
         }
         img.schedule();
+        if (missing.isEmpty) {
+          img.mode = InkPaintMode.image;
+          return;
+        }
+        final low = img.low;
+        if (low != null) {
+          // sustituto barato: la miniatura estirada en lo que falta
+          for (final i in missing) {
+            final (y0, y1) = SheetImageCache.stripRange(h, n, i);
+            final (l0, l1) = SheetImageCache.stripRange(low.height, n, i);
+            c.drawImageRect(low, Rect.fromLTRB(0, l0.toDouble(), low.width.toDouble(), l1.toDouble()),
+                Rect.fromLTRB(0, size.height * y0 / h, size.width, size.height * y1 / h),
+                Paint()..filterQuality = FilterQuality.medium);
+          }
+          img.mode = InkPaintMode.lowRes;
+          return;
+        }
+        img.mode = InkPaintMode.vector;
+        if (missing.length < n) {
+          onlyVector = Path();
+          for (final i in missing) {
+            final (y0, y1) = SheetImageCache.stripRange(h, n, i);
+            onlyVector.addRect(Rect.fromLTRB(0, size.height * y0 / h, size.width, size.height * y1 / h));
+          }
+        }
       }
     }
+    if (onlyVector != null) c.clipPath(onlyVector);
     c.scale(scale);
     c.translate(0, -sheet.top);
     c.clipRect(sheet);
     paintStrokes(c, _alive(skip));
   }
 
-  /// Graba la tanda entera de la hoja a [w] x [h] píxeles (para la imagen). null si hay trazos ocultos.
-  ui.Picture? _record(int w, int h) {
+  /// Graba las filas [y0, y1) de la tanda de la hoja a [w] x [h] píxeles (para una franja de la imagen; toda la
+  /// hoja es y0 = 0, y1 = h). Solo se dibujan los trazos que tocan esas filas. null si hay trazos ocultos.
+  @visibleForTesting
+  ui.Picture? recordStrip(int w, int h, int y0, int y1) {
     final skip = hidden();
     if (skip.isNotEmpty) return null;
     final rec = ui.PictureRecorder();
     final c = Canvas(rec);
+    c.translate(0, -y0.toDouble());
     c.scale(w / sheet.width, h / sheet.height);
     c.translate(0, -sheet.top);
     c.clipRect(sheet);
-    paintStrokes(c, _alive(skip));
+    Iterable<Stroke> ss = _alive(skip);
+    if (y1 - y0 < h) {
+      // trazos que tocan la franja (con margen por el grosor); la franja se recorta sola al hacer la imagen
+      const margin = 60.0;
+      final top = sheet.top + y0 * sheet.height / h - margin, bottom = sheet.top + y1 * sheet.height / h + margin;
+      ss = ss.where((s) => s.bounds.bottom >= top && s.bounds.top <= bottom);
+    }
+    paintStrokes(c, ss);
     return rec.endRecording();
   }
 

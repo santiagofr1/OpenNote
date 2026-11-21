@@ -675,4 +675,77 @@ void main() {
     await settle(t);
     expect(ed.doc.drawOrder().last.id, low);
   });
+
+  testWidgets('scroll rápido de punta a punta: sin errores; quieto usa imágenes; un trazo nuevo se ve y se guarda', (t) async {
+    // cuaderno de 6 hojas con bastante tinta por hoja (más de 1500 puntos: vale una imagen)
+    final s = Storage(root: root);
+    await s.init();
+    final nb = Notebook.create('Veloz');
+    for (var i = 0; i < 5; i++) {
+      nb.sheets.add(nb.newSheet());
+    }
+    final doc = NotebookDoc(nb);
+    for (var k = 0; k < nb.sheets.length; k++) {
+      for (var j = 0; j < 40; j++) {
+        final y = k * kSheetStep + 80 + j * 32.0;
+        doc.strokes['s$k-$j'] = Stroke('s$k-$j', 'pen', '#000000', 3, [
+          for (var i = 0; i < 50; i++) ...[100 + i * 16.0, y + (i.isEven ? 0 : 6), .6]
+        ]);
+      }
+    }
+    final total = doc.strokes.length;
+    await s.saveIndex(NotesIndex(last: nb.id, notebooks: [nb]));
+    await s.saveNotebook(doc);
+
+    await start(t);
+    await t.tap(find.byKey(const Key('nb-Veloz')));
+    await settle(t, 1500);
+    final ed = editor(t);
+    expect(ed.doc.sheetCount, 6);
+
+    // de punta a punta con el dedo, rápido: hacia el final y de vuelta
+    final max = ed.scroll.position.maxScrollExtent;
+    for (var i = 0; i < 25 && ed.scroll.offset < max - 50; i++) {
+      await t.fling(find.byType(PageEditor), const Offset(0, -600), 6000);
+      await settle(t, 250);
+    }
+    expect(ed.scroll.offset, greaterThan(max * .8), reason: 'llegó (casi) al final');
+    for (var i = 0; i < 25 && ed.scroll.offset > 50; i++) {
+      await t.fling(find.byType(PageEditor), const Offset(0, 600), 6000);
+      await settle(t, 250);
+    }
+    expect(t.takeException(), isNull);
+
+    // quieto: la hoja que se ve termina dibujándose con imagen (se espera de verdad: el rasterizado es asíncrono)
+    String visibleId() => ed.doc.sheets[ed.visibleSheet].id;
+    for (var i = 0; i < 60 && !ed.sheetUsesImage(visibleId()); i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await t.pump(const Duration(milliseconds: 50));
+    }
+    expect(ed.sheetUsesImage(visibleId()), isTrue, reason: 'quieta, la hoja visible usa imagen');
+    expect(t.takeException(), isNull);
+
+    // escribir un trazo en una hoja después del scroll: se ve (vectorial al instante) y se guarda
+    ed.scrollToSheet(2, animate: false);
+    await settle(t, 800);
+    final id = ed.doc.sheets[2].id;
+    final ver = ed.inkVersionOf(id).value;
+    final p = docToScreen(t);
+    await stylusLine(t, p(Offset(300, 2 * kSheetStep + 250)), p(Offset(700, 2 * kSheetStep + 250)));
+    expect(ed.doc.strokes.length, total + 1);
+    expect(ed.inkVersionOf(id).value, greaterThan(ver), reason: 'la hoja se repintó con el trazo nuevo');
+    expect(ed.sheetUsesImage(id), isFalse, reason: 'recién escrito: vectorial, no una imagen vieja sin el trazo');
+    for (var i = 0; i < 60 && !ed.sheetUsesImage(id); i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await t.pump(const Duration(milliseconds: 50));
+    }
+    expect(ed.sheetUsesImage(id), isTrue, reason: 'al quedar quieta se regenera con el trazo');
+
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1500);
+    final saved = await savedNotebook('Veloz');
+    final s2 = Storage(root: root);
+    await s2.init();
+    expect((await s2.loadNotebook(saved)).strokes.length, total + 1, reason: 'el trazo nuevo quedó en disco');
+  });
 }

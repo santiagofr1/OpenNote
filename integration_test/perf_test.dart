@@ -140,30 +140,142 @@ double median(List<double> v) => (List.of(v)..sort())[v.length ~/ 2];
 double pct(List<double> sorted, double p) => sorted.isEmpty ? 0 : sorted[(p * (sorted.length - 1)).round()];
 double mb(int bytes) => r1(bytes / 1048576);
 
-/// Junta los FrameTiming que reporta el motor (llegan en tandas, hasta ~1 s después de cada frame).
+/// Qué pasaba en un cuadro (se anota al terminar de armarlo, no cuando llega su FrameTiming).
+class _Sample {
+  final int ts; // vsyncStart del cuadro (µs), el mismo reloj que FrameTiming
+  final bool vector, lowRes, gen;
+  final double off, delta; // posición del scroll y cuánto se movió desde el cuadro anterior (|delta|)
+  _Sample(this.ts, this.vector, this.lowRes, this.gen, this.off, this.delta);
+}
+
+/// Junta los FrameTiming que reporta el motor (llegan en tandas, hasta ~1 s después de cada frame) y, por cada cuadro,
+/// una muestra barata de cómo se estaba dibujando la tinta ([probe]: hojas visibles en vectorial / miniatura y contador
+/// de generación de imágenes). Los dos se juntan por el instante de inicio del cuadro.
 class FrameRecorder {
   final _all = <FrameTiming>[];
+  final _samples = <_Sample>[];
+  ({bool vector, bool lowRes, int activity, double offset})? Function()? probe;
+  bool _sampling = false;
+  int _lastActivity = 0;
+  double _lastOff = 0;
   void _cb(List<FrameTiming> l) => _all.addAll(l);
-  void attach() => SchedulerBinding.instance.addTimingsCallback(_cb);
-  void detach() => SchedulerBinding.instance.removeTimingsCallback(_cb);
+
+  void attach() {
+    SchedulerBinding.instance.addTimingsCallback(_cb);
+    _sampling = true;
+    _chain();
+  }
+
+  void detach() {
+    _sampling = false;
+    SchedulerBinding.instance.removeTimingsCallback(_cb);
+  }
+
+  void _chain() {
+    if (!_sampling) return;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      final p = probe?.call();
+      if (p != null) {
+        final gen = p.activity != _lastActivity;
+        _lastActivity = p.activity;
+        final delta = (p.offset - _lastOff).abs();
+        _lastOff = p.offset;
+        _samples.add(_Sample(
+            SchedulerBinding.instance.currentSystemFrameTimeStamp.inMicroseconds, p.vector, p.lowRes, gen, p.offset, delta));
+      }
+      _chain();
+    });
+  }
 
   /// Descarta lo anterior (después de dejar que lleguen las tandas pendientes).
   Future<void> mark() async {
     await Future<void>.delayed(const Duration(milliseconds: 1400));
     _all.clear();
+    _samples.clear();
   }
 
-  /// Resumen de los frames desde el último [mark].
-  Future<Map<String, Object>> take() async {
+  /// Resumen de los frames desde el último [mark]. Con [onlyMoving] cuenta solo los de la ventana en que el scroll se
+  /// movió: desde el primer cuadro con cambio de offset hasta 500 ms después del último (la ventana de medición de
+  /// la comparación incluye pausas entre swipes y el principio y el final sin tocar nada).
+  Future<Map<String, Object>> take({bool onlyMoving = false}) async {
     await Future<void>.delayed(const Duration(milliseconds: 1400));
-    final fr = List.of(_all);
+    var fr = List.of(_all);
+    final samples = List.of(_samples)..sort((a, b) => a.ts.compareTo(b.ts));
     _all.clear();
+    _samples.clear();
+    int vs(FrameTiming f) => f.timestampInMicroseconds(FramePhase.vsyncStart);
+    // la muestra del cuadro: la más cercana a su vsyncStart (tolerancia 3 ms)
+    _Sample? sampleOf(FrameTiming f) {
+      final t = vs(f);
+      var lo = 0, hi = samples.length;
+      while (lo < hi) {
+        final m = (lo + hi) ~/ 2;
+        if (samples[m].ts < t) {
+          lo = m + 1;
+        } else {
+          hi = m;
+        }
+      }
+      _Sample? best;
+      for (final i in [lo - 1, lo]) {
+        if (i < 0 || i >= samples.length) continue;
+        if ((samples[i].ts - t).abs() <= 3000 && (best == null || (samples[i].ts - t).abs() < (best.ts - t).abs())) {
+          best = samples[i];
+        }
+      }
+      return best;
+    }
+
+    var t0 = 0, t1 = 1 << 62, activeMs = 0.0;
+    var walked = 0.0;
+    var win = samples;
+    if (onlyMoving) {
+      final moving = [for (final s in samples) if (s.delta > .5) s];
+      if (moving.isEmpty) {
+        t0 = 1 << 62;
+        t1 = 0;
+        win = const [];
+      } else {
+        t0 = moving.first.ts;
+        t1 = moving.last.ts + 500000;
+        win = [for (final s in samples) if (s.ts >= t0 && s.ts <= t1) s];
+      }
+      activeMs = t1 > t0 ? (t1 - t0) / 1000 : 0;
+      fr = [for (final f in fr) if (vs(f) >= t0 && vs(f) <= t1) f];
+    }
+    for (final s in win) {
+      walked += s.delta;
+    }
     final build = [for (final f in fr) ms(f.buildDuration)]..sort();
     final raster = [for (final f in fr) ms(f.rasterDuration)]..sort();
     final total = [for (final f in fr) ms(f.totalSpan)]..sort();
     double avg(List<double> v) => v.isEmpty ? 0 : v.reduce((a, b) => a + b) / v.length;
+    // por grupo: cuadros con hoja vectorial / con miniatura / con generación de imagen, y cuántos de ellos pasan de 16 ms
+    var vec = 0, vecSlow = 0, low = 0, lowSlow = 0, gen = 0, genSlow = 0, noSample = 0;
+    for (final f in fr) {
+      final s = sampleOf(f);
+      if (s == null) {
+        noSample++;
+        continue;
+      }
+      final slow = ms(f.totalSpan) > 16.7;
+      if (s.vector) {
+        vec++;
+        if (slow) vecSlow++;
+      }
+      if (s.lowRes) {
+        low++;
+        if (slow) lowSlow++;
+      }
+      if (s.gen) {
+        gen++;
+        if (slow) genSlow++;
+      }
+    }
     return {
       'frames': fr.length,
+      if (onlyMoving) 'ventana_activa_ms': r1(activeMs),
+      'recorrido_total_px': r1(walked),
       'build_prom_ms': r1(avg(build)),
       'build_p50_ms': r1(pct(build, .5)),
       'build_p90_ms': r1(pct(build, .9)),
@@ -176,6 +288,13 @@ class FrameRecorder {
       'frames_mas_16ms': total.where((t) => t > 16.7).length,
       'frames_mas_16ms_pct': total.isEmpty ? 0.0 : r1(100 * total.where((t) => t > 16.7).length / total.length),
       'frames_mas_33ms': total.where((t) => t > 33.4).length,
+      'frames_vectorial': vec,
+      'frames_vectorial_mas_16ms': vecSlow,
+      'frames_lowres': low,
+      'frames_lowres_mas_16ms': lowSlow,
+      'frames_generacion': gen,
+      'frames_generacion_mas_16ms': genSlow,
+      'frames_sin_muestra': noSample,
     };
   }
 }
@@ -210,6 +329,21 @@ void main() {
     results['tabla'] = List.of(lines);
     binding.reportData = Map<String, dynamic>.of(results);
   }
+
+  /// "con hoja vectorial A (>16 ms: B), con miniatura C (D), con generación E (F)" de un resumen de [FrameRecorder.take].
+  String groups(Map<String, Object> f) => 'frames con hoja vectorial ${f['frames_vectorial']} (>16 ms: ${f['frames_vectorial_mas_16ms']}), '
+      'con miniatura ${f['frames_lowres']} (${f['frames_lowres_mas_16ms']}), '
+      'con generación ${f['frames_generacion']} (${f['frames_generacion_mas_16ms']}), sin muestra ${f['frames_sin_muestra']}';
+
+  /// Qué dibuja el editor abierto (si hay uno): la muestra por cuadro de [FrameRecorder].
+  frames.probe = () {
+    final els = find.byType(PageEditor).evaluate();
+    if (els.isEmpty) return null;
+    final ed = (els.first as StatefulElement).state as PageEditorState;
+    if (!ed.scroll.hasClients || !ed.scroll.position.hasPixels) return null;
+    final s = ed.imageFrameState;
+    return (vector: s.vector, lowRes: s.lowRes, activity: s.activity, offset: ed.scroll.offset);
+  };
 
   Future<void> settle(WidgetTester t, [int ms = 400]) async {
     for (var i = 0; i < ms ~/ 50; i++) {
@@ -449,13 +583,14 @@ void main() {
           }
           final took = ms(sw.elapsed);
           final f = await frames.take();
-          f['recorrido_px'] = r1((scroll.offset - p0).abs());
+          f['recorrido_px'] = r1((scroll.offset - p0).abs()); // neto; el total (sumando |delta| por cuadro) va en recorrido_total_px
           f['duracion_ms'] = r1(took);
           out['scroll_$zone'] = f;
           say('scroll $zone: ${f['frames']} frames, ${f['recorrido_px']} px en ${r1(took / 1000)} s | '
               'build prom/p90/p99 ${f['build_prom_ms']}/${f['build_p90_ms']}/${f['build_p99_ms']} ms | '
               'raster prom/p90/p99 ${f['raster_prom_ms']}/${f['raster_p90_ms']}/${f['raster_p99_ms']} ms | '
-              '>16 ms: ${f['frames_mas_16ms']} (>33 ms: ${f['frames_mas_33ms']}), peor ${f['total_peor_ms']} ms');
+              '>16 ms: ${f['frames_mas_16ms']} (>33 ms: ${f['frames_mas_33ms']}), peor ${f['total_peor_ms']} ms | '
+              'recorrido total ${f['recorrido_total_px']} px | ${groups(f)}');
         }
 
         final max0 = scroll.position.maxScrollExtent;
@@ -469,6 +604,9 @@ void main() {
         out['rss_tras_scroll_mb'] = mb(ProcessInfo.currentRss);
         out['rss_max_mb'] = mb(ProcessInfo.maxRss);
         say('RSS tras scrollear ${out['rss_tras_scroll_mb']} MB, maxRSS ${out['rss_max_mb']} MB');
+        final ic = ed.imageCache;
+        out['cache_imagenes'] = {'tandas': ic.imageCount, 'franjas': ic.stripsReady, 'mb': mb(ic.bytes), 'miniaturas': ic.lowCount, 'miniaturas_mb': mb(ic.lowBytes)};
+        say('caché de imágenes: ${ic.imageCount} tandas / ${ic.stripsReady} franjas (${mb(ic.bytes)} MB) + ${ic.lowCount} miniaturas (${mb(ic.lowBytes)} MB)');
 
         // salir: que no quede nada guardándose antes de borrar la carpeta
         await t.tap(find.byKey(const Key('back')));
@@ -519,17 +657,19 @@ void main() {
           lb.shouldPropagateDevicePointerEvents = false;
           lb.framePolicy = policy;
         }
-        final f = await frames.take();
-        f['recorrido_px'] = r1((ed.scroll.offset - p0).abs());
+        // solo los cuadros mientras el scroll se movía (ver FrameRecorder.take); los de afuera de esa ventana no cuentan
+        final f = await frames.take(onlyMoving: true);
+        f['recorrido_px'] = r1((ed.scroll.offset - p0).abs()); // neto
         f['ventana_s'] = _compareWindowSeconds;
         out['swipes'] = f;
         out['rss_tras_swipes_mb'] = mb(ProcessInfo.currentRss);
         out['rss_max_mb'] = mb(ProcessInfo.maxRss);
-        say('swipes ($compare hojas, horizontal, ventana $_compareWindowSeconds s): ${f['frames']} frames totales, '
-            '${f['recorrido_px']} px recorridos | '
+        say('swipes ($compare hojas, horizontal, ventana de $_compareWindowSeconds s, activa ${f['ventana_activa_ms']} ms): '
+            '${f['frames']} frames en movimiento, ${f['recorrido_total_px']} px recorridos (neto ${f['recorrido_px']}) | '
             'build prom/p50/p90/p99 ${f['build_prom_ms']}/${f['build_p50_ms']}/${f['build_p90_ms']}/${f['build_p99_ms']} ms | '
             'raster prom/p50/p90/p99 ${f['raster_prom_ms']}/${f['raster_p50_ms']}/${f['raster_p90_ms']}/${f['raster_p99_ms']} ms | '
             '>16 ms: ${f['frames_mas_16ms']} (${f['frames_mas_16ms_pct']} %), peor ${f['total_peor_ms']} ms');
+        say('swipes, por grupo: ${groups(f)}');
         say('RSS tras swipes ${out['rss_tras_swipes_mb']} MB, maxRSS ${out['rss_max_mb']} MB');
 
         await t.tap(find.byKey(const Key('back')));

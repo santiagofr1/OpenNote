@@ -58,9 +58,11 @@ void main() {
   /// Deja pasar el tiempo de quietud y espera (de verdad) a que termine el rasterizado de la imagen.
   Future<void> settle(WidgetTester t) async {
     await t.pump(const Duration(milliseconds: 400)); // vence el temporizador: se graba y se pide la imagen
-    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
-    await t.pump();
-    await t.pump();
+    // un trabajo (franja o miniatura) por cuadro: se dan cuadros y tiempo real hasta que no quede nada
+    for (var i = 0; i < 14; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 40)));
+      await t.pump(const Duration(milliseconds: 20));
+    }
   }
 
   testWidgets('(a) una hoja visible que queda quieta pasa a dibujarse con imagen', (t) async {
@@ -235,7 +237,7 @@ void main() {
       await t.runAsync(() async {
         final doc = armado();
         final ss = doc.strokes.values.toList();
-        final cache = SheetImageCache(minPoints: 0, quiet: const Duration(milliseconds: 20));
+        final cache = SheetImageCache(minPoints: 0, quiet: const Duration(milliseconds: 20))..framePaced = false;
         final p = cached(doc, ss, cache);
         final inicial = await bytes(await render(p, size)); // vectorial: arranca la cuenta
         expect(cache.usesImage('h'), isFalse);
@@ -260,7 +262,7 @@ void main() {
       await t.runAsync(() async {
         final doc = armado();
         final ss = doc.strokes.values.toList();
-        final cache = SheetImageCache(minPoints: 0, quiet: const Duration(milliseconds: 20));
+        final cache = SheetImageCache(minPoints: 0, quiet: const Duration(milliseconds: 20))..framePaced = false;
         await render(cached(doc, ss, cache), size);
         await Future<void>.delayed(const Duration(milliseconds: 300));
         expect(cache.usesImage('h'), isTrue);
