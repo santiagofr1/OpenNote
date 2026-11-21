@@ -20,11 +20,20 @@ Future<Uint8List> buildNotebookPdf(Storage store, NotebookDoc nb,
     for (var k = 0; k < nb.sheetCount; k++)
       if (only == null || only.contains(k)) k
   ];
-  final images = await loadImages(store, nb);
   final pdf = pw.Document(title: nb.nb.name, creator: 'OpenNote');
   var done = 0;
   for (final k in sheets) {
-    final png = await renderSheetPng(nb, k, images: images);
+    // las hojas sin cargar se leen de disco de a una y se sueltan: el PDF no necesita todo el cuaderno en memoria
+    final (src, i) = await sheetSource(store, nb, k);
+    final images = await loadImages(store, src, sheet: i);
+    final Uint8List png;
+    try {
+      png = await renderSheetPng(src, i, images: images);
+    } finally {
+      for (final img in images.values) {
+        img.dispose();
+      }
+    }
     pdf.addPage(pw.Page(
       pageFormat: PdfPageFormat.a4,
       margin: pw.EdgeInsets.zero,
@@ -35,10 +44,25 @@ Future<Uint8List> buildNotebookPdf(Storage store, NotebookDoc nb,
   return pdf.save();
 }
 
-/// Imágenes insertadas en [doc], decodificadas, por nombre de archivo (las que faltan se saltean).
-Future<Map<String, ui.Image>> loadImages(Storage store, NotebookDoc doc) async {
+/// De dónde dibujar la hoja [k] de [nb]: el propio documento si está cargada; si no, un documento chico con la hoja
+/// de arriba (de memoria o de disco: lo que se le pasa de largo cae en esta) y esta, leída de disco. Devuelve el
+/// documento y el índice de la hoja en él. Lo que esté sin guardar de una hoja cargada se ve igual.
+Future<(NotebookDoc, int)> sheetSource(Storage store, NotebookDoc nb, int k) async {
+  if (nb.isLoadedAt(k)) return (nb, k);
+  final metas = [if (k > 0) nb.sheets[k - 1], nb.sheets[k]];
+  final contents = <SheetContent>[];
+  for (final m in metas) {
+    contents.add(nb.isLoaded(m.id) ? (nb.splitSheets({m.id})[m.id] ?? SheetContent()) : await store.readSheetContent(nb.nb, m));
+  }
+  return (NotebookDoc.fromSheets(Notebook('', '', sheets: metas), contents), metas.length - 1);
+}
+
+/// Imágenes insertadas en [doc] (solo las de la hoja [sheet] si se da), decodificadas, por nombre de archivo
+/// (las que faltan se saltean).
+Future<Map<String, ui.Image>> loadImages(Storage store, NotebookDoc doc, {int? sheet}) async {
   final images = <String, ui.Image>{};
   for (final it in doc.items.values) {
+    if (sheet != null && !it.rect.overlaps(ui.Rect.fromLTWH(0, sheet * kSheetStep, kW, kSheetH))) continue;
     if (it.type == 'image' && it.file != null && !images.containsKey(it.file)) {
       final f = store.media(it.file!);
       if (await f.exists()) images[it.file!] = await decodeImage(await f.readAsBytes());
@@ -82,7 +106,8 @@ Future<bool> savePdf(Uint8List bytes, String name) async {
 
 /// Guarda la hoja [sheet] como PNG, preguntando dónde. Devuelve false si el usuario canceló.
 Future<bool> saveSheetPng(Storage store, NotebookDoc doc, int sheet, String name) async {
-  final png = await renderSheetPng(doc, sheet, images: await loadImages(store, doc));
+  final (src, i) = await sheetSource(store, doc, sheet);
+  final png = await renderSheetPng(src, i, images: await loadImages(store, src, sheet: i));
   final uri = await FilePicker.saveFile(
     dialogTitle: 'Guardar imagen',
     fileName: safeFileName('$name.png'),

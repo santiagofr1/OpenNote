@@ -17,6 +17,7 @@ import '../../widgets/record_voice_dialog.dart';
 import 'menus.dart';
 import 'pages_panel.dart';
 import 'search.dart';
+import 'thumb_cache.dart';
 import 'style_dialog.dart';
 
 /// Un cuaderno abierto: barra de arriba, panel de hojas y el editor con toda la tira de hojas.
@@ -50,6 +51,8 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
   final searchCtrl = TextEditingController();
   List<SearchHit> hits = [];
   Timer? _searchTimer;
+  int _searchGen = 0; // la búsqueda más nueva gana (leer de disco puede tardar)
+  late final thumbs = SheetThumbCache(store); // miniaturas de las hojas sin cargar (panel)
 
   /// Hoja que se está viendo (la actualiza el editor al scrollear).
   final sheetNotifier = ValueNotifier(0);
@@ -68,7 +71,8 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
   }
 
   Future<void> _load() async {
-    final d = await store.loadNotebook(nb);
+    // solo se leen las hojas cercanas a donde se estaba; el editor pide las demás al scrollear
+    final d = await store.openNotebook(nb, around: nb.last);
     if (!mounted) return;
     sheetNotifier.value = nb.last.clamp(0, d.sheetCount - 1);
     setState(() => doc = d);
@@ -188,6 +192,20 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     _sheetOp((d) => d.deleteSheet(k), goTo: k.clamp(0, d.sheetCount - 2));
   }
 
+  /// Duplica la hoja [k]: si no está cargada se lee de disco antes (la copia se arma en memoria y se guarda).
+  Future<void> _duplicateSheet(int k) async {
+    final d = doc!, id = d.sheets[k].id;
+    try {
+      await store.loadSheets(d, [id]);
+    } catch (e) {
+      if (mounted) snack(context, 'No se pudo leer la hoja: $e');
+      return;
+    }
+    final i = d.indexOfSheet(id); // pudo moverse mientras se leía
+    if (!mounted || i < 0 || !d.isLoadedAt(i)) return;
+    _sheetOp((d) => d.duplicateSheet(i), goTo: i + 1);
+  }
+
   void _toggleBookmark(int k) {
     final m = doc!.sheets[k];
     m.bookmark = !m.bookmark;
@@ -202,7 +220,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
       case SheetAction.addAfter:
         _addSheetAfter(k);
       case SheetAction.duplicate:
-        _sheetOp((d) => d.duplicateSheet(k), goTo: k + 1);
+        _duplicateSheet(k);
       case SheetAction.moveUp:
         _sheetOp((d) => d.moveSheet(k, k - 1), goTo: k - 1);
       case SheetAction.moveDown:
@@ -391,22 +409,37 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
   // ================= búsqueda =================
   void _search(String q) {
     _searchTimer?.cancel();
-    _searchTimer = Timer(const Duration(milliseconds: 220), () {
-      final d = doc;
-      if (d != null && mounted) setState(() => hits = searchNotebook(d, q));
+    _searchTimer = Timer(const Duration(milliseconds: 220), () async {
+      final d = doc, gen = ++_searchGen;
+      if (d == null || !mounted) return;
+      // en TODAS las hojas: las no cargadas se leen de disco, de a una
+      final r = await searchNotebookAll(store, d, q);
+      if (mounted && gen == _searchGen) setState(() => hits = r);
     });
   }
 
-  void _goHit(SearchHit h) {
+  Future<void> _goHit(SearchHit h) async {
     setState(() => searching = false);
     if (h.id == null) {
       _goTo(h.sheet);
-    } else {
-      WidgetsBinding.instance.addPostFrameCallback((_) => editorKey.currentState?.reveal(h.id!));
+      return;
     }
+    final d = doc!;
+    if (!d.isLoaded(h.meta.id)) {
+      // el texto está en una hoja sin cargar: se carga y recién ahí se va a él
+      try {
+        await store.loadSheets(d, [h.meta.id]);
+      } catch (e) {
+        if (mounted) snack(context, 'No se pudo leer la hoja: $e');
+        return;
+      }
+      if (!mounted) return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) => editorKey.currentState?.reveal(h.id!));
   }
 
   void _closeSearch() => setState(() {
+        _searchGen++;
         searching = false;
         searchCtrl.clear();
         hits = [];
@@ -496,6 +529,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
 
   Widget _pagesPanel() => PagesPanel(
         doc: doc!,
+        thumbs: thumbs,
         current: sheetNotifier,
         structure: _structure,
         liveVersion: _liveVersion,

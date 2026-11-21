@@ -70,8 +70,10 @@ android {
             }
         }
         // profile se crea como copia de release, pero no hereda el resValue.
+        // Solo se usa para medir rendimiento (tool/perf.sh): también es otra app, igual que debug.
         getByName("profile") {
-            resValue("string", "app_name", "OpenNote")
+            applicationIdSuffix = ".test"
+            resValue("string", "app_name", "OpenNote Test")
         }
     }
 }

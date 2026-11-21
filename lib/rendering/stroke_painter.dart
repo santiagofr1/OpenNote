@@ -1,9 +1,169 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'dart:ui';
+
+import 'package:flutter/foundation.dart';
 
 import '../domain/domain.dart';
 
-/// Dibuja un trazo según su punta (ver [tips]; 'hl' es el resaltador).
+/// Máximo de vértices de un lote de trazos (índices de 16 bits y, de paso, un lote ~ un tramo de hoja que se puede
+/// descartar por zona).
+const kBatchVertices = 12000;
+
+class _Native implements NativeHandle {
+  final ui.Vertices v;
+  _Native(this.v);
+  @override
+  void dispose() => v.dispose();
+}
+
+/// Lote de trazos seguidos de la misma pasada, mismo color y sin capa, dibujado con UN `drawVertices`.
+/// Vive en [Stroke.batchCache] del primer trazo; se rehace si cambia cualquiera (identidad o [Stroke.meshGen]).
+class _Batch implements NativeHandle {
+  final List<Stroke> members;
+  final List<int> gens;
+  final ui.Vertices vertices;
+  _Batch(this.members, this.gens, this.vertices);
+  bool validFor(List<Stroke> s) {
+    if (s.length != members.length) return false;
+    for (var i = 0; i < s.length; i++) {
+      if (!identical(s[i], members[i]) || s[i].meshGen != gens[i] || s[i].mesh == null) return false;
+    }
+    return true;
+  }
+
+  @override
+  void dispose() => vertices.dispose();
+}
+
+ui.Vertices _verticesOf(MeshPart p) {
+  final h = p.native;
+  if (h is _Native) return h.v;
+  final v = ui.Vertices.raw(VertexMode.triangles, p.pos, colors: p.colors, indices: p.idx);
+  p.native = _Native(v);
+  return v;
+}
+
+/// Pinta una lista de partes ya armadas con el color [color] (o el de los vértices si la malla es de colores).
+void _drawParts(Canvas c, Iterable<MeshPart> parts, Color color, bool colored) {
+  final paint = Paint()
+    ..color = color
+    ..isAntiAlias = true;
+  for (final p in parts) {
+    c.drawVertices(_verticesOf(p), colored ? BlendMode.dst : BlendMode.srcOver, paint);
+  }
+}
+
+bool _layered(Stroke s) => s.o < .999 && s.k != 'pencil';
+
+/// Dibuja un trazo según su punta (ver [tips]; 'hl' es el resaltador) con su malla de triángulos
+/// (un `drawVertices` por trazo). Los trazos con opacidad menor a 1 van en una capa para que no se
+/// oscurezcan sus propias uniones (el lápiz lleva el alfa en los colores de los vértices).
 void paintStroke(Canvas c, Stroke s) {
+  final m = s.ensureMesh();
+  if (m == null) return;
+  final layered = _layered(s);
+  if (layered) c.saveLayer(s.bounds, Paint()..color = Color.fromRGBO(0, 0, 0, s.o));
+  _drawParts(c, m.parts, s.color, m.colored);
+  if (layered) c.restore();
+}
+
+
+/// Dibuja varios trazos: primero los resaltadores, así quedan debajo de la tinta.
+/// Los trazos seguidos opacos del mismo color se juntan en lotes (un `drawVertices` por ~[kBatchVertices] vértices).
+/// [cull]: si se pasa, no se dibujan los trazos ni lotes que no tocan ese rectángulo (conviene pasar siempre la
+/// misma lista y recortar con esto: así los lotes no cambian de una franja a otra).
+void paintStrokes(Canvas c, Iterable<Stroke> strokes, {Rect? cull}) {
+  final list = strokes is List<Stroke> ? strokes : strokes.toList();
+  _pass(c, list, cull, true);
+  _pass(c, list, cull, false);
+}
+
+void _pass(Canvas c, List<Stroke> list, Rect? cull, bool hl) {
+  var group = <Stroke>[];
+  var verts = 0;
+  int? key;
+  void flush() {
+    if (group.isNotEmpty) _drawGroup(c, group, cull);
+    group = <Stroke>[];
+    verts = 0;
+    key = null;
+  }
+
+  for (final s in list) {
+    if ((s.k == 'hl') != hl || s.n == 0) continue;
+    if (_layered(s)) {
+      flush();
+      if (cull == null || s.bounds.overlaps(cull)) paintStroke(c, s);
+      continue;
+    }
+    final m = s.ensureMesh();
+    if (m == null) continue;
+    final k = m.colored ? 0 : s.color.toARGB32();
+    if (group.isNotEmpty && (k != key || verts + m.vertexCount > kBatchVertices)) flush();
+    group.add(s);
+    verts += m.vertexCount;
+    key = k;
+  }
+  flush();
+}
+
+void _drawGroup(Canvas c, List<Stroke> g, Rect? cull) {
+  if (g.length == 1) {
+    if (cull == null || g[0].bounds.overlaps(cull)) paintStroke(c, g[0]);
+    return;
+  }
+  if (cull != null) {
+    var r = g.first.bounds;
+    for (final s in g) {
+      r = r.expandToInclude(s.bounds);
+    }
+    if (!r.overlaps(cull)) return;
+  }
+  final b = _batchOf(g);
+  final colored = g.first.mesh!.colored;
+  c.drawVertices(b.vertices, colored ? BlendMode.dst : BlendMode.srcOver, Paint()..color = g.first.color);
+}
+
+_Batch _batchOf(List<Stroke> g) {
+  final first = g.first;
+  final old = first.batchCache;
+  if (old is _Batch && old.validFor(g)) return old;
+  old?.dispose();
+  var nv = 0, ni = 0;
+  final colored = first.mesh!.colored;
+  for (final s in g) {
+    nv += s.mesh!.vertexCount;
+    for (final p in s.mesh!.parts) {
+      ni += p.idx.length;
+    }
+  }
+  final pos = Float32List(nv * 2), idx = Uint16List(ni);
+  final cols = colored ? Int32List(nv) : null;
+  var vo = 0, io = 0;
+  for (final s in g) {
+    for (final p in s.mesh!.parts) {
+      pos.setRange(vo * 2, (vo + p.vertexCount) * 2, p.pos);
+      cols?.setRange(vo, vo + p.vertexCount, p.colors!);
+      for (var i = 0; i < p.idx.length; i++) {
+        idx[io + i] = p.idx[i] + vo;
+      }
+      vo += p.vertexCount;
+      io += p.idx.length;
+    }
+  }
+  final v = ui.Vertices.raw(VertexMode.triangles, pos, colors: cols, indices: idx);
+  final b = _Batch(List.of(g), [for (final s in g) s.meshGen], v);
+  first.batchCache = b;
+  return b;
+}
+
+// ---------------- el dibujo de antes (solo para los tests) ----------------
+
+
+/// El dibujo de antes (un `drawLine`/`Path` por tramo). Solo para comparar en los tests con el de mallas.
+@visibleForTesting
+void paintStrokeLegacy(Canvas c, Stroke s) {
   if (s.n == 0) return;
   switch (s.k) {
     case 'hl':
@@ -126,12 +286,3 @@ void _calli(Canvas c, Stroke s) {
   }
 }
 
-/// Dibuja varios trazos: primero los resaltadores, así quedan debajo de la tinta.
-void paintStrokes(Canvas c, Iterable<Stroke> strokes) {
-  for (final s in strokes) {
-    if (s.k == 'hl') paintStroke(c, s);
-  }
-  for (final s in strokes) {
-    if (s.k != 'hl') paintStroke(c, s);
-  }
-}

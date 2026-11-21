@@ -235,13 +235,13 @@ class _LibraryState extends State<Library> {
   }
 
   Future<void> _duplicate(Notebook nb) async {
-    final src = await store.loadNotebook(nb);
+    // se copian los archivos de las hojas: no se carga ni se decodifica nada del cuaderno
     final copy = Notebook(newId('n'), '${nb.name} (copia)', bg: nb.bg, paper: nb.paper, spacing: nb.spacing, folder: nb.folder)
       ..sheets.addAll(nb.sheets.map((s) => s.copy()))
       ..touch();
-    final doc = NotebookDoc.fromSheets(copy, src.splitBySheet()); // copias: no comparte nada con el original
-    await store.saveNotebook(doc);
-    thumbs[copy.id] = doc;
+    await store.copyNotebookFiles(nb, copy);
+    final t = await store.loadSheetDoc(copy, 0);
+    if (t != null) thumbs[copy.id] = t;
     index!.notebooks.add(copy);
     await store.saveIndex(index!);
     setState(() {});
@@ -249,7 +249,8 @@ class _LibraryState extends State<Library> {
   }
 
   Future<void> _exportPdf(Notebook nb) async {
-    final doc = await store.loadNotebook(nb);
+    // solo la primera hoja queda cargada; el PDF lee las demás de disco de a una
+    final doc = await store.openNotebook(nb, radius: 0);
     if (mounted) await exportPdfFlow(context, store, doc);
   }
 

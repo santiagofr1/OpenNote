@@ -5,6 +5,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import '../../domain/domain.dart';
 import '../../rendering/sheet_render.dart';
+import 'thumb_cache.dart';
 
 enum SheetAction { rename, addAfter, duplicate, moveUp, moveDown, delete }
 
@@ -12,6 +13,7 @@ enum SheetAction { rename, addAfter, duplicate, moveUp, moveDown, delete }
 /// Tocar una miniatura lleva a esa hoja; mantenerla apretada abre el menú de la hoja.
 class PagesPanel extends StatelessWidget {
   final NotebookDoc doc;
+  final SheetThumbCache thumbs; // miniaturas de las hojas que no están cargadas
   final ValueListenable<int> current; // hoja que se está viendo
   final ValueListenable<int> structure; // cambia al agregar, mover o borrar hojas (o cambiar su estilo)
   final ValueListenable<int> liveVersion; // cambia al editar la hoja abierta
@@ -23,6 +25,7 @@ class PagesPanel extends StatelessWidget {
   const PagesPanel({
     super.key,
     required this.doc,
+    required this.thumbs,
     required this.current,
     required this.structure,
     required this.liveVersion,
@@ -131,11 +134,15 @@ class PagesPanel extends StatelessWidget {
               borderRadius: BorderRadius.circular(isCur ? 8 : 9),
               child: Stack(children: [
                 Positioned.fill(
-                  child: ValueListenableBuilder(
-                    valueListenable: liveVersion,
+                  child: _SheetThumb(
+                    doc: doc,
+                    meta: meta,
+                    sheet: k,
+                    cache: thumbs,
+                    liveVersion: liveVersion,
                     // al editar solo se repinta la hoja abierta; con la estructura cambian todas
-                    builder: (_, v, _) => CustomPaint(
-                        painter: SheetThumbPainter(doc, sheet: k, version: structure.value * 1000003 + (isCur ? v : 0))),
+                    version: structure.value * 1000003,
+                    isCur: isCur,
                   ),
                 ),
                 Positioned(
@@ -198,6 +205,80 @@ class PagesPanel extends StatelessWidget {
           ]),
         ),
       ),
+    );
+  }
+}
+
+/// Miniatura de una hoja: si está cargada se dibuja del documento vivo; si no, se lee de disco (con caché) y mientras
+/// tanto se ve el papel. Se redibuja sola cuando la hoja se carga o se descarga.
+class _SheetThumb extends StatefulWidget {
+  final NotebookDoc doc;
+  final SheetMeta meta;
+  final int sheet, version;
+  final bool isCur;
+  final SheetThumbCache cache;
+  final ValueListenable<int> liveVersion;
+  const _SheetThumb(
+      {required this.doc,
+      required this.meta,
+      required this.sheet,
+      required this.cache,
+      required this.liveVersion,
+      required this.version,
+      required this.isCur});
+
+  @override
+  State<_SheetThumb> createState() => _SheetThumbState();
+}
+
+class _SheetThumbState extends State<_SheetThumb> {
+  late NotebookDoc _paper; // solo el papel de esta hoja, para mientras se lee
+
+  @override
+  void initState() {
+    super.initState();
+    widget.doc.addLoadListener(_onLoad);
+    _paper = NotebookDoc.single(widget.meta, SheetContent());
+  }
+
+  @override
+  void didUpdateWidget(_SheetThumb old) {
+    super.didUpdateWidget(old);
+    if (old.doc != widget.doc) {
+      old.doc.removeLoadListener(_onLoad);
+      widget.doc.addLoadListener(_onLoad);
+    }
+    if (old.meta != widget.meta) _paper = NotebookDoc.single(widget.meta, SheetContent());
+  }
+
+  @override
+  void dispose() {
+    widget.doc.removeLoadListener(_onLoad);
+    super.dispose();
+  }
+
+  void _onLoad(String id, bool loaded) {
+    if (mounted && id == widget.meta.id) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final w = widget, m = w.meta;
+    if (w.doc.isLoaded(m.id)) {
+      return ValueListenableBuilder(
+        valueListenable: w.liveVersion,
+        builder: (_, v, _) =>
+            CustomPaint(painter: SheetThumbPainter(w.doc, sheet: w.sheet, version: w.version + (w.isCur ? v : 0))),
+      );
+    }
+    final nb = w.doc.nb;
+    final cached = w.cache.peek(nb, m);
+    if (cached != null) return CustomPaint(painter: SheetThumbPainter(cached, version: m.rev));
+    return FutureBuilder<NotebookDoc?>(
+      key: ValueKey('${m.id}#${m.rev}'),
+      future: w.cache.get(nb, m),
+      builder: (_, snap) =>
+          CustomPaint(painter: SheetThumbPainter(snap.data ?? _paper, version: snap.data == null ? -1 : m.rev)),
     );
   }
 }

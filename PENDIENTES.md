@@ -1,16 +1,14 @@
 # Pendientes
 
-1. **Carga perezosa de hojas lejanas** (resto de "todo hojas", ver Hecho). Hoy se leen y se decodifican todas las
-   hojas al abrir el cuaderno (en un isolate, sin trabar la pantalla) y el cuaderno vive entero en memoria.
-   Por qué no se hizo: el editor, la selección, la tinta y el deshacer trabajan sobre un solo documento con
-   coordenadas globales; cargar solo las hojas cercanas exige que el documento admita "hojas sin cargar"
-   (marcador de posición, guardar sin pisarlas, buscar y exportar leyéndolas del disco).
-   Medir primero con un cuaderno de 100+ hojas antes de complicarlo.
-   - Guardar parte y codifica todo el documento aunque solo una hoja haya cambiado (solo se *escribe* lo cambiado):
-     si pesa, llevar la cuenta de hojas tocadas y codificar solo esas.
-   - Exportar/backup del cuaderno entero como un archivo `.opennote` (ZIP).
+1. **Carga perezosa de hojas lejanas — falta medir en la tablet y afinar**. Implementada (ver Hecho): medir con
+   `tool/perf.sh` (100 y 200 hojas: tiempo de abrir, RAM, scroll rápido) y ajustar `kLoadMargin` / `kKeepMargin`
+   (`lib/editor/page_editor.dart`) si hace falta.
    - Mover hojas arrastrando en el panel (hoy: menú "Mover antes / después").
    - Las operaciones de hojas (agregar, duplicar, mover, borrar) no se pueden deshacer: vacían el historial.
+   - Exportar/backup del cuaderno entero como un archivo `.opennote` (ZIP).
+   - "Seleccionar todo" solo toma lo de las hojas cargadas (decidido a propósito).
+   - Si el historial de deshacer es largo, las hojas que toca no se sueltan (seguridad primero): se podría podar
+     el historial por hojas lejanas si pesa en cuadernos enormes.
 17. **App de PC + sincronización (A INVESTIGAR, no implementar todavía)**:
     - PC: Flutter desktop compila el mismo código para Linux, Windows y macOS. Investigar qué cambia: entrada
       (mouse/teclado y tabletas Wacom en PC), atajos de teclado, rutas de datos, empaquetado (AppImage/Flatpak/.deb,
@@ -42,6 +40,13 @@
 15. **LaTeX**: lo hace el usuario; no tocar.
 
 ## Hecho
+
+- **1. Carga perezosa de hojas** (rama `feat/rendimiento-3`, 2026-11-20): el cuaderno se abre leyendo solo las hojas
+  cercanas a la última vista (±2); `NotebookDoc` distingue hojas cargadas y no cargadas, el editor carga las del rango
+  visible más un margen y suelta las lejanas (si no están sucias, ni seleccionadas, ni con foco, ni en el historial de
+  deshacer) y el guardado nunca escribe una hoja sin cargar. Panel de hojas (miniaturas de disco), búsqueda, PDF y duplicar
+  cuaderno funcionan sin cargar todo. Red de seguridad: `test/data/lazy_load_test.dart` (secuencias aleatorias contra
+  un modelo de referencia) y `test/screens/lazy_notebook_test.dart` (30 hojas por la UI). Detalle en docs/TECNICO.md.
 
 - **9. Capturas en el README** (rama `feat/capturas`): 3 capturas (cuaderno, panel de hojas, biblioteca) que se generan solas en la tablet con `tool/screenshots.sh`, desde "OpenNote Test" con datos de ejemplo (letra con la fuente Hershey Script). La compatibilidad con otras tablets quedó en docs/TECNICO.md ("Tablets y lápices"); falta probarla en otros equipos.
 
