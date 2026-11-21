@@ -890,7 +890,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     setState(() {});
   }
 
-  /// Filtro de la barrita: deja solo el resaltador o solo la tinta (la selección no entra al historial).
+  /// Filtro de la barrita: deja solo el resaltador o todo menos el resaltador (la selección no entra al historial).
   void _keepInk({required bool hl}) {
     sel.keepOnly(doc, hl: hl);
     setState(() {});
@@ -1551,7 +1551,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       if (r != null)
         Positioned.fill(
             child: CustomSingleChildLayout(
-          delegate: _MenuLayout(max(0.0, r.left * scale), r.top * scale > 60 ? r.top * scale - 56 : r.bottom * scale + 8),
+          delegate: _MenuLayout(max(0.0, r.left * scale), r.top * scale - 8, r.bottom * scale + 8),
           child: FittedBox(fit: BoxFit.scaleDown, child: SelectionMenu(
             onCopy: () {
               _copySel();
@@ -1779,12 +1779,12 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 /// Ubica la barrita de la selección en ([x], [y]), corrida a la izquierda si no entra en el ancho de la hoja
 /// (con los filtros de tinta / resaltador es larga; fuera del ancho de la hoja no recibiría toques).
 class _MenuLayout extends SingleChildLayoutDelegate {
-  final double x, y;
-  _MenuLayout(this.x, this.y);
+  final double x, top, bottom;
+  _MenuLayout(this.x, this.top, this.bottom);
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints c) => BoxConstraints.loose(c.biggest);
   @override
-  Offset getPositionForChild(Size size, Size child) => Offset(x.clamp(0.0, max(0.0, size.width - child.width)), y);
+  Offset getPositionForChild(Size size, Size child) => Offset(x.clamp(0.0, max(0.0, size.width - child.width)), top - child.height >= 0 ? top - child.height : bottom);
   @override
-  bool shouldRelayout(_MenuLayout o) => o.x != x || o.y != y;
+  bool shouldRelayout(_MenuLayout o) => o.x != x || o.top != top || o.bottom != bottom;
 }

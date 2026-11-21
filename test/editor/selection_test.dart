@@ -162,4 +162,48 @@ void main() {
     c.texts = [p.texts['t']!];
     expect(clipboardBounds(c)!.bottom, greaterThanOrEqualTo(204 + kLine), reason: 'un texto ocupa al menos un renglón');
   });
+
+  group('filtros de resaltador', () {
+    NotebookDoc hlPage() {
+      final d = page();
+      d.strokes['h'] = Stroke('h', 'hl', '#ffee00', 12, [for (var x = 0; x <= 100; x += 10) ...[x.toDouble(), 50, .5]]);
+      return d;
+    }
+
+    test('solo resaltador sobre un texto: se ofrece el filtro', () {
+      final d = NotebookDoc(Notebook.create('t'));
+      d.strokes['h'] = Stroke('h', 'hl', '#ffee00', 12, [0, 50, .5, 100, 50, .5]);
+      d.texts['t'] = TextBlock('t', 0, 40, 300, 'hola');
+      final sel = Selection()..replace(strokes: ['h']);
+      expect(sel.mixedInk(d), isFalse);
+      sel.replace(strokes: ['h'], texts: ['t']);
+      expect(sel.mixedInk(d), isTrue);
+      sel.replace(texts: ['t']);
+      expect(sel.mixedInk(d), isFalse);
+    });
+
+    test('resaltador con un elemento tambien ofrece el filtro', () {
+      final d = hlPage();
+      final sel = Selection()..replace(strokes: ['h'], items: ['i']);
+      expect(sel.mixedInk(d), isTrue);
+    });
+
+    test('keepOnly(hl: true) deja solo el resaltador', () {
+      final d = hlPage();
+      final sel = Selection()..replace(strokes: ['a', 'h'], texts: ['t'], items: ['i']);
+      sel.keepOnly(d, hl: true);
+      expect(sel.strokes, {'h'});
+      expect(sel.texts, isEmpty);
+      expect(sel.items, isEmpty);
+    });
+
+    test('keepOnly(hl: false) saca el resaltador y conserva tinta, textos y elementos', () {
+      final d = hlPage();
+      final sel = Selection()..replace(strokes: ['a', 'h'], texts: ['t'], items: ['i']);
+      sel.keepOnly(d, hl: false);
+      expect(sel.strokes, {'a'});
+      expect(sel.texts, {'t'});
+      expect(sel.items, {'i'});
+    });
+  });
 }
