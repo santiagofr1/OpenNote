@@ -225,6 +225,16 @@ trazos, textos. La selección ventana/captura está en `Selection.selectIn`: `Se
 arrastre va de derecha a izquierda; en ese caso toma todo lo que toca el recuadro, con `Stroke.touchesRect` y
 `segmentIntersectsRect` (`geometry.dart`) para cortar contra el recorrido real del trazo.
 
+**Selección por toque.** Un toque (sin arrastre) con Seleccionar elige UN elemento: `Selection.hitStack` arma lo que
+hay bajo el lápiz de arriba hacia abajo en lo que se VE (orden de `zRuns`, con el resaltador debajo de la tinta de su
+tanda; trazos con `Stroke.hitBy` y 6 px de pantalla de margen, textos y elementos contra su rectángulo). Tocar de
+nuevo a menos de 12 px, con eso como única selección, pasa al siguiente hacia abajo (cíclico: tinta, resaltador,
+tinta). Un toque afuera del recuadro arma una banda mínima que en `_up` se resuelve como toque (`_tapSelect`): elige
+lo que haya o deselecciona; un toque en un hueco dentro del recuadro no hace nada. Si la selección por recuadro mezcla
+tinta y resaltador (`Selection.mixedInk`), la barrita suma dos botones (solo ícono) "Solo resaltador" / "Solo tinta"
+(`Selection.keepOnly`). Cambiar la selección nunca entra al historial. La barrita se acomoda con `_MenuLayout` para no
+salirse del ancho de la hoja.
+
 ### Guardado
 
 - Guardar codifica en otro isolate solo las hojas sucias (`NotebookDoc.takeDirty`; los mapas de elementos avisan
