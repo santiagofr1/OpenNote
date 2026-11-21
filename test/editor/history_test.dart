@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'dart:ui';
 
 import 'package:apuntes/domain/domain.dart';
@@ -107,6 +108,116 @@ void main() {
       expect(page.drawOrder().map((e) => e.id), ['a', 'b']);
       a.apply(page, undo: false, putText: (id, t) => put(page, id, t));
       expect(page.drawOrder().map((e) => e.id), ['b', 'a']);
+    });
+  });
+
+  group('History.trim (poda por el fondo)', () {
+    NotebookDoc doc(int n) {
+      final nb = Notebook.create('t');
+      while (nb.sheets.length < n) {
+        nb.sheets.add(nb.newSheet());
+      }
+      return NotebookDoc(nb);
+    }
+
+    Stroke on(int k, String id) => Stroke(id, 'pen', '#000000', 2, [50, k * kSheetStep + 100, .5, 90, k * kSheetStep + 110, .5]);
+    EditAction add(NotebookDoc d, int k, String id) {
+      final s = on(k, id);
+      d.strokes[id] = s;
+      return EditAction(added: [s]);
+    }
+
+    Set<String> ids(NotebookDoc d, Iterable<int> ks) => {for (final k in ks) d.sheets[k].id};
+    List<EditAction> drain(History h) => [for (; h.canUndo;) h.undo()!];
+
+    test('descarta las más viejas hasta quedar bajo el tope, suelta sus hojas y nunca toca la visible', () {
+      final d = doc(30), h = History();
+      final all = [for (var k = 0; k < 30; k++) add(d, k, 's$k')];
+      all.forEach(h.push);
+      final cut = h.trim(d, far: ids(d, Iterable.generate(25)), exempt: const {}, visible: ids(d, [29]));
+      expect(cut, isTrue);
+      final left = drain(h);
+      expect(left.reversed.toList(), all.sublist(13), reason: 'quedan las 17 más nuevas: 12 lejanas + 5 cercanas');
+      expect(h.sheetIds(d).intersection(ids(d, Iterable.generate(13))), isEmpty, reason: 'esas hojas se sueltan');
+    });
+
+    test('exentas (sucias, seleccionadas...) no cuentan; bajo el tope no se toca nada', () {
+      final d = doc(30), h = History();
+      for (var k = 0; k < 20; k++) {
+        h.push(add(d, k, 's$k'));
+      }
+      expect(h.trim(d, far: ids(d, Iterable.generate(20)), exempt: ids(d, Iterable.generate(8)), visible: ids(d, [29])), isFalse);
+      expect(drain(h).length, 20);
+    });
+
+    test('una acción que toca la visible frena el recorte: no se descarta ni lo anterior a ella', () {
+      final d = doc(30), h = History();
+      final all = [for (var k = 0; k < 29; k++) add(d, k, 's$k')];
+      all.insert(3, add(d, 29, 'vis')); // la 4ª acción toca la hoja visible
+      all.forEach(h.push);
+      h.trim(d, far: ids(d, Iterable.generate(29)), exempt: const {}, visible: ids(d, [29]));
+      expect(drain(h).reversed.toList(), all.sublist(3), reason: 'solo las 3 de abajo, antes de la que toca la visible');
+    });
+
+    test('si no alcanza con el deshacer, se vacía el rehacer', () {
+      final d = doc(30), h = History();
+      for (var k = 0; k < 20; k++) {
+        h.push(add(d, k, 's$k'));
+      }
+      for (var i = 0; i < 18; i++) {
+        h.undo(); // 18 para rehacer, 2 para deshacer (sobre las hojas 0 y 1)
+      }
+      expect(h.trim(d, far: ids(d, Iterable.generate(20)), exempt: const {}, visible: ids(d, [29]), maxFar: 1), isTrue);
+      expect(h.canUndo, isFalse);
+      expect(h.canRedo, isFalse);
+    });
+
+    test('deshacer después de la poda anda para lo que quedó', () {
+      final d = doc(30), h = History();
+      for (var k = 0; k < 30; k++) {
+        h.push(add(d, k, 's$k'));
+      }
+      h.trim(d, far: ids(d, Iterable.generate(25)), exempt: const {}, visible: ids(d, [29]));
+      for (final a in drain(h)) {
+        a.apply(d, undo: true, putText: (_, _) {});
+      }
+      expect(d.strokes.keys.toSet(), {for (var k = 0; k < 13; k++) 's$k'}, reason: 'lo descartado ya no se deshace; lo demás sí');
+    });
+
+    test('propiedades aleatorias: recorte por el fondo, nunca la visible, bajo el tope o sin más que descartar', () {
+      final r = Random(7);
+      for (var round = 0; round < 300; round++) {
+        final n = 6 + r.nextInt(30), d = doc(n), h = History();
+        final acts = <EditAction>[];
+        for (var i = 0; i < 1 + r.nextInt(60); i++) {
+          acts.add(add(d, r.nextInt(n), 'a$i'));
+          h.push(acts.last);
+        }
+        final undone = r.nextInt(acts.length + 1);
+        for (var i = 0; i < undone; i++) {
+          h.undo();
+        }
+        final redoBefore = acts.sublist(acts.length - undone);
+        Set<String> pick(double p) => {for (var k = 0; k < n; k++) if (r.nextDouble() < p) d.sheets[k].id};
+        final far = pick(.7), exempt = pick(.3), visible = {d.sheets[r.nextInt(n)].id}, max = r.nextInt(10);
+        h.trim(d, far: far, exempt: exempt, visible: visible, maxFar: max);
+        final nRedo = [for (; h.canRedo;) h.redo()!].length; // pasan al deshacer, en orden
+        final all = drain(h).reversed.toList();
+        final remainingRedo = all.sublist(all.length - nRedo), remainingUndo = all.sublist(0, all.length - nRedo);
+        final before = acts.sublist(0, acts.length - undone);
+        // lo que queda de deshacer es un sufijo de lo anterior (se cortó por el fondo)
+        expect(remainingUndo, before.sublist(before.length - remainingUndo.length), reason: 'ronda $round');
+        // nunca se descartó una acción que toque la visible
+        for (final a in before.sublist(0, before.length - remainingUndo.length)) {
+          expect(a.sheetIds(d).intersection(visible), isEmpty, reason: 'ronda $round');
+        }
+        // el rehacer queda entero o vacío
+        expect(remainingRedo.isEmpty || remainingRedo.length == redoBefore.length, isTrue);
+        // bajo el tope, o ya no se podía descartar más
+        final left = {for (final a in [...remainingUndo, ...remainingRedo]) ...a.sheetIds(d)}.intersection(far).difference(exempt);
+        final blocked = remainingUndo.isNotEmpty && remainingUndo.first.sheetIds(d).intersection(visible).isNotEmpty;
+        expect(left.length <= max || blocked || (remainingUndo.isEmpty && remainingRedo.isEmpty), isTrue, reason: 'ronda $round');
+      }
     });
   });
 }

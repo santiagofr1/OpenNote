@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:apuntes/app.dart';
 import 'package:apuntes/data/export.dart';
 import 'package:apuntes/data/sheet_codec.dart';
+import 'package:apuntes/data/updates.dart' show CancelFlag;
+import 'package:apuntes/editor/history.dart' show kHistoryMaxFarSheets;
 import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/editor/page_editor.dart';
@@ -260,5 +262,68 @@ void main() {
     expect(src.strokes.length, 1);
     expect(src.sheets[i].id, doc.sheets[7].id);
     expect(decodeSheet(File('${root.path}/notebooks/${doc.id}/sheets/${doc.sheets[7].id}.sheet').readAsBytesSync()).texts.length, 1);
+  });
+
+  testWidgets('seleccionar todo el cuaderno carga las hojas que faltan y selecciona todo (también las no cargadas al inicio)', (t) async {
+    final ed = await open(t);
+    final doc = ed.doc;
+    expect(doc.isLoadedAt(sheets - 1), isFalse);
+    expect(doc.loadedSheets.length, lessThan(8));
+    // "Seleccionar todo" a secas = la hoja visible
+    ed.sel.selectAll(doc, sheet: ed.visibleSheet);
+    expect(ed.sel.texts, {'t${ed.visibleSheet}'});
+    ed.sel.clear();
+
+    late bool ok;
+    await t.runAsync(() async => ok = await ed.selectAllNotebook());
+    await t.pump();
+    expect(ok, isTrue);
+    expect(doc.loadedSheets.length, sheets);
+    expect(ed.sel.texts.length, sheets, reason: 'un texto por hoja, también las que no estaban cargadas');
+    expect(ed.sel.strokes, {'s7'});
+    await settle(t, 3500); // tiempo de sobra para soltar hojas lejanas: la selección las fija
+    expect(doc.loadedSheets.length, sheets, reason: 'con selección sobre ellas no se sueltan');
+  });
+
+  testWidgets('seleccionar todo el cuaderno se puede cancelar a mitad: no selecciona y lo cargado se suelta solo', (t) async {
+    final ed = await open(t);
+    final doc = ed.doc;
+    final cancel = CancelFlag(), progress = ValueNotifier<double>(0);
+    progress.addListener(cancel.cancel); // cancela apenas termina la primera tanda
+    late bool ok;
+    await t.runAsync(() async => ok = await ed.selectAllNotebook(cancel: cancel, progress: progress));
+    await t.pump();
+    expect(ok, isFalse);
+    expect(ed.sel.isEmpty, isTrue);
+    expect(doc.loadedSheets.length, lessThan(sheets), reason: 'no llegó a cargar todo');
+    await until(t, () => doc.loadedSheets.length < 14, max: 80);
+    expect(doc.loadedSheets.length, lessThan(14), reason: 'sin selección, las lejanas se sueltan');
+  });
+
+  testWidgets('el historial largo se poda por el fondo: se sueltan las hojas viejas y deshacer anda con lo que quedó', (t) async {
+    final ed = await open(t);
+    final doc = ed.doc;
+    // una nota en cada una de las hojas 5..29 (25 hojas distintas), scrolleando de a una
+    for (var k = 5; k < sheets; k++) {
+      ed.scrollToSheet(k, animate: false);
+      await until(t, () => doc.isLoadedAt(k));
+      await settle(t, 100);
+      ed.insertItem(Item('n$k', 'sticky', 0, 0, 300, 200, text: 'nota $k'));
+      await settle(t, 700);
+    }
+    await until(t, () => !ed.history.sheetIds(doc).contains(doc.sheets[5].id), max: 100); // poda + descarga
+    await settle(t, 1500);
+    final far = {for (var k = 0; k < sheets - 8; k++) doc.sheets[k].id}; // lo que está lejos de la última hoja
+    expect(ed.history.sheetIds(doc).intersection(far).length, lessThanOrEqualTo(kHistoryMaxFarSheets));
+    expect(ed.history.sheetIds(doc).contains(doc.sheets[sheets - 1].id), isTrue, reason: 'la hoja visible nunca se suelta');
+    expect((await fromDisk(t)).items.length, 25, reason: 'podar el historial no borra contenido');
+    // deshacer: la última nota se va, y el historial viejo que quedó sigue andando
+    await t.tap(find.byTooltip('Deshacer'));
+    await settle(t, 500);
+    expect(doc.items.containsKey('n${sheets - 1}'), isFalse);
+    await t.tap(find.byTooltip('Rehacer'));
+    await settle(t, 500);
+    expect(doc.items.containsKey('n${sheets - 1}'), isTrue);
+    await settle(t, 1500); // el guardado automático
   });
 }

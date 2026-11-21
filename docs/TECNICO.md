@@ -125,7 +125,19 @@ cargar es, para la app, lo que dice su archivo en disco.
   en disco, su contenido no tiene la misma huella (`sheetDigest`: todo lo que se guarda, sin el ruido de 1e-13 de mover hojas) que el archivo (si difiere se la marca para guardar y no se suelta), tiene
   selección o arrastre, un texto o nota con foco, un trazo o borrador en curso, un audio, un elemento caído
   encima (`misplacedSheets`), o la tocan acciones del historial de deshacer / rehacer (`EditAction.sheetIds`: mientras
-  una acción esté en el historial sus hojas quedan fijadas; con historial largo se sueltan menos hojas, a propósito).
+  una acción esté en el historial sus hojas quedan fijadas; ver "Poda del historial" abajo).
+
+**Poda del historial** (`History.trim`, llamada desde `_unloadFar` antes de decidir qué soltar). Se cuentan las hojas que
+tocan las acciones del historial (deshacer y rehacer) que están lejos de lo que se ve (`_farLoaded`) y que NO están
+fijadas por otro motivo (selección, foco, trazo en curso, audios...). Si son más de `kHistoryMaxFarSheets` = 12 se
+descartan acciones de deshacer desde la MÁS VIEJA, una por una, hasta volver bajo el tope: es un recorte por el fondo de
+la pila, así lo que queda sigue siendo consistente (cada acción parte del estado que dejaron las anteriores, que ya está
+aplicado). El recorte se frena en la primera acción que toca una hoja visible: esa nunca se descarta. Si aun así
+sigue pasado el tope, se vacía lo que se podía rehacer. Esas hojas ya no están fijadas y se sueltan en el mismo ciclo. No se
+avisa al usuario. El 12 es un proxy de memoria: una hoja cargada con tinta y mallas son unos pocos MB, y 12 más las
+cercanas (hasta ~11) quedan dentro de lo medido en la tablet (PSS 240 a 409 MB con 34 hojas); no se estima el peso real
+por hoja (habría que medir mallas y lotes) porque el conteo ya acota el caso grave, el historial largo en cuadernos enormes.
+Las operaciones de hojas viejas (borrar, mover) también se descartan: la hoja borrada que guardaban en memoria se libera.
 
 **Regla de oro: nunca perder datos.** Una hoja no cargada NUNCA se escribe. `Storage._saveNow` solo toma hojas
 cargadas (`splitSheets` ni siquiera devuelve las otras; hay un `assert` y una guarda que no escribe y loguea), también
@@ -135,7 +147,13 @@ borra su archivo (la `Storage` recuerda qué ids figuran en `notebook.json`). Lo
 desconocidos hasta leer su archivo.
 
 Qué pasa con el resto de la app cuando no está todo en memoria:
-- **Seleccionar todo**: solo lo de las hojas cargadas (las visibles y las cercanas).
+- **Seleccionar todo** (menú al mantener el dedo sobre la hoja): selecciona todo lo de la HOJA VISIBLE (`Selection.selectAll(doc,
+  sheet:)`; como Samsung Notes, que selecciona por página; cada elemento es de la hoja de su borde de arriba). **Seleccionar
+  todo el cuaderno** (`PageEditor.selectAllNotebook`): carga las hojas que faltan de a `kSelectAllBatch` = 4 (se puede
+  cancelar entre tandas; un diálogo con progreso aparece si tarda más de ~300 ms; con más de `kSelectAllWarn` = 60 hojas
+  avisa antes cuántas va a cargar) y recién ahí selecciona. Mientras carga (`_selectingAll`) no se suelta ninguna hoja;
+  después las fija la propia selección (`_pinnedSheets`). Si se cancela o falla, no se selecciona nada y lo cargado se
+  suelta solo después.
 - **Un elemento que cae en una hoja sin cargar** (arrastre, pegado): el movimiento se deshace si la hoja no cargó al
   soltar; si igual llega, la hoja se anota en `misplacedSheets`, el editor la carga enseguida y al cargarla se marca para
   guardar (el elemento y lo del disco quedan juntos).
