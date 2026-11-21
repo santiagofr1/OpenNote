@@ -63,11 +63,13 @@ echo "Dependencias detectadas: $(echo $deps)" >&2
 
 # Dependencias directas (readelf NEEDED del binario y las .so del bundle, mapeadas con dpkg -S en Ubuntu
 # 24.04). Las t64 de 24.04 llevan alternativa con el nombre viejo. libjvm.so (de libdartjni, paquete jni) NO
-# se pide: solo hace falta si algún código usa JNI, que en Linux no pasa.
+# se pide: solo hace falta si algún código usa JNI, que en Linux no pasa. libegl1 y libgles2 no salen de ldd porque
+# el engine de Flutter las abre con dlopen; sin ellas la app se cae al arrancar (probado en Ubuntu 24.04 limpio).
+# dbus-send (dbus-bin) lo usa SecretService para ver si hay llavero antes de tocar libsecret.
 depends="libc6, libgcc-s1, libstdc++6, zlib1g, libgtk-3-0t64 | libgtk-3-0, libgdk-pixbuf-2.0-0, \
 libglib2.0-0t64 | libglib2.0-0, libatk1.0-0t64 | libatk1.0-0, libcairo2, libcairo-gobject2, libepoxy0, \
 libfontconfig1, libharfbuzz0b, libpango-1.0-0, libpangocairo-1.0-0, libwayland-client0, libwayland-egl1, \
-libsecret-1-0, libgstreamer1.0-0, libgstreamer-plugins-base1.0-0"
+libsecret-1-0, libgstreamer1.0-0, libgstreamer-plugins-base1.0-0, libegl1, libgles2, dbus-bin | dbus"
 size=$(du -sk "$pkg" | cut -f1)
 
 cat > "$pkg/DEBIAN/control" <<EOF
