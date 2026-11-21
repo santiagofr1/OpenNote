@@ -17,12 +17,16 @@ class SyncReport {
   int uploaded = 0, downloaded = 0, deletedLocal = 0, deletedRemote = 0, conflicts = 0, skipped = 0;
   final errors = <String>[];
 
-  /// La pasada se cortó (sin red o sesión vencida) antes de terminar.
-  bool aborted = false;
+  /// Cuadernos que se saltearon porque estaban abiertos en el editor.
+  final skippedBusy = <String>[];
 
   /// Cambió algo del disco local: la biblioteca tiene que volver a leer el índice.
-  bool changedLocal = false;
-  bool get ok => errors.isEmpty && !aborted;
+  bool localChanged = false;
+
+  /// Se escribió `index.json` local.
+  bool indexChanged = false;
+  bool get ok => errors.isEmpty;
+  bool get nothingToDo => ok && uploaded + downloaded + deletedLocal + deletedRemote + conflicts == 0;
   bool get changedRemote => uploaded + deletedRemote > 0;
   @override
   String toString() =>
@@ -50,11 +54,14 @@ class _Skip implements Exception {
 /// editor pisaría lo que escribamos). Mientras haya alguno abierto tampoco se toca `index.json` (la biblioteca lo
 /// tiene en memoria). Se sincroniza cuando se cierra.
 class SyncEngine {
-  SyncEngine(this.store, this.remote, {Set<String> Function()? openNotebooks})
-      : openNotebooks = openNotebooks ?? (() => const {});
+  SyncEngine(this.store, this.remote, {Set<String> Function()? busy, this.account = ''})
+      : openNotebooks = busy ?? (() => const {});
   final Storage store;
   final RemoteStore remote;
   final Set<String> Function() openNotebooks;
+
+  /// Identifica la cuenta; si cambia respecto de la última pasada se empieza de cero.
+  final String account;
 
   Future<SyncReport>? _current;
   bool get running => _current != null;
@@ -65,11 +72,11 @@ class SyncEngine {
   final _kept = <String>{}; // cuadernos salvados de un borrado porque se editaron del otro lado
   final _deferred = <(String, bool)>[]; // (ruta, true = borrar local / false = borrar remoto)
 
-  /// Corre una pasada (si ya hay una en curso devuelve esa). [account]: identifica la cuenta; si cambia se empieza de cero.
-  Future<SyncReport> run({String account = ''}) =>
-      _current ??= _pass(account).whenComplete(() => _current = null);
+  /// Corre una pasada (si ya hay una en curso devuelve esa). Si el remoto falla del todo (sin red, sesión vencida)
+  /// guarda el error en el estado y lo relanza ([RemoteException]); los errores de un solo archivo van a `errors`.
+  Future<SyncReport> sync() => _current ??= _pass().whenComplete(() => _current = null);
 
-  Future<SyncReport> _pass(String account) async {
+  Future<SyncReport> _pass() async {
     _st = await SyncState.load(store);
     if (_st.account != account) _st = SyncState()..account = account;
     _rep = SyncReport();
@@ -79,7 +86,14 @@ class SyncEngine {
     final open = openNotebooks();
     try {
       final ch = await remote.changes(_st.token);
-      if (ch.full) _st.remote.clear();
+      if (ch.full) {
+        _st.remote.clear();
+        // La carpeta de la nube apareció vacía habiendo cosas sincronizadas: la borraron, no hay que borrar acá.
+        if (!ch.files.any((f) => isSyncPath(f.path)) && _st.base.isNotEmpty) {
+          _st.base.clear();
+          _st.baseText.clear();
+        }
+      }
       for (final f in ch.files) {
         if (isSyncPath(f.path)) _st.remote[f.path] = f.md5;
       }
@@ -102,6 +116,7 @@ class SyncEngine {
         final nb = notebookIdOf(p);
         if ((nb != null && open.contains(nb)) || (p == 'index.json' && open.isNotEmpty)) {
           _rep.skipped++;
+          if (nb != null && !_rep.skippedBusy.contains(nb)) _rep.skippedBusy.add(nb);
           continue;
         }
         try {
@@ -132,14 +147,11 @@ class SyncEngine {
       } else {
         _st.lastError = _rep.errors.isEmpty ? null : _rep.errors.first;
       }
-    } on RemoteException catch (e) {
-      _rep.aborted = true;
-      _rep.errors.add(e.message);
-      _st.lastError = e.message;
     } catch (e) {
-      _rep.aborted = true;
-      _rep.errors.add('$e');
-      _st.lastError = '$e';
+      _st.lastError = e is RemoteException ? e.message : '$e';
+      await _st.save(store);
+      if (e is RemoteException) rethrow;
+      throw RemoteException('$e');
     }
     await _st.save(store);
     return _rep;
@@ -168,15 +180,22 @@ class SyncEngine {
     final mt = s.modified.millisecondsSinceEpoch;
     final b = _st.base[p];
     if (b != null && b.size == s.size && b.mtime == mt) return b;
-    return FileBase(md5.convert(await f.readAsBytes()).toString(), s.size, mt);
+    final bytes = await f.readAsBytes();
+    final h = p == 'index.json' ? _md5(utf8.encode(normalizeIndex(utf8.decode(bytes, allowMalformed: true)))) : _md5(bytes);
+    return FileBase(h, s.size, mt);
   }
 
   /// Escribe [bytes] en [p] solo si en disco sigue lo que se vio ([expect], null = no existía): si alguien lo tocó
   /// mientras tanto (la biblioteca guardó el índice, por ejemplo) no se pisa y queda para la próxima pasada.
   Future<void> _writeLocal(String p, Uint8List bytes, String? expect) async {
     if ((await _stat(p))?.md5 != expect) throw const _Skip();
+    if (p == 'index.json') {
+      final cur = await store.syncFile(p).exists() ? await store.syncFile(p).readAsString() : '{}';
+      bytes = Uint8List.fromList(utf8.encode(restoreIndexLocal(utf8.decode(bytes), cur)));
+    }
     await store.writeSyncFile(p, bytes);
-    _rep.changedLocal = true;
+    _rep.localChanged = true;
+    if (p == 'index.json') _rep.indexChanged = true;
   }
 
   Future<void> _markBase(String p, String hash, {String? text}) async {
@@ -294,7 +313,10 @@ class SyncEngine {
     final isIndex = p == 'index.json';
     final nb = notebookIdOf(p);
     final l = await _stat(p), L = l?.md5, R = _st.remote[p], B = _st.base[p]?.md5;
-    Future<String> localText() => store.syncFile(p).readAsString();
+    Future<String> localText() async {
+      final t = await store.syncFile(p).readAsString();
+      return isIndex ? normalizeIndex(t) : t;
+    }
     Future<(Uint8List, String)> remoteText() async {
       final b = await _download(p);
       final t = utf8.decode(b);
@@ -361,7 +383,7 @@ class SyncEngine {
           if ((await _stat(p))?.md5 != _st.base[p]?.md5) continue; // lo tocaron mientras tanto
           await store.deleteSyncFile(p);
           _rep.deletedLocal++;
-          _rep.changedLocal = true;
+          _rep.localChanged = true;
           final nb = notebookIdOf(p);
           if (nb != null) touched.add(nb);
         } else {

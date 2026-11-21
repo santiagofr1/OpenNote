@@ -40,6 +40,16 @@ Nunca toca la app real ni tus cuadernos: al final verifica que la app real y sus
 Regla para las funciones nuevas: **cada función nueva suma un caso a `integration_test/app_test.dart`.** Si hace
 falta, también agregá un test de lógica pura en `test/`.
 
+## Sincronización con Google Drive
+
+La sincronización usa un proyecto de Google Cloud del dueño del repositorio. Sus IDs de cliente **no están en el repo**:
+los pasa el workflow de release desde secretos. Si hacés un fork y querés probar la sync (o publicar tu propia
+versión), necesitás **tu propio proyecto de Google Cloud**: los pasos están en
+[docs/SINCRONIZACION.md](docs/SINCRONIZACION.md), "Configurar Google Cloud". Copiá `google_config.example.json` a
+`google_config.json` (está en el `.gitignore`) y corré con `--dart-define-from-file=google_config.json`. Sin esos
+datos la app compila y anda igual, solo que "Conectar con Google" avisa que falta configurar. Los tests de la
+sincronización (`test/sync/`) usan un remoto falso en memoria y no necesitan nada de Google.
+
 ## Rendimiento
 
 Si tu cambio puede afectar la velocidad o la memoria (dibujo, carga, guardado, scroll), medilo:
@@ -54,6 +64,7 @@ Pegá los números antes y después en el PR.
 
 ```
 lib/domain/      datos puros sin Flutter: hojas, trazos, cuadernos, carpetas, herramientas (con tests)
+lib/sync/        sincronización con Google Drive: motor, remoto falso, Drive, login
 lib/data/        almacenamiento (Storage), formato binario, migración, exportar PDF/PNG, importar
 lib/rendering/   dibujo de trazos (mallas), papel, hojas completas, capas del editor
 lib/editor/      editor de la tira de hojas, entrada del lápiz, selección, deshacer, zoom, barra

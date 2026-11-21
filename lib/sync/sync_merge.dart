@@ -73,3 +73,28 @@ String mergeIndexJson(String base, String local, String remote, {Set<String> kee
   if (folders.isNotEmpty) out['folders'] = folders;
   return jsonEncode(out);
 }
+
+/// Forma "de nube" de `index.json`: sin los datos propios de cada dispositivo (la última hoja vista de cada cuaderno y
+/// el último cuaderno abierto). Es lo que se compara, se sube y se fusiona; así abrir un cuaderno acá no cuenta como
+/// un cambio que haya que mandar.
+String normalizeIndex(String text) {
+  final j = _parse(text);
+  if (j.isEmpty) return text;
+  j.remove('last');
+  j['notebooks'] = [
+    for (final e in _list(j, 'notebooks')) {...e}..remove('last'),
+  ];
+  return jsonEncode(j);
+}
+
+/// Lo contrario al bajar: a [cloud] (ya en forma de nube) se le devuelven los datos propios que tiene [local].
+String restoreIndexLocal(String cloud, String local) {
+  final c = _parse(cloud), l = _parse(local);
+  if (c.isEmpty) return cloud;
+  if (l['last'] != null) c['last'] = l['last'];
+  final lasts = {for (final e in _list(l, 'notebooks')) e['id']: e['last']};
+  c['notebooks'] = [
+    for (final e in _list(c, 'notebooks')) lasts[e['id']] == null ? e : {...e, 'last': lasts[e['id']]},
+  ];
+  return jsonEncode(c);
+}

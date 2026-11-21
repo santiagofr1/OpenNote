@@ -5,7 +5,14 @@
    - "Seleccionar todo" solo toma lo de las hojas cargadas (decidido a propósito).
    - Si el historial de deshacer es largo, las hojas que toca no se sueltan (seguridad primero): se podría podar
      el historial por hojas lejanas si pesa en cuadernos enormes.
-17. **App de PC + sincronización (A INVESTIGAR, no implementar todavía)**:
+17. **App de PC + sincronización** (rama `feat/drive-sync`). **DECIDIDO (2026-11-21): sincronización por Google Drive**
+    (permiso `drive.file`, carpeta `OpenNote`; tablet y Linux se conectan una vez con Google). Diseño en
+    docs/SINCRONIZACION.md, "Decisión: Google Drive". **Avance:** motor testeable sin Google (`lib/sync/`, remoto
+    falso, tests en `test/sync/`), remoto de Drive (`googleapis` v3), login (Android `google_sign_in`, Linux
+    `googleapis_auth` con PKCE), pantalla en el menú ⋮ de la biblioteca, workflow de release con los IDs desde secretos.
+    **Falta:** que el dueño cree el proyecto de Google Cloud y cargue los secretos (pasos en la doc, "Configurar Google
+    Cloud"); probar con Google de verdad en la tablet y en Linux; pasar la app a "In production"; segundo plano;
+    cifrado de extremo a extremo; empaquetar la app de Linux. Lo que sigue es la investigación original:
     - PC: Flutter desktop compila el mismo código para Linux, Windows y macOS. Investigar qué cambia: entrada
       (mouse/teclado y tabletas Wacom en PC), atajos de teclado, rutas de datos, empaquetado (AppImage/Flatpak/.deb,
       instalador .msi/MSIX en Windows).

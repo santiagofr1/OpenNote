@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -11,6 +12,10 @@ import '../../data/storage.dart';
 import '../../data/updates.dart';
 import '../../domain/domain.dart';
 import '../../domain/version.dart';
+import '../../sync/google_auth.dart';
+import '../../sync/google_config.dart';
+import '../../sync/sync_backend.dart';
+import '../../sync/sync_controller.dart';
 import '../../widgets/dialogs.dart';
 import '../../widgets/pdf_progress.dart';
 import '../../widgets/update_dialog.dart';
@@ -18,12 +23,16 @@ import '../notebook/notebook_screen.dart';
 import 'folder_card.dart';
 import 'move_dialog.dart';
 import 'notebook_card.dart';
+import 'sync_sheet.dart';
 
 /// Biblioteca: las carpetas y los cuadernos de la carpeta actual (con su miniatura),
 /// o los resultados de la búsqueda en todas las carpetas.
 class Library extends StatefulWidget {
-  const Library({super.key, this.root});
+  const Library({super.key, this.root, this.backend});
   final Directory? root;
+
+  /// Cómo se conecta la sincronización (los tests pasan uno falso; null = Google).
+  final SyncBackend? backend;
   @override
   State<Library> createState() => _LibraryState();
 }
@@ -38,11 +47,17 @@ class _LibraryState extends State<Library> {
   String? current; // carpeta abierta (null = inicio)
   final searchCtl = TextEditingController();
   String query = '';
+  late final SyncController sync = SyncController(store: store, backend: widget.backend ?? GoogleBackend())
+    ..busyNotebooks = (() => {?_openId})
+    ..canRun = (() => _openId == null)
+    ..onSynced = ((_) => _reloadAfterSync());
+  String? _openId; // cuaderno abierto en el editor: la sincronización no lo toca
 
   bool get searching => query.trim().isNotEmpty;
 
   @override
   void dispose() {
+    sync.dispose();
     searchCtl.dispose();
     super.dispose();
   }
@@ -60,6 +75,7 @@ class _LibraryState extends State<Library> {
     updPrefs = UpdatePrefs.from(prefs);
     final idx = await store.loadIndex();
     setState(() => index = idx);
+    unawaited(sync.init());
     WidgetsBinding.instance.addPostFrameCallback((_) => _autoUpdateCheck());
     for (final nb in idx.notebooks) {
       final t = await store.loadSheetDoc(nb, 0);
@@ -112,8 +128,24 @@ class _LibraryState extends State<Library> {
     }
   }
 
+  /// La sincronización bajó cosas: se vuelve a leer el índice (si no hay un cuaderno abierto, que lo tiene en memoria).
+  Future<void> _reloadAfterSync() async {
+    if (!mounted || _openId != null) return;
+    final idx = await store.loadIndex();
+    if (!mounted || _openId != null) return;
+    setState(() {
+      index = idx;
+      thumbs.removeWhere((id, _) => !idx.notebooks.any((n) => n.id == id));
+    });
+    for (final nb in idx.notebooks) {
+      final t = await store.loadSheetDoc(nb, 0);
+      if (!mounted) return;
+      if (t != null) setState(() => thumbs[nb.id] = t);
+    }
+  }
+
   Future<void> _settings() async {
-    final check = await showSafeSheet<bool>(
+    final check = await showSafeSheet<String>(
       context,
       (ctx) => StatefulBuilder(
         builder: (ctx, setS) => Padding(
@@ -124,7 +156,14 @@ class _LibraryState extends State<Library> {
               leading: const Icon(Symbols.system_update, weight: 300),
               title: const Text('Buscar actualizaciones'),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              onTap: () => Navigator.pop(ctx, true),
+              onTap: () => Navigator.pop(ctx, 'check'),
+            ),
+            ListTile(
+              key: const Key('syncMenu'),
+              leading: const Icon(Symbols.cloud_sync, weight: 300),
+              title: const Text('Sincronización con Google Drive'),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              onTap: () => Navigator.pop(ctx, 'sync'),
             ),
             SwitchListTile(
               key: const Key('autoUpdates'),
@@ -141,7 +180,10 @@ class _LibraryState extends State<Library> {
         ),
       ),
     );
-    if (check == true && mounted) await _manualUpdateCheck();
+    if (check == 'check' && mounted) await _manualUpdateCheck();
+    if (check == 'sync' && mounted) {
+      await showSafeSheet<void>(context, (ctx) => SyncSheet(sync: sync, missing: widget.backend?.missingConfig ?? GoogleConfig.missing));
+    }
   }
 
   /// favoritos primero; después los más recientes
@@ -157,6 +199,7 @@ class _LibraryState extends State<Library> {
         return;
       }
     }
+    _openId = nb.id;
     await Navigator.of(context).push(PageRouteBuilder(
       transitionDuration: const Duration(milliseconds: 320),
       reverseTransitionDuration: const Duration(milliseconds: 240),
@@ -169,8 +212,10 @@ class _LibraryState extends State<Library> {
         );
       },
     ));
-    // volvió: se guardó todo; refrescar miniatura y orden
+    // volvió: se guardó todo; refrescar miniatura y orden, y sincronizar el cuaderno que se cerró
+    _openId = null;
     if (!mounted) return;
+    unawaited(sync.syncNow());
     if (!index!.notebooks.contains(nb)) {
       setState(() => thumbs.remove(nb.id)); // lo borraron desde adentro
       snack(context, 'Cuaderno borrado');

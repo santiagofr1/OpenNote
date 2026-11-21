@@ -1,6 +1,7 @@
 # App de PC y sincronización
 
-Investigación para el punto 17 de [PENDIENTES.md](../PENDIENTES.md). No implementa nada todavía.
+Investigación para el punto 17 de [PENDIENTES.md](../PENDIENTES.md). La decisión tomada (Google Drive) y su diseño están en
+"Decisión: Google Drive", antes de las fuentes; lo demás es la investigación previa.
 Fecha de la investigación: 2026-11-20.
 
 Las fuentes están listadas al final (sección 6) con números entre corchetes, por ejemplo `[2]`.
@@ -425,6 +426,159 @@ Pasos chicos, cada uno entregable por separado.
 
 Decisiones que hacen falta antes de empezar: si la carpeta de datos en Android puede ser accesible por Syncthing o
 si hay que cambiarla, y si la pérdida de la frase de paso es aceptable para el usuario.
+
+---
+
+## Decisión: Google Drive
+
+**Decidido por el usuario (2026-11-21):** la sincronización va por **Google Drive**. La tablet (Android) y la app de
+Linux se conectan una vez con Google y desde ahí sincronizan solas. Permiso `drive.file` (la app solo ve lo que ella
+crea), carpeta `OpenNote` en "Mi unidad". El proyecto de Google Cloud lo crea el dueño una sola vez; los IDs de
+cliente van dentro de la app publicada. Los usuarios solo tocan "Conectar con Google".
+
+Código: `lib/sync/`. El motor (`sync_engine.dart`, `sync_merge.dart`, `sync_state.dart`) no sabe nada de Google: habla
+con la interfaz `RemoteStore` (`remote_store.dart`), que tiene una versión en memoria para los tests
+(`fake_remote_store.dart`) y la real (`drive_remote_store.dart`, `googleapis` Drive v3). El login está en
+`google_auth.dart`; la pantalla en el menú ⋮ de la biblioteca ("Sincronización con Google Drive").
+
+### Estructura remota
+
+Es la misma estructura que en el disco (ver `TECNICO.md`), bajo `OpenNote/` en "Mi unidad":
+
+```
+OpenNote/
+  index.json                         cuadernos y carpetas
+  notebooks/<id>/notebook.json       orden y datos de las hojas del cuaderno
+  notebooks/<id>/sheets/<hoja>.sheet una hoja (binario)
+  media/<nombre>                     imágenes y audios (nombre único, solo se agregan)
+```
+
+Las rutas se validan con `sync_paths.dart` antes de tocar el disco: lo que no encaja (`..`, otras carpetas,
+`prefs.json`, temporales, `.roto`) se ignora. `sync_state.json` (solo local) guarda, por archivo, la **base**, el
+hash remoto conocido, el token de cambios y la hora del último sync.
+
+### Qué se sube y qué se baja
+
+- **Subir solo lo cambiado.** Por archivo se compara el md5 de lo local con la **base** (el md5 de la última
+  versión que quedó igual en los dos lados). Si no cambió (mismo tamaño y fecha que en la base) ni se relee. Drive
+  devuelve `md5Checksum` de cada archivo, así que no hace falta un campo nuevo en los archivos.
+- **Bajar con la API de cambios de Drive.** `changes.getStartPageToken` la primera vez; después `changes.list` con
+  el token guardado devuelve solo lo que cambió (y lo que se borró o fue a la papelera). **Respaldo:** si no hay token o
+  Drive lo rechaza, se lista todo (`files.list`) y se compara el `md5Checksum` contra lo que se conoce. Las subidas
+  propias también vuelven en el próximo delta con el mismo hash: no hacen nada.
+- **Orden de la pasada:** medios, hojas, `notebook.json`, `index.json` y al final los borrados. Así, si se corta, el
+  otro dispositivo nunca ve un índice que apunta a algo que todavía no llegó.
+
+### Conflictos (por hoja)
+
+Se compara local, remoto y base de cada archivo:
+
+| Local | Remoto | Resultado |
+|---|---|---|
+| igual a la base | cambió | se baja |
+| cambió | igual a la base | se sube |
+| cambió | cambió | **conflicto** (si no son iguales entre sí) |
+
+**Resolución en una hoja:** queda la local donde estaba y la remota se agrega como **hoja nueva "(conflicto)" justo
+después**. Las dos se suben, así el otro dispositivo recibe las dos y, tras una pasada más, los dos lados tienen lo
+mismo. No se pierde nada; el usuario borra la que sobre. Una hoja es un archivo entero: dos cambios en partes
+distintas de la misma hoja también cuentan como conflicto (ver sección 4, opción (a)).
+
+`notebook.json` e `index.json` no generan hojas de conflicto: se **fusionan** por `id` (tres vías con la base
+guardada). Lo agregado en un lado se agrega; lo borrado en un lado se borra si el otro no lo tocó; si cambió en los
+dos, queda el más nuevo por `updated`. Los datos propios de cada dispositivo (la última hoja vista, `rev`) no se
+pisan entre dispositivos.
+
+### Borrados (lápidas), cuadernos y carpetas
+
+- **No hay archivos de lápida.** Un archivo que falta de un lado y figura en la base **se borró** en ese lado: se borra
+  del otro si no cambió. Si el otro lado lo había editado, **editar le gana a borrar**: se conserva (y vuelve a
+  subirse o bajarse), también el cuaderno que lo contiene. Archivos sin base (nuevos) nunca se borran.
+- En Drive, borrar manda el archivo a la **papelera** (se puede recuperar desde Drive; el plazo de 30 días es **(sin confirmar)**).
+- Si la carpeta `OpenNote` aparece vacía (la borraron por error), no se borra nada acá: se vuelve a subir todo.
+- **Cuadernos y carpetas nuevos:** aparecen en `index.json` y en `notebooks/<id>/`; el otro lado los crea. **Renombrar o
+  mover** cambia solo `index.json` (el `id` no cambia), así que el cuaderno no se vuelve a subir.
+- Cambiar de cuenta de Google empieza de cero (sin borrar nada local).
+
+### Cuaderno abierto (regla de oro)
+
+El motor **no toca un cuaderno abierto en el editor**: ni sube ni baja ni borra sus archivos, porque lo que hay en
+memoria pisaría lo escrito. Mientras haya un cuaderno abierto tampoco se toca `index.json` (la biblioteca lo tiene en
+memoria). Se sincroniza **al cerrarlo** (al volver a la biblioteca se hace una pasada). Antes de una pasada el editor
+ya guardó (el guardado se hace al salir). Después de una pasada que cambió algo local, la biblioteca vuelve a leer el
+índice. Lo que se escribe en disco desde la sync va por las mismas escrituras atómicas (temporal + rename) de
+`Storage`, y no se pisa un archivo que cambió entre que se leyó y que se escribió (queda para la próxima pasada).
+
+### Sin red, cortes y errores
+
+Sin red la pasada se corta con un aviso y se reintenta en el próximo disparador; no se pierde nada. El estado se
+guarda **después de cada archivo**, así que repetir la pasada converge (es idempotente). Un archivo que falla no frena
+a los demás. Si la sesión venció o se revocó, el estado pasa a "desconectado" y hay que tocar "Conectar con Google".
+
+### Cuándo sincroniza
+
+1. Al abrir la app (si está conectado).
+2. Al cerrar un cuaderno.
+3. Cada 10 minutos con la app abierta.
+4. Con el botón "Sincronizar ahora".
+
+Segundo plano con la app cerrada: no está (paso siguiente).
+
+### Seguridad
+
+- **Tokens.** Android: los maneja `google_sign_in` / Google Play services; la app no guarda ninguno. Linux: el
+  refresh token va en el almacenamiento seguro del sistema (`flutter_secure_storage`, libsecret en Linux); si el
+  sistema no tiene llavero, ver la nota de `google_auth.dart` (no se probó en una PC sin llavero **(sin confirmar)**).
+- **Alcance.** `drive.file`: la app no ve nada más de tu Drive. Es un permiso "no sensible" **(sin confirmar la
+  clasificación exacta: si lo es, no hace falta la verificación de Google)**.
+- **El secreto del cliente de escritorio no es confidencial** [según Google, en apps instaladas no puede mantenerse en
+  secreto]. Va en la app igual que el ID. Lo que protege la cuenta es el consentimiento del usuario y PKCE.
+- **Google puede leer lo que se sube**: el contenido está sin cifrar en Drive. **Paso siguiente:** cifrado de extremo a
+  extremo (sección 3.2 y 3.3) antes de subir.
+
+### Configurar Google Cloud (pasos del dueño)
+
+Se hace una sola vez. Los usuarios no hacen nada de esto. Estos pasos no los ejecutó nadie todavía: la app compila sin
+ellos y avisa que falta configurar.
+
+1. En <https://console.cloud.google.com/> crear un proyecto (por ejemplo "OpenNote").
+2. **APIs y servicios > Biblioteca:** habilitar **Google Drive API**.
+3. **Pantalla de consentimiento OAuth:** tipo de usuario **External**; nombre de la app, correo de soporte; agregar el
+   scope `.../auth/drive.file`.
+4. **Pasar la app a "In production" (Publicar la app).** Si se queda en *Testing*, Google hace vencer los refresh
+   tokens a los **7 días** (confirmado en la doc de Google: "Using OAuth 2.0 to Access Google APIs", sección *Refresh
+   token expiration*, salvo que los scopes sean solo nombre, correo y perfil) y habría que reconectar cada semana. Con `drive.file`
+   en producción puede aparecer "app no verificada" hasta que Google la revise **(sin confirmar si `drive.file` exige
+   verificación)**; hasta entonces el usuario puede seguir con "Avanzado".
+5. **Credenciales > Crear credenciales > ID de cliente de OAuth**, tres clientes:
+   - **Android** `com.apuntes.apuntes` con el **SHA-1 de la clave de release** (el keystore de los secretos del
+     repo; lo agrega el dueño: `keytool -list -v -keystore release.jks`).
+   - **Android** `com.apuntes.apuntes.test` con el SHA-1 de debug:
+     `F5:83:13:66:18:80:5D:F9:69:D6:EE:D9:C3:EA:82:AC:07:E2:FF:56`.
+   - **Aplicación web** (lo pide `google_sign_in` en Android como `serverClientId`; no se usa para nada más).
+   - **Aplicación de escritorio** ("Desktop app") para Linux (da ID y secreto).
+6. Poner los valores:
+
+| Valor | Secreto de GitHub (Settings > Secrets > Actions) | Local (`--dart-define`) |
+|---|---|---|
+| ID del cliente Web | `GOOGLE_WEB_CLIENT_ID` | `GOOGLE_WEB_CLIENT_ID` |
+| ID del cliente de escritorio | `GOOGLE_DESKTOP_CLIENT_ID` | `GOOGLE_DESKTOP_CLIENT_ID` |
+| Secreto del cliente de escritorio | `GOOGLE_DESKTOP_CLIENT_SECRET` | `GOOGLE_DESKTOP_CLIENT_SECRET` |
+
+   Los clientes Android no llevan ningún valor en la app: Google los reconoce por el nombre del paquete y la firma.
+   El workflow de release arma `google_config.json` desde esos secretos y compila con
+   `--dart-define-from-file=google_config.json`. Si falta `GOOGLE_WEB_CLIENT_ID`, la release sale sin sync (con un aviso).
+   Local: copiar `google_config.example.json` a `google_config.json` (ignorado por git) y
+   `flutter run --dart-define-from-file=google_config.json`.
+7. Si se sube la clave de release de la tablet o se cambia el keystore, hay que actualizar el SHA-1 del cliente Android.
+
+### Riesgos conocidos
+
+- Drive no tiene escritura condicional: dos dispositivos subiendo la misma hoja en el mismo instante pueden pisarse.
+  Se mitiga comparando el hash justo antes de subir; el caso que queda es muy angosto.
+- Con `drive.file` solo se ven los archivos creados por esta app; si el usuario sube o mueve archivos a mano dentro de
+  `OpenNote`, la app no los ve.
+- Dos carpetas con el mismo nombre (si dos dispositivos crean `notebooks/` a la vez) se tratan como la misma por ruta.
 
 ---
 

@@ -75,11 +75,29 @@ jobs:
           keyPassword=${KEY_PASSWORD}
           EOF
 
+      # Sincronización con Google Drive: los IDs de cliente salen de secretos del repositorio. Si no existen, la app
+      # compila igual y la pantalla de sincronización avisa que falta configurar (ver docs/SINCRONIZACION.md).
+      - name: Datos de Google (opcional)
+        env:
+          GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+          GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.GOOGLE_DESKTOP_CLIENT_ID }}
+          GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
+        run: |
+          if [ -n "$GOOGLE_WEB_CLIENT_ID" ]; then
+            jq -n --arg web "$GOOGLE_WEB_CLIENT_ID" --arg did "$GOOGLE_DESKTOP_CLIENT_ID" --arg dsec "$GOOGLE_DESKTOP_CLIENT_SECRET" \
+              '{GOOGLE_WEB_CLIENT_ID: $web, GOOGLE_DESKTOP_CLIENT_ID: $did, GOOGLE_DESKTOP_CLIENT_SECRET: $dsec}' > google_config.json
+            echo "DART_DEFINES=--dart-define-from-file=google_config.json" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Falta el secreto GOOGLE_WEB_CLIENT_ID: esta release sale sin sincronización con Google."
+          fi
+
       - name: Build release APK
         run: |
           flutter build apk --release \
             --build-name="$VERSION_NAME" \
-            --build-number="$VERSION_CODE"
+            --build-number="$VERSION_CODE" \
+            $DART_DEFINES
+          rm -f google_config.json
           mv build/app/outputs/flutter-apk/app-release.apk "OpenNote-v${VERSION_NAME}.apk"
 
       - name: Prepare release notes

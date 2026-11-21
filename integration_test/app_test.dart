@@ -15,6 +15,9 @@ import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/editor/page_editor.dart';
 import 'package:apuntes/editor/selection_menu.dart';
 import 'package:apuntes/rendering/sheet_image_cache.dart';
+import 'package:apuntes/sync/fake_backend.dart';
+import 'package:apuntes/sync/fake_remote_store.dart';
+import 'package:apuntes/sync/sync_engine.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -978,6 +981,40 @@ void main() {
     // las mallas del trazo recién cargado llegan del isolate o se arman al primer dibujo
     await settle(t, 600);
     expect(conMalla(far), isTrue, reason: 'tras recargar, la hoja vuelve con malla');
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('sincronización: "Sincronizar ahora" sube un cuaderno y otro dispositivo lo baja (remoto falso)', (t) async {
+    final remote = FakeRemoteStore();
+    await t.pumpWidget(ApuntesApp(root: root, backend: FakeBackend(remote)));
+    await settle(t, 1500);
+    await createNotebook(t, 'Para nube');
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+    await t.tap(find.byKey(const Key('libraryMenu')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('syncMenu')));
+    await settle(t, 600);
+    expect(find.byKey(const Key('syncConnect')), findsOneWidget);
+    await t.tap(find.byKey(const Key('syncConnect')));
+    for (var i = 0; i < 60 && find.byKey(const Key('syncNow')).evaluate().isEmpty; i++) {
+      await settle(t, 100);
+    }
+    await t.tap(find.byKey(const Key('syncNow')));
+    for (var i = 0; i < 200 && !remote.has('index.json'); i++) {
+      await settle(t, 100);
+    }
+    await settle(t, 1500);
+    expect(remote.has('index.json'), isTrue);
+    expect(remote.paths.where((p) => p.endsWith('/notebook.json')), hasLength(1));
+
+    // otro "dispositivo" (otra carpeta) baja lo subido
+    final other = await Directory.systemTemp.createTemp('apuntes_test_otro');
+    addTearDown(() => other.delete(recursive: true));
+    final s2 = Storage(root: other);
+    await s2.init();
+    await SyncEngine(s2, remote, account: 'x').sync();
+    expect((await s2.loadIndex()).notebooks.map((n) => n.name), ['Para nube']);
     expect(t.takeException(), isNull);
   });
 }
