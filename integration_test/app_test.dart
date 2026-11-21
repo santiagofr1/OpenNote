@@ -678,7 +678,8 @@ void main() {
   });
 
   testWidgets('scroll rápido de punta a punta: sin errores; quieto usa imágenes; un trazo nuevo se ve y se guarda', (t) async {
-    // cuaderno de 6 hojas con bastante tinta por hoja (más de 1500 puntos: vale una imagen)
+    // cuaderno de 6 hojas con bastante tinta por hoja (más de SheetImageCache.defaultMinPoints: vale una imagen)
+    final perStroke = SheetImageCache.defaultMinPoints ~/ 40 + 20;
     final s = Storage(root: root);
     await s.init();
     final nb = Notebook.create('Veloz');
@@ -690,7 +691,7 @@ void main() {
       for (var j = 0; j < 40; j++) {
         final y = k * kSheetStep + 80 + j * 32.0;
         doc.strokes['s$k-$j'] = Stroke('s$k-$j', 'pen', '#000000', 3, [
-          for (var i = 0; i < 50; i++) ...[100 + i * 16.0, y + (i.isEven ? 0 : 6), .6]
+          for (var i = 0; i < perStroke; i++) ...[100 + i * 800 / perStroke, y + (i.isEven ? 0 : 6), .6]
         ]);
       }
     }
