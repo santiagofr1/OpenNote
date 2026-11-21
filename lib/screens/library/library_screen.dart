@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -73,6 +74,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _menu?.remove();
     WidgetsBinding.instance.removeObserver(this);
     store.onSaved = null;
     sync.dispose();
@@ -534,10 +536,10 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
   }
 
   /// mantener apretada una carpeta: opciones
-  Future<void> _folderOptions(Folder f) async {
+  Future<void> _folderOptions(BuildContext card, Folder f) async {
     HapticFeedback.mediumImpact();
     setState(() => pressed = f.id);
-    final v = await _optionsSheet(f.name, [
+    final v = await _optionsMenu(card, f.name, [
       (Symbols.edit, 'Renombrar', 'rename', null),
       (Symbols.drive_file_move, 'Mover a…', 'move', 'moveTo'),
       (Symbols.delete, 'Borrar', 'delete', null),
@@ -554,40 +556,95 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     }
   }
 
-  /// Hoja inferior de opciones: (ícono, texto, valor, key); "Borrar" va al final y en rojo.
-  Future<String?> _optionsSheet(String title, List<(IconData, String, String, String?)> items) {
+  OverlayEntry? _menu;
+  Completer<String?>? _menuDone;
+
+  /// Cierra el menú de opciones (si hay uno) sin elegir nada.
+  void _closeMenu() => _closeMenuWith(null);
+
+  void _closeMenuWith(String? value) {
+    _menu?.remove();
+    _menu = null;
+    final c = _menuDone;
+    _menuDone = null;
+    if (c != null && !c.isCompleted) c.complete(value);
+  }
+
+  /// Menú de opciones anclado a la tarjeta [card]: (ícono, texto, valor, key); "Borrar" va al final y en rojo.
+  /// No es una ruta modal (esas cancelan los punteros y cortarían el arrastre del dedo que sigue apoyado): es un
+  /// OverlayEntry con una barrera que lo cierra al tocar afuera. Devuelve el valor elegido, o null si se cerró.
+  Future<String?> _optionsMenu(BuildContext card, String title, List<(IconData, String, String, String?)> items) {
+    _closeMenu();
     final cs = Theme.of(context).colorScheme;
-    return showSafeSheet<String>(
-      context,
-      (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-              child: Text(title, style: Theme.of(ctx).textTheme.titleLarge, maxLines: 1, overflow: TextOverflow.ellipsis),
+    final box = card.findRenderObject() as RenderBox;
+    final rect = box.localToGlobal(Offset.zero) & box.size;
+    final done = _menuDone = Completer<String?>();
+    const width = 270.0;
+    final height = 60.0 + items.length * 52 + 12;
+    final entry = OverlayEntry(
+      builder: (ctx) {
+        final size = MediaQuery.sizeOf(ctx);
+        final pad = MediaQuery.paddingOf(ctx);
+        final left = (rect.center.dx - width / 2).clamp(8.0, max(8.0, size.width - width - 8)).toDouble();
+        // debajo de la tarjeta si entra; si no, arriba; si tampoco, pegado al borde de abajo
+        var top = rect.bottom + 6;
+        if (top + height > size.height - pad.bottom - 8) top = rect.top - height - 6;
+        top = top.clamp(pad.top + 8, max(pad.top + 8, size.height - pad.bottom - height - 8)).toDouble();
+        return Stack(children: [
+          Positioned.fill(
+            child: GestureDetector(
+              key: const Key('menuBarrier'),
+              behavior: HitTestBehavior.opaque,
+              onTap: _closeMenu,
+              child: const SizedBox.expand(),
             ),
-            for (final (icon, label, value, key) in items) ...[
-              if (value == 'delete') const Divider(indent: 16, endIndent: 16),
-              ListTile(
-                key: key == null ? null : Key(key),
-                leading: Icon(icon, weight: 300, color: value == 'delete' ? cs.error : cs.onSurfaceVariant),
-                title: Text(label, style: TextStyle(color: value == 'delete' ? cs.error : cs.onSurface)),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                onTap: () => Navigator.pop(ctx, value),
+          ),
+          Positioned(
+            left: left,
+            top: top,
+            width: width,
+            child: Material(
+              key: const Key('optionsMenu'),
+              elevation: 8,
+              color: cs.surfaceContainerHigh,
+              borderRadius: BorderRadius.circular(18),
+              clipBehavior: Clip.antiAlias,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 12, 8, 6),
+                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                    child: Text(title, style: Theme.of(ctx).textTheme.titleMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ),
+                  for (final (icon, label, value, key) in items) ...[
+                    if (value == 'delete') const Divider(height: 8, indent: 12, endIndent: 12),
+                    ListTile(
+                      key: key == null ? null : Key(key),
+                      dense: true,
+                      leading: Icon(icon, weight: 300, color: value == 'delete' ? cs.error : cs.onSurfaceVariant),
+                      title: Text(label, style: TextStyle(color: value == 'delete' ? cs.error : cs.onSurface)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      onTap: () => _closeMenuWith(value),
+                    ),
+                  ],
+                ]),
               ),
-            ],
-          ]),
-        ),
-      ),
+            ),
+          ),
+        ]);
+      },
     );
+    _menu = entry;
+    Overlay.of(context).insert(entry);
+    setState(() {}); // el PopScope se entera de que hay menú
+    return done.future;
   }
 
   /// mantener apretado un cuaderno: opciones
-  Future<void> _options(Notebook nb) async {
+  Future<void> _options(BuildContext card, Notebook nb) async {
     HapticFeedback.mediumImpact();
     setState(() => pressed = nb.id);
-    final v = await _optionsSheet(nb.name, [
+    final v = await _optionsMenu(card, nb.name, [
       (Symbols.open_in_new, 'Abrir', 'open', null),
       (Symbols.edit, 'Renombrar', 'rename', null),
       (Symbols.drive_file_move, 'Mover a…', 'move', 'moveTo'),
@@ -625,9 +682,14 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     final nbs = idx == null ? <Notebook>[] : _sorted(hits?.notebooks ?? idx.notebooksIn(current));
     return PopScope(
       // atrás: primero cierra la búsqueda, después sube una carpeta, y recién al final sale
-      canPop: current == null && !searching,
+      canPop: current == null && !searching && _menu == null,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
+        if (_menu != null) {
+          _closeMenu(); // atrás con el menú abierto: solo lo cierra
+          setState(() {});
+          return;
+        }
         if (searching) {
           _goTo(current);
         } else {
@@ -685,7 +747,8 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
                             onDrop: (d) => _drop(d, f.id),
                             builder: (_, hovering) => DragSource(
                               data: LibraryDrag.folder(f),
-                              onHold: () => _folderOptions(f),
+                              onHold: (c) => _folderOptions(c, f),
+                              onHoldCancel: _closeMenu,
                               onMove: auto.moved,
                               onEnd: auto.stop,
                               child: FolderCard(
@@ -716,7 +779,8 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
                         for (final nb in nbs)
                           DragSource(
                             data: LibraryDrag.notebook(nb),
-                            onHold: () => _options(nb),
+                            onHold: (c) => _options(c, nb),
+                            onHoldCancel: _closeMenu,
                             onMove: auto.moved,
                             onEnd: auto.stop,
                             child: NotebookCard(
