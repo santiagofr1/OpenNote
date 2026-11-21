@@ -23,7 +23,8 @@ sin cuentas ni servidores.
   títulos, listas, sangría y alineación.
 - **Selección tipo AutoCAD**: arrastrando hacia la derecha tomás lo que queda adentro del recuadro; hacia la
   izquierda, todo lo que el recuadro toca. Un toque elige un solo elemento y tocar de nuevo alterna al de abajo (por
-  ejemplo, solo el resaltador de una palabra); tocar afuera deselecciona. Después podés mover, copiar, duplicar o eliminar.
+  ejemplo, solo el resaltador de una palabra); tocar afuera deselecciona. Dejando el dedo apretado sobre la hoja, "Seleccionar todo" toma lo de esa hoja y
+  "Seleccionar todo el cuaderno" carga y toma todas. Después podés mover, copiar, duplicar o eliminar.
 - **Orden de capas**: traer al frente, subir, bajar o enviar al fondo lo seleccionado. Se puede deshacer.
 - **Imágenes, notas adhesivas y audios**: insertalos dentro de la hoja, junto con la tinta.
 - **Cuadernos como tira de hojas**: deslizás de una hoja a otra y el título muestra cuál estás viendo (por

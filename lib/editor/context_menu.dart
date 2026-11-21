@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
-enum SheetMenuAction { paste, text, selectAll, addSheet, zoomToWidth }
+enum SheetMenuAction { paste, text, selectAll, selectAllNotebook, addSheet, zoomToWidth }
 
 /// Menú al mantener el dedo sobre la hoja, en [global]. Null si se cerró sin elegir.
 Future<SheetMenuAction?> showSheetMenu(
@@ -29,6 +29,7 @@ Future<SheetMenuAction?> showSheetMenu(
       item(SheetMenuAction.paste, Symbols.content_paste, 'Pegar acá', enabled: canPaste),
       item(SheetMenuAction.text, Symbols.keyboard, 'Escribir acá'),
       item(SheetMenuAction.selectAll, Symbols.select_all, 'Seleccionar todo', enabled: canSelectAll),
+      item(SheetMenuAction.selectAllNotebook, Symbols.select_all, 'Seleccionar todo el cuaderno', enabled: canSelectAll),
       item(SheetMenuAction.addSheet, Symbols.note_add, 'Agregar hoja al final'),
       item(SheetMenuAction.zoomToWidth, Symbols.fit_page_width, 'Zoom al ancho de la hoja', enabled: canResetZoom),
     ],

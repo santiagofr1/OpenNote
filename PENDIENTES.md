@@ -1,10 +1,5 @@
 # Pendientes
 
-1. **Hojas, detalles** (rendimiento hecho y medido en la tablet, ver Hecho y docs/TECNICO.md: 2026-11-21, nota de 34
-   hojas, PSS 240 MB abierta y 409 MB tras desplazar; scroll 1,2 % lentos, p99 8,5 ms):
-   - "Seleccionar todo" solo toma lo de las hojas cargadas (decidido a propósito).
-   - Si el historial de deshacer es largo, las hojas que toca no se sueltan (seguridad primero): se podría podar
-     el historial por hojas lejanas si pesa en cuadernos enormes.
 17. **App de PC + sincronización (A INVESTIGAR, no implementar todavía)**:
     - PC: Flutter desktop compila el mismo código para Linux, Windows y macOS. Investigar qué cambia: entrada
       (mouse/teclado y tabletas Wacom en PC), atajos de teclado, rutas de datos, empaquetado (AppImage/Flatpak/.deb,
@@ -29,6 +24,7 @@
 
 ## Hecho
 
+- **1. Hojas, detalles** (rama `feat/hojas-3`): "Seleccionar todo" toma la hoja visible y "Seleccionar todo el cuaderno" carga las que faltan (progreso, cancelable, aviso con más de 60 hojas); el historial se poda por el fondo si fija más de 12 hojas lejanas. Ver docs/TECNICO.md.
 - **19. Selección: resaltador y tocar afuera** (rama `feat/seleccion-2`): un toque elige un solo elemento (el de más arriba que se ve), tocar de nuevo en el mismo lugar alterna al de abajo (tinta, resaltador), tocar afuera deselecciona, y con tinta y resaltador mezclados la barrita ofrece "Solo resaltador" / "Solo tinta".
 - **1. Hojas: arrastrar, deshacer y `.opennote`** (rama `feat/hojas-2`): mover hojas arrastrando el asa de la miniatura
   en el panel (dedo o lápiz; el menú "Mover antes / después" sigue); agregar, duplicar, mover y borrar hojas se deshacen

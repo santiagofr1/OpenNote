@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../data/storage.dart';
+import '../data/updates.dart' show CancelFlag;
 import '../domain/domain.dart';
 import '../rendering/ink_layers.dart';
 import '../rendering/paper.dart';
@@ -121,6 +122,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   int _syncedCount = -1;
   bool _syncPending = false;
   Timer? _unloadTimer, _retryTimer;
+  bool _selectingAll = false; // "Seleccionar todo el cuaderno" cargando hojas: ninguna se suelta mientras tanto
 
   /// Ids de los elementos seleccionados (lo usan los tests).
   Set<String> get selI => sel.items;
@@ -427,18 +429,29 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   Future<void> _unloadFar(int tries) async {
     if (!mounted) return;
+    if (_selectingAll) return _scheduleUnload(tries: tries + 1);
     final far = developer.Timeline.timeSync('ON farLoaded', _farLoaded);
     if (far.isEmpty) return;
+    _trimHistory(far);
     final r = await widget.store.unloadSheets(doc, far, canUnload: (id) => mounted && !_pinnedSheets().contains(id));
     if (!mounted) return;
     if (r.healed.isNotEmpty) _changed(); // lo que no coincidía con el disco: que se guarde
     if (r.unloaded.length < far.length) _scheduleUnload(tries: tries + 1); // algo no se pudo (sucia, guardando...)
   }
 
+  /// Poda del historial (ver [History.trim]): las hojas lejanas fijadas solo por el historial no pasan de
+  /// [kHistoryMaxFarSheets]. No se muestra nada al usuario.
+  void _trimHistory(List<String> far) {
+    final v = _visibleSheets();
+    final visible = {for (var k = v.first; k <= v.last; k++) doc.sheets[k].id};
+    final exempt = _pinnedSheets(withHistory: false);
+    if (history.trim(doc, far: far.toSet(), exempt: exempt, visible: visible) && mounted) setState(() {});
+  }
+
   /// Hojas que NO se pueden descargar: con selección (o arrastre), texto o nota con foco, trazo o borrador en curso,
   /// audios, elementos caídos en una hoja sin cargar, y las que tocan las acciones del historial (deshacer / rehacer
   /// las necesitan en memoria). Las hojas con cambios sin guardar las protege la `Storage`.
-  Set<String> _pinnedSheets() {
+  Set<String> _pinnedSheets({bool withHistory = true}) {
     final out = <String>{...doc.misplacedSheets};
     void byId(String id) {
       final s = doc.sheetIdOfElementId(id);
@@ -455,7 +468,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     for (final it in doc.items.values) {
       if (it.type == 'audio') byId(it.id);
     }
-    out.addAll(history.sheetIds(doc));
+    if (withHistory) out.addAll(history.sheetIds(doc));
+    if (_selectingAll) out.addAll(doc.loadedSheets);
     return out;
   }
 
@@ -1185,8 +1199,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         _createTextAt(p);
       case SheetMenuAction.selectAll:
         _setTool(Tool.select);
-        setState(() => sel.selectAll(doc));
+        setState(() => sel.selectAll(doc, sheet: visibleSheet)); // la hoja que se ve
         liveTick.value++;
+      case SheetMenuAction.selectAllNotebook:
+        await _selectAllNotebookAsk();
       case SheetMenuAction.addSheet:
         setState(doc.addSheet);
         _sheetAddedAtEnd();
@@ -1196,6 +1212,82 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         widget.onPrefsChanged();
       case null:
         break;
+    }
+  }
+
+  /// Cuadernos con más hojas que esto avisan antes de cargarlas todas para "Seleccionar todo el cuaderno".
+  static const kSelectAllWarn = 60;
+
+  /// Hojas que se piden juntas al cargar para "Seleccionar todo el cuaderno" (entre tanda y tanda se puede cancelar).
+  static const kSelectAllBatch = 4;
+
+  /// "Seleccionar todo el cuaderno" desde el menú: avisa si es enorme, muestra progreso si tarda más de ~300 ms
+  /// y deja cancelar.
+  Future<void> _selectAllNotebookAsk() async {
+    final missing = doc.sheetCount - doc.loadedSheets.length;
+    if (missing > 0 && doc.sheetCount > kSelectAllWarn) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Seleccionar todo el cuaderno'),
+          content: Text('Hay que cargar $missing hojas más en memoria (el cuaderno tiene ${doc.sheetCount}). Puede tardar y gastar bastante memoria.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+            FilledButton(key: const Key('selectAllGo'), onPressed: () => Navigator.pop(ctx, true), child: const Text('Cargar y seleccionar')),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    }
+    final cancel = CancelFlag(), progress = ValueNotifier<double>(0);
+    var shown = false;
+    final timer = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      shown = true;
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Cargando el cuaderno'),
+          content: ValueListenableBuilder<double>(
+            valueListenable: progress,
+            builder: (_, v, _) => LinearProgressIndicator(key: const Key('selectAllProgress'), value: v),
+          ),
+          actions: [TextButton(key: const Key('selectAllCancel'), onPressed: cancel.cancel, child: const Text('Cancelar'))],
+        ),
+      );
+    });
+    await selectAllNotebook(cancel: cancel, progress: progress);
+    timer.cancel();
+    if (shown && mounted) Navigator.of(context).pop();
+    progress.dispose();
+  }
+
+  /// Carga las hojas que faltan (de a [kSelectAllBatch], mirando [cancel] entre tandas) y selecciona todo el cuaderno.
+  /// Mientras carga ninguna hoja se suelta; después las protege la propia selección. Devuelve false si se canceló
+  /// o falló una lectura (la selección queda como estaba; lo cargado se suelta solo más tarde).
+  Future<bool> selectAllNotebook({CancelFlag? cancel, ValueNotifier<double>? progress}) async {
+    if (_selectingAll) return false;
+    _selectingAll = true;
+    try {
+      final missing = [for (final m in doc.sheets) if (!doc.isLoaded(m.id)) m.id];
+      for (var i = 0; i < missing.length; i += kSelectAllBatch) {
+        if (cancel?.cancelled ?? false) return false;
+        await widget.store.loadSheets(doc, missing.sublist(i, min(i + kSelectAllBatch, missing.length)));
+        if (!mounted) return false;
+        progress?.value = min(i + kSelectAllBatch, missing.length) / missing.length;
+      }
+      if (cancel?.cancelled ?? false) return false;
+      _setTool(Tool.select);
+      setState(() => sel.selectAll(doc));
+      liveTick.value++;
+      return true;
+    } catch (e) {
+      developer.log('no se pudo cargar el cuaderno para seleccionar todo: $e', name: 'editor', level: 900);
+      return false;
+    } finally {
+      _selectingAll = false;
+      if (mounted) _scheduleUnload();
     }
   }
 

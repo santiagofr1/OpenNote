@@ -65,9 +65,17 @@ class Selection {
   /// Ids de todo lo seleccionado (trazos, textos y elementos).
   Set<String> get allIds => {...strokes, ...texts, ...items};
 
-  /// "Seleccionar todo": todo lo de las hojas CARGADAS (las visibles y las cercanas), no el cuaderno entero:
-  /// las hojas lejanas no están en memoria (ver la carga perezosa en [NotebookDoc]).
-  void selectAll(NotebookDoc p) => replace(strokes: p.strokes.keys, texts: p.texts.keys, items: p.items.keys);
+  /// "Seleccionar todo": todo lo de la hoja [sheet] (índice; como Samsung Notes, que selecciona por página). Cada
+  /// elemento es de la hoja de su borde de arriba ([NotebookDoc.sheetOfElement]). Una hoja sin cargar no tiene elementos.
+  /// Sin [sheet]: todo lo que haya cargado (lo usa "Seleccionar todo el cuaderno" después de cargar las hojas que faltan).
+  void selectAll(NotebookDoc p, {int? sheet}) {
+    bool inSheet(Layered e) => sheet == null || p.sheetOfElement(e) == sheet;
+    replace(
+      strokes: [for (final s in p.strokes.values) if (inSheet(s)) s.id],
+      texts: [for (final t in p.texts.values) if (inSheet(t)) t.id],
+      items: [for (final i in p.items.values) if (inSheet(i)) i.id],
+    );
+  }
 
   // lo seleccionado que sigue existiendo en la página
   List<Stroke> strokesOf(NotebookDoc p) => [for (final id in strokes) ?p.strokes[id]];
