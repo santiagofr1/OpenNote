@@ -560,12 +560,33 @@ Todo lo decide `SyncController` (`lib/sync/sync_controller.dart`); el motor solo
 | "Sincronizar ahora" | a mano; corta el retroceso | una pasada |
 
 **Nunca dos pasadas a la vez:** un pedido que llega mientras corre una (poll, debounce, "ahora"...) no arranca otra: marca
-"una más al terminar", y los que lleguen mientras tanto se juntan en esa misma. En segundo plano con la app cerrada: no hay
-(paso siguiente: WorkManager / servicio, no se hizo).
+"una más al terminar", y los que lleguen mientras tanto se juntan en esa misma. Con la app cerrada, ver "Segundo plano".
 
 **Indicador.** En la barra de arriba de la biblioteca y del editor, un icono chico (sin texto; el texto está en el
 tooltip): nube con tilde = sincronizado, nube que gira = sincronizando, nube con flecha = hay cambios por subir, nube
 tachada = sin conexión, triángulo = error. No se ve si no hay sesión con Google. Tocarlo abre la hoja de Sincronización.
+
+### Segundo plano (Android)
+
+Con la app cerrada o en segundo plano corre una tarea periódica de `workmanager` (cada **15 min**, el mínimo de Android,
+solo con red). Se registra al conectar con Google y al abrir la app si hay sesión (`ExistingPeriodicWorkPolicy.update`);
+se cancela al desconectar. Interruptor "Sincronizar en segundo plano" en la hoja de Sincronización (menú ⋮ de la
+biblioteca; por defecto encendido, se guarda como `bgSync` en `prefs.json`; solo se ve en Android: en Linux los timers ya
+corren con la ventana minimizada). Código: `lib/sync/background_sync.dart`.
+
+- **Otro isolate, sin UI.** El callback (`backgroundSyncDispatcher`) arma `Storage` + `GoogleBackend.restore()` + el motor
+  y llama a `runBackgroundPass`, que es una función común y testeable (sin WorkManager). Si `restore()` no da sesión o
+  lanza, termina sin hacer nada y sin error.
+- **Nunca a la vez que la app.** Un candado `sync.lock` en la carpeta de datos (PID, dueño y hora; se crea de forma
+  exclusiva; **vence a los 10 min** para que uno abandonado no bloquee para siempre) que toman las dos pasadas, la de
+  `SyncController` también (si lo tiene la de fondo espera 15 s y reintenta). Además la app marca `sync.fg` mientras
+  está en primer plano (se renueva cada consulta; vale 3 min): con la app en primer plano la tarea de fondo no hace nada.
+- **Cuadernos abiertos.** Al pasar a segundo plano la app anota en `sync.busy` los cuadernos abiertos en el editor: la
+  tarea de fondo solo les sube lo suyo, no les escribe encima (misma regla de oro). La marca se borra al abrir la app.
+- **Volver a primer plano.** Si la tarea bajó cambios deja `sync.bgchanged`; la próxima pasada de la app la consume y
+  relee el índice y las miniaturas del disco (`onBackgroundChanged`).
+- **Límite conocido:** `google_sign_in` en Android pide una `Activity` para `attemptLightweightAuthentication`, que en la
+  tarea de fondo no hay; si falla, la tarea queda en "sin sesión" y no sincroniza (ver Riesgos).
 
 ### Cuotas de Drive API: cuántas llamadas hacemos
 
@@ -641,6 +662,7 @@ ellos y avisa que falta configurar.
 
 ### Riesgos conocidos
 
+- **Segundo plano con `google_sign_in`:** su plugin de Android necesita una `Activity` para `attemptLightweightAuthentication` (Credential Manager); en el isolate de WorkManager no hay. Sin probar en la tablet: si falla, la tarea de fondo no sincroniza (termina en "sin sesión"). Alternativa: guardar nosotros un refresh token de Google (flujo de servidor con el cliente Web) y refrescar con `googleapis_auth`, como en Linux.
 - Drive no tiene escritura condicional: dos dispositivos subiendo la misma hoja en el mismo instante pueden pisarse.
   Se mitiga comparando el hash justo antes de subir; el caso que queda es muy angosto.
 - Con `drive.file` solo se ven los archivos creados por esta app; si el usuario sube o mueve archivos a mano dentro de
