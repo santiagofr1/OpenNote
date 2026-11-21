@@ -56,7 +56,7 @@ void main() {
     'pluma': (wave('fountain'), 1.0, .02),
     'fibra': (wave('fine', w: 5), 1.0, .02),
     'resaltador': (wave('hl', w: 18, color: '#f5c518', sharp: false), 1.0, .02),
-    'lápiz': (wave('pencil', w: 5), 2.5, .03),
+    'lápiz': (wave('pencil', w: 5), .8, .006),
     'caligrafía': (wave('calli', w: 6), 1.0, .02),
     'bolígrafo con opacidad': (wave('pen', o: .5), 1.0, .02),
     'resaltador con opacidad': (wave('hl', w: 18, o: .4, color: '#f5c518', sharp: false), 1.0, .02),
@@ -145,6 +145,20 @@ void main() {
         print('$k: ${perPoint.toStringAsFixed(1)} B/punto');
         expect(perPoint, lessThan(40), reason: k);
       }
+    });
+
+    test('lápiz: grano estable (mismo trazo, mismos colores), con variación de alfa entre vértices, y bytes acotados', () {
+      final s = wave('pencil', w: 5, n: 2000, sharp: false);
+      final a = buildStrokeMesh(s)!, b = buildStrokeMesh(s)!;
+      final ca = a.parts.first.colors!, cb = b.parts.first.colors!;
+      expect(ca.toList(), orderedEquals(cb.toList()), reason: 'pseudoaleatorio pero estable');
+      // la tira principal: el alfa de los vértices de los puntos (pares de a 2 vértices) no es constante
+      final alphas = {for (var i = 0; i < 400; i++) ca[i] >>> 24};
+      expect(alphas.length, greaterThan(20), reason: 'hay grano');
+      final perPoint = a.bytes / s.n;
+      // ignore: avoid_print
+      print('lápiz: ${perPoint.toStringAsFixed(1)} B/punto');
+      expect(perPoint, lessThan(200));
     });
 
     test('un trazo larguísimo se parte en partes de menos de 65k vértices', () {

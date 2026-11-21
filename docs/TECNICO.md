@@ -156,7 +156,7 @@ Impeller no tiene caché de pictures: una hoja con mucha tinta vectorial se vuel
 `SheetImageCache` (`lib/rendering/sheet_image_cache.dart`) la reemplaza por imágenes (una textura) mientras la tinta está
 quieta; `InkPainter` (`ink_layers.dart`) decide qué dibujar. Tandas con menos de 1500 puntos no se cachean.
 
-- **Prefetch**: `PageEditor._updatePrefetch` calcula, al scrollear, las hojas visibles y las 3 siguientes en el sentido del
+- **Prefetch**: `PageEditor._updatePrefetch` calcula, al scrollear, las hojas visibles y las 2 siguientes en el sentido del
   movimiento (`SheetImageCache.prefetchPlan`; quieto: solo las visibles) y se las pasa a `prefetch`. Se generan sin esperar
   los 300 ms de quietud (que siguen valiendo para una hoja visible que no estaba en el plan). El plan se reelige en cada
   paso, así que lo que dejó de ser relevante no se genera. `_calcRange` arma al menos una hoja más en el sentido del
@@ -172,7 +172,7 @@ quieta; `InkPainter` (`ink_layers.dart`) decide qué dibujar. Tandas con menos d
   El compuesto es igual (hasta el redondeo) a la imagen entera (`strip_adaptive_test.dart`, `image_prefetch_test.dart`).
 - **Prioridad** (`SheetImageCache._nextJob`): (1) las franjas de las hojas visibles que intersectan el viewport ahora
   (el editor pasa, por hoja visible, la fracción de su alto que se ve: `setVisible(..., fractions:)`), (2) el resto de las
-  franjas de las visibles, (3) las hojas siguientes del plan (3 por delante, `prefetchAhead`) en orden, (4) tandas
+  franjas de las visibles, (3) las hojas siguientes del plan (2 por delante, `prefetchAhead`) en orden, (4) tandas
   quietas fuera del plan. Dentro de una hoja, en el sentido del scroll.
 - **Varios trabajos por cuadro, un solo `toImage`**: el primer trabajo se programa en el post-frame con
   `SchedulerBinding.scheduleTask` (prioridad de animación; con `idle` no corre durante un fling). Cuando termina, si
@@ -287,6 +287,27 @@ una **malla de triángulos** (`lib/domain/stroke_mesh.dart`, `buildStrokeMesh`) 
   3000 a 8000 (una hoja de 46k puntos son ~6 franjas en vez de ~16). Hay que medir en la tablet y ajustar.
 - **Microbenchmark** (`test/rendering/stroke_bench_test.dart`, PC con rasterizador por software, orientativo; 46k
   puntos): grabar 15,8 ms -> 0,8 ms (mallas ya armadas), rasterizar 80 ms -> 9,4 ms.
+
+### Restos de la etapa 5 (RAM, apertura, lápiz)
+
+- **RAM del caché de imágenes**: con la tinta como mallas, una hoja vectorial es barata, así que el caché ya no paga lo
+  que ocupa. Una hoja a ~1650 px de ancho = 1650 x 2333 x 4 B = 15,4 MB. Antes: 12 tandas / 192 MB / 3 hojas adelante
+  (ventana de 7 hojas = 108 MB) y las imágenes de hojas ya pasadas quedaban hasta que otra necesitara lugar: tras desplazar
+  mucho, PSS 583 MB en la tablet. Ahora: 8 tandas / 96 MB / 2 adelante (ventana de 5 hojas = 77 MB) y
+  `SheetImageCache.releaseOutsideWindow()` (la llama `_updatePrefetch`) suelta las imágenes de hojas que no están en la
+  ventana protegida ni visibles. Así la RAM de imágenes queda acotada (<= 96 MB, ~100 MB menos que antes) sin depender de
+  cuánto se scrollea. `detachSheet` ya suelta mallas y lotes (`releaseMesh`) y `dropSheet` las entradas del caché
+  (`test/editor/image_ram_test.dart`). Falta medir PSS en la tablet (objetivo < ~400 MB).
+- **Apertura**: `Storage.loadSheets` decodifica en hasta `Storage.loadParallelism` (4) isolates a la vez, y
+  `openNotebook` arma las mallas solo de la hoja inicial antes de devolver; las de las vecinas se arman enseguida en
+  segundo plano (`_meshLater`, descarta el resultado si el trazo cambió: `meshGen`). `loadNotebook` (exportar, buscar)
+  sigue armando todo. Benchmark en PC (`test/data/open_bench_test.dart`, 5 hojas ~46k puntos, mediana de 5):
+  sin mallas 103 ms; etapa 5 (todo en un isolate) 316 ms; 4 isolates en paralelo 208 ms; ahora (inicial + segundo plano)
+  174 ms.
+- **Lápiz**: la tira principal lleva un vértice por punto (alfa apilado como las cuentas del dibujo viejo) y otro por
+  tramo, con una variación de alfa pseudoaleatoria estable (0,85-1,15). Diferencia contra `paintStrokeLegacy` (media por
+  píxel / % de píxeles con diferencia > 48): antes 0,698 / 0,405 %, ahora 0,629 / 0,384 % (tolerancia del test de 2,5 a 0,8).
+  Lápiz ~175 B/punto con colores.
 
 ## Compilar e instalar en la tablet
 
