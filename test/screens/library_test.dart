@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:apuntes/app.dart';
 import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/domain/domain.dart';
+import 'package:apuntes/screens/library/library_drag.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -272,4 +273,97 @@ void main() {
       await step('confirmar borrar todo');
     });
   }
+
+  group('mover arrastrando', () {
+    /// Mantener apretado [from] y llevarlo (de a pasos) hasta [to]; si [drop], lo suelta ahí.
+    Future<TestGesture> drag(WidgetTester t, Finder from, Finder to, {bool drop = true}) async {
+      final g = await t.startGesture(t.getCenter(from));
+      await t.pump(const Duration(milliseconds: 600));
+      final a = t.getCenter(from), b = t.getCenter(to);
+      for (var i = 1; i <= 8; i++) {
+        await g.moveTo(Offset.lerp(a, b, i / 8)!);
+        await t.pump(const Duration(milliseconds: 30));
+      }
+      if (drop) {
+        await g.up();
+        await settle(t, 600);
+      }
+      return g;
+    }
+
+    testWidgets('soltar un cuaderno sobre una carpeta lo mueve y avisa con Deshacer', (t) async {
+      await start(t);
+      await drag(t, k('nb-Suelto'), k('folder-Facultad'));
+      expect(k('nb-Suelto'), findsNothing, reason: 'ya no está en el inicio');
+      expect(find.text('Movido a Inicio / Facultad'), findsOneWidget);
+      var idx = await disk(t, until: (i) => i.notebooks.firstWhere((n) => n.id == 'n2').folder == 'f1');
+      expect(idx.notebooks.firstWhere((n) => n.id == 'n2').folder, 'f1');
+
+      await t.pump(const Duration(seconds: 1));
+      await t.tap(find.text('Deshacer'));
+      await settle(t, 600);
+      expect(k('nb-Suelto'), findsOneWidget);
+      idx = await disk(t, until: (i) => i.notebooks.firstWhere((n) => n.id == 'n2').folder == null);
+      expect(idx.notebooks.firstWhere((n) => n.id == 'n2').folder, isNull);
+    });
+
+    testWidgets('mantener apretado sin mover abre el menú (no arrastra)', (t) async {
+      await start(t);
+      final g = await t.startGesture(t.getCenter(k('nb-Suelto')));
+      await t.pump(const Duration(milliseconds: 700));
+      await g.up();
+      await settle(t, 600);
+      expect(k('moveTo'), findsOneWidget, reason: 'el menú de opciones');
+      expect(find.textContaining('Movido'), findsNothing);
+    });
+
+    testWidgets('soltar en cualquier otro lado no mueve nada', (t) async {
+      await start(t);
+      final g = await drag(t, k('nb-Suelto'), k('folder-Facultad'), drop: false);
+      await g.moveBy(const Offset(0, 300));
+      await t.pump(const Duration(milliseconds: 50));
+      await g.up();
+      await settle(t, 600);
+      expect(find.textContaining('Movido'), findsNothing);
+      expect(k('nb-Suelto'), findsOneWidget);
+      expect(k('moveTo'), findsNothing, reason: 'tampoco abre el menú: se movió');
+    });
+
+    testWidgets('soltar una carpeta sobre las migas la sube; sobre Inicio la saca de todo', (t) async {
+      await start(t);
+      await tap(t, k('folder-Facultad'));
+      await drag(t, k('folder-Análisis'), k('crumb-inicio'));
+      expect(find.text('Movida a Inicio'), findsOneWidget);
+      expect(k('folder-Análisis'), findsNothing);
+      final idx = await disk(t, until: (i) => i.folderById('f2')!.parent == null);
+      expect(idx.folderById('f2')!.parent, isNull);
+      await t.pump(const Duration(seconds: 1)); // que termine de entrar el aviso
+      await t.tap(find.text('Deshacer'));
+      await settle(t, 600);
+      expect(k('folder-Análisis'), findsOneWidget, reason: 'volvió a Facultad');
+    });
+
+    testWidgets('una carpeta no se puede soltar adentro de sí misma ni de una hija', (t) async {
+      await start(t);
+      // Facultad sobre sí misma: no hay destino
+      await drag(t, k('folder-Facultad'), k('folder-Facultad'));
+      expect(find.textContaining('Movida'), findsNothing);
+      final idx = await disk(t);
+      expect(idx.folderById('f1')!.parent, isNull);
+      // la lógica pura también lo rechaza
+      final d = LibraryDrag.folder(idx.folderById('f1')!);
+      expect(d.canDropOn(idx, 'f2'), isFalse, reason: 'hija');
+      expect(d.canDropOn(idx, 'f1'), isFalse, reason: 'sí misma');
+      expect(d.canDropOn(idx, null), isFalse, reason: 'ya está en el inicio');
+    });
+
+    testWidgets('el scroll no se rompe: arrastrar el fondo con el dedo sigue siendo scroll', (t) async {
+      await start(t, size: const Size(600, 500));
+      final sc = t.state<ScrollableState>(find.byType(Scrollable).first);
+      await t.drag(find.byType(CustomScrollView), const Offset(0, -200));
+      await t.pump();
+      expect(sc.position.pixels, greaterThanOrEqualTo(0));
+      expect(find.textContaining('Movido'), findsNothing);
+    });
+  });
 }

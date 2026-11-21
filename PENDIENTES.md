@@ -29,6 +29,7 @@
 
 ## Hecho
 
+- **Mover arrastrando en la biblioteca** (rama `feat/detalles`, 2026-11-21): `LongPressDraggable` con umbral: mantener apretado y soltar SIN mover abre el menú (ahora al soltar, antes a los 500 ms); mantener apretado y mover más de 10 px arrastra la tarjeta. Soltar sobre una carpeta (se resalta) o sobre las migas de pan, incluida "Inicio", mueve; no deja soltar una carpeta en sí misma ni en una descendiente; scroll automático cerca de los bordes; aviso "Movido a X" con "Deshacer". Ver docs/TECNICO.md.
 - **Selección de texto entre párrafos** (rama `feat/detalles`, 2026-11-21): con mouse arrastrar de un párrafo a otro, con dedo / lápiz mantener apretado (~350 ms) y arrastrar; negrita, colores, listas, alineación, copiar, cortar y borrar valen sobre todo lo seleccionado (botones Copiar / Cortar / Borrar en la barra de formato). No cruza bloques distintos. Ver docs/TECNICO.md.
 - **22. Menú de la hoja con el dedo** (2026-11-21): no abría porque `_onStillPress` dependía de `isScrollingNotifier` (el scroll gana el gesto apenas toca) y quedaba un dedo "fantasma" tras abrir el menú; ahora mira si la hoja se movió de verdad y limpia el seguimiento de dedos al abrir el menú. Verificado con la suite en la tablet.
 - **21. Bugs de la primera prueba real de sync** (2026-11-21): borrados que no llegaban si el otro dispositivo reiniciaba la app (primer `changes()` de cada proceso ahora es listado completo), "Mi cuaderno" de ejemplo duplicado (se descarta si está intacto y la nube ya tiene cuadernos) y sync lenta (sube ~5 s después de guardar, consulta cada 45 s, al volver a primer plano, indicador en la barra, aviso "Actualizar" con el cuaderno abierto). Probado entre tablet y Linux.
@@ -71,7 +72,7 @@
   tarjetas de carpeta con cuántos cuadernos tienen, migas de pan y flecha para subir, atrás del sistema sube de a un nivel.
   "+" ofrece Cuaderno nuevo (en la carpeta actual) y Carpeta nueva. Mantener apretado: cuaderno o carpeta → "Mover a…"
   (árbol con "Inicio"); carpeta → Renombrar / Borrar (sacar los cuadernos a la carpeta de arriba, o borrar todo con
-  segunda confirmación). Mover arrastrando NO se hizo: choca con el long-press del menú y con el scroll; queda "Mover a…".
+  segunda confirmación). Además se puede mover arrastrando (ver el punto de abajo); "Mover a…" sigue.
 - **14. Búsqueda en la biblioteca**: campo arriba; busca por nombre de cuaderno y de carpeta en todas las carpetas, sin
   mayúsculas ni tildes, con la ruta como subtítulo. Al borrar el texto vuelve a la carpeta actual.
 - **7. App renombrada a OpenNote** (nombre en la tablet y título; el id `com.apuntes.apuntes` no cambió).

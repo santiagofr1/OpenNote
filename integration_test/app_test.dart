@@ -697,6 +697,58 @@ void main() {
     expect(find.byKey(const Key('nb-Suelto')), findsOneWidget);
   });
 
+  testWidgets('carpetas: mover arrastrando (cuaderno a carpeta, deshacer, carpeta a las migas)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Suelto');
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+    await createFolder(t, 'Facultad');
+
+    /// Mantener apretado de verdad (la tablet no adelanta el reloj con t.longPress) y llevarlo hasta [to].
+    Future<void> arrastrar(Finder from, Finder to) async {
+      final g = await t.startGesture(t.getCenter(from));
+      final end = DateTime.now().add(const Duration(milliseconds: 750));
+      while (DateTime.now().isBefore(end)) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        await t.pump();
+      }
+      final a = t.getCenter(from), b = t.getCenter(to);
+      for (var i = 1; i <= 12; i++) {
+        await g.moveTo(Offset.lerp(a, b, i / 12)!);
+        await t.pump(const Duration(milliseconds: 30));
+      }
+      await g.up();
+      await settle(t, 800);
+    }
+
+    // cuaderno -> carpeta
+    await arrastrar(find.byKey(const Key('nb-Suelto')), find.byKey(const Key('folder-Facultad')));
+    expect(find.byKey(const Key('nb-Suelto')), findsNothing);
+    expect(find.text('Movido a Inicio / Facultad'), findsOneWidget);
+
+    // deshacer desde el aviso
+    await t.tap(find.text('Deshacer'));
+    await settle(t, 800);
+    expect(find.byKey(const Key('nb-Suelto')), findsOneWidget);
+
+    // mantener apretado sin mover sigue abriendo el menú
+    await holdOn(t, find.byKey(const Key('nb-Suelto')));
+    await settle(t);
+    expect(find.byKey(const Key('moveTo')), findsOneWidget);
+    await t.tapAt(const Offset(5, 5)); // cerrar la hoja
+    await settle(t);
+
+    // carpeta Hija adentro de Facultad, y de ahí a "Inicio" en las migas
+    await t.tap(find.byKey(const Key('folder-Facultad')));
+    await settle(t, 800);
+    await createFolder(t, 'Hija');
+    await arrastrar(find.byKey(const Key('folder-Hija')), find.byKey(const Key('crumb-inicio')));
+    expect(find.byKey(const Key('folder-Hija')), findsNothing);
+    await t.tap(find.byKey(const Key('up')));
+    await settle(t, 800);
+    expect(find.byKey(const Key('folder-Hija')), findsOneWidget, reason: 'ahora está en el inicio');
+  });
+
   testWidgets('buscar en el inicio', (t) async {
     await start(t);
     await createFolder(t, 'Análisis');

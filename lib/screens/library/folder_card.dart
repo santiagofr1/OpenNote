@@ -11,7 +11,8 @@ class FolderCard extends StatelessWidget {
   final String? location; // ruta donde está (al buscar); reemplaza el conteo
   final bool pressed; // resaltada: menú abierto
   final bool dropping; // un cuaderno arrastrado está encima (por si se usa arrastrar)
-  final VoidCallback onTap, onLongPress;
+  final VoidCallback onTap;
+  final VoidCallback? onLongPress; // null: el menú lo abre quien arrastra (DragSource)
   const FolderCard(
       {super.key,
       required this.folder,
@@ -20,7 +21,7 @@ class FolderCard extends StatelessWidget {
       this.pressed = false,
       this.dropping = false,
       required this.onTap,
-      required this.onLongPress});
+      this.onLongPress});
 
   @override
   Widget build(BuildContext context) {
