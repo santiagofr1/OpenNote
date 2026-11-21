@@ -271,9 +271,11 @@ hay bajo el lápiz de arriba hacia abajo en lo que se VE (orden de `zRuns`, con 
 tanda; trazos con `Stroke.hitBy` y 6 px de pantalla de margen, textos y elementos contra su rectángulo). Tocar de
 nuevo a menos de 12 px, con eso como única selección, pasa al siguiente hacia abajo (cíclico: tinta, resaltador,
 tinta). Un toque afuera del recuadro arma una banda mínima que en `_up` se resuelve como toque (`_tapSelect`): elige
-lo que haya o deselecciona; un toque en un hueco dentro del recuadro no hace nada. Si la selección por recuadro mezcla
-tinta y resaltador (`Selection.mixedInk`), la barrita suma dos botones (solo ícono) "Solo resaltador" / "Solo tinta"
-(`Selection.keepOnly`). Cambiar la selección nunca entra al historial. La barrita se acomoda con `_MenuLayout` para no
+lo que haya o deselecciona; un toque en un hueco dentro del recuadro no hace nada. Si la selección tiene resaltador y cualquier otra cosa (tinta, textos, elementos; `Selection.mixedInk`), la barrita suma
+una fila aparte arriba con dos botones con texto: "Solo resaltador" (deja solo los trazos de resaltador) y "Sin
+resaltador" (saca el resaltador y conserva tinta, textos y elementos), ambos en `Selection.keepOnly`. La barrita pasa a
+dos filas (Column) y `_MenuLayout` la pone arriba si entra o abajo del recuadro. No hay interruptor "seleccionar solo
+resaltador" en la herramienta: Seleccionar no tiene sub-menú de opciones en la barra, y los filtros ya cubren el caso. Cambiar la selección nunca entra al historial. La barrita se acomoda con `_MenuLayout` para no
 salirse del ancho de la hoja.
 
 ### Guardado

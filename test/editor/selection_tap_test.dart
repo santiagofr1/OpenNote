@@ -95,16 +95,16 @@ void main() {
     expect(h.ed.history.canUndo, isFalse);
   });
 
-  testWidgets('filtro "Solo resaltador" / "Solo tinta" con la selección mezclada', (t) async {
+  testWidgets('filtro "Solo resaltador" / "Sin resaltador" con la selección mezclada', (t) async {
     final h = await open(t, palabra());
     await tester(t, h, const Offset(500, 500), const Offset(100, 300)); // captura: tinta + resaltador
     expect(h.ed.sel.strokes, {'ink', 'hl'});
-    await t.tap(find.byTooltip('Solo resaltador'));
+    await t.tap(find.text('Solo resaltador'));
     await t.pump();
     expect(h.ed.sel.strokes, {'hl'});
-    expect(find.byTooltip('Solo resaltador'), findsNothing, reason: 'ya no está mezclado');
+    expect(find.text('Solo resaltador'), findsNothing, reason: 'ya no está mezclado');
     await tester(t, h, const Offset(500, 500), const Offset(100, 300));
-    await t.tap(find.byTooltip('Solo tinta'));
+    await t.tap(find.text('Sin resaltador'));
     await t.pump();
     expect(h.ed.sel.strokes, {'ink'});
   });

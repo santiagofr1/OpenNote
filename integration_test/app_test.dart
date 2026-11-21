@@ -908,6 +908,42 @@ void main() {
     expect(find.byType(SelectionMenu), findsNothing);
   });
 
+  testWidgets('selección: "Solo resaltador" sobre texto y tinta mueve solo el resaltador', (t) async {
+    await start(t);
+    await createNotebook(t, 'SoloHl');
+    final p = docToScreen(t);
+    final ed = editor(t);
+    // tinta, un texto escrito y el resaltador encima
+    await stylusLine(t, p(const Offset(200, 200)), p(const Offset(400, 200)));
+    final tb = TextBlock('tx', 200, 160, 300, 'hola');
+    ed.doc.texts[tb.id] = tb;
+    await t.tap(find.byTooltip('Resaltador · tocá de nuevo para opciones'));
+    await settle(t);
+    await stylusLine(t, p(const Offset(200, 200)), p(const Offset(400, 200)));
+    final hl = ed.doc.strokes.values.firstWhere((s) => s.k == 'hl');
+    final ink = ed.doc.strokes.values.firstWhere((s) => s.k != 'hl');
+    final hlBefore = hl.bounds, inkBefore = ink.bounds;
+
+    await t.tap(find.byTooltip('Seleccionar'));
+    await settle(t);
+    // recuadro de captura (derecha a izquierda) sobre todo
+    await stylusDrag(t, p(const Offset(500, 260)), p(const Offset(100, 100)));
+    expect(ed.sel.strokes, {ink.id, hl.id});
+    expect(ed.sel.texts, {tb.id});
+    expect(find.text('Solo resaltador'), findsOneWidget);
+    expect(find.text('Sin resaltador'), findsOneWidget);
+
+    await t.tap(find.text('Solo resaltador'));
+    await settle(t);
+    expect(ed.sel.strokes, {hl.id});
+    expect(ed.sel.texts, isEmpty);
+
+    await stylusDrag(t, p(const Offset(300, 200)), p(const Offset(300, 260)));
+    expect(ed.doc.strokes[ink.id]!.bounds, inkBefore);
+    expect(ed.doc.texts[tb.id]!.y, 160);
+    expect(ed.doc.strokes[hl.id]!.bounds.top, greaterThan(hlBefore.top + 40));
+  });
+
   testWidgets('scroll rápido de punta a punta: sin errores; quieto usa imágenes; un trazo nuevo se ve y se guarda', (t) async {
     // cuaderno de 6 hojas con bastante tinta por hoja (más de SheetImageCache.defaultMinPoints: vale una imagen)
     final perStroke = SheetImageCache.defaultMinPoints ~/ 40 + 20;

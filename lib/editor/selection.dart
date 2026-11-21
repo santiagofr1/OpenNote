@@ -127,15 +127,19 @@ class Selection {
   void selectOne(Layered e) => replace(
       strokes: [if (e is Stroke) e.id], texts: [if (e is TextBlock) e.id], items: [if (e is Item) e.id]);
 
-  /// ¿Hay resaltador y tinta mezclados en la selección? (para ofrecer el filtro)
+  /// ¿Hay resaltador y además cualquier otra cosa (tinta, textos, imágenes, notas, audios)? Entonces la barrita
+  /// ofrece los filtros "Solo resaltador" / "Sin resaltador".
   bool mixedInk(NotebookDoc doc) {
     final s = strokesOf(doc);
-    return s.any((x) => x.k == 'hl') && s.any((x) => x.k != 'hl');
+    return s.any((x) => x.k == 'hl') && (s.any((x) => x.k != 'hl') || texts.isNotEmpty || items.isNotEmpty);
   }
 
-  /// Reduce la selección a los trazos de resaltador ([hl]) o a los de tinta (el resto).
-  void keepOnly(NotebookDoc doc, {required bool hl}) =>
-      replace(strokes: [for (final s in strokesOf(doc)) if ((s.k == 'hl') == hl) s.id]);
+  /// Filtra la selección. Con [hl]: queda solo el resaltador (se sueltan tinta, textos y elementos).
+  /// Sin [hl]: se saca el resaltador y queda todo lo demás (tinta, textos y elementos).
+  void keepOnly(NotebookDoc doc, {required bool hl}) {
+    final keep = [for (final s in strokesOf(doc)) if ((s.k == 'hl') == hl) s.id];
+    replace(strokes: keep, texts: hl ? const [] : texts.toList(), items: hl ? const [] : items.toList());
+  }
 
   /// Selecciona lo que queda dentro de [r] ("ventana"): trazos con la mitad o más de sus puntos adentro;
   /// textos y elementos, si su centro cae adentro. Con [capture], todo lo que [r] toca: trazos cuyo
