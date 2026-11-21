@@ -10,6 +10,7 @@ import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../domain/domain.dart';
+import '../sync/sync_paths.dart';
 import 'migration.dart';
 import 'sheet_codec.dart';
 
@@ -503,6 +504,42 @@ class Storage {
     idx.notebooks.remove(nb);
     await saveIndex(idx);
     await removeNotebookFiles(nb.id);
+  }
+
+  // ================= para la sincronización (lib/sync) =================
+  // La sincronización escribe y borra archivos de cuadernos CERRADOS por acá (nunca los de uno abierto en el editor:
+  // ver SyncEngine). Pasan por las mismas escrituras atómicas y colas que el resto, y solo se aceptan rutas conocidas.
+
+  /// El archivo de [rel] (ruta relativa de sync_paths.dart o `sync_state.json`).
+  File syncFile(String rel) => File('${dir.path}/${_checkSyncPath(rel)}');
+
+  static String _checkSyncPath(String rel) {
+    if (rel != kSyncStateFile && !isSyncPath(rel)) throw ArgumentError('ruta no sincronizable: $rel');
+    return rel;
+  }
+
+  /// Escribe [rel] de forma atómica (temporal + rename), esperando que termine el guardado en curso de su cuaderno.
+  Future<void> writeSyncFile(String rel, List<int> bytes) async {
+    final nb = notebookIdOf(_checkSyncPath(rel));
+    if (nb != null) await _idle(nb);
+    await _writeBytes(syncFile(rel), bytes);
+    if (nb != null) _disk.remove(nb); // lo que recuerda del disco ya no vale: al abrir se vuelve a leer
+  }
+
+  Future<void> deleteSyncFile(String rel) async {
+    final nb = notebookIdOf(_checkSyncPath(rel));
+    if (nb != null) await _idle(nb);
+    final f = syncFile(rel);
+    if (await f.exists()) await f.delete();
+    if (nb != null) _disk.remove(nb);
+  }
+
+  /// Saca las carpetas vacías de un cuaderno al que la sincronización le borró todos los archivos.
+  Future<void> pruneEmptyNotebookDir(String id) async {
+    final sheets = _sheetsDir(id);
+    if (await sheets.exists() && await sheets.list().isEmpty) await sheets.delete();
+    final d = nbDir(id);
+    if (await d.exists() && await d.list().isEmpty) await d.delete();
   }
 
   // ================= preferencias =================
