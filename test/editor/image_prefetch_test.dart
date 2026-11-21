@@ -77,15 +77,17 @@ void main() {
           body: PageEditor(doc: doc, tools: tools, store: Storage(root: root), onChanged: () {}, onPrefsChanged: () {}),
         ),
       ));
+      // el trabajo de la caché va por scheduleTask (un Timer.run): se suelta el editor para que no quede pendiente
+      addTearDown(() => t.pumpWidget(const SizedBox(), duration: const Duration(milliseconds: 1)));
       await t.pump(const Duration(milliseconds: 300));
       return t.state<PageEditorState>(find.byType(PageEditor));
     }
 
     /// Cuadros y tiempo real, SIN llegar a los 300 ms de quietud (el temporizador de la quietud corre con el reloj de prueba).
-    Future<void> frames(WidgetTester t, {int n = 14}) async {
+    Future<void> frames(WidgetTester t, {int n = 20}) async {
       for (var i = 0; i < n; i++) {
         await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 40)));
-        await t.pump(const Duration(milliseconds: 10));
+        await t.pump(const Duration(milliseconds: 5));
       }
     }
 
@@ -314,6 +316,7 @@ void main() {
         await render(p);
         final vectorial = await bytes(await render(p));
         // solo se generan 2 franjas (después "hay lápiz": se posterga)
+        e.lowRefused = true; // sin miniatura: lo que falta va vectorial recortado
         cache.busy = () => cache.jobsStarted >= 2;
         cache.protectedSheets = {'h'};
         cache.visibleSheets = {'h'};

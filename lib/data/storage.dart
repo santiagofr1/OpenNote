@@ -175,6 +175,7 @@ class Storage {
     ];
     if (want.isEmpty) return [];
     final raw = <Uint8List?>[];
+    final tRead = developer.TimelineTask()..start('ON loadSheets leer disco', arguments: {'hojas': want.length});
     try {
       for (final id in want) {
         final f = sheetFile(nb.id, id);
@@ -183,8 +184,16 @@ class Storage {
     } catch (_) {
       if (want.every((id) => doc.indexOfSheet(id) < 0)) return []; // se borraron mientras tanto
       rethrow;
+    } finally {
+      tRead.finish();
     }
-    final decoded = await _decodeDigestInIsolate(raw);
+    final tDec = developer.TimelineTask()..start('ON loadSheets decodificar (isolate)', arguments: {'hojas': want.length});
+    final List<(SheetContent, String)?> decoded;
+    try {
+      decoded = await _decodeDigestInIsolate(raw);
+    } finally {
+      tDec.finish();
+    }
     final state = _disk.putIfAbsent(nb.id, () => _DiskState({}, '', {for (final s in nb.sheets) s.id}));
     final done = <String>[];
     for (var i = 0; i < want.length; i++) {
@@ -221,8 +230,14 @@ class Storage {
         doc.isLoaded(id) && !doc.isSheetDirty(id) && state != null && state.hashes.containsKey(id) && state.digests.containsKey(id) && (canUnload?.call(id) ?? true);
     final cand = [for (final id in ids.toSet()) if (ok(id)) id];
     if (state == null || cand.isEmpty) return (unloaded: unloaded, healed: healed);
-    final contents = doc.splitSheets(cand.toSet());
-    final digests = await _digestInIsolate([for (final id in cand) contents[id]!]);
+    final contents = developer.Timeline.timeSync('ON unloadSheets splitSheets', () => doc.splitSheets(cand.toSet()));
+    final tDig = developer.TimelineTask()..start('ON unloadSheets huella (isolate)', arguments: {'hojas': cand.length});
+    final List<String> digests;
+    try {
+      digests = await _digestInIsolate([for (final id in cand) contents[id]!]);
+    } finally {
+      tDig.finish();
+    }
     for (var i = 0; i < cand.length; i++) {
       final id = cand[i];
       // desde acá todo es sincrónico: lo que se chequea es lo que vale al soltar

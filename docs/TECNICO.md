@@ -161,16 +161,31 @@ quieta; `InkPainter` (`ink_layers.dart`) decide qué dibujar. Tandas con menos d
   los 300 ms de quietud (que siguen valiendo para una hoja visible que no estaba en el plan). El plan se reelige en cada
   paso, así que lo que dejó de ser relevante no se genera. `_calcRange` arma al menos una hoja más en el sentido del
   scroll (hace falta un painter armado para grabar la hoja).
-- **Franjas**: la imagen de una tanda son `stripCount` = 4 franjas horizontales (`<tanda>#<n>` en la caché), cada una un
-  `toImage` ~4 veces más chico y que graba solo los trazos que la tocan. **Un trabajo por cuadro como máximo**, programado
-  después del cuadro (`addPostFrameCallback`) y serializado; no se genera con el lápiz o un pellizco en curso (`busy`).
-  Mientras faltan franjas, las listas van como imagen y el resto como sustituto o vectorial recortado a esa franja. Con
-  todas las franjas el compuesto es igual (hasta el redondeo) a la imagen entera: test en `image_prefetch_test.dart`.
-  Una hoja que no se ve repinta solo cuando están todas (cada repintado graba los trazos de nuevo).
-- **Sustituto**: al terminar las franjas se baja una miniatura de 320 px de ancho (~0,6 MB, desde las franjas, sin tocar
-  los trazos), hasta 80 en memoria (~46 MB). Si la imagen buena se desaloja y la hoja vuelve a verse, se muestra la
-  miniatura estirada en vez de todos los trazos, hasta que llega la buena. Al editar la hoja (versión nueva) se descarta
-  todo y va vectorial, así el trazo nuevo se ve al instante. Sin miniatura: vectorial como antes.
+- **Franjas adaptativas**: la imagen de una tanda se parte en franjas horizontales que se generan de a una. La cantidad
+  sale de los puntos (`SheetImageCache.stripCountFor`): ~`maxPointsPerStrip` = 3000 por franja (se cuenta con los bounds
+  de los trazos; uno que cruza varias franjas cuenta en todas; tolerancia 25%), mínimo 4 y máximo 32 (1000 puntos: 4;
+  46k: ~16; 200k: 32). Por qué: la traza real en la tablet (Galaxy Tab S6 Lite, Impeller, scroll de 12 s en 50 hojas
+  de ~46k puntos) dio que con 4 franjas fijas grabar una franja (`ON cache grabar franja`, hilo UI) costaba 15-27 ms
+  y estaba en 37 de los 39 cuadros UI lentos, y su `toImage` (`ON cache toImage franja`, hilo raster) 35-96 ms, que
+  competían con el cuadro (cuadros raster de 26-60 ms). Con ~3000 puntos por franja cada trabajo baja a ~1/4 (grabar
+  ~2-4 ms), a costa de más trabajos por hoja. `stripCount` fijo sigue existiendo para tests (1 = imagen entera).
+  El compuesto es igual (hasta el redondeo) a la imagen entera (`strip_adaptive_test.dart`, `image_prefetch_test.dart`).
+- **Un trabajo por cuadro, fuera del cuadro**: se programa en el post-frame pero se ejecuta con
+  `SchedulerBinding.scheduleTask` (prioridad de animación; con `idle` no corre mientras hay un fling, justo cuando
+  hace falta), así no suma al build del cuadro que se acaba de dibujar. Si ese cuadro ya gastó más de 8 ms de UI
+  (`maxFrameMs`, medido desde el vsync) el trabajo se posterga al siguiente (hasta 4 veces seguidas). No se genera
+  con el lápiz o un pellizco en curso (`busy`). **Un solo `toImage` a la vez**: el raster es un hilo y cada
+  `toImage` se espera entero antes de empezar el siguiente (`maxRasterInFlight` lo cuenta en los tests).
+- **Hoja que todavía no se ve**: si una tanda cacheable no tiene franjas ni miniatura y su hoja no está en
+  `visibleSheets`, `InkPainter` no dibuja nada (antes la pintaba vectorial, ~40 ms una vez por hoja nueva que entra al
+  rango armado sin verse) y solo deja registrado `record` / `want` para el prefetch. Al pasar a visible
+  (`SheetImageCache.setVisible`, que llama `_updatePrefetch`) se repinta. Con `visibleSheets` vacío (primer cuadro,
+  tests sin scroll) se dibuja como siempre: nunca queda una hoja visible en blanco.
+- **Sustituto**: la miniatura de 320 px de ancho (~0,6 MB) se genera primero (antes que las franjas) para las hojas del
+  plan, grabada desde los trazos salteando puntos (1 de cada `lowStep` = 4, conservando el primero y el último), así
+  el grabado cuesta ~1/4 y en chico no se nota. Hasta 80 en memoria (~46 MB). Si la imagen buena se desaloja y la hoja
+  vuelve a verse, se muestra la miniatura estirada en vez de todos los trazos, hasta que llega la buena. Al editar la
+  hoja se descarta todo y va vectorial, así el trazo nuevo se ve al instante.
 - **Presupuesto**: 8 tandas y 112 MB de franjas (antes 6 y 64 MB). Una hoja a 1000 u x dpr 1,5 son ~12,7 MB; la ventana
   de scroll normal es 2-3 hojas visibles + 2 de prefetch + 1 detrás = ~6, con margen para hojas con varias tandas, y
   112 MB entran 8 hojas de ese tamaño (con zoom hasta ~1,2x). Más las miniaturas: techo de ~160 MB sobre 4 GB. LRU por
