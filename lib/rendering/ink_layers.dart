@@ -97,9 +97,9 @@ class InkPainter extends CustomPainter {
               Paint()..filterQuality = FilterQuality.low);
         }
         img.schedule();
-        // hoja que todavía no se ve y sin imagen ni miniatura: no se dibuja nada (el prefetch la genera y al pasar a
-        // visible se repinta). Sin hojas visibles conocidas (primer cuadro) se dibuja como siempre.
-        if (missing.length == n && img.low == null && cache!.visibleSheets.isNotEmpty && !cache!.visibleSheets.contains(sheetId)) {
+        // hoja que todavía no se ve y con franjas sin generar: solo van las listas, sin trazos (el prefetch genera el
+        // resto y al pasar a visible se repinta). Sin hojas visibles conocidas (primer cuadro) se dibuja como siempre.
+        if (missing.isNotEmpty && cache!.visibleSheets.isNotEmpty && !cache!.visibleSheets.contains(sheetId)) {
           img.mode = InkPaintMode.skipped;
           return;
         }
@@ -107,19 +107,7 @@ class InkPainter extends CustomPainter {
           img.mode = InkPaintMode.image;
           return;
         }
-        final low = img.low;
-        if (low != null) {
-          // sustituto barato: la miniatura estirada en lo que falta
-          for (final i in missing) {
-            final (y0, y1) = SheetImageCache.stripRange(h, n, i);
-            final (l0, l1) = SheetImageCache.stripRange(low.height, n, i);
-            c.drawImageRect(low, Rect.fromLTRB(0, l0.toDouble(), low.width.toDouble(), l1.toDouble()),
-                Rect.fromLTRB(0, size.height * y0 / h, size.width, size.height * y1 / h),
-                Paint()..filterQuality = FilterQuality.medium);
-          }
-          img.mode = InkPaintMode.lowRes;
-          return;
-        }
+        // hoja visible con franjas faltantes: vectorial recortado a esas franjas (nítido; nunca una miniatura)
         img.mode = InkPaintMode.vector;
         if (missing.length < n) {
           onlyVector = Path();
@@ -140,7 +128,7 @@ class InkPainter extends CustomPainter {
   /// Graba las filas [y0, y1) de la tanda de la hoja a [w] x [h] píxeles (para una franja de la imagen; toda la
   /// hoja es y0 = 0, y1 = h). Solo se dibujan los trazos que tocan esas filas. null si hay trazos ocultos.
   @visibleForTesting
-  ui.Picture? recordStrip(int w, int h, int y0, int y1, {int step = 1}) {
+  ui.Picture? recordStrip(int w, int h, int y0, int y1) {
     final skip = hidden();
     if (skip.isNotEmpty) return null;
     final rec = ui.PictureRecorder();
@@ -156,21 +144,8 @@ class InkPainter extends CustomPainter {
       final top = sheet.top + y0 * sheet.height / h - margin, bottom = sheet.top + y1 * sheet.height / h + margin;
       ss = ss.where((s) => s.bounds.bottom >= top && s.bounds.top <= bottom);
     }
-    if (step > 1) ss = ss.map((s) => _thinned(s, step));
     paintStrokes(c, ss);
     return rec.endRecording();
-  }
-
-  /// Copia del trazo con 1 de cada [k] puntos (siempre el primero y el último): para la miniatura, que se ve chica.
-  static Stroke _thinned(Stroke s, int k) {
-    final n = s.n;
-    if (n <= k + 1) return s;
-    final p = <double>[];
-    for (var i = 0; i < n; i += k) {
-      p.addAll([s.pts[i * 3], s.pts[i * 3 + 1], s.pts[i * 3 + 2]]);
-    }
-    if ((n - 1) % k != 0) p.addAll([s.pts[(n - 1) * 3], s.pts[(n - 1) * 3 + 1], s.pts[(n - 1) * 3 + 2]]);
-    return Stroke(s.id, s.k, s.c, s.w, p, s.o)..z = s.z;
   }
 
   @override

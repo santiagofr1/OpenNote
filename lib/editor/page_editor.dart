@@ -81,6 +81,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   double _dpr = 1, _viewW = 800; // para el tamaño en píxeles de esas imágenes
   double _lastOff = 0; // para la dirección del scroll (prefetch de imágenes)
   int _scrollDir = 0, _prefKey = -1;
+  Timer? _stillTimer;
   // elementos de cada hoja (por id) ya ordenados y agrupados en tandas; se rehacen solo cuando esa hoja cambia
   final _sheetRuns = <String, List<ZRun>>{};
   int _runsCount = -1;
@@ -126,6 +127,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     doc.addRenderListener(_onSheetTouched);
     doc.addLoadListener(_onSheetLoaded);
     scroll.addListener(_onScroll);
+    _imgs.still = true; // abierto y sin mover: lo que falte de las visibles se genera ya
     _imgs.busy = () => pointer != null || live != null || erased != null || touch.pinching; // no generar con el lápiz en uso
     WidgetsBinding.instance.addPostFrameCallback((_) => scrollToSheet(widget.initialSheet, animate: false));
   }
@@ -174,6 +176,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     for (final v in _versions.values) {
       v.dispose();
     }
+    _stillTimer?.cancel();
     _imgs.dispose();
     liveTick.dispose();
     _zoomPillTimer?.cancel();
@@ -286,26 +289,40 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final plan = SheetImageCache.prefetchPlan(first: v.first, last: v.last, dir: _scrollDir, count: doc.sheetCount);
     final ids = [for (final k in plan) doc.sheets[k].id];
     final vis = {for (var k = v.first; k <= v.last; k++) doc.sheets[k].id};
-    _imgs.protectedSheets = ids.toSet();
+    // protegidas: el plan y una hoja detrás (la que se acaba de pasar: si se vuelve, está lista)
+    final behind = _scrollDir == 0 ? -1 : (_scrollDir > 0 ? v.first - 1 : v.last + 1);
+    _imgs.protectedSheets = {...ids, if (behind >= 0 && behind < doc.sheetCount) doc.sheets[behind].id};
     _imgs.prefetch(ids, dir: _scrollDir);
-    // visibles: las que no se habían dibujado (o tenían franjas a medias sin repintar) pasan a mostrarse
-    _imgs.setVisible(vis);
+    // visibles: las que no se habían dibujado (o tenían franjas a medias sin repintar) pasan a mostrarse; sus franjas
+    // que están en pantalla se generan primero
+    final top = (off - kTopPad) / scale, bottom = top + _viewH / scale;
+    final fr = <String, (double, double)>{
+      for (var k = v.first; k <= v.last; k++)
+        doc.sheets[k].id: (((top - k * kSheetStep) / kSheetH).clamp(0.0, 1.0), ((bottom - k * kSheetStep) / kSheetH).clamp(0.0, 1.0)),
+    };
+    _imgs.setVisible(vis, fractions: fr);
+  }
+
+  /// Un rato sin scroll: lo que falte de las hojas visibles se genera ya (sin presupuesto por cuadro).
+  void _markStill() {
+    _stillTimer = null;
+    _imgs.still = true;
+    _imgs.kick();
   }
 
   /// Para el benchmark: cómo se están dibujando las hojas que se ven ahora (hay alguna con trazos vectoriales de una
-  /// tanda que valía una imagen / con la miniatura) y el contador de actividad de generación de imágenes.
+  /// tanda que valía una imagen) y el contador de actividad de generación de imágenes.
   @visibleForTesting
-  ({bool vector, bool lowRes, int activity, int jobs}) get imageFrameState {
+  ({bool vector, int activity, int jobs}) get imageFrameState {
     final v = _visibleSheets();
-    var vec = false, low = false;
+    var vec = false;
     for (var k = v.first; k <= v.last; k++) {
       for (final e in _imgs.entriesOf(doc.sheets[k].id)) {
         if (!e.cacheable) continue;
         if (e.mode == InkPaintMode.vector) vec = true;
-        if (e.mode == InkPaintMode.lowRes) low = true;
       }
     }
-    return (vector: vec, lowRes: low, activity: _imgs.activity, jobs: _imgs.jobsStarted);
+    return (vector: vec, activity: _imgs.activity, jobs: _imgs.jobsStarted);
   }
 
   /// Zona de la página que se ve (más un margen), para no pintar de más en la capa en vivo.
@@ -319,6 +336,9 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   void _onScroll() => developer.Timeline.timeSync('ON onScroll', _onScrollImpl);
 
   void _onScrollImpl() {
+    _imgs.still = false;
+    _stillTimer?.cancel();
+    _stillTimer = Timer(const Duration(milliseconds: 120), _markStill);
     _scheduleVisibleSheet();
     _updatePrefetch();
     if (_calcRange() == _range) return;

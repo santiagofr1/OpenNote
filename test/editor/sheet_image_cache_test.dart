@@ -60,7 +60,7 @@ void main() {
   /// Deja pasar el tiempo de quietud y espera (de verdad) a que termine el rasterizado de la imagen.
   Future<void> settle(WidgetTester t) async {
     await t.pump(const Duration(milliseconds: 400)); // vence el temporizador: se graba y se pide la imagen
-    // un trabajo (franja o miniatura) por cuadro: se dan cuadros y tiempo real hasta que no quede nada
+    // un trabajo (franja) por cuadro: se dan cuadros y tiempo real hasta que no quede nada
     for (var i = 0; i < 30; i++) {
       await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 40)));
       await t.pump(const Duration(milliseconds: 20));

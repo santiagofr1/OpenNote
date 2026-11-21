@@ -147,18 +147,18 @@ double mb(int bytes) => r1(bytes / 1048576);
 /// Qué pasaba en un cuadro (se anota al terminar de armarlo, no cuando llega su FrameTiming).
 class _Sample {
   final int ts; // vsyncStart del cuadro (µs), el mismo reloj que FrameTiming
-  final bool vector, lowRes, gen;
+  final bool vector, gen;
   final double off, delta; // posición del scroll y cuánto se movió desde el cuadro anterior (|delta|)
-  _Sample(this.ts, this.vector, this.lowRes, this.gen, this.off, this.delta);
+  _Sample(this.ts, this.vector, this.gen, this.off, this.delta);
 }
 
 /// Junta los FrameTiming que reporta el motor (llegan en tandas, hasta ~1 s después de cada frame) y, por cada cuadro,
-/// una muestra barata de cómo se estaba dibujando la tinta ([probe]: hojas visibles en vectorial / miniatura y contador
+/// una muestra barata de cómo se estaba dibujando la tinta ([probe]: hojas visibles en vectorial y contador
 /// de generación de imágenes). Los dos se juntan por el instante de inicio del cuadro.
 class FrameRecorder {
   final _all = <FrameTiming>[];
   final _samples = <_Sample>[];
-  ({bool vector, bool lowRes, int activity, double offset})? Function()? probe;
+  ({bool vector, int activity, double offset})? Function()? probe;
   bool _sampling = false;
   int _lastActivity = 0;
   double _lastOff = 0;
@@ -185,7 +185,7 @@ class FrameRecorder {
         final delta = (p.offset - _lastOff).abs();
         _lastOff = p.offset;
         _samples.add(_Sample(
-            SchedulerBinding.instance.currentSystemFrameTimeStamp.inMicroseconds, p.vector, p.lowRes, gen, p.offset, delta));
+            SchedulerBinding.instance.currentSystemFrameTimeStamp.inMicroseconds, p.vector, gen, p.offset, delta));
       }
       _chain();
     });
@@ -254,8 +254,8 @@ class FrameRecorder {
     final raster = [for (final f in fr) ms(f.rasterDuration)]..sort();
     final total = [for (final f in fr) ms(f.totalSpan)]..sort();
     double avg(List<double> v) => v.isEmpty ? 0 : v.reduce((a, b) => a + b) / v.length;
-    // por grupo: cuadros con hoja vectorial / con miniatura / con generación de imagen, y cuántos de ellos pasan de 16 ms
-    var vec = 0, vecSlow = 0, low = 0, lowSlow = 0, gen = 0, genSlow = 0, noSample = 0;
+    // por grupo: cuadros con hoja vectorial / con generación de imagen, y cuántos de ellos pasan de 16 ms
+    var vec = 0, vecSlow = 0, gen = 0, genSlow = 0, noSample = 0;
     for (final f in fr) {
       final s = sampleOf(f);
       if (s == null) {
@@ -266,10 +266,6 @@ class FrameRecorder {
       if (s.vector) {
         vec++;
         if (slow) vecSlow++;
-      }
-      if (s.lowRes) {
-        low++;
-        if (slow) lowSlow++;
       }
       if (s.gen) {
         gen++;
@@ -294,8 +290,6 @@ class FrameRecorder {
       'frames_mas_33ms': total.where((t) => t > 33.4).length,
       'frames_vectorial': vec,
       'frames_vectorial_mas_16ms': vecSlow,
-      'frames_lowres': low,
-      'frames_lowres_mas_16ms': lowSlow,
       'frames_generacion': gen,
       'frames_generacion_mas_16ms': genSlow,
       'frames_sin_muestra': noSample,
@@ -336,9 +330,8 @@ void main() {
     binding.reportData = Map<String, dynamic>.of(results);
   }
 
-  /// "con hoja vectorial A (>16 ms: B), con miniatura C (D), con generación E (F)" de un resumen de [FrameRecorder.take].
+  /// "con hoja vectorial A (>16 ms: B), con generación C (D)" de un resumen de [FrameRecorder.take].
   String groups(Map<String, Object> f) => 'frames con hoja vectorial ${f['frames_vectorial']} (>16 ms: ${f['frames_vectorial_mas_16ms']}), '
-      'con miniatura ${f['frames_lowres']} (${f['frames_lowres_mas_16ms']}), '
       'con generación ${f['frames_generacion']} (${f['frames_generacion_mas_16ms']}), sin muestra ${f['frames_sin_muestra']}';
 
   /// Qué dibuja el editor abierto (si hay uno): la muestra por cuadro de [FrameRecorder].
@@ -348,7 +341,7 @@ void main() {
     final ed = (els.first as StatefulElement).state as PageEditorState;
     if (!ed.scroll.hasClients || !ed.scroll.position.hasPixels) return null;
     final s = ed.imageFrameState;
-    return (vector: s.vector, lowRes: s.lowRes, activity: s.activity, offset: ed.scroll.offset);
+    return (vector: s.vector, activity: s.activity, offset: ed.scroll.offset);
   };
 
   Future<void> settle(WidgetTester t, [int ms = 400]) async {
@@ -611,8 +604,8 @@ void main() {
         out['rss_max_mb'] = mb(ProcessInfo.maxRss);
         say('RSS tras scrollear ${out['rss_tras_scroll_mb']} MB, maxRSS ${out['rss_max_mb']} MB');
         final ic = ed.imageCache;
-        out['cache_imagenes'] = {'tandas': ic.imageCount, 'franjas': ic.stripsReady, 'mb': mb(ic.bytes), 'miniaturas': ic.lowCount, 'miniaturas_mb': mb(ic.lowBytes)};
-        say('caché de imágenes: ${ic.imageCount} tandas / ${ic.stripsReady} franjas (${mb(ic.bytes)} MB) + ${ic.lowCount} miniaturas (${mb(ic.lowBytes)} MB)');
+        out['cache_imagenes'] = {'tandas': ic.imageCount, 'franjas': ic.stripsReady, 'mb': mb(ic.bytes)};
+        say('caché de imágenes: ${ic.imageCount} tandas / ${ic.stripsReady} franjas (${mb(ic.bytes)} MB)');
 
         // salir: que no quede nada guardándose antes de borrar la carpeta
         await t.tap(find.byKey(const Key('back')));

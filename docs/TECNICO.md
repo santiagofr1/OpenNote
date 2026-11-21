@@ -156,7 +156,7 @@ Impeller no tiene caché de pictures: una hoja con mucha tinta vectorial se vuel
 `SheetImageCache` (`lib/rendering/sheet_image_cache.dart`) la reemplaza por imágenes (una textura) mientras la tinta está
 quieta; `InkPainter` (`ink_layers.dart`) decide qué dibujar. Tandas con menos de 1500 puntos no se cachean.
 
-- **Prefetch**: `PageEditor._updatePrefetch` calcula, al scrollear, las hojas visibles y las 2 siguientes en el sentido del
+- **Prefetch**: `PageEditor._updatePrefetch` calcula, al scrollear, las hojas visibles y las 3 siguientes en el sentido del
   movimiento (`SheetImageCache.prefetchPlan`; quieto: solo las visibles) y se las pasa a `prefetch`. Se generan sin esperar
   los 300 ms de quietud (que siguen valiendo para una hoja visible que no estaba en el plan). El plan se reelige en cada
   paso, así que lo que dejó de ser relevante no se genera. `_calcRange` arma al menos una hoja más en el sentido del
@@ -170,29 +170,40 @@ quieta; `InkPainter` (`ink_layers.dart`) decide qué dibujar. Tandas con menos d
   competían con el cuadro (cuadros raster de 26-60 ms). Con ~3000 puntos por franja cada trabajo baja a ~1/4 (grabar
   ~2-4 ms), a costa de más trabajos por hoja. `stripCount` fijo sigue existiendo para tests (1 = imagen entera).
   El compuesto es igual (hasta el redondeo) a la imagen entera (`strip_adaptive_test.dart`, `image_prefetch_test.dart`).
-- **Un trabajo por cuadro, fuera del cuadro**: se programa en el post-frame pero se ejecuta con
-  `SchedulerBinding.scheduleTask` (prioridad de animación; con `idle` no corre mientras hay un fling, justo cuando
-  hace falta), así no suma al build del cuadro que se acaba de dibujar. Si ese cuadro ya gastó más de 8 ms de UI
-  (`maxFrameMs`, medido desde el vsync) el trabajo se posterga al siguiente (hasta 4 veces seguidas). No se genera
-  con el lápiz o un pellizco en curso (`busy`). **Un solo `toImage` a la vez**: el raster es un hilo y cada
-  `toImage` se espera entero antes de empezar el siguiente (`maxRasterInFlight` lo cuenta en los tests).
-- **Hoja que todavía no se ve**: si una tanda cacheable no tiene franjas ni miniatura y su hoja no está en
-  `visibleSheets`, `InkPainter` no dibuja nada (antes la pintaba vectorial, ~40 ms una vez por hoja nueva que entra al
+- **Prioridad** (`SheetImageCache._nextJob`): (1) las franjas de las hojas visibles que intersectan el viewport ahora
+  (el editor pasa, por hoja visible, la fracción de su alto que se ve: `setVisible(..., fractions:)`), (2) el resto de las
+  franjas de las visibles, (3) las hojas siguientes del plan (3 por delante, `prefetchAhead`) en orden, (4) tandas
+  quietas fuera del plan. Dentro de una hoja, en el sentido del scroll.
+- **Varios trabajos por cuadro, un solo `toImage`**: el primer trabajo se programa en el post-frame con
+  `SchedulerBinding.scheduleTask` (prioridad de animación; con `idle` no corre durante un fling). Cuando termina, si
+  el UI del último cuadro (medido desde el vsync) más lo grabado por los trabajos desde entonces está por debajo de 8 ms
+  (`maxFrameMs`) y no se llegó a 4 trabajos en el cuadro (`maxJobsPerFrame`), el siguiente arranca enseguida, sin
+  esperar al próximo cuadro. Si no hay presupuesto espera al post-frame y, si ese cuadro gastó más de 8 ms, se posterga
+  (hasta 4 veces seguidas). No se genera con el lápiz o un pellizco en curso (`busy`). Nunca hay dos `toImage` a la vez
+  (el raster es un solo hilo; `maxRasterInFlight` lo cuenta en los tests). Referencia de la última traza en la tablet:
+  build p99 ~7 ms, `toImage` de franja ~7 ms en raster, ~15 franjas/s con un trabajo por cuadro; el encadenado apunta a
+  multiplicar eso mientras el UI tenga holgura.
+- **Quieto = urgente**: el editor marca `still` 120 ms después del último movimiento de scroll (y al abrir). Con `still`
+  y franjas faltantes en una hoja visible no hay presupuesto ni espera al cuadro: se generan una tras otra hasta
+  completar (pruebas: `strip_adaptive_test.dart`; `app_test.dart` verifica que en <= 1,5 s las visibles quedan en
+  modo image).
+- **Hoja que todavía no se ve**: si una tanda cacheable tiene franjas sin generar y su hoja no está en
+  `visibleSheets`, `InkPainter` dibuja solo las franjas listas (nada si no hay ninguna) (antes la pintaba vectorial, ~40 ms una vez por hoja nueva que entra al
   rango armado sin verse) y solo deja registrado `record` / `want` para el prefetch. Al pasar a visible
   (`SheetImageCache.setVisible`, que llama `_updatePrefetch`) se repinta. Con `visibleSheets` vacío (primer cuadro,
   tests sin scroll) se dibuja como siempre: nunca queda una hoja visible en blanco.
-- **Sustituto**: la miniatura de 320 px de ancho (~0,6 MB) se genera primero (antes que las franjas) para las hojas del
-  plan, grabada desde los trazos salteando puntos (1 de cada `lowStep` = 4, conservando el primero y el último), así
-  el grabado cuesta ~1/4 y en chico no se nota. Hasta 80 en memoria (~46 MB). Si la imagen buena se desaloja y la hoja
-  vuelve a verse, se muestra la miniatura estirada en vez de todos los trazos, hasta que llega la buena. Al editar la
-  hoja se descarta todo y va vectorial, así el trazo nuevo se ve al instante.
-- **Presupuesto**: 8 tandas y 112 MB de franjas (antes 6 y 64 MB). Una hoja a 1000 u x dpr 1,5 son ~12,7 MB; la ventana
-  de scroll normal es 2-3 hojas visibles + 2 de prefetch + 1 detrás = ~6, con margen para hojas con varias tandas, y
-  112 MB entran 8 hojas de ese tamaño (con zoom hasta ~1,2x). Más las miniaturas: techo de ~160 MB sobre 4 GB. LRU por
-  uso; las hojas visibles y las del plan nunca se desalojan (si no entra, esa tanda queda vectorial). Una tanda desalojada
-  no se regenera por quietud mientras esté fuera de la ventana (evita que se desalojen una a otra).
-- **Medición** (`integration_test/perf_test.dart`): por cuadro se anota si había una hoja visible en vectorial / con
-  miniatura y si hubo generación (contadores baratos de la caché) y se reporta cuántos de los > 16 ms caen en cada grupo.
+- **Sin miniatura borrosa**: se sacó la miniatura de 320 px (quedaba estirada a ~1650 px y grabada salteando puntos,
+  y como las franjas no alcanzaban al ritmo del scroll, las hojas visibles pasaban mucho tiempo borrosas). Regla: la
+  nitidez manda. En una hoja visible lo que falta se dibuja vectorial recortado a las franjas faltantes (`onlyVector`);
+  el costo se paga generando antes (plan de 3 hojas) y más rápido (varios trabajos por cuadro), no bajando la calidad.
+  Una hoja no visible con franjas faltantes dibuja solo las listas. Al editar la hoja se descarta todo y va
+  vectorial, así el trazo nuevo se ve al instante.
+- **Presupuesto**: 12 tandas y 192 MB de franjas (antes 8 y 112 MB). Una hoja a ~1650 px de ancho son ~15,4 MB; la
+  ventana protegida es hasta 3 visibles + 3 de prefetch + 1 detrás (el editor la protege además del plan) = 7 hojas
+  ~108 MB, con margen de tandas para hojas con varias tandas y de bytes para zoom hasta ~1,3x. Techo de ~192 MB sobre
+  4 GB. LRU por uso; las hojas visibles, las del plan y la de atrás nunca se desalojan (si no entra, esa tanda queda
+  vectorial). Una tanda desalojada no se regenera por quietud mientras esté fuera de la ventana.
+- **Medición** (`integration_test/perf_test.dart`): por cuadro se anota si había una hoja visible en vectorial y si hubo generación (contadores baratos de la caché) y se reporta cuántos de los > 16 ms caen en cada grupo.
   En el modo comparación solo cuentan los cuadros desde el primer cambio de offset hasta 500 ms después del último, y se
   informa el recorrido total (suma de |delta| por cuadro).
 
