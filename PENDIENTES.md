@@ -3,9 +3,6 @@
 1. **Restos de rendimiento / hojas** (lo grande está hecho y medido, ver Hecho y docs/perf): RAM tras desplazar
    mucho ~580 MB por el caché de imágenes (192 MB; se puede bajar); "abrir perezoso" 0,5–1 s en el benchmark por
    armar las mallas (abrir desde la app sigue en 0,4 s); el lápiz con mallas queda algo más parejo que antes.
-   - Mover hojas arrastrando en el panel (hoy: menú "Mover antes / después").
-   - Las operaciones de hojas (agregar, duplicar, mover, borrar) no se pueden deshacer: vacían el historial.
-   - Exportar/backup del cuaderno entero como un archivo `.opennote` (ZIP).
    - "Seleccionar todo" solo toma lo de las hojas cargadas (decidido a propósito).
    - Si el historial de deshacer es largo, las hojas que toca no se sueltan (seguridad primero): se podría podar
      el historial por hojas lejanas si pesa en cuadernos enormes.
@@ -41,6 +38,10 @@
 
 ## Hecho
 
+- **1. Hojas: arrastrar, deshacer y `.opennote`** (rama `feat/hojas-2`): mover hojas arrastrando el asa de la miniatura
+  en el panel (dedo o lápiz; el menú "Mover antes / después" sigue); agregar, duplicar, mover y borrar hojas se deshacen
+  y rehacen en el mismo historial (la hoja borrada vuelve con contenido, estilo, título y marcador); exportar el cuaderno
+  entero como `.opennote` (ZIP con manifest) desde su menú e importarlo desde el "+" de la biblioteca. Detalle en docs/TECNICO.md.
 - **1. Carga perezosa de hojas** (rama `feat/rendimiento-3`, 2026-11-20): el cuaderno se abre leyendo solo las hojas
   cercanas a la última vista (±2); `NotebookDoc` distingue hojas cargadas y no cargadas, el editor carga las del rango
   visible más un margen y suelta las lejanas (si no están sucias, ni seleccionadas, ni con foco, ni en el historial de
