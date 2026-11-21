@@ -37,6 +37,12 @@
       subir ~5 s después de guardar, consultar cambios cada 30–60 s con la app abierta, al volver a primer plano, e
       indicador de estado en la barra.
     - Ojo al probar en PC: no abrir dos copias de la app sobre la misma carpeta de datos (`~/Documents/apuntes`).
+22. **Menú de la hoja con el dedo no abre** (encontrado por la suite en la tablet, 2026-11-21): mantener un dedo
+    quieto sobre la hoja tendría que abrir el menú (Pegar, Seleccionar todo, Agregar hoja…), pero `_onStillPress`
+    (lib/editor/page_editor.dart) lo descarta si `scroll.position.isScrollingNotifier` es true, y con un solo dedo el
+    scroll "gana" el gesto apenas toca y figura en curso aunque la hoja no se mueva. Arreglo en curso (rama
+    `feat/junto-3`): mirar si la hoja se movió de verdad desde que se apoyó el dedo, en vez de ese aviso. Verificar en
+    la tablet con el caso "menú de la hoja" de la suite.
 15. **LaTeX**: lo hace el usuario; no tocar.
 
 ## Hecho
