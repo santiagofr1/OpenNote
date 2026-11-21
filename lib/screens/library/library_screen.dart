@@ -91,7 +91,8 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
 
   // primer plano: sincroniza ya y consulta cada tanto; segundo plano: sin consultas (ver SyncController)
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) => sync.setForeground(state == AppLifecycleState.resumed);
+  void didChangeAppLifecycleState(AppLifecycleState state) =>
+      sync.setForeground(SyncController.isForegroundState(state, desktop: !Platform.isAndroid && !Platform.isIOS));
 
   /// Segundo plano (solo Android): candado y marcas con la tarea de WorkManager, interruptor de las preferencias y
   /// registro/cancelación de la tarea (con un `backend` de prueba no se toca WorkManager).
