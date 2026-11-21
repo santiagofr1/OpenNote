@@ -10,6 +10,7 @@ import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../domain/domain.dart';
+import '../sync/sync_merge.dart';
 import '../sync/sync_paths.dart';
 import 'migration.dart';
 import 'sheet_codec.dart';
@@ -46,6 +47,11 @@ class Storage {
 
   /// Solo para los tests: se llama con (id del cuaderno, id de la hoja) cada vez que se escribe un `.sheet`.
   void Function(String nbId, String sheetId)? onSheetWrite;
+
+  /// Se llama (con el id del cuaderno, o null si fue el índice) cuando terminó de guardar algo en disco: la
+  /// sincronización lo usa para programar una subida pronto (ver SyncController.notifySaved).
+  void Function(String? nbId)? onSaved;
+  String? _lastIndexCloud; // el índice en forma de nube, como se guardó la última vez
 
   Future<void> init() async {
     dir = root ?? Directory('${(await _defaultBase()).path}/apuntes');
@@ -107,7 +113,9 @@ class Storage {
   Future<NotesIndex> loadIndex() async {
     Map? j;
     try {
-      j = jsonDecode(await indexFile.readAsString()) as Map;
+      final text = await indexFile.readAsString();
+      j = jsonDecode(text) as Map;
+      _lastIndexCloud = _cloudIndexKey(text);
     } catch (_) {
       if (await indexFile.exists()) {
         // ilegible: se guarda aparte en vez de pisarlo con el cuaderno de ejemplo
@@ -131,9 +139,22 @@ class Storage {
     return idx;
   }
 
+  /// El índice en forma de nube y sin `rev` (que sube en cada guardado): sirve para saber si cambió algo que se sincroniza.
+  static String _cloudIndexKey(String text) {
+    final j = jsonDecode(normalizeIndex(text));
+    if (j is Map) j.remove('rev');
+    return jsonEncode(j);
+  }
+
   Future<void> saveIndex(NotesIndex idx) {
     idx.rev++;
-    return _writeJson(indexFile, idx.toJson());
+    final data = jsonEncode(idx.toJson());
+    // solo avisa si cambió algo que se sincroniza (abrir un cuaderno cambia `last`, que no se sube); sin dato previo, avisa
+    final cloud = _cloudIndexKey(data);
+    final changed = cloud != _lastIndexCloud;
+    _lastIndexCloud = cloud;
+    final w = _writeBytes(indexFile, utf8.encode(data));
+    return changed ? w.then((_) => onSaved?.call(null)) : w;
   }
 
   /// Completa [nb].sheets con lo que dice su notebook.json (vacío si falta o está roto).
@@ -438,6 +459,7 @@ class Storage {
       final encoded = await _encodeInIsolate([for (final m in order) contents[m.id]!]);
       final state = _disk.putIfAbsent(nb.id, () => _DiskState({}, '', {}));
       final now = DateTime.now().millisecondsSinceEpoch;
+      var wrote = false; // se escribió algún archivo (para avisar a la sincronización)
       for (var k = 0; k < order.length; k++) {
         final m = order[k];
         final (bytes, hash, digest) = encoded[k];
@@ -454,13 +476,15 @@ class Storage {
           ..updated = now;
         await _writeBytes(sheetFile(nb.id, m.id), bytes);
         onSheetWrite?.call(nb.id, m.id);
+        wrote = true;
         state.hashes[m.id] = hash;
         state.digests[m.id] = digest; // ya está en disco: si algo falla más adelante, el hash es el cierto
       }
       final metaJson = jsonEncode(nb.sheetsJson());
-      if (metaJson != state.meta || !await _nbFile(nb.id).exists()) {
+            if (metaJson != state.meta || !await _nbFile(nb.id).exists()) {
         await _writeBytes(_nbFile(nb.id), utf8.encode(metaJson));
         state.meta = metaJson;
+        wrote = true;
       }
       // las hojas borradas, al final: si se corta antes, solo sobran archivos
       // (también las que no estaban cargadas: su archivo se conoce por notebook.json)
@@ -468,10 +492,12 @@ class Storage {
       for (final gone in {...state.onDisk, ...state.hashes.keys}.where((id) => !alive.contains(id)).toList()) {
         final f = sheetFile(nb.id, gone);
         if (await f.exists()) await f.delete();
+        wrote = true;
         state.hashes.remove(gone);
         state.digests.remove(gone);
       }
       state.onDisk = alive;
+      if (wrote) onSaved?.call(nb.id);
     } catch (_) {
       doc.restoreDirty(taken); // no se guardó: sigue sucio
       rethrow;

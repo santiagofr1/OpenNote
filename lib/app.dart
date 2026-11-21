@@ -10,11 +10,14 @@ import 'theme/colors.dart';
 
 class ApuntesApp extends StatelessWidget {
   /// [root]: carpeta de datos propia (los tests usan una temporal)
-  const ApuntesApp({super.key, this.root, this.backend});
+  const ApuntesApp({super.key, this.root, this.backend, this.syncPoll, this.syncDebounce});
   final Directory? root;
 
   /// Sincronización: los tests pasan una falsa (null = Google).
   final SyncBackend? backend;
+
+  /// Tiempos de la sincronización (null = los de siempre; los tests de integración los acortan).
+  final Duration? syncPoll, syncDebounce;
   @override
   Widget build(BuildContext context) => DynamicColorBuilder(
         // colores del sistema (Material You) y modo claro/oscuro del dispositivo
@@ -25,7 +28,7 @@ class ApuntesApp extends StatelessWidget {
           theme: appTheme(ColorScheme.fromSeed(seedColor: light?.primary ?? kAccent)),
           darkTheme: appTheme(ColorScheme.fromSeed(
               seedColor: dark?.primary ?? light?.primary ?? kAccent, brightness: Brightness.dark)),
-          home: Library(root: root, backend: backend),
+          home: Library(root: root, backend: backend, syncPoll: syncPoll, syncDebounce: syncDebounce),
         ),
       );
 }

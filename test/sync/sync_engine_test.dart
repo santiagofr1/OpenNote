@@ -287,6 +287,180 @@ void main() {
     }
   });
 
+  test('cuaderno abierto: lo guardado en disco SE SUBE aunque esté abierto, sin tocar nada local', () async {
+    final a = await device(), b = await device(), r = FakeRemoteStore();
+    final nb = await create(a, 'Abierto', n: 2);
+    await sync(a, r);
+    await sync(b, r);
+    await edit(a, nb.id, 1, 'escrito con el cuaderno abierto');
+    final before = await snapshot(a);
+    final rep = await sync(a, r, busy: {nb.id});
+    expect(rep.uploaded, greaterThanOrEqualTo(2), reason: 'la hoja y notebook.json');
+    expect(rep.remoteWaiting, isEmpty);
+    expect(rep.localChanged, isFalse);
+    expect(await snapshot(a), before, reason: 'no se escribió nada local');
+    await sync(b, r);
+    expect(await texts(b, nb.id, 1), ['escrito con el cuaderno abierto']);
+    r.clearCounters();
+    final again = await sync(a, r, busy: {nb.id});
+    expect(again.uploaded + again.downloaded, 0);
+  });
+
+  test('cuaderno abierto: lo de la nube NO se baja (queda en remoteWaiting) y al cerrarlo se aplica', () async {
+    final a = await device(), b = await device(), r = FakeRemoteStore();
+    final nb = await create(a, 'Abierto', n: 2);
+    await sync(a, r);
+    await sync(b, r);
+    await edit(b, nb.id, 0, 'de otro dispositivo');
+    await sync(b, r);
+    final before = await snapshot(a);
+    final rep = await sync(a, r, busy: {nb.id});
+    expect(rep.remoteWaiting, {nb.id});
+    expect(rep.downloaded, 0);
+    expect(await snapshot(a), before, reason: 'no se escribió nada en el cuaderno abierto');
+    // sigue esperando mientras esté abierto, y no baja nada en pasadas siguientes
+    expect((await sync(a, r, busy: {nb.id})).remoteWaiting, {nb.id});
+    // se cierra: se aplica
+    final closed = await sync(a, r);
+    expect(closed.remoteWaiting, isEmpty);
+    expect(await texts(a, nb.id, 0), ['de otro dispositivo']);
+  });
+
+  test('cuaderno abierto con cambios locales Y de la nube: no se pierde nada (queda la local, la remota va a "(conflicto)")', () async {
+    final a = await device(), b = await device(), r = FakeRemoteStore();
+    final nb = await create(a, 'Abierto', n: 1);
+    await sync(a, r);
+    await sync(b, r);
+    await edit(a, nb.id, 0, 'local sucio');
+    await edit(b, nb.id, 0, 'remoto');
+    await sync(b, r);
+    final rep = await sync(a, r, busy: {nb.id});
+    expect(rep.remoteWaiting, {nb.id});
+    expect(await texts(a, nb.id, 0), ['local sucio'], reason: 'lo local queda tal cual');
+    await sync(a, r); // al cerrarlo
+    await sync(b, r);
+    for (final s in [a, b]) {
+      final n = await nbOf(s, nb.id);
+      expect(n.sheets, hasLength(2));
+      expect(await texts(s, nb.id, 0), ['local sucio']);
+      expect(await texts(s, nb.id, 1), ['remoto']);
+      expect(n.sheets[1].title, contains('(conflicto)'));
+    }
+  });
+
+  test('Storage avisa (onSaved) al terminar de guardar algo, y no cuando no se escribió nada', () async {
+    final a = await device();
+    final nb = await create(a, 'Aviso', n: 1);
+    final saved = <String?>[];
+    a.onSaved = saved.add;
+    final d = await a.loadNotebook(nb);
+    await a.saveNotebook(d); // nada sucio
+    expect(saved, isEmpty);
+    d.texts['x'] = TextBlock('x', 90, 44, 800, 'nuevo');
+    d.markDirtyAt(44);
+    await a.saveNotebook(d);
+    expect(saved, [nb.id]);
+    final idx = await a.loadIndex();
+    await a.saveIndex(idx); // mismo contenido en forma de nube (solo cambia rev)
+    saved.clear();
+    idx.notebooks.first.name = 'Otro nombre';
+    await a.saveIndex(idx);
+    expect(saved, [null], reason: 'un cambio del índice que se sincroniza avisa');
+    idx.last = idx.notebooks.first.id;
+    saved.clear();
+    await a.saveIndex(idx);
+    expect(saved, isEmpty, reason: 'abrir un cuaderno cambia solo datos propios del dispositivo');
+  });
+
+  test('borrar un cuaderno entero en A lo borra en B (índice y carpeta), aunque B lo tenga cargado en la biblioteca', () async {
+    final a = await device(), b = await device(), r = FakeRemoteStore();
+    final keep = await create(a, 'Se queda', n: 1);
+    final gone = await create(a, 'Se borra', n: 2);
+    await sync(a, r);
+    await sync(b, r);
+    // B tiene la biblioteca cargada (índice leído y miniatura de la primera hoja), sin abrir el cuaderno
+    final idxB = await b.loadIndex();
+    expect(idxB.notebooks.map((n) => n.id).toSet(), {keep.id, gone.id});
+    await b.loadSheetDoc(idxB.notebooks.firstWhere((n) => n.id == gone.id), 0);
+    expect(b.nbDir(gone.id).existsSync(), isTrue);
+    // A lo borra y sincroniza
+    final idxA = await a.loadIndex();
+    await a.deleteNotebook(idxA, idxA.notebooks.firstWhere((n) => n.id == gone.id));
+    await sync(a, r);
+    expect(r.paths.where((p) => p.contains(gone.id)), isEmpty);
+    // B sincroniza (sin abrirlo)
+    final rep = await sync(b, r);
+    expect(rep.localChanged, isTrue);
+    expect(rep.indexChanged, isTrue);
+    expect((await index(b)).notebooks.map((n) => n.id), [keep.id]);
+    expect((await b.loadIndex()).notebooks.map((n) => n.id), [keep.id]);
+    expect(b.nbDir(gone.id).existsSync(), isFalse, reason: 'la carpeta del cuaderno también se va');
+    expect(await texts(b, keep.id, 0), ['Se queda 0']);
+  });
+
+  test('borrar en A y B con un proceso NUEVO de Drive (token viejo, el borrado pasó antes): el listado completo lo detecta', () async {
+    final a = await device(), b = await device(), r = FakeRemoteStore();
+    final keep = await create(a, 'Se queda');
+    final gone = await create(a, 'Se borra');
+    await sync(a, r);
+    await sync(b, r);
+    final idxA = await a.loadIndex();
+    await a.deleteNotebook(idxA, idxA.notebooks.firstWhere((n) => n.id == gone.id));
+    await sync(a, r);
+    // B retoma con un store "recién arrancado": su primer changes() devuelve el listado completo aunque tenga token
+    final fresh = _FreshProcess(r);
+    await SyncEngine(b, fresh, account: 'a@b.c').sync();
+    expect(fresh.fullCalls, 1);
+    expect((await index(b)).notebooks.map((n) => n.id), [keep.id]);
+    expect(b.nbDir(gone.id).existsSync(), isFalse);
+    // la carpeta remota vacía de verdad sigue sin borrar nada local
+    r.wipe();
+    await SyncEngine(b, _FreshProcess(r), account: 'a@b.c').sync();
+    expect((await index(b)).notebooks.map((n) => n.id), [keep.id], reason: 'carpeta vacía = no se borra nada, se vuelve a subir');
+    expect(r.has('index.json'), isTrue);
+  });
+
+  test('primera sync: el cuaderno de ejemplo intacto "Mi cuaderno" se descarta si la nube ya tiene cuadernos', () async {
+    final a = await device(), b = await device(), r = FakeRemoteStore();
+    await create(a, 'Mi cuaderno', n: 1);
+    await a.loadIndex();
+    await sync(a, r);
+    // B: primer arranque (loadIndex crea el cuaderno de ejemplo, vacío) y primera sync
+    final first = await b.loadIndex();
+    expect(first.notebooks.map((n) => n.name), ['Mi cuaderno']);
+    final sampleId = first.notebooks.single.id;
+    final rep = await sync(b, r);
+    expect(rep.indexChanged, isTrue);
+    final names = (await index(b)).notebooks.map((n) => n.name).toList();
+    expect(names, ['Mi cuaderno'], reason: 'solo el de la nube, no dos');
+    expect((await index(b)).notebooks.single.id, isNot(sampleId));
+    expect(b.nbDir(sampleId).existsSync(), isFalse);
+    expect(r.paths.where((p) => p.contains(sampleId)), isEmpty, reason: 'el de ejemplo nunca se sube');
+    // y en A no cambió nada
+    await sync(a, r);
+    expect((await index(a)).notebooks, hasLength(1));
+  });
+
+  test('primera sync: un "Mi cuaderno" con algo escrito, o la nube vacía, NO se descarta', () async {
+    final a = await device(), b = await device(), c = await device(), r = FakeRemoteStore();
+    await create(a, 'Otro');
+    await sync(a, r);
+    // B: "Mi cuaderno" con un texto
+    final nb = Notebook.create('Mi cuaderno');
+    final d = NotebookDoc(nb);
+    d.texts['t'] = TextBlock('t', 90, 44, 800, 'importante');
+    await b.saveNotebook(d);
+    await b.saveIndex(NotesIndex(last: nb.id, notebooks: [nb]));
+    await sync(b, r);
+    expect((await index(b)).notebooks.map((n) => n.name).toSet(), {'Otro', 'Mi cuaderno'});
+    // C: ejemplo intacto pero la nube está vacía: se sube
+    final r2 = FakeRemoteStore();
+    await c.loadIndex();
+    await sync(c, r2);
+    expect((await index(c)).notebooks.map((n) => n.name), ['Mi cuaderno']);
+    expect(r2.has('index.json'), isTrue);
+  });
+
   test('la media se copia al otro lado (solo se agrega)', () async {
     final a = await device(), b = await device(), r = FakeRemoteStore();
     await create(a, 'Con foto');
@@ -375,4 +549,31 @@ void main() {
     expect(File('${a.dir.path}/x.sheet').existsSync(), isFalse);
     expect(File('${a.dir.path}/prefs.json').existsSync(), isFalse);
   });
+}
+
+/// Un remoto que se comporta como un proceso recién arrancado de Drive: el primer `changes` es un listado completo
+/// aunque el motor tenga token (no conoce el mapa anterior).
+class _FreshProcess implements RemoteStore {
+  _FreshProcess(this.inner);
+  final FakeRemoteStore inner;
+  int fullCalls = 0;
+  bool _first = true;
+  @override
+  Future<RemoteChanges> changes(String? token) {
+    if (_first) {
+      _first = false;
+      fullCalls++;
+      return inner.changes(null);
+    }
+    return inner.changes(token);
+  }
+
+  @override
+  Future<Uint8List> download(String path) => inner.download(path);
+  @override
+  Future<RemoteFile> upload(String path, Uint8List bytes, {String? ifRemoteMd5}) => inner.upload(path, bytes, ifRemoteMd5: ifRemoteMd5);
+  @override
+  Future<void> delete(String path) => inner.delete(path);
+  @override
+  Future<void> createFolder(String path) => inner.createFolder(path);
 }
