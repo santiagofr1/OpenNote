@@ -44,7 +44,7 @@ if [ "${BACKUP:-0}" = 1 ]; then
 fi
 
 set +e
-flutter test integration_test/app_test.dart -d "$DEV" -r expanded --no-uninstall
+flutter test integration_test/app_test.dart -d "$DEV" -r expanded --no-uninstall ${NOMBRE:+--plain-name "$NOMBRE"}
 R=$?
 set -e
 

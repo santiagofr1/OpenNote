@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:math' show max, min;
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
@@ -31,6 +32,11 @@ class Storage {
   /// Codificar y decodificar hojas en otro isolate. Solo los tests de widgets lo apagan
   /// (Isolate.run no anda dentro del reloj falso de testWidgets).
   static bool useIsolates = true;
+
+  /// Cuántos isolates decodifican hojas a la vez en [loadSheets] (1 = uno solo, como antes). Y si arman las mallas de
+  /// los trazos al decodificar (si no, se arman al primer dibujo). Los toca el benchmark de apertura (`test/data/open_bench_test.dart`).
+  static int loadParallelism = 4;
+  static bool meshesOnLoad = true;
   late final Directory dir;
 
   // lo último que hay en disco de cada cuaderno, para guardar solo lo que cambió
@@ -144,12 +150,14 @@ class Storage {
   /// Una hoja que falta o está rota queda vacía; la rota se aparta como `.roto` para no pisarla.
   Future<NotebookDoc> loadNotebook(Notebook nb) async {
     if (nb.sheets.isEmpty) await _readSheetList(nb);
-    return openNotebook(nb, radius: nb.sheets.length);
+    return openNotebook(nb, radius: nb.sheets.length, meshAll: true);
   }
 
   /// Abre el cuaderno leyendo notebook.json y SOLO las hojas de [around] - [radius] a [around] + [radius]
-  /// (con [radius] negativo no carga ninguna). Las demás quedan sin cargar: se piden con [loadSheets].
-  Future<NotebookDoc> openNotebook(Notebook nb, {int around = 0, int radius = 2}) async {
+  /// (con [radius] negativo no carga ninguna). Las demás quedan sin cargar: se piden con [loadSheets]. La hoja [around] llega
+  /// con las mallas de sus trazos armadas; las de las vecinas se arman enseguida en segundo plano ([meshesIdle]), salvo
+  /// con [meshAll] (todas antes de devolver).
+  Future<NotebookDoc> openNotebook(Notebook nb, {int around = 0, int radius = 2, bool meshAll = false}) async {
     if (nb.sheets.isEmpty) await _readSheetList(nb);
     final onDisk = {for (final s in nb.sheets) s.id};
     final doc = NotebookDoc.lazy(nb);
@@ -158,7 +166,8 @@ class Storage {
     final n = nb.sheets.length;
     if (radius >= 0 && n > 0) {
       final from = (around - radius).clamp(0, n - 1), to = (around + radius).clamp(0, n - 1);
-      await loadSheets(doc, [for (var k = from; k <= to; k++) nb.sheets[k].id]);
+      // la hoja inicial llega con las mallas armadas; las vecinas se arman enseguida, en segundo plano
+      await loadSheets(doc, [for (var k = from; k <= to; k++) nb.sheets[k].id], meshFirst: meshAll ? null : {nb.sheets[around.clamp(0, n - 1)].id});
     }
     await _sweep(nb);
     return doc;
@@ -167,7 +176,10 @@ class Storage {
   /// Carga de disco las hojas [ids] que no estén cargadas (leyendo y decodificando en otro isolate) y las pone en [doc].
   /// Devuelve los ids que cargó. Si falla la lectura no se carga NINGUNA (y se lanza el error): una hoja sin cargar
   /// no se pisa, pero una hoja "cargada vacía" por un error de lectura sí se guardaría vacía.
-  Future<List<String>> loadSheets(NotebookDoc doc, Iterable<String> ids) async {
+  ///
+  /// [meshFirst]: si se da, solo las mallas de esas hojas se arman antes de devolver (llegan con la hoja); las de las
+  /// demás se arman después en otros isolates ([_meshLater]) sin hacer esperar a quien llama. Si no, todas van con la hoja.
+  Future<List<String>> loadSheets(NotebookDoc doc, Iterable<String> ids, {Set<String>? meshFirst}) async {
     final nb = doc.nb;
     final want = [
       for (final id in ids.toSet())
@@ -190,12 +202,13 @@ class Storage {
     final tDec = developer.TimelineTask()..start('ON loadSheets decodificar (isolate)', arguments: {'hojas': want.length});
     final List<(SheetContent, String)?> decoded;
     try {
-      decoded = await _decodeDigestInIsolate(raw);
+      decoded = await _decodeDigestInIsolate(raw, [for (final id in want) Storage.meshesOnLoad && (meshFirst?.contains(id) ?? true)]);
     } finally {
       tDec.finish();
     }
     final state = _disk.putIfAbsent(nb.id, () => _DiskState({}, '', {for (final s in nb.sheets) s.id}));
     final done = <String>[];
+    final later = <Stroke>[];
     for (var i = 0; i < want.length; i++) {
       final id = want[i];
       if (doc.isLoaded(id) || doc.indexOfSheet(id) < 0) continue; // otro la cargó, o se borró: no se pisa nada
@@ -211,9 +224,50 @@ class Storage {
           state.digests[id] = decoded[i]!.$2;
         }
         done.add(id);
+        if (c != null && Storage.meshesOnLoad && meshFirst != null && !meshFirst.contains(id)) later.addAll(c.strokes);
       }
     }
+    if (later.isNotEmpty) {
+      final f = _meshLater(later);
+      _meshJobs.add(f);
+      unawaited(f.whenComplete(() => _meshJobs.remove(f)));
+    }
     return done;
+  }
+
+  final _meshJobs = <Future<void>>[];
+
+  /// Se completa cuando terminaron las mallas que se están armando en segundo plano (para los tests).
+  Future<void> get meshesIdle async {
+    while (_meshJobs.isNotEmpty) {
+      await Future.wait(List.of(_meshJobs));
+    }
+  }
+
+  /// Arma en otros isolates las mallas de [strokes] que todavía no tienen (hojas vecinas de la inicial). Si mientras
+  /// tanto el trazo cambió (otra [Stroke.meshGen]) o ya se armó la malla (el painter la arma al primer dibujo), el
+  /// resultado se descarta. Los errores se ignoran: la malla se arma al primer dibujo, como siempre.
+  Future<void> _meshLater(List<Stroke> strokes) async {
+    final todo = [for (final s in strokes) if (s.mesh == null) s];
+    if (todo.isEmpty) return;
+    final par = Storage.useIsolates ? min(Storage.loadParallelism, (todo.length / 8).ceil()) : 1;
+    final gens = [for (final s in todo) s.meshGen];
+    // solo valores (no los Stroke, que arrastran a la UI): [k, c, w, o, copia de los puntos]
+    final specs = [for (final s in todo) (s.id, s.k, s.c, s.w, s.o, List<double>.of(s.pts))];
+    final groups = <List<int>>[for (var g = 0; g < max(1, par); g++) [for (var i = g; i < todo.length; i += max(1, par)) i]];
+    try {
+      final parts = await Future.wait([
+        for (final g in groups) _meshSpecs([for (final i in g) specs[i]]),
+      ]);
+      for (var gi = 0; gi < groups.length; gi++) {
+        for (var j = 0; j < groups[gi].length; j++) {
+          final i = groups[gi][j], s = todo[i], m = parts[gi][j];
+          if (m != null && s.mesh == null && s.meshGen == gens[i]) s.mesh = m;
+        }
+      }
+    } catch (e) {
+      developer.log('no se pudieron armar las mallas vecinas: $e', name: 'storage', level: 900);
+    }
   }
 
   /// Suelta de memoria las hojas [ids] cargadas. Solo suelta una hoja si TODO esto se cumple:
@@ -279,6 +333,23 @@ class Storage {
       await tmp.rename(to.path);
     }
     await _writeJson(_nbFile(copy.id), copy.sheetsJson());
+  }
+
+  /// Espera a que termine el guardado en curso de [nbId] (para leer sus archivos al exportar).
+  Future<void> settle(String nbId) => _idle(nbId);
+
+  /// Escribe en disco un cuaderno que viene de afuera (importar un `.opennote`): los archivos de las hojas tal cual
+  /// ([sheetFiles]: id de hoja → bytes) y su notebook.json. Si algo falla borra lo escrito.
+  Future<void> writeImportedNotebook(Notebook nb, Map<String, Uint8List> sheetFiles) async {
+    try {
+      for (final e in sheetFiles.entries) {
+        await _writeBytes(sheetFile(nb.id, e.key), e.value);
+      }
+      await _writeJson(_nbFile(nb.id), nb.sheetsJson());
+    } catch (_) {
+      await removeNotebookFiles(nb.id);
+      rethrow;
+    }
   }
 
   /// El contenido de la hoja [m] leído de disco, sin tocar ningún documento (vacío si falta o está rota).
@@ -460,20 +531,44 @@ Future<List<SheetContent?>> _decodeInIsolate(List<Uint8List?> raw) => _compute((
     ]);
 
 /// Decodifica y saca la huella del contenido de cada hoja.
-Future<List<(SheetContent, String)?>> _decodeDigestInIsolate(List<Uint8List?> raw) => _compute(() => [
-      for (final b in raw)
-        if (b == null) null else _tryDecodeDigest(b)
-    ]);
+///
+/// Con varias hojas se reparten entre hasta [Storage.loadParallelism] isolates que corren a la vez (decodificar, armar
+/// las mallas y sacar la huella de una hoja de ~46k puntos son ~100 ms; en serie, abrir con 5 hojas eran ~0,5 s).
+/// El resultado vuelve en el orden pedido.
+Future<List<(SheetContent, String)?>> _decodeDigestInIsolate(List<Uint8List?> raw, List<bool> meshOf) async {
+  final par = Storage.useIsolates ? min(Storage.loadParallelism, raw.length) : 1;
+  // (los estáticos no viajan al isolate: [meshOf] dice, por hoja, si se arman las mallas ahí)
+  if (par <= 1) return _compute(() => [for (var i = 0; i < raw.length; i++) if (raw[i] == null) null else _tryDecodeDigest(raw[i]!, meshOf[i])]);
+  // reparto alternado: una hoja por isolate si hay tantos como hojas
+  final groups = <List<int>>[for (var g = 0; g < par; g++) [for (var i = g; i < raw.length; i += par) i]];
+  final parts = await Future.wait([
+    for (final g in groups)
+      _compute(() => [for (final i in g) raw[i] == null ? null : _tryDecodeDigest(raw[i]!, meshOf[i])]),
+  ]);
+  final out = List<(SheetContent, String)?>.filled(raw.length, null);
+  for (var g = 0; g < groups.length; g++) {
+    for (var j = 0; j < groups[g].length; j++) {
+      out[groups[g][j]] = parts[g][j];
+    }
+  }
+  return out;
+}
 
-(SheetContent, String)? _tryDecodeDigest(Uint8List b) {
+(SheetContent, String)? _tryDecodeDigest(Uint8List b, bool mesh) {
   final c = _tryDecode(b);
   if (c == null) return null;
   // las mallas de los trazos se arman acá, fuera del hilo de la UI (los buffers viajan sin copiarse)
-  for (final s in c.strokes) {
-    s.mesh = buildStrokeMesh(s);
+  if (mesh) {
+    for (final s in c.strokes) {
+      s.mesh = buildStrokeMesh(s);
+    }
   }
   return (c, sheetDigest(c));
 }
+
+// Desde una función suelta para que el isolate no arrastre la `Storage` (ni su estado) en el mensaje.
+Future<List<StrokeMesh?>> _meshSpecs(List<(String, String, String, double, double, List<double>)> specs) =>
+    _compute(() => [for (final s in specs) buildStrokeMesh(Stroke(s.$1, s.$2, s.$3, s.$4, s.$6, s.$5))]);
 
 Future<List<String>> _digestInIsolate(List<SheetContent> contents) => _compute(() => [for (final c in contents) sheetDigest(c)]);
 

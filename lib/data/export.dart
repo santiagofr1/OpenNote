@@ -116,3 +116,16 @@ Future<bool> saveSheetPng(Storage store, NotebookDoc doc, int sheet, String name
   );
   return uri != null;
 }
+
+/// Abre el selector del sistema para elegir carpeta y nombre, y guarda el `.opennote`. Falso si el usuario canceló.
+/// Es una variable para que los tests la reemplacen (no pueden manejar el diálogo del sistema).
+Future<bool> Function(Uint8List bytes, String name) saveOpennote = (bytes, name) async {
+  final safe = safeFileName(name).trim();
+  final uri = await FilePicker.saveFile(
+    dialogTitle: 'Guardar cuaderno',
+    fileName: '${safe.isEmpty ? 'Cuaderno' : safe}.opennote',
+    bytes: bytes,
+    mimeType: 'application/octet-stream',
+  );
+  return uri != null;
+};

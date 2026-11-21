@@ -4,6 +4,7 @@
 //   flutter test integration_test -d <id de la tablet>
 
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:apuntes/app.dart';
@@ -281,6 +282,102 @@ void main() {
     expect(nb.sheets.length, 1);
     final sheets = Directory('${root.path}/notebooks/${nb.id}/sheets').listSync().where((e) => e.path.endsWith('.sheet'));
     expect(sheets.length, 1);
+  });
+
+  testWidgets('hojas: borrar y deshacer, mover con el asa y deshacer, exportar e importar .opennote', (t) async {
+    await start(t);
+    await createNotebook(t, 'Tres');
+    await t.tap(find.byKey(const Key('pagesBtn')));
+    await settle(t, 600);
+    await t.tap(find.byKey(const Key('addPage')));
+    await settle(t, 900);
+    await t.tap(find.byKey(const Key('addPage')));
+    await settle(t, 900);
+    expect(editor(t).doc.sheetCount, 3);
+    await t.tap(find.byKey(const Key('pagesBtn'))); // cierra el panel
+    await settle(t, 600);
+
+    // un trazo por hoja: se reconocen por la hoja donde caen
+    final ed = editor(t);
+    for (var k = 0; k < 3; k++) {
+      final st = Stroke('st$k', 'pen', '#22211e', 2.6, [100, k * kSheetStep + 200, .5, 500, k * kSheetStep + 200, .5]);
+      ed.doc.strokes[st.id] = st;
+      ed.doc.markDirtyElement(st);
+    }
+    // ignore: invalid_use_of_protected_member
+    ed.setState(() {});
+    await settle(t, 600);
+    int sheetOf(String id) => editor(t).doc.sheetOfY(editor(t).doc.strokes[id]!.bounds.top);
+    expect([sheetOf('st0'), sheetOf('st1'), sheetOf('st2')], [0, 1, 2]);
+
+    // borrar la hoja 2 y deshacer: vuelve con su trazo
+    await t.tap(find.byKey(const Key('pagesBtn')));
+    await settle(t, 600);
+    await holdOn(t, find.byKey(const Key('thumb-2')));
+    await settle(t, 500);
+    await t.tap(find.text('Borrar'));
+    await settle(t, 500);
+    await t.tap(find.byKey(const Key('confirmDelete')));
+    await settle(t, 900);
+    expect(editor(t).doc.sheetCount, 2);
+    expect(editor(t).doc.strokes.containsKey('st1'), isFalse);
+    await t.tap(find.byTooltip('Deshacer'));
+    await settle(t, 900);
+    expect(editor(t).doc.sheetCount, 3);
+    expect(editor(t).doc.strokes.containsKey('st1'), isTrue, reason: 'volvió con su trazo');
+    expect(sheetOf('st1'), 1);
+
+    // mover la 3 antes de la 1 con el asa, y deshacer
+    final from = t.getCenter(find.byKey(const Key('thumbHandle-3')));
+    final to = t.getCenter(find.byKey(const Key('thumbDrop-1')));
+    final g = await t.startGesture(from);
+    await t.pump(const Duration(milliseconds: 50));
+    for (var i = 1; i <= 8; i++) {
+      await g.moveTo(Offset.lerp(from, to, i / 8)!);
+      await t.pump(const Duration(milliseconds: 30));
+    }
+    await g.up();
+    await settle(t, 900);
+    expect(sheetOf('st2'), 0, reason: 'la hoja 3 quedó primera');
+    await t.tap(find.byTooltip('Deshacer'));
+    await settle(t, 900);
+    expect(sheetOf('st2'), 2);
+    expect(sheetOf('st0'), 0);
+
+    // exportar .opennote (el diálogo del sistema se reemplaza) e importarlo
+    await t.tap(find.byKey(const Key('pagesBtn')));
+    await settle(t, 600);
+    Uint8List? saved;
+    final savedSave = saveOpennote, savedPick = Pickers.opennote;
+    saveOpennote = (bytes, name) async {
+      saved = bytes;
+      return true;
+    };
+    addTearDown(() {
+      saveOpennote = savedSave;
+      Pickers.opennote = savedPick;
+    });
+    await openMore(t, 'Exportar cuaderno (.opennote)');
+    expect(saved, isNotNull);
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+    Pickers.opennote = () async => saved;
+    await t.tap(find.byKey(const Key('new')));
+    await settle(t, 600);
+    await t.tap(find.byKey(const Key('importNotebook')));
+    await settle(t, 2000);
+    final store = Storage(root: root);
+    await store.init();
+    final idx = await store.loadIndex();
+    // al arrancar la app crea "Mi cuaderno": se comparan solo el original y el importado
+    final names = idx.notebooks.map((n) => n.name).toList();
+    final orig = idx.notebooks.firstWhere((n) => n.name == 'Tres');
+    final imp = idx.notebooks.where((n) => n.name == 'Tres (importado)').toList();
+    expect(imp.length, 1, reason: 'cuadernos: $names');
+    expect(imp.single.id, isNot(orig.id));
+    final impDoc = await store.loadNotebook(imp.single);
+    expect(impDoc.sheetCount, 3, reason: 'el importado trae sus 3 hojas');
+    expect(impDoc.strokes.length, 3, reason: 'y un trazo en cada una');
   });
 
   testWidgets('nota adhesiva y búsqueda', (t) async {
@@ -677,6 +774,47 @@ void main() {
     expect(ed.doc.drawOrder().last.id, low);
   });
 
+  testWidgets('selección: un toque elige la tinta, otro el resaltador (se mueve solo) y tocar afuera deselecciona', (t) async {
+    await start(t);
+    await createNotebook(t, 'Toque');
+    final p = docToScreen(t);
+    final ed = editor(t);
+    // una "palabra" a lápiz y resaltada encima
+    await stylusLine(t, p(const Offset(200, 200)), p(const Offset(400, 200)));
+    await t.tap(find.byTooltip('Resaltador · tocá de nuevo para opciones'));
+    await settle(t);
+    await stylusLine(t, p(const Offset(200, 200)), p(const Offset(400, 200)));
+    expect(ed.doc.strokes.length, 2);
+    final hl = ed.doc.strokes.values.firstWhere((s) => s.k == 'hl');
+    final ink = ed.doc.strokes.values.firstWhere((s) => s.k != 'hl');
+    final hlBefore = hl.bounds, inkBefore = ink.bounds;
+
+    await t.tap(find.byTooltip('Seleccionar'));
+    await settle(t);
+
+    Future<void> tapAt(Offset d) async {
+      final g = await t.startGesture(p(d), kind: PointerDeviceKind.stylus);
+      await g.up();
+      await settle(t);
+    }
+
+    // el de más arriba que se ve es la tinta; tocar de nuevo en el mismo lugar alterna al resaltador
+    await tapAt(const Offset(300, 200));
+    expect(ed.sel.strokes, {ink.id});
+    await tapAt(const Offset(300, 200));
+    expect(ed.sel.strokes, {hl.id});
+
+    // se mueve solo el resaltador
+    await stylusDrag(t, p(const Offset(300, 200)), p(const Offset(300, 260)));
+    expect(ed.doc.strokes[ink.id]!.bounds, inkBefore);
+    expect(ed.doc.strokes[hl.id]!.bounds.top, greaterThan(hlBefore.top + 40));
+
+    // tocar afuera: no queda nada seleccionado
+    await tapAt(const Offset(500, 500));
+    expect(ed.sel.isEmpty, isTrue);
+    expect(find.byType(SelectionMenu), findsNothing);
+  });
+
   testWidgets('scroll rápido de punta a punta: sin errores; quieto usa imágenes; un trazo nuevo se ve y se guarda', (t) async {
     // cuaderno de 6 hojas con bastante tinta por hoja (más de SheetImageCache.defaultMinPoints: vale una imagen)
     final perStroke = SheetImageCache.defaultMinPoints ~/ 40 + 20;
@@ -767,5 +905,79 @@ void main() {
     final s2 = Storage(root: root);
     await s2.init();
     expect((await s2.loadNotebook(saved)).strokes.length, total + 1, reason: 'el trazo nuevo quedó en disco');
+  });
+
+  testWidgets('hojas con lápiz y bolígrafo: abrir, desplazar, descargar y volver; las hojas se ven con malla', (t) async {
+    // 12 hojas, cada una con trazos de lápiz y de bolígrafo (las mallas se arman al cargar y se sueltan al descargar)
+    final s = Storage(root: root);
+    await s.init();
+    final nb = Notebook.create('Mallas');
+    while (nb.sheets.length < 12) {
+      nb.sheets.add(nb.newSheet());
+    }
+    final doc = NotebookDoc(nb);
+    for (var k = 0; k < nb.sheets.length; k++) {
+      for (var j = 0; j < 20; j++) {
+        final y = k * kSheetStep + 80 + j * 40.0;
+        final kind = j.isEven ? 'pencil' : 'pen';
+        doc.strokes['m$k-$j'] = Stroke('m$k-$j', kind, '#22211e', 3, [
+          for (var i = 0; i < 120; i++) ...[100 + i * 6.0, y + (i % 5) * 3, .3 + (i % 7) * .08]
+        ]);
+      }
+    }
+    await s.saveIndex(NotesIndex(last: nb.id, notebooks: [nb]));
+    await s.saveNotebook(doc);
+
+    await start(t);
+    await t.tap(find.byKey(const Key('nb-Mallas')));
+    await settle(t, 1500);
+    final ed = editor(t);
+    expect(ed.doc.sheetCount, 12);
+
+    bool conMalla(int k) {
+      final id = ed.doc.sheets[k].id;
+      if (!ed.doc.isLoaded(id)) return false;
+      final mine = [for (final st in ed.doc.strokes.values) if (ed.doc.sheetOfElement(st) == k) st];
+      return mine.length == 20 && mine.every((st) => st.mesh != null);
+    }
+
+    await settle(t, 800);
+    expect(conMalla(ed.visibleSheet), isTrue, reason: 'la hoja inicial llega con malla');
+
+    // hasta el final y de vuelta, rápido
+    final max = ed.scroll.position.maxScrollExtent;
+    for (var i = 0; i < 25 && ed.scroll.offset < max - 50; i++) {
+      await t.fling(find.byType(PageEditor), const Offset(0, -600), 6000);
+      await settle(t, 250);
+    }
+    for (var i = 0; i < 25 && ed.scroll.offset > 50; i++) {
+      await t.fling(find.byType(PageEditor), const Offset(0, 600), 6000);
+      await settle(t, 250);
+    }
+    expect(t.takeException(), isNull);
+
+    // descargar una hoja lejana a mano (suelta mallas y lotes) y volver a ella: se recarga y se ve con malla
+    final far = ed.doc.sheetCount - 1;
+    final farId = ed.doc.sheets[far].id;
+    final farStrokes = [for (final st in ed.doc.strokes.values) if (ed.doc.sheetOfElement(st) == far) st];
+    final r = await t.runAsync(() => ed.widget.store.unloadSheets(ed.doc, [farId]));
+    if (r != null && r.unloaded.contains(farId)) {
+      for (final st in farStrokes) {
+        expect(st.mesh, isNull, reason: 'la hoja descargada soltó la malla');
+        expect(st.batchCache, isNull, reason: 'y el lote');
+      }
+      expect(ed.doc.isLoaded(farId), isFalse);
+    }
+    ed.scrollToSheet(far, animate: false);
+    for (var i = 0; i < 40 && !conMalla(far); i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await t.pump(const Duration(milliseconds: 50));
+    }
+    expect(t.takeException(), isNull);
+    expect(ed.doc.isLoaded(farId), isTrue, reason: 'volvió a cargarse');
+    // las mallas del trazo recién cargado llegan del isolate o se arman al primer dibujo
+    await settle(t, 600);
+    expect(conMalla(far), isTrue, reason: 'tras recargar, la hoja vuelve con malla');
+    expect(t.takeException(), isNull);
   });
 }

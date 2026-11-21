@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,8 +12,10 @@ import 'thumb_cache.dart';
 enum SheetAction { rename, addAfter, duplicate, moveUp, moveDown, delete }
 
 /// Panel de hojas a la izquierda: contador, filtros y una miniatura por hoja en dos columnas.
-/// Tocar una miniatura lleva a esa hoja; mantenerla apretada abre el menú de la hoja.
-class PagesPanel extends StatelessWidget {
+/// Tocar una miniatura lleva a esa hoja; mantenerla apretada abre el menú de la hoja; el asa de abajo a la izquierda
+/// (`thumbHandle-N`) se arrastra para mover la hoja: al soltarla sobre otra miniatura queda en esa posición.
+/// (El long-press de la miniatura sigue abriendo el menú: por eso el arrastre va en un asa aparte, con dedo o lápiz.)
+class PagesPanel extends StatefulWidget {
   final NotebookDoc doc;
   final SheetThumbCache thumbs; // miniaturas de las hojas que no están cargadas
   final ValueListenable<int> current; // hoja que se está viendo
@@ -21,6 +25,7 @@ class PagesPanel extends StatelessWidget {
   final VoidCallback onToggleBookmarksFilter, onSearch, onAdd;
   final ValueChanged<int> onOpen, onToggleBookmark;
   final void Function(int sheet, SheetAction action) onAction;
+  final void Function(int from, int to) onMove; // arrastrar una miniatura: lleva la hoja [from] a la posición [to]
 
   const PagesPanel({
     super.key,
@@ -36,10 +41,60 @@ class PagesPanel extends StatelessWidget {
     required this.onOpen,
     required this.onToggleBookmark,
     required this.onAction,
+    required this.onMove,
   });
 
   @override
+  State<PagesPanel> createState() => _PagesPanelState();
+}
+
+class _PagesPanelState extends State<PagesPanel> {
+  final _scroll = ScrollController();
+  final _gridKey = GlobalKey();
+  int? _dragFrom; // hoja que se está arrastrando
+  Offset? _dragAt; // dedo / lápiz (global)
+  Timer? _autoScroll;
+
+  NotebookDoc get doc => widget.doc;
+  SheetThumbCache get thumbs => widget.thumbs;
+  ValueListenable<int> get current => widget.current;
+  ValueListenable<int> get structure => widget.structure;
+  ValueListenable<int> get liveVersion => widget.liveVersion;
+  bool get onlyBookmarks => widget.onlyBookmarks;
+
+  @override
+  void dispose() {
+    _autoScroll?.cancel();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _dragStart(int k) {
+    setState(() => _dragFrom = k);
+    HapticFeedback.mediumImpact();
+    _autoScroll = Timer.periodic(const Duration(milliseconds: 16), (_) => _tickScroll());
+  }
+
+  void _dragEnd() {
+    _autoScroll?.cancel();
+    _autoScroll = null;
+    if (mounted) setState(() => _dragFrom = null);
+  }
+
+  /// Arrastrando cerca del borde de arriba o de abajo de la grilla, esta scrollea sola.
+  void _tickScroll() {
+    final at = _dragAt, box = _gridKey.currentContext?.findRenderObject();
+    if (at == null || box is! RenderBox || !_scroll.hasClients) return;
+    final y = box.globalToLocal(at).dy, h = box.size.height;
+    const edge = 56.0;
+    final dy = y < edge ? -(edge - y) / 4 : (y > h - edge ? (y - (h - edge)) / 4 : 0.0);
+    if (dy == 0) return;
+    _scroll.jumpTo((_scroll.offset + dy).clamp(0.0, _scroll.position.maxScrollExtent));
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final onAdd = widget.onAdd, onSearch = widget.onSearch, onToggleBookmarksFilter = widget.onToggleBookmarksFilter;
     final cs = Theme.of(context).colorScheme;
     return Container(
       key: const Key('pagesPanel'),
@@ -92,6 +147,8 @@ class PagesPanel extends StatelessWidget {
               child: list.isEmpty
                   ? Center(child: Text('No hay hojas marcadas', style: TextStyle(color: cs.onSurfaceVariant)))
                   : GridView.builder(
+                      key: _gridKey,
+                      controller: _scroll,
                       padding: const EdgeInsets.fromLTRB(14, 4, 14, 20),
                       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 2,
@@ -110,6 +167,56 @@ class PagesPanel extends StatelessWidget {
   }
 
   Widget _thumb(BuildContext context, int k, int cur, ColorScheme cs) {
+    return DragTarget<int>(
+      key: Key('thumbDrop-${k + 1}'),
+      onWillAcceptWithDetails: (d) => d.data != k,
+      onAcceptWithDetails: (d) => widget.onMove(d.data, k),
+      builder: (context, candidates, _) => Opacity(
+        opacity: _dragFrom == k ? .35 : 1,
+        child: DecoratedBox(
+          position: DecorationPosition.foreground,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: candidates.isEmpty ? null : Border.all(color: cs.tertiary, width: 3),
+          ),
+          child: _thumbBody(context, k, cur, cs),
+        ),
+      ),
+    );
+  }
+
+  Widget _handle(int k, ColorScheme cs) {
+    final n = k + 1;
+    return Draggable<int>(
+      key: Key('thumbHandle-$n'),
+      data: k,
+      onDragStarted: () => _dragStart(k),
+      onDragUpdate: (d) => _dragAt = d.globalPosition,
+      onDragEnd: (_) => _dragEnd(),
+      feedback: Material(
+        elevation: 8,
+        borderRadius: BorderRadius.circular(10),
+        color: cs.primaryContainer,
+        child: SizedBox(
+          width: 84,
+          height: 112,
+          child: Center(child: Text('$n', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w600, color: cs.onPrimaryContainer))),
+        ),
+      ),
+      child: Tooltip(
+        message: 'Arrastrar para mover',
+        child: Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(color: cs.surface.withValues(alpha: .85), shape: BoxShape.circle),
+          child: Icon(Symbols.drag_handle, size: 22, weight: 400, color: cs.onSurfaceVariant),
+        ),
+      ),
+    );
+  }
+
+  Widget _thumbBody(BuildContext context, int k, int cur, ColorScheme cs) {
+    final onOpen = widget.onOpen, onToggleBookmark = widget.onToggleBookmark;
     final meta = doc.sheets[k], isCur = k == cur, n = k + 1;
     return GestureDetector(
       key: Key('thumb-$n'),
@@ -120,7 +227,7 @@ class PagesPanel extends StatelessWidget {
       onLongPress: () => HapticFeedback.mediumImpact(),
       onLongPressUp: () async {
         final v = await _sheetMenu(context, k);
-        if (v != null) onAction(k, v);
+        if (v != null) widget.onAction(k, v);
       },
       child: Column(children: [
         Expanded(
@@ -159,6 +266,7 @@ class PagesPanel extends StatelessWidget {
                         color: meta.bookmark ? cs.primary : const Color(0x55000000)),
                   ),
                 ),
+                Positioned(left: 4, bottom: 4, child: _handle(k, cs)),
               ]),
             ),
           ),

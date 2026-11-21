@@ -9,7 +9,11 @@ class EditAction {
 
   /// Cambios de orden de dibujo: [z] de cada elemento (por id) antes y después.
   final Map<String, int> zBefore, zAfter;
+
+  /// Operaciones de hojas (agregar, duplicar, mover, borrar). Se hacen en este orden al rehacer y al revés al deshacer.
+  final List<SheetOp> sheetOps;
   const EditAction({
+    this.sheetOps = const [],
     this.removed = const [],
     this.added = const [],
     this.textBefore = const {},
@@ -23,7 +27,7 @@ class EditAction {
   /// Ids de las hojas que toca esta acción: donde están ahora y donde estaban (antes/después) sus elementos.
   /// Mientras la acción esté en el historial esas hojas no se pueden descargar: deshacer/rehacer las necesita en memoria.
   Set<String> sheetIds(NotebookDoc doc) {
-    final out = <String>{};
+    final out = <String>{for (final op in sheetOps) ...op.sheetIds(doc)};
     void byId(String id) {
       final s = doc.sheetIdOfElementId(id);
       if (s != null) out.add(s);
@@ -52,6 +56,9 @@ class EditAction {
   /// Vuelve la página a como estaba antes ([undo]) o después de la acción.
   /// Los textos pasan por [putText] para que sus campos de edición se enteren.
   void apply(NotebookDoc doc, {required bool undo, required void Function(String id, TextBlock? t) putText}) {
+    for (final op in undo ? sheetOps.reversed : sheetOps) {
+      op.apply(doc, undo: undo);
+    }
     for (final s in undo ? added : removed) {
       doc.strokes.remove(s.id);
     }
@@ -68,6 +75,100 @@ class EditAction {
     (undo ? itemBefore : itemAfter).forEach((id, it) => it == null ? doc.items.remove(id) : doc.items[id] = it.copy());
     (undo ? zBefore : zAfter).forEach(doc.setZ);
   }
+}
+
+/// Hoja a mostrar después de aplicar la acción (la de la última operación de hojas); null si no toca hojas.
+extension EditActionSheets on EditAction {
+  int? sheetFocus(NotebookDoc doc, {required bool undo}) =>
+      sheetOps.isEmpty ? null : (undo ? sheetOps.first : sheetOps.last).focus(doc, undo: undo);
+}
+
+/// Operación de hojas deshacible. El contenido va en coordenadas locales de la hoja, así que mover hojas no toca los
+/// trazos: solo se corren en el documento global (`NotebookDoc.moveSheet`), que ya conserva lo local.
+sealed class SheetOp {
+  const SheetOp();
+
+  /// Hace ([undo] false) o deshace la operación.
+  void apply(NotebookDoc doc, {required bool undo});
+
+  /// Hojas que tienen que estar cargadas para poder aplicarla (se fijan en memoria mientras la acción esté en el historial).
+  Set<String> sheetIds(NotebookDoc doc) => const {};
+
+  /// Índice de la hoja que conviene mostrar después de aplicarla.
+  int focus(NotebookDoc doc, {required bool undo});
+}
+
+/// Mover la hoja [from] a la posición [to].
+class SheetMoveOp extends SheetOp {
+  final int from, to;
+  const SheetMoveOp(this.from, this.to);
+
+  /// Mueve la hoja [from] a [to] en [doc] y devuelve la operación (null si no cambia nada).
+  static SheetMoveOp? run(NotebookDoc doc, int from, int to) {
+    if (from == to || from < 0 || to < 0 || from >= doc.sheetCount || to >= doc.sheetCount) return null;
+    doc.moveSheet(from, to);
+    return SheetMoveOp(from, to);
+  }
+
+  @override
+  void apply(NotebookDoc doc, {required bool undo}) => undo ? doc.moveSheet(to, from) : doc.moveSheet(from, to);
+
+  @override
+  int focus(NotebookDoc doc, {required bool undo}) => undo ? from : to;
+}
+
+/// Una hoja que se agregó (o duplicó: [added] true) o se borró ([added] false). Guarda la hoja entera (datos y contenido local) para
+/// poder volver a ponerla en su lugar; al sacarla de nuevo se vuelve a tomar lo que tenga en ese momento.
+/// Una hoja borrada que se puede restaurar vive solo acá, en memoria, hasta que el historial la suelte
+/// (el archivo `.sheet` lo borra el guardado como siempre): por eso borrar carga la hoja antes.
+class SheetPresenceOp extends SheetOp {
+  final bool added;
+  int at;
+  SheetMeta meta;
+  SheetContent content;
+  SheetPresenceOp._(this.added, this.at, this.meta, this.content);
+
+  /// Registra una hoja [m] recién agregada o duplicada (ya está en [doc]).
+  factory SheetPresenceOp.added(NotebookDoc doc, SheetMeta m) {
+    final op = SheetPresenceOp._(true, 0, m, SheetContent());
+    op._capture(doc, doc.indexOfSheet(m.id));
+    return op;
+  }
+
+  /// Borra la hoja [i] (que tiene que estar cargada) y devuelve la operación; null si no se pudo borrar.
+  static SheetPresenceOp? delete(NotebookDoc doc, int i) {
+    if (doc.sheetCount < 2 || i < 0 || i >= doc.sheetCount || !doc.isLoadedAt(i)) return null;
+    final op = SheetPresenceOp._(false, i, doc.sheets[i], SheetContent());
+    op._capture(doc, i);
+    return doc.deleteSheet(i) ? op : null;
+  }
+
+  void _capture(NotebookDoc doc, int i) {
+    if (i < 0) return;
+    final m = doc.sheets[i];
+    at = i;
+    meta = m.copy();
+    if (doc.isLoaded(m.id)) content = doc.splitSheets({m.id})[m.id] ?? SheetContent();
+  }
+
+  @override
+  void apply(NotebookDoc doc, {required bool undo}) {
+    if (added != undo) {
+      doc.insertSheet(at, meta: meta.copy(), content: content.copy());
+    } else {
+      final i = doc.indexOfSheet(meta.id);
+      if (i < 0) return;
+      _capture(doc, i);
+      doc.deleteSheet(i);
+    }
+  }
+
+  @override
+  Set<String> sheetIds(NotebookDoc doc) => doc.indexOfSheet(meta.id) >= 0 ? {meta.id} : const {};
+
+  @override
+  int focus(NotebookDoc doc, {required bool undo}) =>
+      (added != undo ? doc.indexOfSheet(meta.id) : at).clamp(0, doc.sheetCount - 1);
 }
 
 /// Mapa "no existía / ya no existe" para esos ids.
