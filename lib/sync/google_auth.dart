@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'drive_remote_store.dart';
 import 'google_config.dart';
 import 'remote_store.dart';
+import 'secret_service.dart';
 import 'sync_backend.dart';
 
 /// Con `drive.file` la app solo ve lo que ella misma crea (la carpeta `OpenNote` y su contenido).
@@ -27,12 +28,20 @@ abstract class TokenStore {
 class SecureTokenStore implements TokenStore {
   const SecureTokenStore();
   static const _s = FlutterSecureStorage();
+  // Sin llavero en Linux (ver SecretService) no se toca el plugin: leer da null, borrar no hace nada y guardar
+  // avisa con un error que la pantalla muestra.
   @override
-  Future<String?> read(String key) => _s.read(key: key);
+  Future<String?> read(String key) async => await SecretService.available() ? _s.read(key: key) : null;
   @override
-  Future<void> write(String key, String value) => _s.write(key: key, value: value);
+  Future<void> write(String key, String value) async {
+    if (!await SecretService.available()) throw const RemoteException(kNoSecretServiceMessage);
+    await _s.write(key: key, value: value);
+  }
+
   @override
-  Future<void> delete(String key) => _s.delete(key: key);
+  Future<void> delete(String key) async {
+    if (await SecretService.available()) await _s.delete(key: key);
+  }
 }
 
 /// Login con Google, con dos caminos:
