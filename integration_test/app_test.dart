@@ -980,4 +980,55 @@ void main() {
     expect(conMalla(far), isTrue, reason: 'tras recargar, la hoja vuelve con malla');
     expect(t.takeException(), isNull);
   });
+
+  testWidgets('menú de la hoja: "Seleccionar todo" toma solo la hoja visible y "Seleccionar todo el cuaderno" todas; deshacer y rehacer andan', (t) async {
+    await start(t);
+    await createNotebook(t, 'Todo');
+    final ed = editor(t);
+    // 8 hojas con un trazo en cada una
+    while (ed.doc.sheetCount < 8) {
+      ed.doc.addSheet();
+    }
+    for (var k = 0; k < 8; k++) {
+      final st = Stroke('st$k', 'pen', '#22211e', 2.6, [100, k * kSheetStep + 200, .5, 500, k * kSheetStep + 200, .5]);
+      ed.doc.strokes[st.id] = st;
+      ed.doc.markDirtyElement(st);
+    }
+    // ignore: invalid_use_of_protected_member
+    ed.setState(() {});
+    await settle(t, 800);
+    expect(ed.visibleSheet, 0);
+    ed.insertItem(Item('nota', 'sticky', 0, 0, 300, 200, text: 'apunte')); // algo para deshacer, en la hoja visible
+    await settle(t, 600);
+
+    Future<void> menu(String item) async {
+      final g = await t.startGesture(sheetCenter(t) + const Offset(0, 250)); // debajo de la nota
+      final end = DateTime.now().add(const Duration(milliseconds: 750));
+      while (DateTime.now().isBefore(end)) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        await t.pump();
+      }
+      await g.up();
+      await settle(t, 500);
+      await t.tap(find.text(item));
+      await settle(t, 1500);
+    }
+
+    await menu('Seleccionar todo');
+    expect(ed.sel.strokes, {'st0'}, reason: 'solo lo de la hoja visible');
+    expect(ed.sel.items, {'nota'});
+    expect(ed.sel.texts, isEmpty);
+
+    await menu('Seleccionar todo el cuaderno');
+    expect(ed.sel.strokes, {for (var k = 0; k < 8; k++) 'st$k'}, reason: 'todas las hojas');
+    expect(ed.sel.items, {'nota'});
+
+    await t.tap(find.byTooltip('Deshacer'));
+    await settle(t, 600);
+    expect(ed.doc.items.containsKey('nota'), isFalse);
+    expect(ed.doc.strokes.length, 8, reason: 'deshacer la nota no toca los trazos');
+    await t.tap(find.byTooltip('Rehacer'));
+    await settle(t, 600);
+    expect(ed.doc.items.containsKey('nota'), isTrue);
+  });
 }

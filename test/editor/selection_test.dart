@@ -15,6 +15,48 @@ void main() {
     return p;
   }
 
+  group('selectAll', () {
+    NotebookDoc three() {
+      final nb = Notebook.create('t');
+      while (nb.sheets.length < 3) {
+        nb.sheets.add(nb.newSheet());
+      }
+      final d = NotebookDoc(nb);
+      for (var k = 0; k < 3; k++) {
+        final y = k * kSheetStep + 100;
+        d.strokes['s$k'] = Stroke('s$k', 'pen', '#000000', 2, [50, y, .5, 90, y, .5]);
+        d.texts['t$k'] = TextBlock('t$k', 90, y + 50, 300, 'hoja $k');
+        d.items['i$k'] = Item('i$k', 'sticky', 100, y + 200, 100, 100);
+      }
+      return d;
+    }
+
+    test('con hoja: solo lo de esa hoja (trazos, textos y elementos)', () {
+      final d = three(), sel = Selection();
+      sel.selectAll(d, sheet: 1);
+      expect(sel.strokes, {'s1'});
+      expect(sel.texts, {'t1'});
+      expect(sel.items, {'i1'});
+      sel.selectAll(d, sheet: 2);
+      expect(sel.allIds, {'s2', 't2', 'i2'}, reason: 'reemplaza la selección anterior');
+    });
+
+    test('sin hoja: todo lo cargado; una hoja sin cargar no aporta nada', () {
+      final full = three(), sel = Selection();
+      sel.selectAll(full);
+      expect(sel.allIds.length, 9);
+      final d = NotebookDoc.lazy(full.nb); // solo se cargan las hojas 0 y 1
+      for (var k = 0; k < 2; k++) {
+        final id = full.sheets[k].id;
+        expect(d.attachSheet(id, full.splitSheets({id})[id]!), isTrue);
+      }
+      sel.selectAll(d);
+      expect(sel.allIds.length, 6);
+      sel.selectAll(d, sheet: 2);
+      expect(sel.isEmpty, isTrue);
+    });
+  });
+
   group('selectIn', () {
     test('trazos con la mitad o más de los puntos adentro', () {
       final p = page(), sel = Selection();
