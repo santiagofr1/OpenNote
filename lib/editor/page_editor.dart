@@ -88,6 +88,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   double _lastOff = 0; // para la dirección del scroll (prefetch de imágenes)
   int _scrollDir = 0, _prefKey = -1;
   Timer? _stillTimer;
+  double _pressScrollY = 0; // scroll vertical al apoyar el dedo (para el menú de la hoja)
   // elementos de cada hoja (por id) ya ordenados y agrupados en tandas; se rehacen solo cuando esa hoja cambia
   final _sheetRuns = <String, List<ZRun>>{};
   int _runsCount = -1;
@@ -1131,6 +1132,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     touch.down(e.pointer, e.position);
     if (touch.length == 1 && pointer == null) {
       stillPress.start(e.position);
+      _pressScrollY = scroll.hasClients ? scroll.offset : 0;
     } else {
       stillPress.cancel(); // segundo dedo: es zoom, no menú
     }
@@ -1173,11 +1175,14 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   /// Un dedo quieto sobre la hoja: menú contextual (si no se está scrolleando ni escribiendo).
   void _onStillPress(Offset g) {
     if (!mounted || touch.pinching || touch.length != 1 || pointer != null) return;
-    if (scroll.hasClients && scroll.position.isScrollingNotifier.value) return;
+    // Ojo: `isScrollingNotifier` no sirve acá: con un solo scroll posible (zoom 1, sin scroll horizontal) el dedo
+    // gana la arena apenas toca y el scroll figura "en curso" aunque no se mueva. Se mira si la hoja se movió.
+    if (scroll.hasClients && (scroll.offset - _pressScrollY).abs() > 1) return;
     final box = _sheetKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null) return;
     final local = box.globalToLocal(g);
     if (!(Offset.zero & box.size).contains(local)) return;
+    touch.clear(); // el menú se abre con el dedo apoyado: si el "levantó" no llega, no queda un dedo fantasma
     _sheetMenu(g, _toPage(local));
   }
 

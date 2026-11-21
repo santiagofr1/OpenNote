@@ -18,6 +18,13 @@ class TouchTracker {
     _pos[pointer] = global;
   }
 
+  /// Suelta todos los dedos (el menú de la hoja se abre con el dedo apoyado y el levantado puede no llegar acá).
+  void clear() {
+    _pos.clear();
+    count = 0;
+    pinching = false;
+  }
+
   void move(int pointer, Offset global) => _pos[pointer] = global;
 
   void up(int pointer) {

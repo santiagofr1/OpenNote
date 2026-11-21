@@ -1058,7 +1058,8 @@ void main() {
     }
     await settle(t, 1500);
     expect(remote.has('index.json'), isTrue);
-    expect(remote.paths.where((p) => p.endsWith('/notebook.json')), hasLength(1));
+    // (no es el único: la app crea "Mi cuaderno" de ejemplo al arrancar y, con la nube vacía, también sube)
+    expect(remote.paths.where((p) => p.endsWith('/notebook.json')), isNotEmpty);
 
     // otro "dispositivo" (otra carpeta) baja lo subido
     final other = await Directory.systemTemp.createTemp('apuntes_test_otro');
@@ -1066,7 +1067,7 @@ void main() {
     final s2 = Storage(root: other);
     await s2.init();
     await SyncEngine(s2, remote, account: 'x').sync();
-    expect((await s2.loadIndex()).notebooks.map((n) => n.name), ['Para nube']);
+    expect((await s2.loadIndex()).notebooks.map((n) => n.name), contains('Para nube'));
     expect(t.takeException(), isNull);
   });
 
