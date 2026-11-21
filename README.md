@@ -27,7 +27,7 @@ guardan en tu tablet, sin cuentas ni servidores.
 
 - Cada cuaderno es una tira continua de hojas A4: deslizás de una a otra, y el título muestra cuál
   estás viendo (por ejemplo, "2 / 5").
-- En el panel de hojas podés agregar, duplicar, mover, borrar, marcar o renombrar cada hoja.
+- En el panel de hojas podés agregar, duplicar, mover, borrar, marcar o renombrar cada hoja. Para mover, arrastrá el asa (las tres rayitas) de la miniatura, con el dedo o con el lápiz; mantener apretado sigue abriendo el menú (con "Mover antes / después"). Agregar, duplicar, mover y borrar se deshacen y rehacen con los botones de siempre (una hoja borrada vuelve con todo su contenido).
 - Fondos rayado, cuadriculado o de puntos, con medidas reales de A4: si imprimís al 100 %, sale a
   tamaño real.
 - Elegí el estilo de una hoja o de todo el cuaderno.
@@ -44,6 +44,7 @@ guardan en tu tablet, sin cuentas ni servidores.
 
 - Importá PDF, imágenes y audios.
 - Exportá tus cuadernos a PDF o PNG.
+- Exportá un cuaderno entero como archivo `.opennote` (desde el menú ⋮ del cuaderno o manteniendo apretado en la biblioteca) para guardarlo o pasarlo a otro equipo; se importa desde el "+" de la biblioteca como cuaderno nuevo (si ya hay uno con ese nombre queda "X (importado)").
 
 **Aspecto**
 

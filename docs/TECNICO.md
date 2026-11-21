@@ -245,6 +245,27 @@ salirse del ancho de la hoja.
 - Escritura atómica (temporal + rename). Los guardados de un mismo cuaderno se hacen de a uno y se
   juntan.
 
+### Operaciones de hojas deshacibles
+
+Agregar, duplicar, mover y borrar hojas van al mismo historial que el resto (`lib/editor/history.dart`): una
+`EditAction` lleva una lista `sheetOps` (`SheetMoveOp`, `SheetPresenceOp`) que se aplica en orden al rehacer y al
+revés al deshacer. `EditAction.sheetIds` incluye las hojas de esas operaciones, así que quedan fijadas en memoria
+mientras la acción esté en el historial. Una hoja borrada restaurable guarda en la operación su contenido local
+(`SheetContent`), su estilo, título, marcador y posición; por eso borrar primero carga la hoja si no estaba cargada.
+El `.sheet` en disco lo borra el guardado como siempre y, al restaurar, la hoja se marca sucia y se vuelve a escribir.
+No hay `trash/`: el contenido vive en memoria hasta que el historial lo suelta o se cierra el cuaderno.
+Mover en el panel: asa `drag_handle` por miniatura (`thumbHandle-N`, destino `thumbDrop-N`), con dedo o lápiz.
+
+### Formato `.opennote`
+
+ZIP creado por `lib/data/opennote_file.dart`: `manifest.json` (app, versión de formato, nombre, fondo, papel,
+espaciado, cantidad de hojas), `notebook.json`, `sheets/<hoja>.sheet` (copiados de disco tal cual, sin cargar las hojas)
+y `media/<archivo>` (solo lo que usan las hojas). Al importar se valida el manifest (versión, nombres de archivo
+seguros, hojas que coinciden) antes de escribir; un archivo roto lanza `OpennoteException` y no deja nada en disco.
+El cuaderno nuevo recibe un id nuevo y "X (importado)" si el nombre ya existe. Exportar: menú ⋮ del cuaderno y menú
+de mantener apretado en la biblioteca (`saveOpennote` en `export.dart`); importar: "+" de la biblioteca
+(`Pickers.opennote`). Ambos son sustituibles en los tests.
+
 ### Migración
 
 Al leer un índice viejo (`pages/<id>.json`) se migra automáticamente: cada página se aplana en sus
@@ -357,6 +378,9 @@ Requisitos:
   `test/data/lazy_load_test.dart` son la red de seguridad del guardado: secuencias aleatorias de operaciones contra
   un modelo de referencia con todo cargado, comparando cada `.sheet` (el segundo mezcla además cargas y descargas de
   hojas); `test/screens/lazy_notebook_test.dart` abre un cuaderno de 30 hojas por la UI.
+  `test/data/sheet_ops_undo_test.dart` (deshacer/rehacer de hojas, disco consistente, `.opennote` ida y vuelta y
+  archivo roto), `test/screens/sheet_ops_ui_test.dart` (asa, menú, hojas no cargadas) y
+  `test/screens/opennote_ui_test.dart` (exportar/importar desde la biblioteca).
 - `./run_tests.sh`: tests de integración en la tablet. Corren con el build debug
   (`com.apuntes.apuntes.test`, "OpenNote Test"), que es otra app con datos propios. Antes y después
   verifica que OpenNote y sus cuadernos sigan intactos.
