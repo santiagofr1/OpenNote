@@ -10,12 +10,17 @@ class GoogleConfig {
   /// El cliente "Android" (paquete + SHA-1) no se escribe en ningún lado: Google lo reconoce por la firma de la app.
   static const webClientId = String.fromEnvironment('GOOGLE_WEB_CLIENT_ID');
 
+  /// Secreto del cliente Web: solo para canjear el código de servidor por un refresh token propio (segundo plano en
+  /// Android). Opcional: si falta, todo anda igual salvo la sincronización con la app cerrada.
+  static const webClientSecret = String.fromEnvironment('GOOGLE_WEB_CLIENT_SECRET');
+
   /// Linux / escritorio: cliente OAuth de tipo "Aplicación de escritorio". Google exige mandar el secreto en el
   /// canje del código aunque en una app instalada no sea secreto de verdad.
   static const desktopClientId = String.fromEnvironment('GOOGLE_DESKTOP_CLIENT_ID');
   static const desktopClientSecret = String.fromEnvironment('GOOGLE_DESKTOP_CLIENT_SECRET');
 
   static bool get androidReady => webClientId.isNotEmpty;
+  static bool get androidBackgroundReady => androidReady && webClientSecret.isNotEmpty;
   static bool get desktopReady => desktopClientId.isNotEmpty && desktopClientSecret.isNotEmpty;
 
   static bool get isDesktop => Platform.isLinux || Platform.isWindows || Platform.isMacOS;

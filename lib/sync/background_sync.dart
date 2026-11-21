@@ -49,7 +49,7 @@ Future<BackgroundResult> runBackgroundPass(
   try {
     final SyncSession? s;
     try {
-      s = await backend.restore();
+      s = await backend.restoreInBackground();
     } catch (e) {
       // por ejemplo google_sign_in sin Activity: sin sesión usable en segundo plano, no es un error de la tarea
       return BackgroundResult(BackgroundOutcome.noSession, error: e);

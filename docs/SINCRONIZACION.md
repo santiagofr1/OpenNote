@@ -585,8 +585,15 @@ corren con la ventana minimizada). Código: `lib/sync/background_sync.dart`.
   tarea de fondo solo les sube lo suyo, no les escribe encima (misma regla de oro). La marca se borra al abrir la app.
 - **Volver a primer plano.** Si la tarea bajó cambios deja `sync.bgchanged`; la próxima pasada de la app la consume y
   relee el índice y las miniaturas del disco (`onBackgroundChanged`).
-- **Límite conocido:** `google_sign_in` en Android pide una `Activity` para `attemptLightweightAuthentication`, que en la
-  tarea de fondo no hay; si falla, la tarea queda en "sin sesión" y no sincroniza (ver Riesgos).
+- **Sesión en el isolate de fondo (Android): refresh token propio.** `google_sign_in` pide una `Activity` para retomar la
+  sesión y en la tarea de fondo no hay. Entonces, con la app en primer plano (al conectar, o al abrir la app si todavía
+  no hay token), se le pide a `google_sign_in` un `serverAuthCode` (`authorizeServer`), se canjea en
+  `https://oauth2.googleapis.com/token` con el cliente Web (`GOOGLE_WEB_CLIENT_ID` + `GOOGLE_WEB_CLIENT_SECRET`) y el
+  refresh token queda en el almacenamiento seguro junto con la cuenta (`lib/sync/refresh_token_auth.dart`). La tarea de
+  fondo (`GoogleBackend.restoreInBackground`) saca tokens de acceso con ese refresh token, sin tocar `google_sign_in`.
+  Si Google responde `invalid_grant` el token se borra y la app lo vuelve a pedir la próxima vez en primer plano. Al
+  desconectar se revoca en Google y se borra. La app en primer plano sigue usando `google_sign_in` como siempre. Si falta
+  el secreto `GOOGLE_WEB_CLIENT_SECRET`, todo anda igual y solo el segundo plano no sincroniza.
 
 ### Cuotas de Drive API: cuántas llamadas hacemos
 
@@ -650,6 +657,7 @@ ellos y avisa que falta configurar.
 | Valor | Secreto de GitHub (Settings > Secrets > Actions) | Local (`--dart-define`) |
 |---|---|---|
 | ID del cliente Web | `GOOGLE_WEB_CLIENT_ID` | `GOOGLE_WEB_CLIENT_ID` |
+| Secreto del cliente Web (segundo plano en Android, opcional) | `GOOGLE_WEB_CLIENT_SECRET` | `GOOGLE_WEB_CLIENT_SECRET` |
 | ID del cliente de escritorio | `GOOGLE_DESKTOP_CLIENT_ID` | `GOOGLE_DESKTOP_CLIENT_ID` |
 | Secreto del cliente de escritorio | `GOOGLE_DESKTOP_CLIENT_SECRET` | `GOOGLE_DESKTOP_CLIENT_SECRET` |
 
@@ -662,7 +670,7 @@ ellos y avisa que falta configurar.
 
 ### Riesgos conocidos
 
-- **Segundo plano con `google_sign_in`:** su plugin de Android necesita una `Activity` para `attemptLightweightAuthentication` (Credential Manager); en el isolate de WorkManager no hay. Sin probar en la tablet: si falla, la tarea de fondo no sincroniza (termina en "sin sesión"). Alternativa: guardar nosotros un refresh token de Google (flujo de servidor con el cliente Web) y refrescar con `googleapis_auth`, como en Linux.
+- **Segundo plano sin probar en la tablet:** el canje del `serverAuthCode` (`authorizeServer` puede mostrar la pantalla de permiso la primera vez, y Google no siempre devuelve refresh token si ya había uno emitido para esa cuenta y cliente; en ese caso el segundo plano queda sin token hasta revocar el acceso de la app en la cuenta de Google y volver a conectar). El secreto del cliente Web va dentro de la app, igual que el de escritorio: no es confidencial.
 - Drive no tiene escritura condicional: dos dispositivos subiendo la misma hoja en el mismo instante pueden pisarse.
   Se mitiga comparando el hash justo antes de subir; el caso que queda es muy angosto.
 - Con `drive.file` solo se ven los archivos creados por esta app; si el usuario sube o mueve archivos a mano dentro de

@@ -19,6 +19,9 @@ class FakeBackend implements SyncBackend {
   Future<SyncSession?> restore() async => _signedIn ? SyncSession(account, remote) : null;
 
   @override
+  Future<SyncSession?> restoreInBackground() => restore();
+
+  @override
   Future<SyncSession> signIn() async {
     signIns++;
     _signedIn = true;

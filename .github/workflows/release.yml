@@ -80,12 +80,13 @@ jobs:
       - name: Datos de Google (opcional)
         env:
           GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+          GOOGLE_WEB_CLIENT_SECRET: ${{ secrets.GOOGLE_WEB_CLIENT_SECRET }}
           GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.GOOGLE_DESKTOP_CLIENT_ID }}
           GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
         run: |
           if [ -n "$GOOGLE_WEB_CLIENT_ID" ]; then
-            jq -n --arg web "$GOOGLE_WEB_CLIENT_ID" --arg did "$GOOGLE_DESKTOP_CLIENT_ID" --arg dsec "$GOOGLE_DESKTOP_CLIENT_SECRET" \
-              '{GOOGLE_WEB_CLIENT_ID: $web, GOOGLE_DESKTOP_CLIENT_ID: $did, GOOGLE_DESKTOP_CLIENT_SECRET: $dsec}' > google_config.json
+            jq -n --arg web "$GOOGLE_WEB_CLIENT_ID" --arg wsec "$GOOGLE_WEB_CLIENT_SECRET" --arg did "$GOOGLE_DESKTOP_CLIENT_ID" --arg dsec "$GOOGLE_DESKTOP_CLIENT_SECRET" \
+              '{GOOGLE_WEB_CLIENT_ID: $web, GOOGLE_WEB_CLIENT_SECRET: $wsec, GOOGLE_DESKTOP_CLIENT_ID: $did, GOOGLE_DESKTOP_CLIENT_SECRET: $dsec}' > google_config.json
             echo "DART_DEFINES=--dart-define-from-file=google_config.json" >> "$GITHUB_ENV"
           else
             echo "::warning::Falta el secreto GOOGLE_WEB_CLIENT_ID: esta release sale sin sincronización con Google."
@@ -186,12 +187,13 @@ jobs:
       - name: Datos de Google (opcional)
         env:
           GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+          GOOGLE_WEB_CLIENT_SECRET: ${{ secrets.GOOGLE_WEB_CLIENT_SECRET }}
           GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.GOOGLE_DESKTOP_CLIENT_ID }}
           GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
         run: |
           if [ -n "$GOOGLE_WEB_CLIENT_ID" ]; then
-            jq -n --arg web "$GOOGLE_WEB_CLIENT_ID" --arg did "$GOOGLE_DESKTOP_CLIENT_ID" --arg dsec "$GOOGLE_DESKTOP_CLIENT_SECRET" \
-              '{GOOGLE_WEB_CLIENT_ID: $web, GOOGLE_DESKTOP_CLIENT_ID: $did, GOOGLE_DESKTOP_CLIENT_SECRET: $dsec}' > google_config.json
+            jq -n --arg web "$GOOGLE_WEB_CLIENT_ID" --arg wsec "$GOOGLE_WEB_CLIENT_SECRET" --arg did "$GOOGLE_DESKTOP_CLIENT_ID" --arg dsec "$GOOGLE_DESKTOP_CLIENT_SECRET" \
+              '{GOOGLE_WEB_CLIENT_ID: $web, GOOGLE_WEB_CLIENT_SECRET: $wsec, GOOGLE_DESKTOP_CLIENT_ID: $did, GOOGLE_DESKTOP_CLIENT_SECRET: $dsec}' > google_config.json
           else
             echo "::warning::Falta el secreto GOOGLE_WEB_CLIENT_ID: el .deb sale sin sincronización con Google."
           fi
