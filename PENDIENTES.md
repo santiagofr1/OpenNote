@@ -36,6 +36,9 @@
       o las dos juntas. Hace falta una forma de elegir solo uno (p. ej. un toque sobre el resaltador elige el de arriba
       en el orden; tocar de nuevo en el mismo lugar alterna al de abajo; o un filtro "solo resaltador / solo tinta").
     - Con algo seleccionado, tocar FUERA del recuadro no hace nada: debería deseleccionar.
+20. **Borrar releases viejos de GitHub** (pedido del usuario, 2026-11-20): cada push a main crea un Release `v1.0.<n>`
+    con su APK y se acumulan. Que el workflow, después de publicar, borre los viejos y deje solo los últimos N
+    (p. ej. 5) con `gh release delete --cleanup-tag`. La app busca solo el último, así que no rompe el aviso.
 15. **LaTeX**: lo hace el usuario; no tocar.
 
 ## Hecho
