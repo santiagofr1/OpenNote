@@ -540,7 +540,7 @@ class Storage {
   File syncFile(String rel) => File('${dir.path}/${_checkSyncPath(rel)}');
 
   static String _checkSyncPath(String rel) {
-    if (rel != kSyncStateFile && !isSyncPath(rel)) throw ArgumentError('ruta no sincronizable: $rel');
+    if (rel != kSyncStateFile && rel != kSyncCryptoCacheFile && !isSyncPath(rel)) throw ArgumentError('ruta no sincronizable: $rel');
     return rel;
   }
 

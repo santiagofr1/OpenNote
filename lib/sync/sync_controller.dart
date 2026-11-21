@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../data/storage.dart';
+import 'encrypted_remote_store.dart';
 import 'remote_store.dart';
 import 'sync_backend.dart';
+import 'sync_crypto.dart';
 import 'sync_engine.dart';
 import 'sync_state.dart';
 
@@ -36,10 +38,14 @@ class SyncController extends ChangeNotifier {
     this.maxWait = const Duration(seconds: 30),
     this.backoffBase = const Duration(seconds: 30),
     this.backoffMax = const Duration(minutes: 10),
+    this.crypto,
   });
   final Storage store;
   final SyncBackend backend;
   final Duration pollInterval, debounce, maxWait, backoffBase, backoffMax;
+
+  /// Cifrado de extremo a extremo opcional (null: sin esa función). Ver sync_crypto.dart.
+  final SyncCrypto? crypto;
 
   SyncPhase phase = SyncPhase.disconnected;
   String? account;
@@ -179,6 +185,7 @@ class SyncController extends ChangeNotifier {
     _fails = 0;
     remoteWaiting = const {};
     try {
+      await crypto?.forget(); // la clave del cifrado no queda guardada en este dispositivo
       await backend.signOut();
       await SyncState.clear(store); // la próxima conexión empieza de cero; los cuadernos de acá no se tocan
     } catch (e) {
@@ -299,6 +306,10 @@ class SyncController extends ChangeNotifier {
       if (rep.localChanged) onSynced?.call(rep);
       _set(SyncPhase.idle);
       return true;
+    } on CryptoLockedException catch (e) {
+      error = e.message; // falta la frase: no se reintenta solo, se pide en la pantalla de sincronización
+      _set(SyncPhase.idle);
+      return false;
     } on RemoteAuthException catch (e) {
       error = e.message;
       _cancelTimers();
@@ -315,9 +326,60 @@ class SyncController extends ChangeNotifier {
   }
 
   Future<SyncReport> _enginePass(SyncSession s) async {
-    final rep = await SyncEngine(store, s.store, busy: busyNotebooks, account: s.account).sync();
-    conflictCount = (await SyncState.load(store)).conflictCount;
-    return rep;
+    for (var tries = 0;; tries++) {
+      try {
+        final remote = await (crypto?.wrap(s.store) ?? Future.value(s.store));
+        final rep = await SyncEngine(store, remote, busy: busyNotebooks, account: s.account).sync();
+        conflictCount = (await SyncState.load(store)).conflictCount;
+        return rep;
+      } on VaultChangedException {
+        if (tries >= 2) rethrow;
+        crypto?.invalidate(); // otro dispositivo cambió el cifrado: se vuelve a leer crypto.json y se repite
+      }
+    }
+  }
+
+  // ---------- cifrado (activar / desactivar / frase): corren solos, sin pasada en curso ----------
+
+  /// Activa el cifrado de la nube con [passphrase]. Devuelve el error para mostrar (null: salió bien).
+  Future<String?> enableEncryption(String passphrase) =>
+      _cryptoOp((c, s) => c.enable(s.store, passphrase, (r) => _plainPass(s, r)));
+
+  /// Desactiva el cifrado (deja la nube en claro otra vez).
+  Future<String?> disableEncryption() => _cryptoOp((c, s) => c.disable(s.store, (r) => _plainPass(s, r)));
+
+  /// Da la frase de una nube que ya estaba cifrada (otro dispositivo la activó).
+  Future<String?> unlockEncryption(String passphrase) => _cryptoOp((c, s) => c.unlock(s.store, passphrase));
+
+  Future<void> _plainPass(SyncSession s, RemoteStore r) => SyncEngine(store, r, busy: busyNotebooks, account: s.account).sync();
+
+  Future<String?> _cryptoOp(Future<void> Function(SyncCrypto c, SyncSession s) op) async {
+    final c = crypto;
+    if (c == null) return null;
+    await whenIdle();
+    final s = _session;
+    if (s == null) return 'Conectá con Google primero';
+    final done = Completer<void>();
+    _running = done.future; // los pedidos de pasada que lleguen mientras tanto esperan (_again)
+    error = null;
+    _set(SyncPhase.syncing);
+    String? problem;
+    try {
+      await op(c, s);
+    } catch (e) {
+      problem = _msg(e);
+      if (e is RemoteAuthException) {
+        error = e.message;
+      }
+    } finally {
+      c.clearProgress();
+      _running = null;
+      done.complete();
+    }
+    _again = false;
+    _set(SyncPhase.idle);
+    if (_session != null) unawaited(syncNow(manual: true));
+    return problem;
   }
 
   String _msg(Object e) => e is RemoteException ? e.message : 'No se pudo sincronizar: $e';

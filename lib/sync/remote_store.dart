@@ -69,3 +69,13 @@ abstract class RemoteStore {
   /// Crea la carpeta [path] y las de arriba (no falla si ya existe).
   Future<void> createFolder(String path);
 }
+
+/// Un remoto que puede borrar de forma definitiva (sin papelera ni versiones viejas). Es opcional: lo usa el cambio de
+/// cifrado para que no quede el texto en claro guardado en ningún lado (ver [purgeOrDelete]).
+abstract interface class PurgingRemoteStore {
+  Future<void> purge(String path);
+}
+
+/// Borra [path] de forma definitiva si [store] sabe hacerlo; si no, con [RemoteStore.delete].
+Future<void> purgeOrDelete(RemoteStore store, String path) =>
+    store is PurgingRemoteStore ? (store as PurgingRemoteStore).purge(path) : store.delete(path);
