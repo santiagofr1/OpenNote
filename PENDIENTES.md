@@ -1,7 +1,7 @@
 # Pendientes
 
-1. **Hojas, detalles** (rendimiento hecho y medido, ver Hecho y docs/TECNICO.md; falta medir en la tablet la RAM tras
-   desplazar con el presupuesto nuevo del caché de imágenes, objetivo < ~400 MB):
+1. **Hojas, detalles** (rendimiento hecho y medido en la tablet, ver Hecho y docs/TECNICO.md: 2026-11-21, nota de 34
+   hojas, PSS 240 MB abierta y 409 MB tras desplazar; scroll 1,2 % lentos, p99 8,5 ms):
    - "Seleccionar todo" solo toma lo de las hojas cargadas (decidido a propósito).
    - Si el historial de deshacer es largo, las hojas que toca no se sueltan (seguridad primero): se podría podar
      el historial por hojas lejanas si pesa en cuadernos enormes.
