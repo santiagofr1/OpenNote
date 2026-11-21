@@ -93,6 +93,42 @@ class Selection {
         {for (final it in itemsOf(doc)) it.id: Offset(it.x, it.y)},
       );
 
+  /// Lo que hay bajo [pt] (con margen [tol], en unidades de documento), de arriba hacia abajo en lo que se VE:
+  /// el orden de dibujo, con el resaltador debajo de la tinta de su tanda (ver [zRuns]). Hit test real:
+  /// trazos contra su recorrido, textos y elementos contra su rectángulo.
+  List<Layered> hitStack(NotebookDoc doc, Offset pt, double tol) {
+    final seen = <Layered>[];
+    for (final run in zRuns(doc.drawOrder())) {
+      final ink = run.strokes;
+      if (ink != null) {
+        seen..addAll(ink.where((s) => s.k == 'hl'))..addAll(ink.where((s) => s.k != 'hl'));
+      } else {
+        seen.add(run.single!);
+      }
+    }
+    bool hit(Layered e) => switch (e) {
+          Stroke s => s.hitBy(pt, tol),
+          TextBlock t => textRect(t, doc.lineAt(t.y)).inflate(tol).contains(pt),
+          Item it => it.rect.inflate(tol).contains(pt),
+          _ => false,
+        };
+    return [for (final e in seen.reversed) if (hit(e)) e];
+  }
+
+  /// Deja seleccionado solo [e].
+  void selectOne(Layered e) => replace(
+      strokes: [if (e is Stroke) e.id], texts: [if (e is TextBlock) e.id], items: [if (e is Item) e.id]);
+
+  /// ¿Hay resaltador y tinta mezclados en la selección? (para ofrecer el filtro)
+  bool mixedInk(NotebookDoc doc) {
+    final s = strokesOf(doc);
+    return s.any((x) => x.k == 'hl') && s.any((x) => x.k != 'hl');
+  }
+
+  /// Reduce la selección a los trazos de resaltador ([hl]) o a los de tinta (el resto).
+  void keepOnly(NotebookDoc doc, {required bool hl}) =>
+      replace(strokes: [for (final s in strokesOf(doc)) if ((s.k == 'hl') == hl) s.id]);
+
   /// Selecciona lo que queda dentro de [r] ("ventana"): trazos con la mitad o más de sus puntos adentro;
   /// textos y elementos, si su centro cae adentro. Con [capture], todo lo que [r] toca: trazos cuyo
   /// recorrido cruza el rectángulo (ver [Stroke.touchesRect]), textos y elementos que se superponen.

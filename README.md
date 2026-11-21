@@ -19,6 +19,7 @@ guardan en tu tablet, sin cuentas ni servidores.
 - Con el dedo te desplazás, pellizcás para hacer zoom, y podés bloquear el zoom.
 - Escribí con teclado cuando lo necesites: tocá el tecladito y se abre un renglón nuevo, con negrita, cursiva, colores, títulos, listas y alineación.
 - Seleccioná con un recuadro: arrastrando hacia la derecha tomás lo que queda adentro; hacia la izquierda, todo lo que el recuadro toca. Después podés mover, copiar, duplicar o eliminar.
+- Tocá un elemento para elegirlo solo; tocá de nuevo en el mismo lugar para pasar al de abajo (por ejemplo, de la tinta al resaltador que tiene atrás). Tocar afuera deselecciona. Si el recuadro agarró tinta y resaltador, la barrita deja quedarte con solo uno.
 - Cambiá el orden de lo seleccionado: traerlo al frente o enviarlo al fondo.
 - Insertá imágenes, notas adhesivas y grabaciones de voz.
 
