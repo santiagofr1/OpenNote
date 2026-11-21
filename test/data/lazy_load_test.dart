@@ -168,6 +168,20 @@ void main() {
       expect(lazy.texts['t0']!.text, 'sin guardar');
     });
 
+    test('las mallas de los trazos vienen armadas al cargar una hoja y se sueltan al descargarla', () async {
+      final ref = build(Random(6), 4);
+      final lazy = await openLazy(ref, around: 0, radius: 0);
+      final id = lazy.sheets[2].id;
+      expect(lazy.isLoaded(id), isFalse);
+      await store.loadSheets(lazy, [id]);
+      final strokes = [for (final s in lazy.strokes.values) if (lazy.sheetOfY(s.bounds.top) == 2) s];
+      expect(strokes, isNotEmpty);
+      expect(strokes.every((s) => s.mesh != null && s.mesh!.vertexCount > 0), isTrue, reason: 'armadas fuera del hilo de la UI');
+      final r = await store.unloadSheets(lazy, [id]);
+      expect(r.unloaded, [id]);
+      expect(strokes.every((s) => s.mesh == null && s.batchCache == null), isTrue, reason: 'se soltaron con la hoja');
+    });
+
     test('unloadSheets: se niega con cambios sin guardar, sin archivo conocido o si lo prohíbe canUnload', () async {
       final ref = build(Random(5), 6);
       final lazy = await openLazy(ref, around: 0, radius: 5);

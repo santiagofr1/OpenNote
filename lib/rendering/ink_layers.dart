@@ -122,7 +122,7 @@ class InkPainter extends CustomPainter {
     c.scale(scale);
     c.translate(0, -sheet.top);
     c.clipRect(sheet);
-    paintStrokes(c, _alive(skip));
+    paintStrokes(c, _alive(skip), cull: sheet);
   }
 
   /// Graba las filas [y0, y1) de la tanda de la hoja a [w] x [h] píxeles (para una franja de la imagen; toda la
@@ -137,14 +137,15 @@ class InkPainter extends CustomPainter {
     c.scale(w / sheet.width, h / sheet.height);
     c.translate(0, -sheet.top);
     c.clipRect(sheet);
-    Iterable<Stroke> ss = _alive(skip);
+    Rect? cull;
     if (y1 - y0 < h) {
-      // trazos que tocan la franja (con margen por el grosor); la franja se recorta sola al hacer la imagen
+      // lo que toca la franja (con margen por el grosor); la franja se recorta sola al hacer la imagen. Se recorta
+      // con `cull` y no filtrando la lista: así los lotes de trazos son siempre los mismos y se reusan.
       const margin = 60.0;
-      final top = sheet.top + y0 * sheet.height / h - margin, bottom = sheet.top + y1 * sheet.height / h + margin;
-      ss = ss.where((s) => s.bounds.bottom >= top && s.bounds.top <= bottom);
+      cull = Rect.fromLTRB(sheet.left, sheet.top + y0 * sheet.height / h - margin, sheet.right,
+          sheet.top + y1 * sheet.height / h + margin);
     }
-    paintStrokes(c, ss);
+    paintStrokes(c, _alive(skip), cull: cull);
     return rec.endRecording();
   }
 

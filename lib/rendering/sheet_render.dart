@@ -24,8 +24,7 @@ void paintSheet(Canvas c, NotebookDoc doc, int sheet, double pxPerUnit, {Map<Str
   for (final run in zRuns(doc.drawOrder())) {
     final e = run.single;
     if (run.strokes != null) {
-      final vis = [for (final s in run.strokes!) if (s.bounds.overlaps(visible)) s];
-      if (vis.isNotEmpty) paintStrokes(c, vis);
+      paintStrokes(c, run.strokes!, cull: visible);
     } else if (e is Item) {
       if (e.rect.overlaps(visible)) paintItem(c, e, images?[e.file]);
     } else if (e is TextBlock) {

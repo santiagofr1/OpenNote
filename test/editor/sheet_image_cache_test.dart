@@ -19,7 +19,7 @@ void main() {
     SheetImageCache.defaultMinPoints = 0; // en los tests, cualquier tinta vale una imagen
   });
   tearDown(() {
-    SheetImageCache.defaultMinPoints = 1500;
+    SheetImageCache.defaultMinPoints = 12000;
     root.deleteSync(recursive: true);
   });
 

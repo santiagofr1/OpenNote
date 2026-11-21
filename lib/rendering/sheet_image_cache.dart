@@ -28,7 +28,7 @@ enum InkPaintMode {
 /// cada cuadro (Impeller no tiene caché de pictures).
 ///
 /// Franjas: la imagen de una tanda se arma en franjas horizontales que se generan en trabajos separados. La cantidad
-/// sale de los puntos ([stripCountFor]): ~[maxPointsPerStrip] (3000, con 25% de tolerancia) por franja, entre [minStrips] (4) y [maxStrips] (32); una hoja de 46k puntos son ~16.
+/// sale de los puntos ([stripCountFor]): ~[maxPointsPerStrip] (8000, con 25% de tolerancia) por franja, entre [minStrips] (4) y [maxStrips] (32); una hoja de 46k puntos son ~6.
 /// Cada franja es un `toImage` mucho más chico que el de la hoja entera, así ningún cuadro paga la hoja de golpe, y
 /// nunca hay dos `toImage` a la vez (el raster es un solo hilo). Mientras faltan franjas en una hoja que se ve, se
 /// dibujan las listas como imagen y el resto vectorial recortado a esa franja: la nitidez manda, no hay versión de baja
@@ -90,7 +90,8 @@ class SheetImageCache {
   /// Por hoja visible, qué parte de su alto se ve ahora (fracciones 0..1): sus franjas se generan primero.
   Map<String, (double, double)> viewFractions = const {};
 
-  /// Tandas con menos puntos que esto son baratas de rasterizar: no valen una imagen.
+  /// Tandas con menos puntos que esto son baratas de rasterizar: no valen una imagen. Con trazos como mallas (una
+  /// `drawVertices` por lote, ver docs/TECNICO.md, etapa 5) una hoja de 12k puntos se pinta en ~1 ms de UI.
   int minPoints;
   Duration quiet;
 
@@ -131,7 +132,7 @@ class SheetImageCache {
   /// Cuántos trabajos de generación empezaron (cada uno es una franja).
   int jobsStarted = 0;
 
-  static int defaultMinPoints = 1500;
+  static int defaultMinPoints = 12000;
 
   final _entries = <String, InkImage>{};
   final _bySheet = <String, List<InkImage>>{};
@@ -150,7 +151,7 @@ class SheetImageCache {
     this.maxImages = 12,
     this.maxBytes = 192 << 20,
     this.stripCount,
-    this.maxPointsPerStrip = 3000,
+    this.maxPointsPerStrip = 8000,
     this.minStrips = 4,
     this.maxStrips = 32,
     int? minPoints,
