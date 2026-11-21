@@ -107,7 +107,8 @@ Future<String?> askPin(BuildContext context, String title, {String? subtitle}) {
 }
 
 /// Aviso abajo; reemplaza al anterior para que no se encolen.
-void snack(BuildContext context, String m, {Duration duration = const Duration(seconds: 4), double width = 340}) =>
+void snack(BuildContext context, String m,
+        {Duration duration = const Duration(seconds: 4), double width = 340, SnackBarAction? action}) =>
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(m), duration: duration, width: width));
+      ..showSnackBar(SnackBar(content: Text(m), duration: duration, width: width, action: action));

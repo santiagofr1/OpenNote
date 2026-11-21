@@ -21,6 +21,7 @@ import '../../widgets/pdf_progress.dart';
 import '../../widgets/update_dialog.dart';
 import '../notebook/notebook_screen.dart';
 import 'folder_card.dart';
+import 'library_drag.dart';
 import 'move_dialog.dart';
 import 'notebook_card.dart';
 import 'sync_indicator.dart';
@@ -50,6 +51,9 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
   String? pressed; // cuaderno o carpeta mantenido (resaltado)
   String? current; // carpeta abierta (null = inicio)
   final searchCtl = TextEditingController();
+  final scroll = ScrollController();
+  final _scrollKey = GlobalKey();
+  late final auto = AutoScroller(scroll, _scrollKey); // scroll automático al arrastrar cerca de los bordes
   String query = '';
   late final SyncController sync = SyncController(
       store: store,
@@ -69,6 +73,8 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     store.onSaved = null;
     sync.dispose();
     searchCtl.dispose();
+    auto.stop();
+    scroll.dispose();
     super.dispose();
   }
 
@@ -391,6 +397,40 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     if (mounted) snack(context, 'Movido a ${index!.pathLabel(r.id)}');
   }
 
+  /// Soltó un cuaderno o carpeta sobre una carpeta o miga de pan ([target]; null = Inicio).
+  /// Avisa "Movido a X" con "Deshacer".
+  Future<void> _drop(LibraryDrag d, String? target) async {
+    final idx = index!;
+    if (!d.canDropOn(idx, target)) return;
+    final before = d.parent;
+    final nb = d.nb, f = d.folder;
+    if (nb != null) {
+      idx.moveNotebook(nb, target);
+    } else if (!idx.moveFolder(f!, target)) {
+      return;
+    }
+    setState(() {});
+    await store.saveIndex(idx);
+    if (!mounted) return;
+    snack(context, '${nb != null ? 'Movido' : 'Movida'} a ${idx.pathLabel(target)}',
+        action: SnackBarAction(
+          label: 'Deshacer',
+          onPressed: () async {
+            if (nb != null && idx.notebooks.contains(nb)) {
+              idx.moveNotebook(nb, before);
+            } else if (f != null && idx.folders.contains(f)) {
+              f
+                ..parent = before
+                ..touch();
+            } else {
+              return; // lo borraron mientras tanto
+            }
+            if (mounted) setState(() {});
+            await store.saveIndex(idx);
+          },
+        ));
+  }
+
   Future<void> _renameFolder(Folder f) async {
     final n = (await askText(context, 'Renombrar carpeta', initial: f.name))?.trim();
     if (n == null || n.isEmpty) return;
@@ -585,7 +625,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
               ),
         body: idx == null
             ? const Center(child: CircularProgressIndicator())
-            : CustomScrollView(slivers: [
+            : CustomScrollView(key: _scrollKey, controller: scroll, slivers: [
                 SliverSafeArea(
                   bottom: false,
                   sliver: SliverPadding(
@@ -618,14 +658,25 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
                       ),
                       delegate: SliverChildListDelegate([
                         for (final f in folders)
-                          FolderCard(
-                            key: Key('folder-${f.name}'),
-                            folder: f,
-                            count: idx.notebookCount(f.id),
-                            location: searching ? idx.pathLabel(f.parent) : null,
-                            pressed: pressed == f.id,
-                            onTap: () => _goTo(f.id),
-                            onLongPress: () => _folderOptions(f),
+                          DropZone(
+                            key: Key('drop-${f.name}'),
+                            accepts: (d) => d.canDropOn(idx, f.id),
+                            onDrop: (d) => _drop(d, f.id),
+                            builder: (_, hovering) => DragSource(
+                              data: LibraryDrag.folder(f),
+                              onHold: () => _folderOptions(f),
+                              onMove: auto.moved,
+                              onEnd: auto.stop,
+                              child: FolderCard(
+                                key: Key('folder-${f.name}'),
+                                folder: f,
+                                count: idx.notebookCount(f.id),
+                                location: searching ? idx.pathLabel(f.parent) : null,
+                                pressed: pressed == f.id,
+                                dropping: hovering,
+                                onTap: () => _goTo(f.id),
+                              ),
+                            ),
                           ),
                       ]),
                     ),
@@ -642,14 +693,19 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
                       ),
                       delegate: SliverChildListDelegate([
                         for (final nb in nbs)
-                          NotebookCard(
-                            key: Key('nb-${nb.name}'),
-                            nb: nb,
-                            thumb: thumbs[nb.id],
-                            pressed: pressed == nb.id,
-                            location: searching ? idx.pathLabel(nb.folder) : null,
-                            onTap: () => _open(nb),
-                            onLongPress: () => _options(nb),
+                          DragSource(
+                            data: LibraryDrag.notebook(nb),
+                            onHold: () => _options(nb),
+                            onMove: auto.moved,
+                            onEnd: auto.stop,
+                            child: NotebookCard(
+                              key: Key('nb-${nb.name}'),
+                              nb: nb,
+                              thumb: thumbs[nb.id],
+                              pressed: pressed == nb.id,
+                              location: searching ? idx.pathLabel(nb.folder) : null,
+                              onTap: () => _open(nb),
+                            ),
                           ),
                       ]),
                     ),
@@ -668,7 +724,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     ];
     final sub = idx.notebooks.isEmpty && idx.folders.isEmpty
         ? 'Creá el primero para empezar'
-        : '${parts.join(' · ')} · mantené uno apretado para ver opciones';
+        : '${parts.join(' · ')} · mantené uno apretado para opciones o arrastralo a una carpeta';
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
         if (folder != null)
@@ -727,17 +783,29 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
   /// Inicio › Facultad › Análisis (cada tramo lleva a esa carpeta, menos el último)
   Widget _breadcrumb(NotesIndex idx, ColorScheme cs) {
     final path = idx.pathOf(current);
-    Widget crumb(String key, String name, String? id, {bool last = false}) => InkWell(
-          key: Key(key),
-          borderRadius: BorderRadius.circular(6),
-          onTap: last ? null : () => _goTo(id),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-            child: Text(name,
-                style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: last ? FontWeight.w600 : FontWeight.w400,
-                    color: last ? cs.onSurface : cs.primary)),
+    Widget crumb(String key, String name, String? id, {bool last = false}) => DropZone(
+          accepts: (d) => d.canDropOn(idx, id),
+          onDrop: (d) => _drop(d, id),
+          builder: (_, hovering) => AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            decoration: BoxDecoration(
+              color: hovering ? cs.primary.withValues(alpha: .18) : null,
+              borderRadius: BorderRadius.circular(8),
+              border: hovering ? Border.all(color: cs.primary, width: 1.5) : null,
+            ),
+            child: InkWell(
+              key: Key(key),
+              borderRadius: BorderRadius.circular(6),
+              onTap: last ? null : () => _goTo(id),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: Text(name,
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: last ? FontWeight.w600 : FontWeight.w400,
+                        color: last ? cs.onSurface : cs.primary)),
+              ),
+            ),
           ),
         );
     return Padding(

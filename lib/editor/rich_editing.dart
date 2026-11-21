@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
@@ -49,7 +51,7 @@ class RichController extends TextEditingController {
 
   @override
   TextSpan buildTextSpan({required BuildContext context, TextStyle? style, required bool withComposing}) =>
-      ed.layoutFor(index).span(lead: kGuide);
+      ed.layoutFor(index).span(lead: kGuide, sel: ed.acrossLocal(index));
 
   @override
   set value(TextEditingValue v) {
@@ -149,6 +151,7 @@ class BlockEditor {
     block = t;
     _numbers = null;
     pending = null;
+    across = null;
     if (fields.length != body.paras.length) {
       _rebuildFields();
       onStructure();
@@ -173,6 +176,7 @@ class BlockEditor {
   }
 
   void dispose() {
+    _holdTimer?.cancel();
     for (final f in fields) {
       f.ctl.dispose();
       f.focus.dispose();
@@ -202,6 +206,8 @@ class BlockEditor {
   }
 
   (int, int) get globalSel {
+    final x = across;
+    if (x != null) return x;
     final i = active;
     final (a, b) = _localSel(i);
     return (body.globalOf(i, a), body.globalOf(i, b));
@@ -209,13 +215,155 @@ class BlockEditor {
 
   void selectionChanged() {
     pending = null;
+    if (across != null && _pointer == null) {
+      across = null; // tocó / movió el cursor: se termina la selección entre párrafos
+      _syncAll();
+    }
     onFocus();
+  }
+
+  // ---- selección entre párrafos ----
+  // Cada párrafo es un TextField con su propia selección, así que la que cruza párrafos es un rango
+  // global propio ([across]) que se arma mirando el dedo / mouse (mantener apretado y arrastrar, o
+  // arrastrar con el mouse) y se pinta como fondo en los tramos. Mientras existe, formato, copiar,
+  // cortar y borrar trabajan sobre ella (el modelo ya acepta rangos entre párrafos).
+
+  /// Rango global ordenado [inicio, fin] de la selección que cruza párrafos; null si no hay.
+  (int, int)? across;
+
+  int? _pointer; // dedo / mouse apretado sobre el bloque
+  bool _armed = false; // el dedo ya aguantó lo suficiente para que arrastrar seleccione
+  Timer? _holdTimer;
+  int? _anchor; // posición global donde empezó el arrastre
+
+  /// Cuánto hay que mantener apretado (con dedo o lápiz) antes de que arrastrar seleccione.
+  static const kHoldToSelect = Duration(milliseconds: 350);
+
+  /// Rango local [inicio, fin) de la selección entre párrafos en el párrafo [i] (null si no lo toca).
+  (int, int)? acrossLocal(int i) {
+    final x = across;
+    if (x == null) return null;
+    final g = body.globalOf(i, 0), len = body.paras[i].length;
+    final lo = max(x.$1, g) - g, hi = min(x.$2, g + len) - g;
+    return hi > lo ? (lo, hi) : null;
+  }
+
+  /// Texto de la selección entre párrafos (párrafos separados por salto de línea).
+  String? get acrossText {
+    final x = across;
+    return x == null ? null : body.plainText.substring(x.$1, x.$2);
+  }
+
+  /// Arma la selección entre párrafos entre las posiciones globales [a] y [b] (en cualquier orden).
+  void selectAcross(int a, int b) {
+    a = a.clamp(0, body.length);
+    b = b.clamp(0, body.length);
+    across = a == b ? null : (min(a, b), max(a, b));
+    pending = null;
+    _syncAll();
+    onFocus();
+  }
+
+  /// Deja de haber selección entre párrafos.
+  void clearAcross() {
+    if (across == null) return;
+    across = null;
+    _syncAll();
+    onFocus();
+  }
+
+  Future<void> copyAcross() async {
+    final t = acrossText;
+    if (t != null) await Clipboard.setData(ClipboardData(text: t));
+  }
+
+  Future<void> cutAcross() async {
+    await copyAcross();
+    deleteAcross();
+  }
+
+  /// Borra lo seleccionado entre párrafos (los de en medio desaparecen y los de las puntas se unen).
+  void deleteAcross() {
+    final x = across;
+    if (x == null) return;
+    across = null;
+    final before = fields.length;
+    _setBody(body.replaceRange(x.$1, x.$2, ''));
+    _afterStructure(body.locate(x.$1).para, before, x.$1);
+  }
+
+  /// El punto [global] cae sobre alguno de los campos del bloque.
+  bool containsGlobal(Offset global) {
+    for (final f in fields) {
+      final box = f.focus.context?.findRenderObject();
+      if (box is RenderBox && box.attached && (box.localToGlobal(Offset.zero) & box.size).contains(global)) return true;
+    }
+    return false;
+  }
+
+  /// Párrafo cuyo campo cae en [global] (el de más abajo cuyo tope quedó por encima del punto).
+  int _paraAt(Offset global) {
+    var best = 0;
+    for (var i = 0; i < fields.length; i++) {
+      final box = fields[i].focus.context?.findRenderObject();
+      if (box is RenderBox && box.attached && box.localToGlobal(Offset.zero).dy <= global.dy) best = i;
+    }
+    return best;
+  }
+
+  /// Posición global del carácter que está bajo [global] dentro del párrafo [i].
+  int _globalAt(int i, Offset global) {
+    final st = fields[i].focus.context?.findAncestorStateOfType<EditableTextState>();
+    var off = body.paras[i].length;
+    if (st != null) {
+      off = (st.renderEditable.getPositionForPoint(global).offset - 1).clamp(0, body.paras[i].length);
+    }
+    return body.globalOf(i, off);
+  }
+
+  void pointerDown(PointerDownEvent e) {
+    if (_pointer != null) return;
+    _pointer = e.pointer;
+    _anchor = null;
+    // con el mouse arrastrar ya es seleccionar; con el dedo / lápiz hace falta mantener apretado
+    _armed = e.kind == PointerDeviceKind.mouse;
+    _holdTimer?.cancel();
+    if (!_armed) _holdTimer = Timer(kHoldToSelect, () => _armed = true);
+    if (across != null) {
+      across = null; // un toque nuevo suelta la selección anterior
+      _syncAll();
+    }
+    if (fields.isNotEmpty) _anchor = _globalAt(_paraAt(e.position), e.position);
+  }
+
+  void pointerMove(PointerMoveEvent e) {
+    if (e.pointer != _pointer || !_armed || _anchor == null || fields.length < 2) return;
+    final i = _paraAt(e.position);
+    // mientras no salga del párrafo de origen, el campo se arregla solo
+    if (across == null && i == body.locate(_anchor!).para) return;
+    selectAcross(_anchor!, _globalAt(i, e.position));
+  }
+
+  void pointerUp(PointerEvent e) {
+    if (e.pointer != _pointer) return;
+    _pointer = null;
+    _holdTimer?.cancel();
+    final x = across;
+    if (x == null) return;
+    // el campo de origen quedó con su propia selección (y su menú nativo): se lo deja con el cursor
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (across != x) return;
+      final l = body.locate(x.$1);
+      final f = fields[l.para.clamp(0, fields.length - 1)];
+      f.ctl.setSilently(f.ctl.value.copyWith(selection: TextSelection.collapsed(offset: l.offset + 1)));
+    });
   }
 
   // ---- edición del usuario ----
   /// Una edición de [old] a [nv] en el campo [i]. Devuelve el valor a aplicar, o null si ya lo resolvió
   /// (partir con Enter, unir con retroceso).
   TextEditingValue? userEdit(int i, String old, TextEditingValue nv) {
+    across = null;
     var text = nv.text;
     if (!text.startsWith(kGuide)) {
       if (old.length == 1 + text.length && old.substring(1) == text) {
@@ -375,12 +523,26 @@ class BlockEditor {
               : k == LogicalKeyboardKey.keyU
                   ? Fmt.underline
                   : null;
-      if (f == null) return false;
+      if (f == null) {
+        if (across != null && k == LogicalKeyboardKey.keyC) {
+          copyAcross();
+          return true;
+        }
+        if (across != null && k == LogicalKeyboardKey.keyX) {
+          cutAcross();
+          return true;
+        }
+        return false;
+      }
       toggleFmt(f);
       return true;
     }
     if (k == LogicalKeyboardKey.tab) {
       indentBy(hw.isShiftPressed ? -1 : 1);
+      return true;
+    }
+    if (across != null && (k == LogicalKeyboardKey.backspace || k == LogicalKeyboardKey.delete)) {
+      deleteAcross();
       return true;
     }
     final sel = fields[i].ctl.selection, len = fields[i].ctl.text.length;

@@ -59,6 +59,9 @@ class TextFields {
   }
 
   BlockEditor? editor(String id) => _eds[id];
+
+  /// El punto [global] (pantalla) está sobre el texto de algún bloque.
+  bool textAt(Offset global) => _eds.values.any((e) => e.containsGlobal(global));
   bool get anyFocused => _eds.values.any((e) => e.hasFocus);
 
   /// El bloque que tiene el foco ahora.
@@ -203,9 +206,17 @@ class TextBlockView extends StatelessWidget {
                 : selected
                     ? BoxDecoration(color: const Color(0x1A2F5BD3), borderRadius: BorderRadius.circular(3))
                     : null,
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              for (var i = 0; i < editor.fields.length; i++) _paraRow(i),
-            ]),
+            // Listener (no entra a la arena de gestos): mira el dedo para la selección entre párrafos
+            child: Listener(
+              behavior: HitTestBehavior.translucent,
+              onPointerDown: editor.pointerDown,
+              onPointerMove: editor.pointerMove,
+              onPointerUp: editor.pointerUp,
+              onPointerCancel: editor.pointerUp,
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                for (var i = 0; i < editor.fields.length; i++) _paraRow(i),
+              ]),
+            ),
           ),
           if (textMode)
             Positioned(

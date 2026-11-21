@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/editor/page_editor.dart';
+import 'package:apuntes/editor/rich_editing.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -29,7 +31,7 @@ void main() {
 
   Future<void> tapKeyboardTool(WidgetTester t) async {
     await t.tap(find.byTooltip('Texto con teclado'));
-    await t.pump(const Duration(milliseconds: 400));
+    await t.pump(const Duration(milliseconds: 600));
     await t.pump(const Duration(milliseconds: 100));
   }
 
@@ -183,5 +185,116 @@ void main() {
     await t.tap(find.byKey(Key('check-${b.id}-0')));
     await t.pump();
     expect(b.body.paras[0].checked, isTrue);
+  });
+
+  group('selección entre párrafos', () {
+    // un bloque con tres párrafos y el campo del primero enfocado
+    Future<(PageEditorState, TextBlock, BlockEditor)> tres(WidgetTester t) async {
+      final ed = await open(t);
+      await tapKeyboardTool(t);
+      final b = only(ed);
+      b.body = RichBody.plain('uno\ndos\ntres');
+      final be = ed.texts.editor(b.id)!..replaceModel(b);
+      await t.pump(const Duration(milliseconds: 100));
+      be.focusAt(0, 0); // al rearmar los campos se perdió el foco
+      await t.pump(const Duration(milliseconds: 100));
+      return (ed, b, be);
+    }
+
+    Offset at(WidgetTester t, TextBlock b, int i, double fx) {
+      final r = t.getRect(find.byKey(Key('para-${b.id}-$i')));
+      return Offset(r.left + r.width * fx, r.center.dy);
+    }
+
+    Future<void> arrastrar(WidgetTester t, TextBlock b, PointerDeviceKind kind) async {
+      final g = await t.startGesture(at(t, b, 0, .0) + const Offset(1, 0), kind: kind);
+      if (kind != PointerDeviceKind.mouse) await t.pump(const Duration(milliseconds: 600));
+      await g.moveTo(at(t, b, 1, .0));
+      await g.moveTo(at(t, b, 2, .0) + const Offset(40, 0));
+      await t.pump();
+      await g.up();
+      await t.pump(const Duration(milliseconds: 100));
+    }
+
+    testWidgets('mouse: arrastrar de un párrafo a otro selecciona todo lo del medio', (t) async {
+      final (_, b, be) = await tres(t);
+      await arrastrar(t, b, PointerDeviceKind.mouse);
+      expect(be.across, isNotNull);
+      expect(be.acrossText, startsWith('uno\ndos\n'));
+      expect(be.acrossText!.length, greaterThan(8));
+      expect(find.byKey(const Key('across-copy')), findsOneWidget);
+    });
+
+    testWidgets('dedo: hace falta mantener apretado; si se mueve enseguida no selecciona', (t) async {
+      final (_, b, be) = await tres(t);
+      final g = await t.startGesture(at(t, b, 0, .0) + const Offset(1, 0));
+      await g.moveTo(at(t, b, 2, .0));
+      await t.pump();
+      await g.up();
+      await t.pump(const Duration(milliseconds: 100));
+      expect(be.across, isNull, reason: 'sin mantener apretado no es selección');
+      await arrastrar(t, b, PointerDeviceKind.touch);
+      expect(be.across, isNotNull);
+    });
+
+    testWidgets('negrita y color sobre la selección que cruza párrafos', (t) async {
+      final (_, b, be) = await tres(t);
+      be.selectAcross(2, 10); // "o\ndos\ntr"
+      await t.pump();
+      await t.tap(find.byKey(const Key('fmt-bold')));
+      await t.pump();
+      expect(b.body.paras[0].runs.map((r) => (r.text, r.style.bold)), [('un', false), ('o', true)]);
+      expect(b.body.paras[1].runs.single.style.bold, isTrue);
+      expect(b.body.paras[2].runs.map((r) => (r.text, r.style.bold)), [('tr', true), ('es', false)]);
+      expect(be.across, isNotNull, reason: 'la selección sigue para poder seguir formateando');
+      await t.tap(find.byKey(const Key('fmt-color')));
+      await t.pump();
+      await t.tap(find.byKey(Key('color-${0xFFB91C1C.toRadixString(16)}')));
+      await t.pump();
+      expect(b.body.paras[1].runs.single.style.color, 0xFFB91C1C);
+    });
+
+    testWidgets('copiar y cortar llevan el texto al portapapeles; borrar une las puntas', (t) async {
+      String? clip;
+      t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (c) async {
+        if (c.method == 'Clipboard.setData') clip = (c.arguments as Map)['text'] as String?;
+        return null;
+      });
+      addTearDown(() => t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+      final (_, b, be) = await tres(t);
+      be.selectAcross(2, 10);
+      await t.pump();
+      await t.tap(find.byKey(const Key('across-copy')));
+      await t.pump();
+      expect(clip, 'o\ndos\ntr');
+      expect(b.text, 'uno\ndos\ntres', reason: 'copiar no toca el texto');
+      await t.tap(find.byKey(const Key('across-cut')));
+      await t.pump(const Duration(milliseconds: 100));
+      expect(b.text, 'unes');
+      expect(be.fields.length, 1);
+      expect(be.across, isNull);
+      expect(find.byKey(const Key('across-copy')), findsNothing);
+    });
+
+    testWidgets('Backspace borra la selección y tocar un campo la suelta', (t) async {
+      final (_, b, be) = await tres(t);
+      be.selectAcross(0, 5); // "uno\nd"
+      await t.pump();
+      await t.sendKeyEvent(LogicalKeyboardKey.backspace);
+      await t.pump(const Duration(milliseconds: 100));
+      expect(b.text, 'os\ntres');
+      be.selectAcross(0, 4);
+      await t.pump();
+      await t.tap(find.byKey(Key('para-${b.id}-1')));
+      await t.pump(const Duration(milliseconds: 100));
+      expect(be.across, isNull);
+    });
+
+    testWidgets('el modelo acepta deshacer: selección entre párrafos con replaceModel la suelta', (t) async {
+      final (_, b, be) = await tres(t);
+      be.selectAcross(0, 6);
+      be.replaceModel(b);
+      expect(be.across, isNull);
+    });
   });
 }
