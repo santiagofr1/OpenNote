@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show AppLifecycleState;
 
 import 'package:flutter/foundation.dart';
 
@@ -243,6 +244,13 @@ class SyncController extends ChangeNotifier {
     _applyBackground();
     _set(SyncPhase.disconnected);
   }
+
+  /// ¿Cuenta como primer plano para la sync? En Android/iOS solo `resumed`: el resto es la app tapada o por cerrarse, y
+  /// de ahí se encarga la tarea de fondo. En la PC no hay tarea de fondo, y `inactive` (ventana sin foco) o `hidden`
+  /// (minimizada) siguen siendo la app abierta: se sigue consultando hasta que se cierra.
+  static bool isForegroundState(AppLifecycleState state, {required bool desktop}) => desktop
+      ? state != AppLifecycleState.paused && state != AppLifecycleState.detached
+      : state == AppLifecycleState.resumed;
 
   /// La app pasó a primer plano ([fg] true: sincroniza ya y retoma las consultas periódicas) o a segundo plano (corta las
   /// consultas periódicas; si hay algo guardado sin subir, se sube ahora porque Android puede cerrar la app).

@@ -1,3 +1,4 @@
+import 'dart:ui' show AppLifecycleState;
 import 'dart:async';
 import 'dart:io';
 
@@ -206,5 +207,16 @@ void main() {
       tick(2);
       expect(c.remoteWaiting, isEmpty);
     });
+  });
+
+  test('primer plano: en la PC una ventana sin foco o minimizada sigue consultando; en Android solo resumed', () {
+    for (final st in [AppLifecycleState.resumed, AppLifecycleState.inactive, AppLifecycleState.hidden]) {
+      expect(SyncController.isForegroundState(st, desktop: true), isTrue, reason: '$st en la PC');
+    }
+    expect(SyncController.isForegroundState(AppLifecycleState.paused, desktop: true), isFalse);
+    expect(SyncController.isForegroundState(AppLifecycleState.resumed, desktop: false), isTrue);
+    for (final st in [AppLifecycleState.inactive, AppLifecycleState.hidden, AppLifecycleState.paused]) {
+      expect(SyncController.isForegroundState(st, desktop: false), isFalse, reason: '$st en Android');
+    }
   });
 }
