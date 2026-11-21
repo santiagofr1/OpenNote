@@ -1071,6 +1071,27 @@ void main() {
     expect(t.takeException(), isNull);
   });
 
+  testWidgets('sincronización en segundo plano: el interruptor aparece (solo en Android), viene encendido y se guarda', (t) async {
+    await t.pumpWidget(ApuntesApp(root: root, backend: FakeBackend(FakeRemoteStore())));
+    await settle(t, 1500);
+    await t.tap(find.byKey(const Key('libraryMenu')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('syncMenu')));
+    await settle(t, 600);
+    if (!Platform.isAndroid) {
+      expect(find.byKey(const Key('syncBackground')), findsNothing, reason: 'fuera de Android no hay interruptor');
+      return;
+    }
+    expect(t.widget<SwitchListTile>(find.byKey(const Key('syncBackground'))).value, isTrue, reason: 'por defecto encendido');
+    await t.tap(find.byKey(const Key('syncBackground')));
+    await settle(t, 600);
+    expect(t.widget<SwitchListTile>(find.byKey(const Key('syncBackground'))).value, isFalse);
+    expect(File('${root.path}/prefs.json').readAsStringSync(), matches(RegExp(r'"bgSync"\s*:\s*false')), reason: 'se guarda en prefs.json');
+    await t.tap(find.byKey(const Key('syncBackground')));
+    await settle(t, 600);
+    expect(t.widget<SwitchListTile>(find.byKey(const Key('syncBackground'))).value, isTrue);
+  });
+
   testWidgets('sincronización automática: lo escrito en un cuaderno abierto llega a la nube solo, y un cambio de la nube avisa', (t) async {
     final remote = FakeRemoteStore();
     final backend = FakeBackend(remote);

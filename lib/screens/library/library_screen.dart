@@ -12,10 +12,12 @@ import '../../data/storage.dart';
 import '../../data/updates.dart';
 import '../../domain/domain.dart';
 import '../../domain/version.dart';
+import '../../sync/background_sync.dart';
 import '../../sync/google_auth.dart';
 import '../../sync/google_config.dart';
 import '../../sync/sync_backend.dart';
 import '../../sync/sync_controller.dart';
+import '../../sync/sync_lock.dart';
 import '../../widgets/dialogs.dart';
 import '../../widgets/pdf_progress.dart';
 import '../../widgets/update_dialog.dart';
@@ -83,10 +85,27 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) => sync.setForeground(state == AppLifecycleState.resumed);
 
+  /// Segundo plano (solo Android): candado y marcas con la tarea de WorkManager, interruptor de las preferencias y
+  /// registro/cancelación de la tarea (con un `backend` de prueba no se toca WorkManager).
+  void _setupBackgroundSync(Map? prefs) {
+    if (!BackgroundSync.supported) return;
+    sync
+      ..backgroundSupported = true
+      ..backgroundEnabled = bgSyncEnabled(prefs)
+      ..lock = SyncLock(store.dir)
+      ..marks = SyncMarks(store.dir)
+      ..onBackgroundChanged = (() => unawaited(_reloadAfterSync()))
+      ..onBackgroundToggled = ((v) => store.savePrefs({kBgSyncPref: v}));
+    if (widget.backend == null) {
+      sync.applyBackground = (wanted) => wanted ? BackgroundSync.ensureRegistered() : BackgroundSync.cancel();
+    }
+  }
+
   Future<void> _load() async {
     await store.init();
     store.onSaved = (_) => sync.notifySaved();
     final prefs = await store.loadPrefs();
+    _setupBackgroundSync(prefs);
     tools.load(prefs);
     updPrefs = UpdatePrefs.from(prefs);
     final idx = await store.loadIndex();
