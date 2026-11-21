@@ -1,11 +1,7 @@
 # Pendientes
 
-1. **Restos de rendimiento / hojas** (lo grande está hecho y medido, ver Hecho y docs/perf): RAM tras desplazar
-   mucho ~580 MB por el caché de imágenes (192 MB; se puede bajar); "abrir perezoso" 0,5–1 s en el benchmark por
-   armar las mallas (abrir desde la app sigue en 0,4 s); el lápiz con mallas queda algo más parejo que antes.
-   - Mover hojas arrastrando en el panel (hoy: menú "Mover antes / después").
-   - Las operaciones de hojas (agregar, duplicar, mover, borrar) no se pueden deshacer: vacían el historial.
-   - Exportar/backup del cuaderno entero como un archivo `.opennote` (ZIP).
+1. **Hojas, detalles** (rendimiento hecho y medido, ver Hecho y docs/TECNICO.md; falta medir en la tablet la RAM tras
+   desplazar con el presupuesto nuevo del caché de imágenes, objetivo < ~400 MB):
    - "Seleccionar todo" solo toma lo de las hojas cargadas (decidido a propósito).
    - Si el historial de deshacer es largo, las hojas que toca no se sueltan (seguridad primero): se podría podar
      el historial por hojas lejanas si pesa en cuadernos enormes.
@@ -29,17 +25,16 @@
     cambios de Drive. Conflicto en la misma hoja: guardar las dos versiones. La app de PC habla directo con Drive
     (en Linux no hay cliente oficial). Hace falta un proyecto de Google Cloud para el login; confirmar si drive.file
     exige verificación de Google. Orden: 1) Drive en la tablet, 2) app Linux, 3) en segundo plano, 4) cifrado opcional.
-19. **Selección: resaltador y tocar afuera** (reportado por el usuario en la 1.0.9):
-    - Una palabra escrita y resaltada encima: con seleccionar no se puede agarrar solo el resaltador; agarra la tinta,
-      o las dos juntas. Hace falta una forma de elegir solo uno (p. ej. un toque sobre el resaltador elige el de arriba
-      en el orden; tocar de nuevo en el mismo lugar alterna al de abajo; o un filtro "solo resaltador / solo tinta").
-    - Con algo seleccionado, tocar FUERA del recuadro no hace nada: debería deseleccionar.
-20. **Borrar releases viejos de GitHub** (pedido del usuario, 2026-11-20): cada push a main crea un Release `v1.0.<n>`
-    con su APK y se acumulan. Que el workflow, después de publicar, borre los viejos y deje solo los últimos N
-    (p. ej. 5) con `gh release delete --cleanup-tag`. La app busca solo el último, así que no rompe el aviso.
 15. **LaTeX**: lo hace el usuario; no tocar.
 
 ## Hecho
+
+- **19. Selección: resaltador y tocar afuera** (rama `feat/seleccion-2`): un toque elige un solo elemento (el de más arriba que se ve), tocar de nuevo en el mismo lugar alterna al de abajo (tinta, resaltador), tocar afuera deselecciona, y con tinta y resaltador mezclados la barrita ofrece "Solo resaltador" / "Solo tinta".
+- **1. Hojas: arrastrar, deshacer y `.opennote`** (rama `feat/hojas-2`): mover hojas arrastrando el asa de la miniatura
+  en el panel (dedo o lápiz; el menú "Mover antes / después" sigue); agregar, duplicar, mover y borrar hojas se deshacen
+  y rehacen en el mismo historial (la hoja borrada vuelve con contenido, estilo, título y marcador); exportar el cuaderno
+  entero como `.opennote` (ZIP con manifest) desde su menú e importarlo desde el "+" de la biblioteca. Detalle en docs/TECNICO.md.
+- **20. Borrar releases viejos** (rama `feat/releases-viejos`): el workflow deja solo los últimos 5 `v1.0.<n>` (`tool/podar_releases.sh`, nunca borra el Latest ni el nuevo, tolera fallos). Ver docs/RELEASES.md.
 
 - **1. Carga perezosa de hojas** (rama `feat/rendimiento-3`, 2026-11-20): el cuaderno se abre leyendo solo las hojas
   cercanas a la última vista (±2); `NotebookDoc` distingue hojas cargadas y no cargadas, el editor carga las del rango

@@ -156,7 +156,7 @@ Impeller no tiene caché de pictures: una hoja con mucha tinta vectorial se vuel
 `SheetImageCache` (`lib/rendering/sheet_image_cache.dart`) la reemplaza por imágenes (una textura) mientras la tinta está
 quieta; `InkPainter` (`ink_layers.dart`) decide qué dibujar. Tandas con menos de 1500 puntos no se cachean.
 
-- **Prefetch**: `PageEditor._updatePrefetch` calcula, al scrollear, las hojas visibles y las 3 siguientes en el sentido del
+- **Prefetch**: `PageEditor._updatePrefetch` calcula, al scrollear, las hojas visibles y las 2 siguientes en el sentido del
   movimiento (`SheetImageCache.prefetchPlan`; quieto: solo las visibles) y se las pasa a `prefetch`. Se generan sin esperar
   los 300 ms de quietud (que siguen valiendo para una hoja visible que no estaba en el plan). El plan se reelige en cada
   paso, así que lo que dejó de ser relevante no se genera. `_calcRange` arma al menos una hoja más en el sentido del
@@ -172,7 +172,7 @@ quieta; `InkPainter` (`ink_layers.dart`) decide qué dibujar. Tandas con menos d
   El compuesto es igual (hasta el redondeo) a la imagen entera (`strip_adaptive_test.dart`, `image_prefetch_test.dart`).
 - **Prioridad** (`SheetImageCache._nextJob`): (1) las franjas de las hojas visibles que intersectan el viewport ahora
   (el editor pasa, por hoja visible, la fracción de su alto que se ve: `setVisible(..., fractions:)`), (2) el resto de las
-  franjas de las visibles, (3) las hojas siguientes del plan (3 por delante, `prefetchAhead`) en orden, (4) tandas
+  franjas de las visibles, (3) las hojas siguientes del plan (2 por delante, `prefetchAhead`) en orden, (4) tandas
   quietas fuera del plan. Dentro de una hoja, en el sentido del scroll.
 - **Varios trabajos por cuadro, un solo `toImage`**: el primer trabajo se programa en el post-frame con
   `SchedulerBinding.scheduleTask` (prioridad de animación; con `idle` no corre durante un fling). Cuando termina, si
@@ -225,6 +225,16 @@ trazos, textos. La selección ventana/captura está en `Selection.selectIn`: `Se
 arrastre va de derecha a izquierda; en ese caso toma todo lo que toca el recuadro, con `Stroke.touchesRect` y
 `segmentIntersectsRect` (`geometry.dart`) para cortar contra el recorrido real del trazo.
 
+**Selección por toque.** Un toque (sin arrastre) con Seleccionar elige UN elemento: `Selection.hitStack` arma lo que
+hay bajo el lápiz de arriba hacia abajo en lo que se VE (orden de `zRuns`, con el resaltador debajo de la tinta de su
+tanda; trazos con `Stroke.hitBy` y 6 px de pantalla de margen, textos y elementos contra su rectángulo). Tocar de
+nuevo a menos de 12 px, con eso como única selección, pasa al siguiente hacia abajo (cíclico: tinta, resaltador,
+tinta). Un toque afuera del recuadro arma una banda mínima que en `_up` se resuelve como toque (`_tapSelect`): elige
+lo que haya o deselecciona; un toque en un hueco dentro del recuadro no hace nada. Si la selección por recuadro mezcla
+tinta y resaltador (`Selection.mixedInk`), la barrita suma dos botones (solo ícono) "Solo resaltador" / "Solo tinta"
+(`Selection.keepOnly`). Cambiar la selección nunca entra al historial. La barrita se acomoda con `_MenuLayout` para no
+salirse del ancho de la hoja.
+
 ### Guardado
 
 - Guardar codifica en otro isolate solo las hojas sucias (`NotebookDoc.takeDirty`; los mapas de elementos avisan
@@ -234,6 +244,27 @@ arrastre va de derecha a izquierda; en ese caso toma todo lo que toca el recuadr
 - Las hojas borradas se eliminan.
 - Escritura atómica (temporal + rename). Los guardados de un mismo cuaderno se hacen de a uno y se
   juntan.
+
+### Operaciones de hojas deshacibles
+
+Agregar, duplicar, mover y borrar hojas van al mismo historial que el resto (`lib/editor/history.dart`): una
+`EditAction` lleva una lista `sheetOps` (`SheetMoveOp`, `SheetPresenceOp`) que se aplica en orden al rehacer y al
+revés al deshacer. `EditAction.sheetIds` incluye las hojas de esas operaciones, así que quedan fijadas en memoria
+mientras la acción esté en el historial. Una hoja borrada restaurable guarda en la operación su contenido local
+(`SheetContent`), su estilo, título, marcador y posición; por eso borrar primero carga la hoja si no estaba cargada.
+El `.sheet` en disco lo borra el guardado como siempre y, al restaurar, la hoja se marca sucia y se vuelve a escribir.
+No hay `trash/`: el contenido vive en memoria hasta que el historial lo suelta o se cierra el cuaderno.
+Mover en el panel: asa `drag_handle` por miniatura (`thumbHandle-N`, destino `thumbDrop-N`), con dedo o lápiz.
+
+### Formato `.opennote`
+
+ZIP creado por `lib/data/opennote_file.dart`: `manifest.json` (app, versión de formato, nombre, fondo, papel,
+espaciado, cantidad de hojas), `notebook.json`, `sheets/<hoja>.sheet` (copiados de disco tal cual, sin cargar las hojas)
+y `media/<archivo>` (solo lo que usan las hojas). Al importar se valida el manifest (versión, nombres de archivo
+seguros, hojas que coinciden) antes de escribir; un archivo roto lanza `OpennoteException` y no deja nada en disco.
+El cuaderno nuevo recibe un id nuevo y "X (importado)" si el nombre ya existe. Exportar: menú ⋮ del cuaderno y menú
+de mantener apretado en la biblioteca (`saveOpennote` en `export.dart`); importar: "+" de la biblioteca
+(`Pickers.opennote`). Ambos son sustituibles en los tests.
 
 ### Migración
 
@@ -288,6 +319,27 @@ una **malla de triángulos** (`lib/domain/stroke_mesh.dart`, `buildStrokeMesh`) 
 - **Microbenchmark** (`test/rendering/stroke_bench_test.dart`, PC con rasterizador por software, orientativo; 46k
   puntos): grabar 15,8 ms -> 0,8 ms (mallas ya armadas), rasterizar 80 ms -> 9,4 ms.
 
+### Restos de la etapa 5 (RAM, apertura, lápiz)
+
+- **RAM del caché de imágenes**: con la tinta como mallas, una hoja vectorial es barata, así que el caché ya no paga lo
+  que ocupa. Una hoja a ~1650 px de ancho = 1650 x 2333 x 4 B = 15,4 MB. Antes: 12 tandas / 192 MB / 3 hojas adelante
+  (ventana de 7 hojas = 108 MB) y las imágenes de hojas ya pasadas quedaban hasta que otra necesitara lugar: tras desplazar
+  mucho, PSS 583 MB en la tablet. Ahora: 8 tandas / 96 MB / 2 adelante (ventana de 5 hojas = 77 MB) y
+  `SheetImageCache.releaseOutsideWindow()` (la llama `_updatePrefetch`) suelta las imágenes de hojas que no están en la
+  ventana protegida ni visibles. Así la RAM de imágenes queda acotada (<= 96 MB, ~100 MB menos que antes) sin depender de
+  cuánto se scrollea. `detachSheet` ya suelta mallas y lotes (`releaseMesh`) y `dropSheet` las entradas del caché
+  (`test/editor/image_ram_test.dart`). Falta medir PSS en la tablet (objetivo < ~400 MB).
+- **Apertura**: `Storage.loadSheets` decodifica en hasta `Storage.loadParallelism` (4) isolates a la vez, y
+  `openNotebook` arma las mallas solo de la hoja inicial antes de devolver; las de las vecinas se arman enseguida en
+  segundo plano (`_meshLater`, descarta el resultado si el trazo cambió: `meshGen`). `loadNotebook` (exportar, buscar)
+  sigue armando todo. Benchmark en PC (`test/data/open_bench_test.dart`, 5 hojas ~46k puntos, mediana de 5):
+  sin mallas 103 ms; etapa 5 (todo en un isolate) 316 ms; 4 isolates en paralelo 208 ms; ahora (inicial + segundo plano)
+  174 ms.
+- **Lápiz**: la tira principal lleva un vértice por punto (alfa apilado como las cuentas del dibujo viejo) y otro por
+  tramo, con una variación de alfa pseudoaleatoria estable (0,85-1,15). Diferencia contra `paintStrokeLegacy` (media por
+  píxel / % de píxeles con diferencia > 48): antes 0,698 / 0,405 %, ahora 0,629 / 0,384 % (tolerancia del test de 2,5 a 0,8).
+  Lápiz ~175 B/punto con colores.
+
 ## Compilar e instalar en la tablet
 
 ```
@@ -326,6 +378,9 @@ Requisitos:
   `test/data/lazy_load_test.dart` son la red de seguridad del guardado: secuencias aleatorias de operaciones contra
   un modelo de referencia con todo cargado, comparando cada `.sheet` (el segundo mezcla además cargas y descargas de
   hojas); `test/screens/lazy_notebook_test.dart` abre un cuaderno de 30 hojas por la UI.
+  `test/data/sheet_ops_undo_test.dart` (deshacer/rehacer de hojas, disco consistente, `.opennote` ida y vuelta y
+  archivo roto), `test/screens/sheet_ops_ui_test.dart` (asa, menú, hojas no cargadas) y
+  `test/screens/opennote_ui_test.dart` (exportar/importar desde la biblioteca).
 - `./run_tests.sh`: tests de integración en la tablet. Corren con el build debug
   (`com.apuntes.apuntes.test`, "OpenNote Test"), que es otra app con datos propios. Antes y después
   verifica que OpenNote y sus cuadernos sigan intactos.

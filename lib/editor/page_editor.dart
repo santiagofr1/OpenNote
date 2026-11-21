@@ -53,7 +53,12 @@ class PageEditor extends StatefulWidget {
   final ValueNotifier<int>? sheetNotifier; // hoja que se está viendo (la actualiza el editor al scrollear)
   final VoidCallback onChanged; // cambió el cuaderno (hay que guardarlo)
   final VoidCallback onPrefsChanged; // cambiaron las herramientas (prefs.json)
+
+  /// Cambiaron las hojas desde el editor (deshacer / rehacer una operación de hojas, hoja agregada tirando o con el menú):
+  /// el panel tiene que redibujarse. Recibe la hoja que conviene mostrar (null si no hay que moverse).
+  final ValueChanged<int?>? onSheetsChanged;
   const PageEditor({
+    this.onSheetsChanged,
     super.key,
     required this.doc,
     required this.tools,
@@ -293,6 +298,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final behind = _scrollDir == 0 ? -1 : (_scrollDir > 0 ? v.first - 1 : v.last + 1);
     _imgs.protectedSheets = {...ids, if (behind >= 0 && behind < doc.sheetCount) doc.sheets[behind].id};
     _imgs.prefetch(ids, dir: _scrollDir);
+    _imgs.releaseOutsideWindow(); // las imágenes de las hojas que quedaron lejos se sueltan (ver SheetImageCache)
     // visibles: las que no se habían dibujado (o tenían franjas a medias sin repintar) pasan a mostrarse; sus franjas
     // que están en pantalla se generan primero
     final top = (off - kTopPad) / scale, bottom = top + _viewH / scale;
@@ -543,6 +549,12 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     }
     final band = sel.band;
     if (band != null) {
+      if (band.longestSide * scale < 6) {
+        // un toque, no un recuadro: elige el elemento de más arriba bajo el lápiz (o nada)
+        sel.bandA = sel.bandB = null;
+        _tapSelect(band.topLeft, _selBefore);
+        return;
+      }
       sel.selectIn(doc, band, capture: sel.capture);
       sel.bandA = sel.bandB = null;
       setState(() {});
@@ -610,6 +622,11 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final a = undo ? history.undo() : history.redo();
     if (a == null) return;
     a.apply(doc, undo: undo, putText: texts.put);
+    if (a.sheetOps.isNotEmpty) {
+      _afterSheetOps();
+      widget.onSheetsChanged?.call(a.sheetFocus(doc, undo: undo));
+      return;
+    }
     _clearSel();
     _touchAll();
     _changed();
@@ -624,8 +641,38 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     liveTick.value++;
   }
 
-  /// Lápiz abajo con "seleccionar": dentro de la selección la mueve; afuera estira un rectángulo nuevo.
+  /// Lo que estaba seleccionado al apoyar el lápiz (el toque de afuera lo deselecciona antes de resolverse).
+  Set<String> _selBefore = const {};
+
+  /// Dónde fue el último toque que eligió algo (para alternar al tocar de nuevo en el mismo lugar).
+  Offset? _tapAt;
+
+  /// Toque con "seleccionar" en [p]: elige UN elemento, el de más arriba que se ve bajo el lápiz. Si ya era lo único
+  /// seleccionado ([current]) y el toque cae en el mismo lugar (~12 px), pasa al siguiente hacia abajo (cíclico).
+  /// Sin nada bajo el lápiz queda deseleccionado (salvo con [keepIfEmpty]). No entra al historial.
+  void _tapSelect(Offset p, Set<String> current, {bool keepIfEmpty = false}) {
+    final stack = sel.hitStack(doc, p, 6 / scale);
+    if (stack.isEmpty && keepIfEmpty) return; // toque en un hueco del recuadro de la selección: no pasa nada
+    var pick = stack.isEmpty ? null : stack.first;
+    final at = _tapAt;
+    if (stack.length > 1 && current.length == 1 && at != null && (p - at).distance * scale <= 12) {
+      final i = stack.indexWhere((e) => e.id == current.first);
+      if (i >= 0) pick = stack[(i + 1) % stack.length];
+    }
+    _tapAt = pick == null ? null : p;
+    if (pick == null) {
+      sel.clear();
+    } else {
+      sel.selectOne(pick);
+    }
+    setState(() {});
+    liveTick.value++;
+  }
+
+  /// Lápiz abajo con "seleccionar": dentro de la selección la mueve; afuera estira un rectángulo nuevo
+  /// (y si queda en un toque, deselecciona o elige lo que haya abajo).
   void _selDown(Offset p) {
+    _selBefore = sel.allIds;
     final r = sel.bounds(doc);
     if (r != null && r.inflate(12).contains(p)) {
       sel.startDrag(doc, p);
@@ -668,9 +715,9 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final drag = sel.drag!, d = drag.delta;
     sel.drag = null;
     if (d.distance < .5) {
-      // fue un toque: nada se movió
+      // fue un toque: nada se movió; elige (o alterna) lo que haya bajo el lápiz
       _touchStrokes(sel.strokesOf(doc));
-      setState(() {});
+      _tapSelect(drag.from, sel.allIds, keepIfEmpty: true);
       return;
     }
     // si algo va a caer en una hoja sin cargar, se deshace el movimiento (y se pide cargarla): nada se pierde
@@ -826,6 +873,13 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     if (r != null) _growIfNeeded(r.bottom);
     _changed();
     setState(() {});
+  }
+
+  /// Filtro de la barrita: deja solo el resaltador o solo la tinta (la selección no entra al historial).
+  void _keepInk({required bool hl}) {
+    sel.keepOnly(doc, hl: hl);
+    setState(() {});
+    liveTick.value++;
   }
 
   /// Menú "Orden": mueve la selección en el orden de dibujo (con deshacer).
@@ -1019,6 +1073,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   void _addSheetFromPull() {
     final oldH = doc.h;
     setState(doc.addSheet);
+    _sheetAddedAtEnd();
     _changed();
     // lleva a la hoja nueva
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1134,6 +1189,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         liveTick.value++;
       case SheetMenuAction.addSheet:
         setState(doc.addSheet);
+        _sheetAddedAtEnd();
         _changed();
       case SheetMenuAction.zoomToWidth:
         _setZoom(1);
@@ -1191,11 +1247,20 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     }
   }
 
-  /// Después de agregar, duplicar, mover o borrar hojas desde afuera: lo que dependía del orden
-  /// anterior (deshacer, selección, campos de texto) ya no sirve. Las operaciones de hojas no se deshacen.
-  void sheetsChanged() {
+  /// Después de agregar, duplicar, mover o borrar hojas desde afuera: lo que dependía del orden anterior
+  /// (selección, campos de texto) ya no sirve. Con [action] la operación queda en el historial y se puede deshacer;
+  /// sin ella (algo que no se sabe deshacer) el historial se vacía.
+  void sheetsChanged([EditAction? action]) {
+    if (action != null) {
+      history.push(action);
+    } else {
+      history.clear();
+    }
+    _afterSheetOps();
+  }
+
+  void _afterSheetOps() {
     texts.attach(doc);
-    history.clear();
     sel.clear();
     pointer = null;
     live = null;
@@ -1209,6 +1274,12 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     _syncedRange = null;
     _requestSync();
     _scheduleUnload();
+  }
+
+  /// Hoja agregada al final (tirar o menú): se puede deshacer.
+  void _sheetAddedAtEnd() {
+    _pushUndo(EditAction(sheetOps: [SheetPresenceOp.added(doc, doc.sheets.last)]));
+    widget.onSheetsChanged?.call(null);
   }
 
   /// Agrega un elemento centrado en lo que se está viendo y lo deja seleccionado.
@@ -1379,10 +1450,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     return Stack(clipBehavior: Clip.none, children: [
       _layers(textMode),
       if (r != null)
-        Positioned(
-          left: max(0.0, r.left * scale),
-          top: r.top * scale > 60 ? r.top * scale - 56 : r.bottom * scale + 8,
-          child: SelectionMenu(
+        Positioned.fill(
+            child: CustomSingleChildLayout(
+          delegate: _MenuLayout(max(0.0, r.left * scale), r.top * scale > 60 ? r.top * scale - 56 : r.bottom * scale + 8),
+          child: FittedBox(fit: BoxFit.scaleDown, child: SelectionMenu(
             onCopy: () {
               _copySel();
               snack(context, 'Copiado', duration: const Duration(milliseconds: 1200), width: 260);
@@ -1395,8 +1466,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             onDelete: _deleteSel,
             onClose: _clearSel,
             onOrder: _reorderSel,
-          ),
-        ),
+            onOnlyHl: sel.mixedInk(doc) ? () => _keepInk(hl: true) : null,
+            onOnlyInk: sel.mixedInk(doc) ? () => _keepInk(hl: false) : null,
+          )),
+        )),
       if (resizable != null)
         ResizeHandle(
           item: resizable,
@@ -1602,4 +1675,17 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       }),
     );
   }
+}
+
+/// Ubica la barrita de la selección en ([x], [y]), corrida a la izquierda si no entra en el ancho de la hoja
+/// (con los filtros de tinta / resaltador es larga; fuera del ancho de la hoja no recibiría toques).
+class _MenuLayout extends SingleChildLayoutDelegate {
+  final double x, y;
+  _MenuLayout(this.x, this.y);
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints c) => BoxConstraints.loose(c.biggest);
+  @override
+  Offset getPositionForChild(Size size, Size child) => Offset(x.clamp(0.0, max(0.0, size.width - child.width)), y);
+  @override
+  bool shouldRelayout(_MenuLayout o) => o.x != x || o.y != y;
 }

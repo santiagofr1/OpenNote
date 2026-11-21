@@ -7,6 +7,9 @@ import '../domain/domain.dart';
 class SelectionMenu extends StatelessWidget {
   final VoidCallback onCopy, onCut, onDuplicate, onDelete, onClose;
   final ValueChanged<ZMove> onOrder;
+
+  /// Filtros de tinta / resaltador: solo se pasan si la selección tiene las dos cosas mezcladas.
+  final VoidCallback? onOnlyHl, onOnlyInk;
   const SelectionMenu({
     super.key,
     required this.onCopy,
@@ -15,6 +18,8 @@ class SelectionMenu extends StatelessWidget {
     required this.onDelete,
     required this.onClose,
     required this.onOrder,
+    this.onOnlyHl,
+    this.onOnlyInk,
   });
 
   @override
@@ -33,6 +38,9 @@ class SelectionMenu extends StatelessWidget {
             ]),
           ),
         );
+    // filtros: solo el ícono (con tooltip), para que la barrita siga entrando en el ancho de la hoja
+    Widget only(IconData i, String tip, VoidCallback f) => IconButton(
+        onPressed: f, icon: Icon(i, size: 19, weight: 300, color: fg), tooltip: tip);
     Widget order() => PopupMenuButton<ZMove>(
           key: const Key('selOrder'),
           tooltip: 'Orden',
@@ -64,6 +72,8 @@ class SelectionMenu extends StatelessWidget {
           b(Symbols.content_cut, 'Cortar', onCut),
           b(Symbols.control_point_duplicate, 'Duplicar', onDuplicate),
           order(),
+          if (onOnlyHl != null) only(Symbols.ink_highlighter, 'Solo resaltador', onOnlyHl!),
+          if (onOnlyInk != null) only(Symbols.stylus_note, 'Solo tinta', onOnlyInk!),
           b(Symbols.delete, 'Eliminar', onDelete),
           IconButton(
               onPressed: onClose,

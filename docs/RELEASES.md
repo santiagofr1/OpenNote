@@ -20,6 +20,22 @@ El workflow `.github/workflows/release.yml`:
 Si falta el secreto del keystore, el job falla a propósito. Nunca se publica una release firmada con
 la clave de debug.
 
+## Limpieza de releases viejos
+
+Al final del job, el paso "Podar releases viejos" corre `tool/podar_releases.sh`, que deja solo los
+últimos 5 releases (`KEEP=5` en el paso) y borra el resto con `gh release delete <tag> --cleanup-tag --yes`
+(borra también el tag). Reglas:
+
+- Solo toca tags `^v1\.0\.[0-9]+$`; ignora drafts, prereleases y cualquier otro tag.
+- Ordena por fecha de creación y nunca borra el marcado Latest ni el recién publicado (`CURRENT_TAG`).
+- Corre solo si la publicación salió bien. Si un borrado falla, avisa con un warning y sigue con el resto;
+  el paso es `continue-on-error`, así que no tumba el workflow.
+- Usa `GH_TOKEN` (`github.token`) y el permiso `contents: write` que el workflow ya tiene.
+- La app solo consulta el último release, así que el aviso de actualización no se ve afectado.
+
+Para probar la selección sin borrar nada:
+`gh release list --json tagName,createdAt,isLatest,isDraft,isPrerelease --limit 200 | DRY_RUN=1 tool/podar_releases.sh`
+
 ## Secretos del repositorio
 
 Hay que configurar estos cuatro secretos en **Settings → Secrets and variables → Actions → New

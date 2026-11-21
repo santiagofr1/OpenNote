@@ -35,7 +35,7 @@ enum InkPaintMode {
 /// resolución. Cada franja tiene su clave ([InkImage.stripKey], `<tanda>#<n>`).
 ///
 /// Cuándo se genera: (1) por adelantado ([prefetch]): el editor dice qué hojas se ven y cuáles vienen en la dirección
-/// del scroll ([prefetchAhead] = 3) y se las va generando sin esperar a que queden quietas; (2) una tanda visible que
+/// del scroll ([prefetchAhead] = 2) y se las va generando sin esperar a que queden quietas; (2) una tanda visible que
 /// queda quieta [quiet] (300 ms) también se genera. Sin interrumpir al lápiz ([busy]). Los trabajos se reeligen en
 /// cada paso: si la hoja dejó de ser relevante, no se genera.
 ///
@@ -52,11 +52,14 @@ enum InkPaintMode {
 /// pedido es otro (zoom): ahí sigue usando las franjas viejas (estiradas) hasta que se regeneran, así el pellizco no
 /// vuelve a rasterizar todo.
 ///
-/// Presupuesto (GPU/RAM), elegido para que entre la ventana protegida sin desalojos: una hoja a ~1650 px de ancho
-/// = 1650 x 2333 x 4 B ≈ 15,4 MB. La ventana es hasta 3 visibles + [prefetchAhead] (3) adelante + 1 detrás = 7 hojas
-/// ≈ 108 MB. [maxImages] = 12 tandas deja margen (una hoja con una imagen o nota en el medio suma tandas) y
-/// [maxBytes] = 192 MB entra esas 7 hojas con zoom hasta ~1,3x sin desalojar. Con más zoom caben menos (se desalojan
-/// las de hojas fuera de la ventana, nunca las visibles ni las del prefetch). Contra 4 GB de la tablet. Ninguna imagen
+/// Presupuesto (GPU/RAM): una hoja a ~1650 px de ancho = 1650 x 2333 x 4 B ≈ 15,4 MB. La ventana protegida es hasta
+/// 2 visibles + [prefetchAhead] (2) adelante + 1 detrás = 5 hojas ≈ 77 MB; [maxBytes] = 96 MB entra eso con zoom ~1,1x
+/// y [maxImages] = 8 tandas deja margen para hojas con varias tandas (una imagen o nota en el medio). Con más zoom
+/// caben menos (se desalojan las de fuera de la ventana, nunca las visibles ni las del prefetch; si ni así entra,
+/// esa tanda queda vectorial, que con mallas es barato). Antes (etapa 4): 12 tandas / 192 MB / 3 adelante, y las
+/// imágenes de hojas que ya se pasaron quedaban hasta que otra necesitara el lugar (tras desplazar mucho: PSS 583 MB
+/// medido en la tablet); ahora [releaseOutsideWindow] las suelta al cambiar la ventana, así la RAM de imágenes queda
+/// acotada por la ventana (<= 96 MB) y no por el tiempo que se scrollea. Contra 4 GB de la tablet. Ninguna imagen
 /// pasa del tope de ancho que pone el editor (2x el ancho de pantalla): más zoom que eso se dibuja vectorial.
 class SheetImageCache {
   int maxImages;
@@ -78,7 +81,7 @@ class SheetImageCache {
   int maxJobsPerFrame = 4;
 
   /// Cuántas hojas por delante del scroll se generan por adelantado.
-  static const prefetchAhead = 3;
+  static const prefetchAhead = 2;
 
   /// Para los tests: ms de UI del cuadro actual (null: se mide desde el vsync).
   @visibleForTesting
@@ -148,8 +151,8 @@ class SheetImageCache {
   int _stamp = 0;
 
   SheetImageCache({
-    this.maxImages = 12,
-    this.maxBytes = 192 << 20,
+    this.maxImages = 8,
+    this.maxBytes = 96 << 20,
     this.stripCount,
     this.maxPointsPerStrip = 8000,
     this.minStrips = 4,
@@ -219,6 +222,19 @@ class SheetImageCache {
     _wanted = sheetIds;
     _dir = dir;
     _kick();
+  }
+
+  /// Suelta las imágenes de las hojas que no están en la ventana protegida ni se ven (la hoja sigue cargada: si se
+  /// vuelve a ella, se regenera). Con la tinta como mallas pintar una hoja vectorial es barato, así que no vale la pena
+  /// tener RAM/GPU ocupada con imágenes de hojas que ya se pasaron. Devuelve cuántas tandas soltó.
+  int releaseOutsideWindow() {
+    var n = 0;
+    for (final e in List.of(_entries.values)) {
+      if (!e.hasImage || protectedSheets.contains(e.sheetId) || visibleSheets.contains(e.sheetId)) continue;
+      e.evict(notify: false); // (se llama también durante el build: las hojas que no se ven no hace falta repintarlas)
+      n++;
+    }
+    return n;
   }
 
   /// Cambió algo de la hoja: sus imágenes ya no sirven.
@@ -607,7 +623,7 @@ class InkImage extends ChangeNotifier {
   }
 
   /// Desalojo por falta de lugar: suelta las franjas y avisa (el pintor deja de usarlas).
-  void evict() {
+  void evict({bool notify = true}) {
     _gen++;
     for (var i = 0; i < strips.length; i++) {
       strips[i]?.image.dispose();
@@ -616,7 +632,7 @@ class InkImage extends ChangeNotifier {
     imageStrokes = null;
     refused = false;
     evicted = true;
-    notifyListeners();
+    if (notify) notifyListeners();
   }
 
   void _dispose() {

@@ -117,7 +117,7 @@ void main() {
 
   testWidgets('un toque sin arrastre no selecciona nada', (t) async {
     final h = await open(t, armado());
-    final g = await t.startGesture(at(h, 250, 450), kind: PointerDeviceKind.stylus);
+    final g = await t.startGesture(at(h, 250, 700), kind: PointerDeviceKind.stylus); // en un hueco
     await g.up();
     await t.pump();
     expect(h.ed.sel.isEmpty, isTrue);

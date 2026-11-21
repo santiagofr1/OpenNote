@@ -32,6 +32,7 @@ Future<String?> showMoreMenu(BuildContext context, Offset at, Notebook nb) => sh
         const PopupMenuItem(value: 'style', child: MenuRow(Symbols.palette, 'Estilo de hoja')),
         const PopupMenuDivider(),
         const PopupMenuItem(value: 'saveas', child: MenuRow(Symbols.save_as, 'Guardar como')),
+        const PopupMenuItem(value: 'opennote', child: MenuRow(Symbols.archive, 'Exportar cuaderno (.opennote)')),
         const PopupMenuDivider(),
         _IconRow([
           (Symbols.star, nb.favorite ? 'Quitar de favoritos' : 'Favorito', 'fav', nb.favorite),
