@@ -41,6 +41,7 @@ El código está dividido por capas. Cada capa usa solo las de arriba:
   (`ink`), selección, deshacer (`history`), textos, elementos, zoom (`viewport`, `touch_gestures`),
   tirar para agregar hoja, barra acoplable (`dock_layout`, `toolbar`) y menús.
 - `lib/screens/` — biblioteca y cuaderno abierto (panel de hojas, búsqueda, estilo, menús).
+- `lib/sync/` — sincronización con Google Drive (ver abajo y `SINCRONIZACION.md`).
 - `lib/widgets/`, `lib/theme/` — diálogos compartidos y tema.
 - `lib/main.dart`, `lib/app.dart` — arranque.
 
@@ -244,6 +245,8 @@ salirse del ancho de la hoja.
 - Las hojas borradas se eliminan.
 - Escritura atómica (temporal + rename). Los guardados de un mismo cuaderno se hacen de a uno y se
   juntan.
+- Al terminar de escribir algo (una hoja, `notebook.json`, o un cambio del índice que se sincroniza) la `Storage` llama a
+  `onSaved`: la biblioteca lo conecta con `SyncController.notifySaved` (subida con debounce, ver "Sincronización").
 
 ### Operaciones de hojas deshacibles
 
@@ -339,6 +342,24 @@ una **malla de triángulos** (`lib/domain/stroke_mesh.dart`, `buildStrokeMesh`) 
   tramo, con una variación de alfa pseudoaleatoria estable (0,85-1,15). Diferencia contra `paintStrokeLegacy` (media por
   píxel / % de píxeles con diferencia > 48): antes 0,698 / 0,405 %, ahora 0,629 / 0,384 % (tolerancia del test de 2,5 a 0,8).
   Lápiz ~175 B/punto con colores.
+
+## Sincronización (resumen técnico)
+
+Detalle y decisiones en `docs/SINCRONIZACION.md` (sección "Decisión: Google Drive"). Piezas de `lib/sync/`:
+
+- `SyncEngine`: una pasada entre `Storage` y un `RemoteStore` (Drive o `FakeRemoteStore`); no sabe de relojes ni de la UI.
+- `SyncController` (`ChangeNotifier`): decide CUÁNDO. Debounce 5 s tras el último guardado (máximo 30 s desde el primero),
+  consulta de cambios cada 45 s solo en primer plano, pasada al volver a primer plano, una sola pasada a la vez (lo que
+  llega en el medio se junta en una más) y retroceso 30 s → 10 min ante errores. Expone `status` (`SyncStatus`) para el
+  indicador (`screens/library/sync_indicator.dart`) y `remoteWaiting` (cuadernos abiertos con cambios de la nube sin aplicar).
+  Los tiempos son parámetros del constructor; los tests lo corren con `fakeAsync` y una pasada falsa (`passOverride`).
+- Cuaderno abierto: el motor solo SUBE lo ya guardado y nunca escribe local ahí; los cambios remotos se avisan en el
+  editor ("Hay cambios de otro dispositivo" / Actualizar). Ver la regla de oro en `SINCRONIZACION.md`.
+- Cableado: `Library` crea el controlador, hace `store.onSaved = (_) => sync.notifySaved()` y es `WidgetsBindingObserver`
+  (`resumed` → `setForeground(true)`). `NotebookScreen` recibe el controlador solo para el indicador y el aviso.
+- Tests: `test/sync/sync_engine_test.dart` (motor, con dos dispositivos y cuaderno abierto), `test/sync/sync_controller_test.dart`
+  (planificador con reloj falso), `test/screens/sync_ui_test.dart` (indicador y aviso), y en `integration_test/app_test.dart`
+  el caso de sincronización automática (tarda ~15 s en la tablet: usa tiempos acortados `syncPoll` / `syncDebounce`).
 
 ## Compilar e instalar en la tablet
 
