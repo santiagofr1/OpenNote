@@ -1,6 +1,11 @@
 # Pendientes
 
-17. **App de PC + sincronización (A INVESTIGAR, no implementar todavía)**:
+17. **App de PC + sincronización** (rama `feat/drive-sync`). **DECIDIDO (2026-11-21): sincronización por Google Drive**
+    (permiso `drive.file`, carpeta `OpenNote`; tablet y Linux se conectan una vez con Google). Diseño en
+    docs/SINCRONIZACION.md, "Decisión: Google Drive". **Avance:** motor testeable sin Google (`lib/sync/`, remoto
+    falso, tests en `test/sync/`), remoto de Drive (`googleapis` v3), login (Android `google_sign_in`, Linux
+    `googleapis_auth` con PKCE), pantalla en el menú ⋮ de la biblioteca, workflow de release con los IDs desde secretos.
+    **Hecho también:** proyecto de Google Cloud `opennote-515407` (en producción, permiso no sensible), clientes OAuth y secretos cargados; probado de verdad entre la tablet y Linux (subir, bajar, borrar). **Falta:** cliente Android de la app real (necesita el SHA-1 del keystore de release), segundo plano, cifrado de extremo a extremo. **Hecho:** app de Linux empaquetada como `.deb` (`tool/build_deb.sh`, job `linux` del release, repo apt `santiagofr1/apt`); falta probar la instalación en una máquina limpia y agregar `santiagofr1/OpenNote` a `apps.txt` del repo apt. Lo que sigue es la investigación original:
     - PC: Flutter desktop compila el mismo código para Linux, Windows y macOS. Investigar qué cambia: entrada
       (mouse/teclado y tabletas Wacom en PC), atajos de teclado, rutas de datos, empaquetado (AppImage/Flatpak/.deb,
       instalador .msi/MSIX en Windows).
@@ -20,22 +25,11 @@
     cambios de Drive. Conflicto en la misma hoja: guardar las dos versiones. La app de PC habla directo con Drive
     (en Linux no hay cliente oficial). Hace falta un proyecto de Google Cloud para el login; confirmar si drive.file
     exige verificación de Google. Orden: 1) Drive en la tablet, 2) app Linux, 3) en segundo plano, 4) cifrado opcional.
-21. **Sync con Drive: bugs vistos en la primera prueba real** (2026-11-21, tablet + Linux, rama `feat/drive-sync`):
-    - **Borrar un cuaderno no se propaga si el otro dispositivo reinició la app**: al arrancar, `DriveRemoteStore.changes()`
-      carga el listado actual (que ya no tiene lo borrado) y lo usa como "antes", así el delta nunca reporta el borrado.
-      Arreglo: el primer `changes()` de cada proceso hace un listado completo (`full: true`) y el motor recalcula.
-      Test que reproduzca: proceso nuevo + borrado hecho antes en el otro dispositivo.
-    - **"Mi cuaderno" duplicado**: cada dispositivo crea su cuaderno de ejemplo al primer arranque y al sincronizar
-      quedan dos. Arreglo: en la primera sync, si el de ejemplo local está intacto y el remoto ya tiene cuadernos,
-      descartarlo sin subirlo.
-    - **Tarda en sincronizar si no se toca el botón** (solo al abrir, al cerrar cuaderno y cada 10 min). Arreglo en curso:
-      subir ~5 s después de guardar, consultar cambios cada 30–60 s con la app abierta, al volver a primer plano, e
-      indicador de estado en la barra.
-    - Ojo al probar en PC: no abrir dos copias de la app sobre la misma carpeta de datos (`~/Documents/apuntes`).
 15. **LaTeX**: lo hace el usuario; no tocar.
 
 ## Hecho
 
+- **21. Bugs de la primera prueba real de sync** (2026-11-21): borrados que no llegaban si el otro dispositivo reiniciaba la app (primer `changes()` de cada proceso ahora es listado completo), "Mi cuaderno" de ejemplo duplicado (se descarta si está intacto y la nube ya tiene cuadernos) y sync lenta (sube ~5 s después de guardar, consulta cada 45 s, al volver a primer plano, indicador en la barra, aviso "Actualizar" con el cuaderno abierto). Probado entre tablet y Linux.
 - **1. Hojas, detalles** (rama `feat/hojas-3`): "Seleccionar todo" toma la hoja visible y "Seleccionar todo el cuaderno" carga las que faltan (progreso, cancelable, aviso con más de 60 hojas); el historial se poda por el fondo si fija más de 12 hojas lejanas. Ver docs/TECNICO.md.
 - **19. Selección: resaltador y tocar afuera** (rama `feat/seleccion-2`): un toque elige un solo elemento (el de más arriba que se ve), tocar de nuevo en el mismo lugar alterna al de abajo (tinta, resaltador), tocar afuera deselecciona, y con tinta y resaltador mezclados la barrita ofrece "Solo resaltador" / "Solo tinta".
 - **1. Hojas: arrastrar, deshacer y `.opennote`** (rama `feat/hojas-2`): mover hojas arrastrando el asa de la miniatura

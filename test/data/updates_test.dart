@@ -27,6 +27,19 @@ void main() {
     expect(parseRelease({'message': 'Not Found'}), isNull);
   });
 
+  test('release: elige el .apk aunque haya un .deb antes', () {
+    final j = fixture();
+    final assets = (j['assets'] as List).cast<Map<String, dynamic>>();
+    final deb = {
+      'name': 'opennote_1.0.12_amd64.deb',
+      'size': 1,
+      'browser_download_url': 'https://github.com/santiagofr1/OpenNote/releases/download/v1.0.12/opennote_1.0.12_amd64.deb',
+    };
+    final u = parseRelease({...j, 'assets': [deb, ...assets]})!;
+    expect(u.apkUrl, endsWith('/OpenNote-v1.0.12.apk'));
+    expect(parseRelease({...j, 'assets': [deb]}), isNull);
+  });
+
   test('newerThan compara con la versión instalada', () {
     final u = parseRelease(fixture());
     expect(newerThan(u, AppVersion.tryParse('1.0.11')), isNotNull);
