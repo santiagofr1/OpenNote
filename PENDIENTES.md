@@ -1,8 +1,8 @@
 # Pendientes
 
-1. **Carga perezosa de hojas lejanas — falta medir en la tablet y afinar**. Implementada (ver Hecho): medir con
-   `tool/perf.sh` (100 y 200 hojas: tiempo de abrir, RAM, scroll rápido) y ajustar `kLoadMargin` / `kKeepMargin`
-   (`lib/editor/page_editor.dart`) si hace falta.
+1. **Restos de rendimiento / hojas** (lo grande está hecho y medido, ver Hecho y docs/perf): RAM tras desplazar
+   mucho ~580 MB por el caché de imágenes (192 MB; se puede bajar); "abrir perezoso" 0,5–1 s en el benchmark por
+   armar las mallas (abrir desde la app sigue en 0,4 s); el lápiz con mallas queda algo más parejo que antes.
    - Mover hojas arrastrando en el panel (hoy: menú "Mover antes / después").
    - Las operaciones de hojas (agregar, duplicar, mover, borrar) no se pueden deshacer: vacían el historial.
    - Exportar/backup del cuaderno entero como un archivo `.opennote` (ZIP).
