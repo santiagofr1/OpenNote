@@ -591,6 +591,89 @@ comparte entre todos los usuarios de la app: con muchos usuarios el tope por min
 que habría que mirar; con 1 000 usuarios consultando cada 45 s son unas 1 300 llamadas por minuto en total.
 La consulta periódica es barata para la batería: una petición HTTPS chica cada 45 s con la pantalla prendida y la app visible.
 
+### Cifrado de extremo a extremo (opcional)
+
+Código: `lib/sync/e2e_crypto.dart` (formato y claves), `encrypted_remote_store.dart` (decorador de `RemoteStore`),
+`sync_crypto.dart` (estado, clave guardada, activar / desactivar / frase), UI en
+`lib/screens/library/crypto_section.dart` (hoja de sincronización, sección "Cifrado"). Tests: `test/sync/e2e_test.dart`.
+
+**Qué ve Google con el cifrado activo:** archivos sin sentido (contenido cifrado), su **cantidad, tamaños y fechas**, y
+sus **rutas**. Las rutas (`notebooks/<id>/sheets/<hoja>.sheet`, `media/<nombre>`) **quedan en claro a propósito**: son ids
+al azar, no llevan el nombre del cuaderno (el nombre está dentro de `index.json`, que va cifrado), y así el motor y la
+API de cambios de Drive siguen funcionando igual. Lo que no se oculta: cuántos cuadernos y hojas hay y cuándo se tocan.
+
+**Esquema**
+
+- Frase elegida por el usuario (mínimo 8 caracteres) → clave de 32 bytes con **Argon2id** (paquete `cryptography`
+  2.9.0, última versión disponible al hacerlo) y una **sal de 16 bytes al azar**. La derivación va en otro isolate para no
+  trabar la pantalla.
+- **Parámetros: 64 MiB de memoria, 3 pasadas, 1 hilo** (RFC 9106, segunda opción recomendada para poca memoria). En Dart puro
+  no hay paralelismo real, así que se usa 1 hilo. **Medido en la PC de desarrollo (Linux, Dart JIT): 585 ms** (con 19 MiB y
+  2 pasadas: 217 ms). **En la Galaxy Tab S6 Lite NO se midió**: se estima unos 3 a 5 segundos (varias veces más lenta);
+  se paga solo al activar el cifrado y al ingresar la frase en un dispositivo nuevo. Los parámetros viajan en
+  `crypto.json`, así que se pueden cambiar en una versión futura sin romper nubes ya cifradas.
+- **Cada archivo:** XChaCha20-Poly1305 con nonce de 24 bytes al azar (no se repite en la práctica). Formato:
+  `ONCR` (4 bytes mágicos) + versión (1 byte, hoy 1) + nonce (24) + texto cifrado + etiqueta (16). Datos asociados (AAD):
+  versión + **ruta del archivo**, así un archivo cifrado no se puede mover a otra ruta sin que falle. Medido: 5 MiB se cifran en
+  ~170 ms y se descifran en ~140 ms (PC).
+- **`OpenNote/crypto.json`** (en claro, sin secretos): `version`, `cipher`, parámetros del KDF, `salt`, `verifier` (un texto
+  conocido cifrado con la clave: descifrarlo bien prueba que la frase es la correcta) y `migrating` (null, o
+  `encrypting` / `decrypting` mientras se cambia el cifrado). Si existe, la nube está cifrada.
+- **La clave derivada (no la frase) se guarda en el almacenamiento seguro** (`TokenStore` / `flutter_secure_storage`:
+  Keystore en Android, libsecret en Linux) con la clave `opennote.sync.e2e.key`. Al desconectar de Google se borra. En un
+  dispositivo nuevo, al conectarse y ver `crypto.json`, la app pide la frase: con una incorrecta no sincroniza y avisa
+  ("La frase de cifrado es incorrecta"); no se reintenta sola.
+- **Si se olvida la frase no hay forma de recuperar lo que está en la nube** (lo local sigue entero). La UI lo avisa en la
+  sección y en el diálogo de activación.
+
+**Los hashes (lo delicado).** El motor compara el md5 de lo local (claro) con la base y con el md5 que informa el remoto.
+Con cifrado, el md5 remoto es del texto cifrado y cambia en cada subida (nonce al azar) aunque el contenido sea igual: el
+motor vería conflictos o subidas sin fin. No se tocó el motor: `EncryptedRemoteStore` le habla **siempre en hashes del
+claro** y se acuerda de la correspondencia (md5 del cifrado en la nube → md5 del claro) en una caché por ruta
+(`HashCache`, guardada en `sync_crypto_cache.json`, solo local):
+
+1. Al **subir**: calcula el md5 del claro, sube el cifrado y anota (md5 devuelto por la nube → md5 del claro). Devuelve al
+   motor el md5 del claro. El `ifRemoteMd5` que manda el motor (claro) se traduce al del cifrado antes de pasarlo.
+2. Al **listar cambios**: traduce cada md5 de la nube con la caché. Las subidas propias que vuelven en el próximo delta
+   figuran con el mismo hash claro: no hacen nada. Si el archivo es nuevo (lo subió otro dispositivo) lo baja y lo
+   descifra **una vez** para saber su hash claro (se guarda unos MB en memoria para que el `download` del motor no lo baje
+   dos veces) y lo anota. Con la caché perdida no se rompe nada: se reconstruye bajando (el `upload` también se autocorrige).
+3. Un archivo de la nube **no cifrado o que no descifra** corta la pasada con un error claro. No se lo ignora: el motor lo
+   tomaría por "borrado en la nube" y borraría el local.
+4. El decorador oculta `crypto.json` del motor y vigila su contenido: si lo cambió otro dispositivo (activó, desactivó o
+   rehízo el cifrado) la pasada se corta y se vuelve a leer; si la carpeta de la nube apareció vacía, **repone `crypto.json`**
+   antes de subir nada (nunca se sube nada sin cifrar con el cifrado activo). Con la nube sin cifrar, un envoltorio mínimo
+   (`PlainRemoteStore`) detecta que apareció `crypto.json`.
+
+Medido en los tests: con dos dispositivos, pasadas sucesivas sin cambios hacen 0 subidas y 0 bajadas de archivos.
+
+**Activar con datos ya en la nube (implementado: re-sube todo cifrado)**
+
+1. Se deriva la clave y se hace una pasada normal (todo al día).
+2. Se sube `crypto.json` con `migrating: encrypting` (los otros dispositivos que se conecten ya piden la frase) y la clave
+   queda en el almacenamiento seguro.
+3. Cada archivo de la nube se baja, se **borra de forma definitiva** (`files.delete` de Drive, no papelera: si no, el texto
+   en claro quedaría 30 días en la papelera y como revisión vieja) y se vuelve a subir cifrado. Los que ya están cifrados se saltean.
+4. Se vuelve a subir `crypto.json` con `migrating: null`.
+
+**Desactivar** es lo inverso (se marca `decrypting`, cada archivo se baja, se descifra, se borra y se sube en claro; al final
+se borra `crypto.json` y la clave del dispositivo). Si se corta a la mitad (sin red, app cerrada), `crypto.json` sigue marcado y
+**la próxima pasada de un dispositivo que tenga la clave lo retoma**. Al empezar o fallar un cambio de cifrado se borra
+`sync_state.json` (la base): si no, un archivo que quedó borrado de la nube a la mitad se tomaría por un borrado en la nube y
+se borraría el local; sin base, el motor lo vuelve a subir. Los cuadernos locales no se tocan nunca.
+
+**Límites y riesgos conocidos**
+
+- **Metadatos visibles:** cantidad de archivos, tamaños, fechas y rutas (ver arriba).
+- **Rollback:** la nube puede devolver una versión vieja de un archivo que sigue siendo válida (el AAD lleva la ruta pero no
+  un contador). Sin resolver (ver sección 3.2).
+- **Integridad entre dispositivos durante un cambio de cifrado:** no tocar la nube desde otro dispositivo mientras se
+  activa o desactiva; dos dispositivos convirtiendo a la vez deberían converger pero no se probó.
+- **Cifrado de archivos grandes en Dart puro:** carga el archivo entero en memoria (las imágenes de `media/` son de unos MB).
+- **No se probó contra Drive real ni en la tablet** (sin tablet conectada); solo con el remoto falso en los tests. En
+  particular el borrado definitivo de Drive (`files.delete`) y el tiempo de Argon2id en la tablet.
+- **Linux sin llavero:** si el sistema no tiene almacenamiento seguro, no se puede guardar la clave y la frase se pide de nuevo.
+
 ### Seguridad
 
 - **Tokens.** Android: los maneja `google_sign_in` / Google Play services; la app no guarda ninguno. Linux: el
@@ -600,8 +683,8 @@ La consulta periódica es barata para la batería: una petición HTTPS chica cad
   clasificación exacta: si lo es, no hace falta la verificación de Google)**.
 - **El secreto del cliente de escritorio no es confidencial** [según Google, en apps instaladas no puede mantenerse en
   secreto]. Va en la app igual que el ID. Lo que protege la cuenta es el consentimiento del usuario y PKCE.
-- **Google puede leer lo que se sube**: el contenido está sin cifrar en Drive. **Paso siguiente:** cifrado de extremo a
-  extremo (sección 3.2 y 3.3) antes de subir.
+- **Google puede leer lo que se sube** salvo que se active el cifrado de extremo a extremo (sección "Cifrado", más
+  abajo). Es opcional y viene apagado.
 
 ### Configurar Google Cloud (pasos del dueño)
 
