@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -11,6 +12,10 @@ import '../../data/storage.dart';
 import '../../data/updates.dart';
 import '../../domain/domain.dart';
 import '../../domain/version.dart';
+import '../../sync/google_auth.dart';
+import '../../sync/google_config.dart';
+import '../../sync/sync_backend.dart';
+import '../../sync/sync_controller.dart';
 import '../../widgets/dialogs.dart';
 import '../../widgets/pdf_progress.dart';
 import '../../widgets/update_dialog.dart';
@@ -18,17 +23,25 @@ import '../notebook/notebook_screen.dart';
 import 'folder_card.dart';
 import 'move_dialog.dart';
 import 'notebook_card.dart';
+import 'sync_indicator.dart';
+import 'sync_sheet.dart';
 
 /// Biblioteca: las carpetas y los cuadernos de la carpeta actual (con su miniatura),
 /// o los resultados de la búsqueda en todas las carpetas.
 class Library extends StatefulWidget {
-  const Library({super.key, this.root});
+  const Library({super.key, this.root, this.backend, this.syncPoll, this.syncDebounce});
   final Directory? root;
+
+  /// Cómo se conecta la sincronización (los tests pasan uno falso; null = Google).
+  final SyncBackend? backend;
+
+  /// Cada cuánto consulta la nube con la app en primer plano, y cuánto espera tras el último guardado (null = por defecto).
+  final Duration? syncPoll, syncDebounce;
   @override
   State<Library> createState() => _LibraryState();
 }
 
-class _LibraryState extends State<Library> {
+class _LibraryState extends State<Library> with WidgetsBindingObserver {
   late final store = Storage(root: widget.root);
   final tools = ToolState();
   NotesIndex? index;
@@ -38,11 +51,23 @@ class _LibraryState extends State<Library> {
   String? current; // carpeta abierta (null = inicio)
   final searchCtl = TextEditingController();
   String query = '';
+  late final SyncController sync = SyncController(
+      store: store,
+      backend: widget.backend ?? GoogleBackend(),
+      pollInterval: widget.syncPoll ?? const Duration(seconds: 45),
+      debounce: widget.syncDebounce ?? const Duration(seconds: 5))
+    ..busyNotebooks = (() => {?_openId})
+    ..onSynced = ((_) => _reloadAfterSync());
+  String? _openId; // cuaderno abierto en el editor: la sincronización solo le sube lo guardado, no le escribe
+  bool _staleAfterSync = false; // bajó algo mientras había un cuaderno abierto: al cerrarlo se vuelve a leer todo
 
   bool get searching => query.trim().isNotEmpty;
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    store.onSaved = null;
+    sync.dispose();
     searchCtl.dispose();
     super.dispose();
   }
@@ -50,16 +75,23 @@ class _LibraryState extends State<Library> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
   }
 
+  // primer plano: sincroniza ya y consulta cada tanto; segundo plano: sin consultas (ver SyncController)
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) => sync.setForeground(state == AppLifecycleState.resumed);
+
   Future<void> _load() async {
     await store.init();
+    store.onSaved = (_) => sync.notifySaved();
     final prefs = await store.loadPrefs();
     tools.load(prefs);
     updPrefs = UpdatePrefs.from(prefs);
     final idx = await store.loadIndex();
     setState(() => index = idx);
+    unawaited(sync.init());
     WidgetsBinding.instance.addPostFrameCallback((_) => _autoUpdateCheck());
     for (final nb in idx.notebooks) {
       final t = await store.loadSheetDoc(nb, 0);
@@ -112,8 +144,29 @@ class _LibraryState extends State<Library> {
     }
   }
 
+  /// La sincronización bajó cosas: se vuelve a leer el índice (si no hay un cuaderno abierto, que lo tiene en memoria).
+  Future<void> _reloadAfterSync() async {
+    if (!mounted) return;
+    if (_openId != null) {
+      _staleAfterSync = true;
+      return;
+    }
+    _staleAfterSync = false;
+    final idx = await store.loadIndex();
+    if (!mounted || _openId != null) return;
+    setState(() {
+      index = idx;
+      thumbs.removeWhere((id, _) => !idx.notebooks.any((n) => n.id == id));
+    });
+    for (final nb in idx.notebooks) {
+      final t = await store.loadSheetDoc(nb, 0);
+      if (!mounted) return;
+      if (t != null) setState(() => thumbs[nb.id] = t);
+    }
+  }
+
   Future<void> _settings() async {
-    final check = await showSafeSheet<bool>(
+    final check = await showSafeSheet<String>(
       context,
       (ctx) => StatefulBuilder(
         builder: (ctx, setS) => Padding(
@@ -124,7 +177,14 @@ class _LibraryState extends State<Library> {
               leading: const Icon(Symbols.system_update, weight: 300),
               title: const Text('Buscar actualizaciones'),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              onTap: () => Navigator.pop(ctx, true),
+              onTap: () => Navigator.pop(ctx, 'check'),
+            ),
+            ListTile(
+              key: const Key('syncMenu'),
+              leading: const Icon(Symbols.cloud_sync, weight: 300),
+              title: const Text('Sincronización con Google Drive'),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              onTap: () => Navigator.pop(ctx, 'sync'),
             ),
             SwitchListTile(
               key: const Key('autoUpdates'),
@@ -141,15 +201,21 @@ class _LibraryState extends State<Library> {
         ),
       ),
     );
-    if (check == true && mounted) await _manualUpdateCheck();
+    if (check == 'check' && mounted) await _manualUpdateCheck();
+    if (check == 'sync' && mounted) {
+      await _openSyncSheet();
+    }
   }
 
   /// favoritos primero; después los más recientes
   List<Notebook> _sorted(List<Notebook> list) => [...list]
     ..sort((a, b) => a.favorite != b.favorite ? (a.favorite ? -1 : 1) : b.updated.compareTo(a.updated));
 
-  Future<void> _open(Notebook nb) async {
-    if (nb.pin != null) {
+  Future<void> _openSyncSheet() =>
+      showSafeSheet<void>(context, (ctx) => SyncSheet(sync: sync, missing: widget.backend?.missingConfig ?? GoogleConfig.missing));
+
+  Future<void> _open(Notebook nb, {bool askedPin = false}) async {
+    if (nb.pin != null && !askedPin) {
       final p = await askPin(context, nb.name, subtitle: 'Este cuaderno está bloqueado');
       if (p == null || !mounted) return;
       if (hashPin(p) != nb.pin) {
@@ -157,10 +223,12 @@ class _LibraryState extends State<Library> {
         return;
       }
     }
-    await Navigator.of(context).push(PageRouteBuilder(
+    _openId = nb.id;
+    final result = await Navigator.of(context).push<Object?>(PageRouteBuilder<Object?>(
       transitionDuration: const Duration(milliseconds: 320),
       reverseTransitionDuration: const Duration(milliseconds: 240),
-      pageBuilder: (_, _, _) => NotebookScreen(store: store, index: index!, nb: nb, tools: tools),
+      pageBuilder: (_, _, _) =>
+          NotebookScreen(store: store, index: index!, nb: nb, tools: tools, sync: sync, onOpenSync: _openSyncSheet),
       transitionsBuilder: (_, a, _, child) {
         final c = CurvedAnimation(parent: a, curve: Curves.easeOutQuart);
         return FadeTransition(
@@ -169,8 +237,20 @@ class _LibraryState extends State<Library> {
         );
       },
     ));
-    // volvió: se guardó todo; refrescar miniatura y orden
+    // volvió: se guardó todo; refrescar miniatura y orden, y sincronizar el cuaderno que se cerró
+    _openId = null;
     if (!mounted) return;
+    if (result == 'refresh') {
+      // "Actualizar" (aviso de cambios de otro dispositivo): ya está guardado y cerrado; se baja y se vuelve a abrir
+      await sync.syncNow(manual: true);
+      await sync.whenIdle();
+      await _reloadAfterSync();
+      final again = index?.notebooks.where((n) => n.id == nb.id).firstOrNull;
+      if (mounted && again != null) return _open(again, askedPin: true);
+      if (!mounted) return;
+    }
+    unawaited(sync.syncNow());
+    if (_staleAfterSync) unawaited(_reloadAfterSync());
     if (!index!.notebooks.contains(nb)) {
       setState(() => thumbs.remove(nb.id)); // lo borraron desde adentro
       snack(context, 'Cuaderno borrado');
@@ -604,6 +684,7 @@ class _LibraryState extends State<Library> {
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w500, color: cs.onSurface)),
         ),
+        SyncIndicator(sync: sync, onTap: _openSyncSheet),
         IconButton(
           key: const Key('libraryMenu'),
           tooltip: 'Más opciones',

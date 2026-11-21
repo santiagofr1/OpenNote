@@ -174,6 +174,12 @@ class SheetPresenceOp extends SheetOp {
 /// Mapa "no existía / ya no existe" para esos ids.
 Map<String, T?> absent<T>(Iterable<String> ids) => {for (final id in ids) id: null};
 
+/// Tope de hojas lejanas fijadas SOLO por el historial. Pasado esto se descartan las acciones más viejas (ver
+/// [History.trim]). 12: es lo que entra cómodo en memoria (una hoja cargada con tinta y mallas pesa unos pocos MB;
+/// 12 más las ~11 cercanas que ya se mantienen quedan en el orden de lo medido, 240 a 409 MB de PSS con 34 hojas) y
+/// alcanza para deshacer con holgura lo que se hizo en las últimas hojas trabajadas.
+const kHistoryMaxFarSheets = 12;
+
 /// Pilas de deshacer / rehacer.
 class History {
   static const limit = 200;
@@ -197,6 +203,41 @@ class History {
         for (final a in _undo) ...a.sheetIds(doc),
         for (final a in _redo) ...a.sheetIds(doc),
       };
+
+  /// Poda del historial para no fijar en memoria demasiadas hojas lejanas. Cuenta las hojas que tocan las acciones
+  /// del historial y están en [far] (lejos de lo que se ve) y no en [exempt] (otras razones para tenerlas cargadas:
+  /// sucias, seleccionadas, con foco...). Si son más de [maxFar], descarta las acciones de deshacer MÁS VIEJAS, una por
+  /// una desde el fondo de la pila (recorte por el fondo: lo que queda sigue siendo consistente, porque cada acción
+  /// se apoya en el estado que dejaron las anteriores, que ya está aplicado), hasta volver bajo el tope. Se corta antes
+  /// de la primera acción que toque una hoja de [visible]: esa nunca se descarta. Si descartando todo lo posible
+  /// sigue pasado el tope, se vacía lo que se puede rehacer. Devuelve true si descartó algo.
+  bool trim(NotebookDoc doc, {required Set<String> far, required Set<String> exempt, required Set<String> visible, int maxFar = kHistoryMaxFarSheets}) {
+    final undoSets = [for (final a in _undo) a.sheetIds(doc)];
+    final redoSets = [for (final a in _redo) a.sheetIds(doc)];
+    final counts = <String, int>{};
+    void add(Set<String> ids, int d) {
+      for (final id in ids) {
+        if (far.contains(id) && !exempt.contains(id)) counts.update(id, (n) => n + d, ifAbsent: () => d);
+        if (counts[id] == 0) counts.remove(id);
+      }
+    }
+
+    for (final x in [...undoSets, ...redoSets]) {
+      add(x, 1);
+    }
+    if (counts.length <= maxFar) return false;
+    var cut = 0;
+    while (cut < _undo.length && counts.length > maxFar && !undoSets[cut].any(visible.contains)) {
+      add(undoSets[cut++], -1);
+    }
+    _undo.removeRange(0, cut);
+    var dropped = cut > 0;
+    if (counts.length > maxFar && _redo.isNotEmpty) {
+      _redo.clear();
+      dropped = true;
+    }
+    return dropped;
+  }
 
   /// La acción a deshacer (queda para rehacer), o null si no hay.
   EditAction? undo() => _move(_undo, _redo);

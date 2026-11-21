@@ -41,6 +41,7 @@ El código está dividido por capas. Cada capa usa solo las de arriba:
   (`ink`), selección, deshacer (`history`), textos, elementos, zoom (`viewport`, `touch_gestures`),
   tirar para agregar hoja, barra acoplable (`dock_layout`, `toolbar`) y menús.
 - `lib/screens/` — biblioteca y cuaderno abierto (panel de hojas, búsqueda, estilo, menús).
+- `lib/sync/` — sincronización con Google Drive (ver abajo y `SINCRONIZACION.md`).
 - `lib/widgets/`, `lib/theme/` — diálogos compartidos y tema.
 - `lib/main.dart`, `lib/app.dart` — arranque.
 
@@ -125,7 +126,19 @@ cargar es, para la app, lo que dice su archivo en disco.
   en disco, su contenido no tiene la misma huella (`sheetDigest`: todo lo que se guarda, sin el ruido de 1e-13 de mover hojas) que el archivo (si difiere se la marca para guardar y no se suelta), tiene
   selección o arrastre, un texto o nota con foco, un trazo o borrador en curso, un audio, un elemento caído
   encima (`misplacedSheets`), o la tocan acciones del historial de deshacer / rehacer (`EditAction.sheetIds`: mientras
-  una acción esté en el historial sus hojas quedan fijadas; con historial largo se sueltan menos hojas, a propósito).
+  una acción esté en el historial sus hojas quedan fijadas; ver "Poda del historial" abajo).
+
+**Poda del historial** (`History.trim`, llamada desde `_unloadFar` antes de decidir qué soltar). Se cuentan las hojas que
+tocan las acciones del historial (deshacer y rehacer) que están lejos de lo que se ve (`_farLoaded`) y que NO están
+fijadas por otro motivo (selección, foco, trazo en curso, audios...). Si son más de `kHistoryMaxFarSheets` = 12 se
+descartan acciones de deshacer desde la MÁS VIEJA, una por una, hasta volver bajo el tope: es un recorte por el fondo de
+la pila, así lo que queda sigue siendo consistente (cada acción parte del estado que dejaron las anteriores, que ya está
+aplicado). El recorte se frena en la primera acción que toca una hoja visible: esa nunca se descarta. Si aun así
+sigue pasado el tope, se vacía lo que se podía rehacer. Esas hojas ya no están fijadas y se sueltan en el mismo ciclo. No se
+avisa al usuario. El 12 es un proxy de memoria: una hoja cargada con tinta y mallas son unos pocos MB, y 12 más las
+cercanas (hasta ~11) quedan dentro de lo medido en la tablet (PSS 240 a 409 MB con 34 hojas); no se estima el peso real
+por hoja (habría que medir mallas y lotes) porque el conteo ya acota el caso grave, el historial largo en cuadernos enormes.
+Las operaciones de hojas viejas (borrar, mover) también se descartan: la hoja borrada que guardaban en memoria se libera.
 
 **Regla de oro: nunca perder datos.** Una hoja no cargada NUNCA se escribe. `Storage._saveNow` solo toma hojas
 cargadas (`splitSheets` ni siquiera devuelve las otras; hay un `assert` y una guarda que no escribe y loguea), también
@@ -135,7 +148,13 @@ borra su archivo (la `Storage` recuerda qué ids figuran en `notebook.json`). Lo
 desconocidos hasta leer su archivo.
 
 Qué pasa con el resto de la app cuando no está todo en memoria:
-- **Seleccionar todo**: solo lo de las hojas cargadas (las visibles y las cercanas).
+- **Seleccionar todo** (menú al mantener el dedo sobre la hoja): selecciona todo lo de la HOJA VISIBLE (`Selection.selectAll(doc,
+  sheet:)`; como Samsung Notes, que selecciona por página; cada elemento es de la hoja de su borde de arriba). **Seleccionar
+  todo el cuaderno** (`PageEditor.selectAllNotebook`): carga las hojas que faltan de a `kSelectAllBatch` = 4 (se puede
+  cancelar entre tandas; un diálogo con progreso aparece si tarda más de ~300 ms; con más de `kSelectAllWarn` = 60 hojas
+  avisa antes cuántas va a cargar) y recién ahí selecciona. Mientras carga (`_selectingAll`) no se suelta ninguna hoja;
+  después las fija la propia selección (`_pinnedSheets`). Si se cancela o falla, no se selecciona nada y lo cargado se
+  suelta solo después.
 - **Un elemento que cae en una hoja sin cargar** (arrastre, pegado): el movimiento se deshace si la hoja no cargó al
   soltar; si igual llega, la hoja se anota en `misplacedSheets`, el editor la carga enseguida y al cargarla se marca para
   guardar (el elemento y lo del disco quedan juntos).
@@ -244,6 +263,8 @@ salirse del ancho de la hoja.
 - Las hojas borradas se eliminan.
 - Escritura atómica (temporal + rename). Los guardados de un mismo cuaderno se hacen de a uno y se
   juntan.
+- Al terminar de escribir algo (una hoja, `notebook.json`, o un cambio del índice que se sincroniza) la `Storage` llama a
+  `onSaved`: la biblioteca lo conecta con `SyncController.notifySaved` (subida con debounce, ver "Sincronización").
 
 ### Operaciones de hojas deshacibles
 
@@ -339,6 +360,24 @@ una **malla de triángulos** (`lib/domain/stroke_mesh.dart`, `buildStrokeMesh`) 
   tramo, con una variación de alfa pseudoaleatoria estable (0,85-1,15). Diferencia contra `paintStrokeLegacy` (media por
   píxel / % de píxeles con diferencia > 48): antes 0,698 / 0,405 %, ahora 0,629 / 0,384 % (tolerancia del test de 2,5 a 0,8).
   Lápiz ~175 B/punto con colores.
+
+## Sincronización (resumen técnico)
+
+Detalle y decisiones en `docs/SINCRONIZACION.md` (sección "Decisión: Google Drive"). Piezas de `lib/sync/`:
+
+- `SyncEngine`: una pasada entre `Storage` y un `RemoteStore` (Drive o `FakeRemoteStore`); no sabe de relojes ni de la UI.
+- `SyncController` (`ChangeNotifier`): decide CUÁNDO. Debounce 5 s tras el último guardado (máximo 30 s desde el primero),
+  consulta de cambios cada 45 s solo en primer plano, pasada al volver a primer plano, una sola pasada a la vez (lo que
+  llega en el medio se junta en una más) y retroceso 30 s → 10 min ante errores. Expone `status` (`SyncStatus`) para el
+  indicador (`screens/library/sync_indicator.dart`) y `remoteWaiting` (cuadernos abiertos con cambios de la nube sin aplicar).
+  Los tiempos son parámetros del constructor; los tests lo corren con `fakeAsync` y una pasada falsa (`passOverride`).
+- Cuaderno abierto: el motor solo SUBE lo ya guardado y nunca escribe local ahí; los cambios remotos se avisan en el
+  editor ("Hay cambios de otro dispositivo" / Actualizar). Ver la regla de oro en `SINCRONIZACION.md`.
+- Cableado: `Library` crea el controlador, hace `store.onSaved = (_) => sync.notifySaved()` y es `WidgetsBindingObserver`
+  (`resumed` → `setForeground(true)`). `NotebookScreen` recibe el controlador solo para el indicador y el aviso.
+- Tests: `test/sync/sync_engine_test.dart` (motor, con dos dispositivos y cuaderno abierto), `test/sync/sync_controller_test.dart`
+  (planificador con reloj falso), `test/screens/sync_ui_test.dart` (indicador y aviso), y en `integration_test/app_test.dart`
+  el caso de sincronización automática (tarda ~15 s en la tablet: usa tiempos acortados `syncPoll` / `syncDebounce`).
 
 ## Compilar e instalar en la tablet
 

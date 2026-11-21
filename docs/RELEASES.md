@@ -17,6 +17,16 @@ El workflow `.github/workflows/release.yml`:
    `v1.0.<run_number>`, usando como notas los asuntos de los commits desde el tag `v*` anterior.
 5. Marca esa release como la última (`make_latest`).
 
+Después corre el job `linux` (Ubuntu 24.04, `needs: release`): compila `flutter build linux --release`, arma
+`opennote_<versión>_amd64.deb` con `tool/build_deb.sh` (misma versión `1.0.<run_number>`, con los IDs de Google
+desde los mismos secretos) y lo sube con `gh release upload` al mismo release. Si ese job falla, el APK y el aviso
+de actualización de Android siguen andando (la app solo elige el asset `.apk`). Las notas del release traen las
+instrucciones de instalación para Linux. Al final avisa al repo apt (`santiagofr1/apt`) con un
+`repository_dispatch` `publish`, que baja el `.deb` de los Releases y republica el índice. El secreto
+`APT_DISPATCH_TOKEN` es opcional (fine-grained token con *Contents: read and write* sobre `santiagofr1/apt`):
+sin él no falla, el cron horario del repo apt lo levanta igual. Para que apt lo tome hay que listar
+`santiagofr1/OpenNote` en el `apps.txt` de ese repo.
+
 Si falta el secreto del keystore, el job falla a propósito. Nunca se publica una release firmada con
 la clave de debug.
 

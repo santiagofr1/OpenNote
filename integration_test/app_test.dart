@@ -10,11 +10,15 @@ import 'dart:ui' as ui;
 import 'package:apuntes/app.dart';
 import 'package:apuntes/data/export.dart';
 import 'package:apuntes/data/media_import.dart';
+import 'package:apuntes/data/sheet_codec.dart';
 import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/editor/page_editor.dart';
 import 'package:apuntes/editor/selection_menu.dart';
 import 'package:apuntes/rendering/sheet_image_cache.dart';
+import 'package:apuntes/sync/fake_backend.dart';
+import 'package:apuntes/sync/fake_remote_store.dart';
+import 'package:apuntes/sync/sync_engine.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -978,6 +982,159 @@ void main() {
     // las mallas del trazo recién cargado llegan del isolate o se arman al primer dibujo
     await settle(t, 600);
     expect(conMalla(far), isTrue, reason: 'tras recargar, la hoja vuelve con malla');
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('menú de la hoja: "Seleccionar todo" toma solo la hoja visible y "Seleccionar todo el cuaderno" todas; deshacer y rehacer andan', (t) async {
+    await start(t);
+    await createNotebook(t, 'Todo');
+    final ed = editor(t);
+    // 8 hojas con un trazo en cada una
+    while (ed.doc.sheetCount < 8) {
+      ed.doc.addSheet();
+    }
+    for (var k = 0; k < 8; k++) {
+      final st = Stroke('st$k', 'pen', '#22211e', 2.6, [100, k * kSheetStep + 200, .5, 500, k * kSheetStep + 200, .5]);
+      ed.doc.strokes[st.id] = st;
+      ed.doc.markDirtyElement(st);
+    }
+    // ignore: invalid_use_of_protected_member
+    ed.setState(() {});
+    await settle(t, 800);
+    expect(ed.visibleSheet, 0);
+    ed.insertItem(Item('nota', 'sticky', 0, 0, 300, 200, text: 'apunte')); // algo para deshacer, en la hoja visible
+    await settle(t, 600);
+
+    Future<void> menu(String item) async {
+      final g = await t.startGesture(sheetCenter(t) + const Offset(0, 250)); // debajo de la nota
+      final end = DateTime.now().add(const Duration(milliseconds: 750));
+      while (DateTime.now().isBefore(end)) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        await t.pump();
+      }
+      await g.up();
+      await settle(t, 500);
+      await t.tap(find.text(item));
+      await settle(t, 1500);
+    }
+
+    await menu('Seleccionar todo');
+    expect(ed.sel.strokes, {'st0'}, reason: 'solo lo de la hoja visible');
+    expect(ed.sel.items, {'nota'});
+    expect(ed.sel.texts, isEmpty);
+
+    await menu('Seleccionar todo el cuaderno');
+    expect(ed.sel.strokes, {for (var k = 0; k < 8; k++) 'st$k'}, reason: 'todas las hojas');
+    expect(ed.sel.items, {'nota'});
+
+    await t.tap(find.byTooltip('Deshacer'));
+    await settle(t, 600);
+    expect(ed.doc.items.containsKey('nota'), isFalse);
+    expect(ed.doc.strokes.length, 8, reason: 'deshacer la nota no toca los trazos');
+    await t.tap(find.byTooltip('Rehacer'));
+    await settle(t, 600);
+    expect(ed.doc.items.containsKey('nota'), isTrue);
+  });
+
+  testWidgets('sincronización: "Sincronizar ahora" sube un cuaderno y otro dispositivo lo baja (remoto falso)', (t) async {
+    final remote = FakeRemoteStore();
+    await t.pumpWidget(ApuntesApp(root: root, backend: FakeBackend(remote)));
+    await settle(t, 1500);
+    await createNotebook(t, 'Para nube');
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+    await t.tap(find.byKey(const Key('libraryMenu')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('syncMenu')));
+    await settle(t, 600);
+    expect(find.byKey(const Key('syncConnect')), findsOneWidget);
+    await t.tap(find.byKey(const Key('syncConnect')));
+    for (var i = 0; i < 60 && find.byKey(const Key('syncNow')).evaluate().isEmpty; i++) {
+      await settle(t, 100);
+    }
+    await t.tap(find.byKey(const Key('syncNow')));
+    for (var i = 0; i < 200 && !remote.has('index.json'); i++) {
+      await settle(t, 100);
+    }
+    await settle(t, 1500);
+    expect(remote.has('index.json'), isTrue);
+    // (no es el único: la app crea "Mi cuaderno" de ejemplo al arrancar y, con la nube vacía, también sube)
+    expect(remote.paths.where((p) => p.endsWith('/notebook.json')), isNotEmpty);
+
+    // otro "dispositivo" (otra carpeta) baja lo subido
+    final other = await Directory.systemTemp.createTemp('apuntes_test_otro');
+    addTearDown(() => other.delete(recursive: true));
+    final s2 = Storage(root: other);
+    await s2.init();
+    await SyncEngine(s2, remote, account: 'x').sync();
+    expect((await s2.loadIndex()).notebooks.map((n) => n.name), contains('Para nube'));
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('sincronización automática: lo escrito en un cuaderno abierto llega a la nube solo, y un cambio de la nube avisa', (t) async {
+    final remote = FakeRemoteStore();
+    final backend = FakeBackend(remote);
+    await backend.signIn(); // ya conectado: la app retoma la sesión al abrir
+    await t.pumpWidget(ApuntesApp(
+        root: root, backend: backend, syncPoll: const Duration(seconds: 4), syncDebounce: const Duration(seconds: 2)));
+    await settle(t, 1500);
+    await createNotebook(t, 'Auto');
+    expect(find.byKey(const Key('syncIndicator')), findsOneWidget, reason: 'indicador en el editor');
+
+    // 1) un trazo con el cuaderno ABIERTO; sin tocar "Sincronizar ahora" llega a la nube en pocos segundos
+    final c = sheetCenter(t);
+    await stylusLine(t, c - const Offset(120, 40), c + const Offset(120, 40));
+    int strokesInRemote() {
+      var n = 0;
+      for (final p in remote.paths.where((p) => p.endsWith('.sheet'))) {
+        n += decodeSheet(remote.bytesOf(p)!).strokes.length;
+      }
+      return n;
+    }
+
+    var waited = 0;
+    while (strokesInRemote() == 0 && waited < 20) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 250)));
+      await settle(t, 250);
+      waited++;
+    }
+    expect(strokesInRemote(), 1, reason: 'subido solo, con el cuaderno abierto (esperó ~${waited / 2} s)');
+    expect(find.byKey(const Key('remoteBanner')), findsNothing);
+
+    // 2) otro dispositivo cambia la misma hoja: el cuaderno abierto no se pisa; aparece el aviso
+    final other = await Directory.systemTemp.createTemp('apuntes_test_otro2');
+    addTearDown(() => other.delete(recursive: true));
+    final s2 = Storage(root: other);
+    await s2.init();
+    await SyncEngine(s2, remote, account: 'otro').sync();
+    final idx2 = await s2.loadIndex();
+    final d2 = await s2.loadNotebook(idx2.notebooks.firstWhere((n) => n.name == 'Auto'));
+    d2.texts['t'] = TextBlock('t', 90, 44, 800, 'desde la otra tablet');
+    d2.markDirtyAt(44);
+    await s2.saveNotebook(d2);
+    await s2.saveIndex(idx2);
+    await SyncEngine(s2, remote, account: 'otro').sync();
+    waited = 0;
+    while (find.byKey(const Key('remoteBanner')).evaluate().isEmpty && waited < 40) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 250)));
+      await settle(t, 250);
+      waited++;
+    }
+    expect(find.byKey(const Key('remoteBanner')), findsOneWidget);
+    expect(editor(t).doc.strokes, hasLength(1), reason: 'lo local sigue intacto');
+
+    // 3) "Actualizar": se cierra, baja y se vuelve a abrir con el cambio y el trazo
+    await t.tap(find.byKey(const Key('remoteRefresh')));
+    waited = 0;
+    while ((find.byKey(const Key('remoteBanner')).evaluate().isNotEmpty || find.byType(PageEditor).evaluate().isEmpty) && waited < 60) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 250)));
+      await settle(t, 250);
+      waited++;
+    }
+    await settle(t, 1000);
+    expect(find.byKey(const Key('remoteBanner')), findsNothing);
+    expect(editor(t).doc.texts.values.map((x) => x.text), contains('desde la otra tablet'));
+    expect(editor(t).doc.strokes, hasLength(1));
     expect(t.takeException(), isNull);
   });
 }
