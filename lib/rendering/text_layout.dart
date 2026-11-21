@@ -48,6 +48,9 @@ TextStyle runStyle(RunStyle r) => TextStyle(
       backgroundColor: r.highlight == null ? null : Color(r.highlight!),
     );
 
+/// Color con el que se pinta la selección que cruza párrafos.
+const kSelectionPaint = Color(0x663B82F6);
+
 /// Un párrafo ya medido en cuanto a estilo: lo que hace falta para dibujarlo o armar su campo.
 class ParaLayout {
   final Para para;
@@ -63,10 +66,26 @@ class ParaLayout {
   TextAlign get align => textAlignOf(para.align);
 
   /// Los tramos como hijos de un [TextSpan]; [lead] va antes (el campo lo usa para su carácter guía).
-  TextSpan span({String lead = ''}) => TextSpan(style: base, children: [
-        if (lead.isNotEmpty) TextSpan(text: lead),
-        for (final r in para.runs) TextSpan(text: r.text, style: runStyle(r.style)),
-      ]);
+  /// [sel] es un rango local [inicio, fin) que se pinta como seleccionado (selección entre párrafos).
+  TextSpan span({String lead = '', (int, int)? sel}) {
+    final kids = <InlineSpan>[if (lead.isNotEmpty) TextSpan(text: lead)];
+    var pos = 0;
+    for (final r in para.runs) {
+      final a = pos, b = pos + r.text.length;
+      pos = b;
+      final st = runStyle(r.style);
+      final from = sel == null ? b : max(sel.$1, a), to = sel == null ? b : min(sel.$2, b);
+      if (from >= to) {
+        kids.add(TextSpan(text: r.text, style: st));
+        continue;
+      }
+      final hl = st.merge(const TextStyle(backgroundColor: kSelectionPaint));
+      if (from > a) kids.add(TextSpan(text: r.text.substring(0, from - a), style: st));
+      kids.add(TextSpan(text: r.text.substring(from - a, to - a), style: hl));
+      if (to < b) kids.add(TextSpan(text: r.text.substring(to - a), style: st));
+    }
+    return TextSpan(style: base, children: kids);
+  }
 }
 
 /// Mide el párrafo [p] (con [number] si es numerado) en un renglón de [line] unidades a [scale] px por unidad.

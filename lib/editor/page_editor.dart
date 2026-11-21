@@ -1178,6 +1178,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     // Ojo: `isScrollingNotifier` no sirve acá: con un solo scroll posible (zoom 1, sin scroll horizontal) el dedo
     // gana la arena apenas toca y el scroll figura "en curso" aunque no se mueva. Se mira si la hoja se movió.
     if (scroll.hasClients && (scroll.offset - _pressScrollY).abs() > 1) return;
+    // sobre un texto en modo texto, mantener apretado es de la selección del texto (y de arrastrarla entre párrafos)
+    if (ts.tool == Tool.text && texts.textAt(g)) return;
     final box = _sheetKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null) return;
     final local = box.globalToLocal(g);

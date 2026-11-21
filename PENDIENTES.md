@@ -29,6 +29,7 @@
 
 ## Hecho
 
+- **Selección de texto entre párrafos** (rama `feat/detalles`, 2026-11-21): con mouse arrastrar de un párrafo a otro, con dedo / lápiz mantener apretado (~350 ms) y arrastrar; negrita, colores, listas, alineación, copiar, cortar y borrar valen sobre todo lo seleccionado (botones Copiar / Cortar / Borrar en la barra de formato). No cruza bloques distintos. Ver docs/TECNICO.md.
 - **22. Menú de la hoja con el dedo** (2026-11-21): no abría porque `_onStillPress` dependía de `isScrollingNotifier` (el scroll gana el gesto apenas toca) y quedaba un dedo "fantasma" tras abrir el menú; ahora mira si la hoja se movió de verdad y limpia el seguimiento de dedos al abrir el menú. Verificado con la suite en la tablet.
 - **21. Bugs de la primera prueba real de sync** (2026-11-21): borrados que no llegaban si el otro dispositivo reiniciaba la app (primer `changes()` de cada proceso ahora es listado completo), "Mi cuaderno" de ejemplo duplicado (se descarta si está intacto y la nube ya tiene cuadernos) y sync lenta (sube ~5 s después de guardar, consulta cada 45 s, al volver a primer plano, indicador en la barra, aviso "Actualizar" con el cuaderno abierto). Probado entre tablet y Linux.
 - **1. Hojas, detalles** (rama `feat/hojas-3`): "Seleccionar todo" toma la hoja visible y "Seleccionar todo el cuaderno" carga las que faltan (progreso, cancelable, aviso con más de 60 hojas); el historial se poda por el fondo si fija más de 12 hojas lejanas. Ver docs/TECNICO.md.
@@ -65,7 +66,7 @@
   nuevo debajo de lo último visible (o arriba si está vacío) y abre el teclado; en modo texto lo reabre en el último bloque;
   los bloques vacíos se borran. Barra de formato (negrita, cursiva, subrayado, tachado, colores, título/subtítulo, listas,
   sangría, alineación), Ctrl+B/I/U y Tab / Shift+Tab. Sin flutter_quill: modelo propio (`rich_text.dart`) que dibujan igual
-  editor, miniaturas, PNG y PDF. Los textos viejos se convierten solos. Falta: selección que cruce párrafos con el dedo.
+  editor, miniaturas, PNG y PDF. Los textos viejos se convierten solos.
 - **13. Carpetas en la biblioteca** (rama `feat/carpetas`): carpetas anidadas (`Folder` en `NotesIndex.folders`, `Notebook.folder`),
   tarjetas de carpeta con cuántos cuadernos tienen, migas de pan y flecha para subir, atrás del sistema sube de a un nivel.
   "+" ofrece Cuaderno nuevo (en la carpeta actual) y Carpeta nueva. Mantener apretado: cuaderno o carpeta → "Mover a…"

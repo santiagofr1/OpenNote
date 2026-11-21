@@ -70,12 +70,21 @@ El texto con teclado se apoya en el renglón de su propia hoja.
   la casilla de tareas se dibuja con trazos.
 - Edición (`lib/editor/rich_editing.dart`): un `TextField` por párrafo, no uno solo. Se eligió así porque la
   alineación, la sangría y el marcador son por párrafo y un campo único solo tiene una alineación; además
-  Enter / retroceso al principio parten y unen campos sin tocar el caret nativo. A cambio no hay selección que
-  cruce párrafos con el dedo (el formato de párrafo aplica al párrafo con foco; las operaciones del modelo ya
-  aceptan rangos entre párrafos). Cada campo lleva un carácter guía invisible (U+200B) al principio: si el teclado
+  Enter / retroceso al principio parten y unen campos sin tocar el caret nativo. A cambio la selección nativa
+  nunca sale de su párrafo; por eso la que cruza párrafos es propia (ver "Selección entre párrafos"). Cada campo lleva un carácter guía invisible (U+200B) al principio: si el teclado
   del celular lo borra, es un retroceso al principio. `RichController.buildTextSpan` pinta los tramos y el valor
   que escribe el usuario se pasa al modelo (`userEdit`) heredando el formato del carácter anterior o el pendiente
   (negrita sin selección).
+- **Selección entre párrafos** (`BlockEditor.across`, rango global `(inicio, fin)`): un `Listener` sobre el bloque
+  (no entra a la arena de gestos, así no pelea con el `TextField`) mira el puntero. Con mouse, arrastrar saliendo del
+  párrafo de origen ya selecciona; con dedo o lápiz hay que mantener apretado `kHoldToSelect` (350 ms) y recién ahí
+  arrastrar. La posición bajo el dedo sale del `RenderEditable` de cada campo. Se pinta con fondo en los tramos
+  (`ParaLayout.span(sel:)`, el campo nativo no pinta selección fuera de su párrafo). Mientras existe, `globalSel`
+  devuelve ese rango, así negrita, colores, listas, alineación y sangría trabajan sobre todos los párrafos; la barra
+  de formato suma Copiar / Cortar / Borrar (también Ctrl+C / Ctrl+X / Suprimir / Retroceso) y borrar usa
+  `replaceRange` + `_afterStructure`. Se suelta al tocar, escribir o cambiar el modelo. Mantener apretado sobre un
+  texto en modo texto ya no abre el menú de la hoja (era de la selección). Límites: no cruza BLOQUES distintos
+  (cada bloque es un editor propio) y las manijas nativas de un campo siguen acotadas a su párrafo.
 - Barra de formato (`format_bar.dart`): botones que no toman el foco (`canRequestFocus: false` +
   `TextFieldTapRegion`), así el teclado no se cierra.
 - El tecladito de la barra crea un bloque debajo de lo último visible de la hoja que se ve; en modo texto reabre el

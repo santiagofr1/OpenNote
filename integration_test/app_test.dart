@@ -445,6 +445,43 @@ void main() {
     expect(saved.body.paras[0].runs.first.style.bold, isTrue);
   });
 
+  testWidgets('texto: selección que cruza párrafos (arrastrar), negrita y borrar', (t) async {
+    await start(t);
+    await createNotebook(t, 'Cruce');
+    await t.tap(find.byTooltip('Texto con teclado'));
+    await settle(t, 600);
+    final ed = editor(t);
+    final b = ed.doc.texts.values.single;
+    final be = ed.texts.editor(b.id)!;
+    await t.enterText(find.byKey(Key('para-${b.id}-0')), 'uno');
+    await settle(t, 300);
+    await t.enterText(find.byKey(Key('para-${b.id}-0')), 'uno\n');
+    await settle(t, 300);
+    await t.enterText(find.byKey(Key('para-${b.id}-1')), 'dos');
+    await settle(t, 300);
+    expect(b.body.paras.length, 2);
+
+    // mantener apretado en el primer párrafo y arrastrar hasta el segundo
+    final r0 = t.getRect(find.byKey(Key('para-${b.id}-0')));
+    final r1 = t.getRect(find.byKey(Key('para-${b.id}-1')));
+    final g = await t.startGesture(Offset(r0.left + 2, r0.center.dy));
+    await t.pump(const Duration(milliseconds: 400));
+    await g.moveTo(Offset(r1.left + 30, r1.center.dy));
+    await t.pump();
+    await g.up();
+    await settle(t, 300);
+    expect(be.across, isNotNull, reason: 'la selección cruzó de un párrafo al otro');
+    await t.tap(find.byKey(const Key('fmt-bold')));
+    await settle(t, 300);
+    expect(b.body.paras[0].runs.first.style.bold, isTrue);
+    expect(b.body.paras[1].runs.first.style.bold, isTrue);
+
+    await t.tap(find.byKey(const Key('across-delete')));
+    await settle(t, 300);
+    expect(b.body.paras.length, 1, reason: 'borrar une los párrafos de las puntas');
+    expect(be.across, isNull);
+  });
+
   testWidgets('insertar imagen (selector simulado) mantiene la proporción', (t) async {
     final img = await fakeImage(400, 300);
     Pickers.image = (_) async => img;

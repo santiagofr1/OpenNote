@@ -37,6 +37,7 @@ class _FormatBarState extends State<FormatBar> {
             final ed = widget.fields.focused;
             if (ed == null) return const SizedBox(height: 0);
             return Column(mainAxisSize: MainAxisSize.min, children: [
+              if (ed.across != null) _acrossBar(ed),
               if (_open != null) _palette(ed, cs),
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
@@ -83,6 +84,28 @@ class _FormatBarState extends State<FormatBar> {
       al('fmt-justify', Symbols.format_align_justify, 'Justificar', ParaAlign.justify),
     ];
   }
+
+  /// Acciones sobre la selección que cruza párrafos (el menú nativo del campo solo ve su párrafo).
+  Widget _acrossBar(BlockEditor ed) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Row(children: [
+          TextButton.icon(
+              key: const Key('across-copy'),
+              onPressed: ed.copyAcross,
+              icon: const Icon(Symbols.content_copy, size: 18),
+              label: const Text('Copiar')),
+          TextButton.icon(
+              key: const Key('across-cut'),
+              onPressed: ed.cutAcross,
+              icon: const Icon(Symbols.content_cut, size: 18),
+              label: const Text('Cortar')),
+          TextButton.icon(
+              key: const Key('across-delete'),
+              onPressed: ed.deleteAcross,
+              icon: const Icon(Symbols.delete, size: 18),
+              label: const Text('Borrar')),
+        ]),
+      );
 
   void _toggle(String k) => setState(() => _open = _open == k ? null : k);
 
