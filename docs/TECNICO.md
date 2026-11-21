@@ -95,10 +95,14 @@ El texto con teclado se apoya en el renglón de su propia hoja.
 ### Mover arrastrando (biblioteca)
 `lib/screens/library/library_drag.dart`. Cada tarjeta (cuaderno o carpeta) va en un `DragSource`, un
 `LongPressDraggable<LibraryDrag>` (500 ms). Un `LongPressDraggable` acepta el gesto apenas pasa el tiempo, sin
-esperar movimiento, así que el umbral se arma a mano: la tarjeta que viaja (feedback) es invisible hasta que el
-dedo se movió más de `kDragSlop` (10 px) desde donde apoyó; si se suelta sin pasar el umbral es "mantener apretado" y
-se abre el menú de siempre (`onHold`, ahora al soltar y no a los 500 ms, porque abrir una hoja a mitad del gesto
-cancelaría los punteros y ya no se podría arrastrar). Moverse antes de los 500 ms sigue siendo scroll. Los destinos
+esperar movimiento: ahí (`onDragStarted`) se llama a `onHold`, que abre el menú de opciones YA, con el dedo todavía
+apoyado (vibración + menú). Ese menú no es una ruta modal (`showModalBottomSheet`/`showMenu` cancelarían los
+punteros y se cortaría el arrastre): es un `OverlayEntry` anclado a la tarjeta (`_optionsMenu` en
+`library_screen.dart`, mismas opciones y acciones de siempre) con una barrera transparente que lo cierra al tocar
+afuera; el botón atrás (`PopScope`) también lo cierra. El umbral se arma a mano: la tarjeta que viaja (feedback) es
+invisible hasta que el dedo se movió más de `kDragSlop` (10 px) desde donde apoyó; en ese momento se llama a
+`onHoldCancel` (cierra el menú) y empieza el arrastre. Si se suelta sin pasar el umbral el menú queda abierto y se
+toca una opción normalmente. Moverse antes de los 500 ms sigue siendo scroll. Los destinos
 son `DropZone` (un `DragTarget`): las tarjetas de carpeta (se resaltan con `dropping`) y las migas de pan, que
 incluyen "Inicio" y solo se ven dentro de una carpeta. `LibraryDrag.canDropOn` rechaza dejarlo donde ya está y
 meter una carpeta en sí misma o en una descendiente. `AutoScroller` desplaza el `CustomScrollView` (16 ms) cuando

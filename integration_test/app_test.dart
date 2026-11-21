@@ -712,11 +712,13 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 50));
         await t.pump();
       }
+      expect(find.byKey(const Key('moveTo')), findsOneWidget, reason: 'el menú aparece mientras sigue apretado');
       final a = t.getCenter(from), b = t.getCenter(to);
       for (var i = 1; i <= 12; i++) {
         await g.moveTo(Offset.lerp(a, b, i / 12)!);
         await t.pump(const Duration(milliseconds: 30));
       }
+      expect(find.byKey(const Key('moveTo')), findsNothing, reason: 'al moverse el menú se cierra y arrastra');
       await g.up();
       await settle(t, 800);
     }
@@ -731,11 +733,11 @@ void main() {
     await settle(t, 800);
     expect(find.byKey(const Key('nb-Suelto')), findsOneWidget);
 
-    // mantener apretado sin mover sigue abriendo el menú
+    // mantener apretado sin mover: el menú aparece al mantener y queda abierto al soltar
     await holdOn(t, find.byKey(const Key('nb-Suelto')));
     await settle(t);
     expect(find.byKey(const Key('moveTo')), findsOneWidget);
-    await t.tapAt(const Offset(5, 5)); // cerrar la hoja
+    await t.tapAt(const Offset(5, 5)); // tocar afuera lo cierra
     await settle(t);
 
     // carpeta Hija adentro de Facultad, y de ahí a "Inicio" en las migas

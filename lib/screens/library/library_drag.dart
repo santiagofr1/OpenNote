@@ -32,17 +32,20 @@ class LibraryDrag {
 /// Más que esto (px) hay que mover el dedo, ya mantenido, para que sea arrastrar y no "abrir el menú".
 const kDragSlop = 10.0;
 
-/// Envuelve una tarjeta: mantener apretado y MOVER (más de [kDragSlop]) la arrastra; mantener apretado
-/// y soltar SIN mover llama a [onHold] (el menú de opciones, como siempre). Antes de los 500 ms, mover es scroll.
-/// [onMove] avisa dónde está el dedo (para el scroll automático) y [onEnd] cuando se suelta.
+/// Envuelve una tarjeta: a los 500 ms de mantener apretado llama a [onHold] (abre el menú de opciones, anclado
+/// a la tarjeta, mientras el dedo sigue apoyado). Si después el dedo se mueve más de [kDragSlop] llama a
+/// [onHoldCancel] (cierra el menú) y la tarjeta se arrastra; si suelta sin mover, el menú queda abierto.
+/// Antes de los 500 ms, mover es scroll. [onMove] avisa dónde está el dedo (para el scroll automático) y
+/// [onEnd] cuando se suelta.
 class DragSource extends StatefulWidget {
   final LibraryDrag data;
   final Widget child;
-  final VoidCallback onHold;
+  final void Function(BuildContext card) onHold;
+  final VoidCallback? onHoldCancel;
   final ValueChanged<Offset>? onMove;
   final VoidCallback? onEnd;
   const DragSource(
-      {super.key, required this.data, required this.child, required this.onHold, this.onMove, this.onEnd});
+      {super.key, required this.data, required this.child, required this.onHold, this.onHoldCancel, this.onMove, this.onEnd});
 
   @override
   State<DragSource> createState() => _DragSourceState();
@@ -67,16 +70,20 @@ class _DragSourceState extends State<DragSource> {
       child: LongPressDraggable<LibraryDrag>(
         data: widget.data,
         dragAnchorStrategy: (_, _, _) => const Offset(90, 26), // el dedo en el centro de la tarjeta que viaja
-        onDragStarted: () => _moved.value = false,
+        onDragStarted: () {
+          _moved.value = false;
+          widget.onHold(context);
+        },
         onDragUpdate: (d) {
-          if (!_moved.value && (d.globalPosition - _down).distance > kDragSlop) _moved.value = true;
+          if (!_moved.value && (d.globalPosition - _down).distance > kDragSlop) {
+            _moved.value = true;
+            widget.onHoldCancel?.call();
+          }
           widget.onMove?.call(d.globalPosition);
         },
         onDragEnd: (_) {
-          final held = !_moved.value;
           _moved.value = false;
           widget.onEnd?.call();
-          if (held) widget.onHold(); // no se movió: era mantener apretado
         },
         feedback: ValueListenableBuilder<bool>(
           valueListenable: _moved,

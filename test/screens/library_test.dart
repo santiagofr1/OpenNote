@@ -307,14 +307,53 @@ void main() {
       expect(idx.notebooks.firstWhere((n) => n.id == 'n2').folder, isNull);
     });
 
-    testWidgets('mantener apretado sin mover abre el menú (no arrastra)', (t) async {
+    testWidgets('mantener apretado abre el menú YA, sin soltar; soltar sin mover lo deja abierto', (t) async {
       await start(t);
       final g = await t.startGesture(t.getCenter(k('nb-Suelto')));
       await t.pump(const Duration(milliseconds: 700));
+      expect(k('moveTo'), findsOneWidget, reason: 'el menú aparece mientras sigue apretado');
+      expect(k('optionsMenu'), findsOneWidget);
       await g.up();
       await settle(t, 600);
-      expect(k('moveTo'), findsOneWidget, reason: 'el menú de opciones');
+      expect(k('moveTo'), findsOneWidget, reason: 'soltar sin mover lo deja abierto');
       expect(find.textContaining('Movido'), findsNothing);
+      await t.tap(find.text('Renombrar'));
+      await settle(t, 600);
+      expect(find.byType(TextField), findsWidgets, reason: 'tocar una opción anda normal');
+    });
+
+    testWidgets('con el menú abierto, mover más de 10 px lo cierra y arrastra', (t) async {
+      await start(t);
+      final g = await t.startGesture(t.getCenter(k('nb-Suelto')));
+      await t.pump(const Duration(milliseconds: 700));
+      expect(k('moveTo'), findsOneWidget);
+      final a = t.getCenter(k('nb-Suelto')), b = t.getCenter(k('folder-Facultad'));
+      for (var i = 1; i <= 8; i++) {
+        await g.moveTo(Offset.lerp(a, b, i / 8)!);
+        await t.pump(const Duration(milliseconds: 30));
+      }
+      expect(k('moveTo'), findsNothing, reason: 'el menú se cerró al moverse');
+      await g.up();
+      await settle(t, 600);
+      expect(find.text('Movido a Inicio / Facultad'), findsOneWidget);
+      expect(k('moveTo'), findsNothing);
+    });
+
+    testWidgets('el menú se cierra tocando afuera y con atrás (sin salir de la pantalla)', (t) async {
+      await start(t);
+      await hold(t, k('nb-Suelto'));
+      expect(k('moveTo'), findsOneWidget);
+      await t.tapAt(const Offset(5, 5));
+      await settle(t, 400);
+      expect(k('moveTo'), findsNothing);
+      expect(k('nb-Suelto'), findsOneWidget);
+
+      await hold(t, k('folder-Facultad'));
+      expect(k('moveTo'), findsOneWidget);
+      await t.binding.handlePopRoute();
+      await settle(t, 400);
+      expect(k('moveTo'), findsNothing);
+      expect(k('nb-Suelto'), findsOneWidget);
     });
 
     testWidgets('soltar en cualquier otro lado no mueve nada', (t) async {
