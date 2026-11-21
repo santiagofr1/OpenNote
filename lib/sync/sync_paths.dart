@@ -6,6 +6,9 @@ library;
 /// Estado de la sincronización (solo local, no se sube).
 const kSyncStateFile = 'sync_state.json';
 
+/// Caché del cifrado (ruta → hash del texto cifrado y del claro; solo local, no se sube). Ver encrypted_remote_store.dart.
+const kSyncCryptoCacheFile = 'sync_crypto_cache.json';
+
 final _id = RegExp(r'^[A-Za-z0-9_-]{1,64}$');
 final _file = RegExp(r'^[A-Za-z0-9_-][A-Za-z0-9._-]{0,127}$');
 

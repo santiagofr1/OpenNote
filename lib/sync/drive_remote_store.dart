@@ -7,6 +7,7 @@ import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:googleapis_auth/googleapis_auth.dart' show AccessDeniedException;
 import 'package:http/http.dart' as http;
 
+import 'e2e_crypto.dart' show kCryptoFile;
 import 'remote_store.dart';
 import 'sync_paths.dart';
 
@@ -42,7 +43,7 @@ class _Node {
 ///
 /// NOTA: escrito contra la documentación de Drive v3 y `googleapis` 19; todavía NO se probó contra Drive real (hacen falta
 /// credenciales, ver docs/SINCRONIZACION.md).
-class DriveRemoteStore implements RemoteStore {
+class DriveRemoteStore implements RemoteStore, PurgingRemoteStore {
   DriveRemoteStore(http.Client client, {this.rootName = 'OpenNote'}) : _api = drive.DriveApi(client);
   final drive.DriveApi _api;
   final String rootName;
@@ -136,7 +137,7 @@ class DriveRemoteStore implements RemoteStore {
     for (final n in _nodes.values) {
       if (n.folder) continue;
       final p = _pathOf(n);
-      if (p == null || !isSyncPath(p)) continue;
+      if (p == null || !(isSyncPath(p) || p == kCryptoFile)) continue;
       final prev = out[p];
       if (prev == null || n.modified > prev.modified) out[p] = n;
     }
@@ -259,6 +260,16 @@ class DriveRemoteStore implements RemoteStore {
         if (n == null) return;
         // a la papelera (no borrado definitivo): se puede recuperar desde Drive
         await _api.files.update(drive.File(trashed: true), n.id, $fields: 'id');
+        _nodes.remove(n.id);
+      });
+
+  @override
+  Future<void> purge(String path) => _g(() async {
+        if (!_loaded) await _loadAll();
+        final n = _snapshot()[path];
+        if (n == null) return;
+        // borrado definitivo (no pasa por la papelera): con el cifrado no debe quedar el archivo viejo en claro
+        await _api.files.delete(n.id);
         _nodes.remove(n.id);
       });
 
