@@ -677,6 +677,47 @@ void main() {
     expect(ed.doc.drawOrder().last.id, low);
   });
 
+  testWidgets('selección: un toque elige la tinta, otro el resaltador (se mueve solo) y tocar afuera deselecciona', (t) async {
+    await start(t);
+    await createNotebook(t, 'Toque');
+    final p = docToScreen(t);
+    final ed = editor(t);
+    // una "palabra" a lápiz y resaltada encima
+    await stylusLine(t, p(const Offset(200, 200)), p(const Offset(400, 200)));
+    await t.tap(find.byTooltip('Resaltador · tocá de nuevo para opciones'));
+    await settle(t);
+    await stylusLine(t, p(const Offset(200, 200)), p(const Offset(400, 200)));
+    expect(ed.doc.strokes.length, 2);
+    final hl = ed.doc.strokes.values.firstWhere((s) => s.k == 'hl');
+    final ink = ed.doc.strokes.values.firstWhere((s) => s.k != 'hl');
+    final hlBefore = hl.bounds, inkBefore = ink.bounds;
+
+    await t.tap(find.byTooltip('Seleccionar'));
+    await settle(t);
+
+    Future<void> tapAt(Offset d) async {
+      final g = await t.startGesture(p(d), kind: PointerDeviceKind.stylus);
+      await g.up();
+      await settle(t);
+    }
+
+    // el de más arriba que se ve es la tinta; tocar de nuevo en el mismo lugar alterna al resaltador
+    await tapAt(const Offset(300, 200));
+    expect(ed.sel.strokes, {ink.id});
+    await tapAt(const Offset(300, 200));
+    expect(ed.sel.strokes, {hl.id});
+
+    // se mueve solo el resaltador
+    await stylusDrag(t, p(const Offset(300, 200)), p(const Offset(300, 260)));
+    expect(ed.doc.strokes[ink.id]!.bounds, inkBefore);
+    expect(ed.doc.strokes[hl.id]!.bounds.top, greaterThan(hlBefore.top + 40));
+
+    // tocar afuera: no queda nada seleccionado
+    await tapAt(const Offset(500, 500));
+    expect(ed.sel.isEmpty, isTrue);
+    expect(find.byType(SelectionMenu), findsNothing);
+  });
+
   testWidgets('scroll rápido de punta a punta: sin errores; quieto usa imágenes; un trazo nuevo se ve y se guarda', (t) async {
     // cuaderno de 6 hojas con bastante tinta por hoja (más de SheetImageCache.defaultMinPoints: vale una imagen)
     final perStroke = SheetImageCache.defaultMinPoints ~/ 40 + 20;
