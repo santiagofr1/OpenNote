@@ -13,6 +13,7 @@ import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/editor/page_editor.dart';
 import 'package:apuntes/editor/selection_menu.dart';
+import 'package:apuntes/rendering/sheet_image_cache.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -724,6 +725,24 @@ void main() {
     }
     expect(ed.sheetUsesImage(visibleId()), isTrue, reason: 'quieta, la hoja visible usa imagen');
     expect(t.takeException(), isNull);
+
+    // quieto: en <= 1,5 s TODAS las hojas visibles quedan con modo image (todas sus franjas listas, sin vectorial)
+    bool visiblesListas() {
+      for (var k = 0; k < ed.doc.sheetCount; k++) {
+        if (!ed.imageCache.visibleSheets.contains(ed.doc.sheets[k].id)) continue;
+        for (final e in ed.imageCache.entriesOf(ed.doc.sheets[k].id)) {
+          if (e.cacheable && e.mode != InkPaintMode.image) return false;
+        }
+      }
+      return true;
+    }
+
+    final t0 = DateTime.now();
+    while (!visiblesListas() && DateTime.now().difference(t0) < const Duration(milliseconds: 1500)) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await t.pump(const Duration(milliseconds: 30));
+    }
+    expect(visiblesListas(), isTrue, reason: 'quieto, en 1,5 s las hojas visibles quedan con todas las franjas (modo image)');
 
     // escribir un trazo en una hoja después del scroll: se ve (vectorial al instante) y se guarda
     ed.scrollToSheet(2, animate: false);

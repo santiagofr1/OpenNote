@@ -8,7 +8,7 @@ import 'package:apuntes/rendering/sheet_image_cache.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Etapa 4 (afinado): franjas según los puntos, hoja no visible sin dibujar, un solo toImage a la vez, miniatura primero.
+/// Etapa 4 (afinado): franjas según los puntos, hoja no visible sin dibujar, un solo toImage a la vez, prioridad y varios trabajos por cuadro.
 void main() {
   const scale = .5;
   final size = Size(kW * scale, kSheetH * scale);
@@ -110,7 +110,7 @@ void main() {
   });
 
   group('hoja no visible', () {
-    testWidgets('sin imagen ni miniatura no dibuja trazos; al volverse visible se repinta y se ven', (t) async {
+    testWidgets('sin imagen no dibuja trazos; al volverse visible se repinta y se ven', (t) async {
       await t.runAsync(() async {
         final doc = docDe(tinta(1200));
         final cache = SheetImageCache(minPoints: 0, quiet: const Duration(seconds: 30))..framePaced = false;
@@ -141,18 +141,22 @@ void main() {
       });
     });
 
-    testWidgets('no visible pero con miniatura: se dibuja la miniatura', (t) async {
+    testWidgets('visible con franjas a medias nunca usa miniatura: lo que falta se dibuja vectorial', (t) async {
       await t.runAsync(() async {
         final doc = docDe(tinta(1200));
-        final cache = SheetImageCache(minPoints: 0, quiet: const Duration(seconds: 30))..framePaced = false;
+        final cache = SheetImageCache(minPoints: 0, quiet: const Duration(seconds: 30), stripCount: 4)..framePaced = false;
         final p = painter(doc, cache);
         await render(p);
-        cache.visibleSheets = {'otra'};
+        cache.visibleSheets = {'h'};
+        final e = cache.entry('k-h', 'h');
+        cache.busy = () => cache.jobsStarted >= 1; // una sola franja lista
         cache.protectedSheets = {'h'};
         cache.prefetch(['h']);
-        await Future<void>.delayed(const Duration(milliseconds: 150));
-        expect(cache.entriesOf('h').first.low, isNotNull);
-        expect(ink(await render(p)), greaterThan(100));
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        expect(e.readyStripKeys.length, 1);
+        final mixto = await render(p);
+        expect(e.mode, InkPaintMode.vector);
+        expect(ink(mixto), greaterThan(200));
         cache.dispose();
       });
     });
@@ -177,37 +181,88 @@ void main() {
       });
     });
 
-    test('la miniatura (con puntos salteados) se graba antes que las franjas', () async {
-      final cache = SheetImageCache(minPoints: 0)..framePaced = false;
-      final log = <String>[];
-      final e = cache.entry('k', 's');
-      e.record = (w, h, y0, y1, {int step = 1}) {
-        log.add(y1 - y0 < h ? 'franja' : (step > 1 ? 'mini/$step' : 'entera'));
+    InkImage fake(SheetImageCache cache, String key, String sheet, {int strips = 4}) {
+      final e = cache.entry(key, sheet);
+      e.record = (w, h, y0, y1) {
         final rec = ui.PictureRecorder();
         Canvas(rec).drawRect(Rect.fromLTWH(0, 0, w.toDouble(), (y1 - y0).toDouble()), Paint());
         return rec.endRecording();
       };
       e.recStrokes = const [];
+      e.stripN = strips;
       e.want(800, 1100);
-      cache.protectedSheets = {'s'};
-      cache.prefetch(['s']);
+      return e;
+    }
+
+    test('prioridad: franjas visibles en el viewport, luego el resto de la visible, luego las de adelante', () async {
+      final cache = SheetImageCache(minPoints: 0)..framePaced = false;
+      final orden = <String>[];
+      final v = fake(cache, 'kv', 'v', strips: 8), a = fake(cache, 'ka', 'a', strips: 4);
+      for (final (e, n) in [(v, 'v'), (a, 'a')]) {
+        final rec = e.record!;
+        e.record = (w, h, y0, y1) {
+          final i = [for (var k = 0; k < e.stripN; k++) if (SheetImageCache.stripRange(h, e.stripN, k).$1 == y0) k].first;
+          orden.add('$n$i');
+          return rec(w, h, y0, y1);
+        };
+      }
+      cache.protectedSheets = {'v', 'a'};
+      // se ve de 40% a 60% de la hoja v (franjas 3 y 4 de 8)
+      cache.setVisible({'v'}, fractions: {'v': (.4, .6)});
+      cache.prefetch(['v', 'a'], dir: 1);
       await Future<void>.delayed(const Duration(milliseconds: 600));
-      expect(log.first, 'mini/${cache.lowStep}');
-      expect(log.where((l) => l == 'franja').length, e.stripN);
-      expect(e.low, isNotNull);
-      expect(cache.lowGenerated, 1);
+      expect(orden.take(2), ['v3', 'v4'], reason: 'primero lo que se ve en pantalla');
+      expect(orden.skip(2).take(6).toSet(), {'v0', 'v1', 'v2', 'v5', 'v6', 'v7'}, reason: 'después el resto de la visible');
+      expect(orden.skip(8), ['a0', 'a1', 'a2', 'a3'], reason: 'al final las de adelante');
+      expect(cache.maxRasterInFlight, 1);
       cache.dispose();
     });
 
-    test('recordStrip acepta step (miniatura con 1 de cada k puntos) y graba', () {
-      final s = Stroke('x', 'pen', '#000000', 2, [for (var i = 0; i < 101; i++) ...[i * 1.0, 0, .5]]);
-      final doc = docDe([s]);
-      final p = InkPainter(doc, [s], sheet, scale, ValueNotifier(0), () => const {});
-      final full = p.recordStrip(320, 440, 0, 440), thin = p.recordStrip(320, 440, 0, 440, step: 4);
-      expect(full, isNotNull);
-      expect(thin, isNotNull);
-      full!.dispose();
-      thin!.dispose();
+    testWidgets('varios trabajos por cuadro con presupuesto de UI; uno solo sin presupuesto; un toImage en vuelo', (t) async {
+      for (final (ms, esperaMuchos) in [(1.0, true), (20.0, false)]) {
+        final cache = SheetImageCache(minPoints: 0);
+        cache.uiMsProbe = () => ms;
+        fake(cache, 'k', 's', strips: 12);
+        cache.protectedSheets = {'s'};
+        cache.prefetch(['s']);
+        var maxPorCuadro = 0, prev = 0;
+        await t.runAsync(() async {
+          for (var f = 0; f < 6; f++) {
+            await t.pump(const Duration(milliseconds: 16));
+            await Future<void>.delayed(const Duration(milliseconds: 60));
+            maxPorCuadro = max(maxPorCuadro, cache.jobsStarted - prev);
+            prev = cache.jobsStarted;
+          }
+        });
+        if (esperaMuchos) {
+          expect(maxPorCuadro, greaterThan(1), reason: 'UI de 1 ms: se encadenan trabajos dentro del cuadro');
+          expect(maxPorCuadro, lessThanOrEqualTo(cache.maxJobsPerFrame));
+        } else {
+          expect(maxPorCuadro, lessThanOrEqualTo(1), reason: 'UI de 20 ms: un trabajo por cuadro como mucho');
+        }
+        expect(cache.maxRasterInFlight, 1);
+        cache.dispose();
+        await t.pump(const Duration(milliseconds: 100));
+      }
+    });
+
+    testWidgets('quieto con franjas faltantes en una visible: se generan todas ya, aunque el UI no tenga presupuesto', (t) async {
+      final cache = SheetImageCache(minPoints: 0);
+      cache.uiMsProbe = () => 20;
+      final e = fake(cache, 'k', 's', strips: 12);
+      cache.protectedSheets = {'s'};
+      cache.still = true;
+      await t.runAsync(() async {
+        cache.setVisible({'s'});
+        cache.prefetch(['s']);
+        for (var f = 0; f < 10 && !e.stripCurrentAll; f++) {
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+        }
+      });
+      expect(e.stripCurrentAll, isTrue);
+      expect(cache.maxRasterInFlight, 1);
+      cache.dispose();
+      await t.pump(const Duration(milliseconds: 100));
     });
   });
 }

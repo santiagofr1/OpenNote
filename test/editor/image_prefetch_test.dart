@@ -11,7 +11,7 @@ import 'package:apuntes/rendering/sheet_image_cache.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Etapa 4: prefetch de imágenes en la dirección del scroll, franjas, miniatura como sustituto y desalojo LRU.
+/// Etapa 4: prefetch de imágenes en la dirección del scroll, franjas, vectorial recortado en lo que falta y desalojo LRU.
 void main() {
   late Directory root;
   setUp(() {
@@ -42,8 +42,8 @@ void main() {
     List<int> plan(int first, int last, int dir, {int count = 10}) =>
         SheetImageCache.prefetchPlan(first: first, last: last, dir: dir, count: count);
 
-    test('hacia abajo: las visibles y las 2 siguientes', () => expect(plan(3, 4, 1), [3, 4, 5, 6]));
-    test('hacia arriba: las visibles y las 2 anteriores (la más cercana primero)', () => expect(plan(3, 4, -1), [3, 4, 2, 1]));
+    test('hacia abajo: las visibles y las 3 siguientes', () => expect(plan(3, 4, 1), [3, 4, 5, 6, 7]));
+    test('hacia arriba: las visibles y las 3 anteriores (la más cercana primero)', () => expect(plan(3, 4, -1), [3, 4, 2, 1, 0]));
     test('quieto: solo las visibles', () => expect(plan(3, 4, 0), [3, 4]));
     test('en los bordes del cuaderno no se pasa', () {
       expect(plan(8, 9, 1), [8, 9]);
@@ -93,7 +93,7 @@ void main() {
 
     bool ready(PageEditorState ed, NotebookDoc doc, int k) => ed.imageCache.entriesOf(doc.sheets[k].id).any((e) => e.hasImage);
 
-    testWidgets('scrolleando hacia abajo se genera la de adelante (sin esperar quietud) y no la de atrás', (t) async {
+    testWidgets('scrolleando hacia abajo se genera la de adelante (sin esperar quietud) ', (t) async {
       final doc = armado(8);
       final ed = await open(t, doc);
       ed.scroll.jumpTo(3 * kSheetStep * ed.scale + 200);
@@ -104,7 +104,6 @@ void main() {
       final v = ed.imageCache.visibleSheets;
       expect(v, contains(doc.sheets[3].id));
       expect(ready(ed, doc, 4), isTrue, reason: 'la que viene abajo ya tiene imagen');
-      expect(ready(ed, doc, 2), isFalse, reason: 'la de atrás no se genera por adelantado');
       expect(ed.imageCache.generated, greaterThan(0));
     });
 
@@ -121,7 +120,7 @@ void main() {
       expect(ready(ed, doc, 7), isFalse);
     });
 
-    testWidgets('un trabajo de generación por cuadro como máximo', (t) async {
+    testWidgets('a lo sumo maxJobsPerFrame trabajos por cuadro y un toImage a la vez', (t) async {
       final doc = armado(8);
       final ed = await open(t, doc);
       ed.scroll.jumpTo(3 * kSheetStep * ed.scale + 200);
@@ -136,11 +135,12 @@ void main() {
         total += d;
         await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
       }
-      expect(maxPerFrame, lessThanOrEqualTo(1));
+      expect(maxPerFrame, lessThanOrEqualTo(ed.imageCache.maxJobsPerFrame));
+      expect(ed.imageCache.maxRasterInFlight, 1);
       expect(total, greaterThan(3), reason: 'se generó por franjas, en varios cuadros');
     });
 
-    testWidgets('editar una hoja invalida sus franjas, su miniatura y su imagen; las demás no', (t) async {
+    testWidgets('editar una hoja invalida sus franjas y su imagen; las demás no', (t) async {
       final doc = armado(4);
       final ed = await open(t, doc);
       for (var i = 0; i < 3; i++) {
@@ -151,13 +151,11 @@ void main() {
       expect(ed.sheetUsesImage(id), isTrue);
       final e = ed.imageCache.entriesOf(id).first;
       expect(e.readyStripKeys.length, 4);
-      expect(e.low, isNotNull, reason: 'con todas las franjas se hizo la miniatura');
       final other = ed.imageCache.stripsReady - 4;
 
       doc.strokes['nuevo'] = line('nuevo', 500, 700, 800, 900);
       await t.pump();
       expect(e.readyStripKeys, isEmpty);
-      expect(e.low, isNull, reason: 'editando se ve vectorial: nada viejo que tape el trazo nuevo');
       expect(ed.sheetUsesImage(id), isFalse);
       expect(ed.imageCache.stripsReady, other, reason: 'las otras hojas siguen con sus franjas');
     });
@@ -259,7 +257,7 @@ void main() {
       });
     });
 
-    testWidgets('el sustituto (miniatura) se usa solo si no hay imagen, y se descarta al llegar la buena', (t) async {
+    testWidgets('hoja visible sin imagen: vectorial nítido (nunca miniatura); llega la buena y es igual', (t) async {
       await t.runAsync(() async {
         final doc = armado(1);
         final cache = nuevo();
@@ -271,20 +269,23 @@ void main() {
 
         await generar(p, cache);
         expect(cache.usesImage('h'), isTrue);
-        expect(e.low, isNotNull);
         await render(p);
-        expect(e.mode, InkPaintMode.image, reason: 'con la imagen buena no se mira la miniatura');
+        expect(e.mode, InkPaintMode.image);
 
-        // la imagen buena se desaloja: mientras tanto se ve la miniatura (no los trazos)
+        // la imagen buena se desaloja: mientras tanto se ve vectorial, igual de nítido
         cache.protectedSheets = const {}; // que no se regenere sola enseguida
+        cache.visibleSheets = {'h'};
         e.evict();
         e.refused = true; // y que no se regenere mientras miramos
-        final conMiniatura = await bytes(await render(p));
-        expect(e.mode, InkPaintMode.lowRes);
-        expect(inkPixels(conMiniatura), greaterThan(100), reason: 'la miniatura muestra la tinta');
-        expect(inkPixels(conMiniatura), lessThan(inkPixels(vectorial) * 3));
+        final sinImagen = await bytes(await render(p));
+        expect(e.mode, InkPaintMode.vector);
+        var bad = 0;
+        for (var i = 0; i < sinImagen.length; i++) {
+          if ((sinImagen[i] - vectorial[i]).abs() > 6) bad++;
+        }
+        expect(bad / sinImagen.length, lessThan(.002), reason: 'sin imagen se ve igual que el vectorial, no una versión borrosa');
 
-        // llega la buena: se vuelve a la imagen y la miniatura ya no se usa
+        // llega la buena: se vuelve a la imagen
         e.refused = false;
         cache.protectedSheets = {'h'};
         cache.prefetch(['h']);
@@ -292,16 +293,15 @@ void main() {
         final buena = await bytes(await render(p));
         expect(e.mode, InkPaintMode.image);
         expect(cache.usesImage('h'), isTrue);
-        var bad = 0;
+        bad = 0;
         for (var i = 0; i < buena.length; i++) {
           if ((buena[i] - vectorial[i]).abs() > 6) bad++;
         }
         expect(bad / buena.length, lessThan(.002), reason: 'en reposo se ve nítida, igual que el vectorial');
 
-        // editar la hoja: nada de miniatura vieja, vectorial al instante
+        // editar la hoja: vectorial al instante
         cache.invalidateSheet('h');
         await render(p);
-        expect(e.low, isNull);
         expect(e.mode, InkPaintMode.vector);
         cache.dispose();
       });
@@ -316,7 +316,6 @@ void main() {
         await render(p);
         final vectorial = await bytes(await render(p));
         // solo se generan 2 franjas (después "hay lápiz": se posterga)
-        e.lowRefused = true; // sin miniatura: lo que falta va vectorial recortado
         cache.busy = () => cache.jobsStarted >= 2;
         cache.protectedSheets = {'h'};
         cache.visibleSheets = {'h'};
@@ -351,12 +350,8 @@ void main() {
         expect(cache.entriesOf('s0').first.hasImage, isTrue, reason: 'la protegida sigue');
         expect(cache.imageCount, lessThanOrEqualTo(3));
         expect(cache.entriesOf('s4').first.hasImage, isTrue, reason: 'la última pedida entró');
-        // las desalojadas se quedan con la miniatura
         final sinImagen = [for (final id in ps.keys) if (!cache.entriesOf(id).first.hasImage) id];
         expect(sinImagen, isNotEmpty);
-        for (final id in sinImagen) {
-          expect(cache.entriesOf(id).first.low, isNotNull, reason: '$id conserva la miniatura');
-        }
         cache.dispose();
       });
     });
