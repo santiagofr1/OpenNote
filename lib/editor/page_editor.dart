@@ -79,6 +79,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   // imágenes de la tinta quieta (ver [SheetImageCache]); a lo sumo [maxImages] a la vez, soltadas al descargar la hoja
   final _imgs = SheetImageCache();
   double _dpr = 1, _viewW = 800; // para el tamaño en píxeles de esas imágenes
+  double _lastOff = 0; // para la dirección del scroll (prefetch de imágenes)
+  int _scrollDir = 0, _prefKey = -1;
   // elementos de cada hoja (por id) ya ordenados y agrupados en tandas; se rehacen solo cuando esa hoja cambia
   final _sheetRuns = <String, List<ZRun>>{};
   int _runsCount = -1;
@@ -250,7 +252,62 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     // sin scroll todavía (primer cuadro): se mira desde la hoja inicial, que es adonde se va a saltar
     final top = scroll.hasClients && scroll.position.hasPixels ? (off - kTopPad) / scale : widget.initialSheet * kSheetStep;
     final span = _viewH / scale;
-    return (first: doc.sheetOfY(top - span), last: doc.sheetOfY(top + 2 * span));
+    var first = doc.sheetOfY(top - span), last = doc.sheetOfY(top + 2 * span);
+    // al menos una hoja más en el sentido del scroll: hace falta armada para generarle la imagen por adelantado
+    if (_scrollDir > 0) {
+      last = max(last, min(doc.sheetCount - 1, doc.sheetOfY(top + span) + 1));
+    } else if (_scrollDir < 0) {
+      first = min(first, max(0, doc.sheetOfY(top) - 1));
+    }
+    return (first: first, last: last);
+  }
+
+  /// Hojas que se ven ahora (índices, de la primera a la última).
+  ({int first, int last}) _visibleSheets() {
+    final off = scroll.hasClients && scroll.position.hasPixels ? scroll.offset : widget.initialSheet * kSheetStep * scale;
+    final top = (off - kTopPad) / scale;
+    return (first: doc.sheetOfY(top), last: doc.sheetOfY(top + _viewH / scale));
+  }
+
+  /// Le dice a la caché de imágenes qué hojas se ven y cuáles vienen en la dirección del scroll (la próxima y la
+  /// siguiente), para que las vaya generando por adelantado (ver [SheetImageCache.prefetch]). Barato: solo recalcula
+  /// si cambió la hoja visible o el sentido.
+  void _updatePrefetch() {
+    if (!scroll.hasClients || !scroll.position.hasPixels) return;
+    final off = scroll.offset;
+    if ((off - _lastOff).abs() > .5) _scrollDir = off > _lastOff ? 1 : -1;
+    _lastOff = off;
+    final v = _visibleSheets();
+    final key = (v.first * 100003 + v.last) * 4 + _scrollDir + 1 + doc.sheetCount * 7919;
+    if (key == _prefKey) return;
+    _prefKey = key;
+    final plan = SheetImageCache.prefetchPlan(first: v.first, last: v.last, dir: _scrollDir, count: doc.sheetCount);
+    final ids = [for (final k in plan) doc.sheets[k].id];
+    _imgs.visibleSheets = {for (var k = v.first; k <= v.last; k++) doc.sheets[k].id};
+    _imgs.protectedSheets = ids.toSet();
+    _imgs.prefetch(ids, dir: _scrollDir);
+    // las hojas que ya tenían franjas a medias sin repintar (no se veían) pasan a mostrarlas
+    for (final id in _imgs.visibleSheets) {
+      for (final e in _imgs.entriesOf(id)) {
+        if (e.hasImage && e.mode != InkPaintMode.image) e.notifyListeners();
+      }
+    }
+  }
+
+  /// Para el benchmark: cómo se están dibujando las hojas que se ven ahora (hay alguna con trazos vectoriales de una
+  /// tanda que valía una imagen / con la miniatura) y el contador de actividad de generación de imágenes.
+  @visibleForTesting
+  ({bool vector, bool lowRes, int activity, int jobs}) get imageFrameState {
+    final v = _visibleSheets();
+    var vec = false, low = false;
+    for (var k = v.first; k <= v.last; k++) {
+      for (final e in _imgs.entriesOf(doc.sheets[k].id)) {
+        if (!e.cacheable) continue;
+        if (e.mode == InkPaintMode.vector) vec = true;
+        if (e.mode == InkPaintMode.lowRes) low = true;
+      }
+    }
+    return (vector: vec, lowRes: low, activity: _imgs.activity, jobs: _imgs.jobsStarted);
   }
 
   /// Zona de la página que se ve (más un margen), para no pintar de más en la capa en vivo.
@@ -263,6 +320,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   /// Al scrollear solo se rearma el cuaderno si cambió el rango de hojas armadas.
   void _onScroll() {
     _scheduleVisibleSheet();
+    _updatePrefetch();
     if (_calcRange() == _range) return;
     _scheduleUnload();
     void rebuild() {
@@ -1348,7 +1406,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final focusedText = texts.focused?.block.id;
     if (focusedText != null) fixed.add(focusedText);
     _fillRuns(first, last);
-    _imgs.protectedSheets = {for (var k = first; k <= last; k++) doc.sheets[k].id};
+    _updatePrefetch();
     // lo que está armado fuera de las hojas del rango (textos / notas con foco, lo seleccionado, audios, desbordes de arriba)
     final extras = <Layered>[];
     for (final it in doc.items.values) {

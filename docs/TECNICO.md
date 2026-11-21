@@ -150,6 +150,37 @@ Qué pasa con el resto de la app cuando no está todo en memoria:
   archivo, pero lo que se arrastra de una hoja a otra conserva su z, así que su capa respecto a lo que ya había en la
   hoja de destino depende del orden de carga (solo cambia cómo se superponen; se guarda lo que se vio).
 
+#### Imágenes de la tinta al desplazar (etapa 4)
+
+Impeller no tiene caché de pictures: una hoja con mucha tinta vectorial se vuelve a rasterizar en cada cuadro del scroll.
+`SheetImageCache` (`lib/rendering/sheet_image_cache.dart`) la reemplaza por imágenes (una textura) mientras la tinta está
+quieta; `InkPainter` (`ink_layers.dart`) decide qué dibujar. Tandas con menos de 1500 puntos no se cachean.
+
+- **Prefetch**: `PageEditor._updatePrefetch` calcula, al scrollear, las hojas visibles y las 2 siguientes en el sentido del
+  movimiento (`SheetImageCache.prefetchPlan`; quieto: solo las visibles) y se las pasa a `prefetch`. Se generan sin esperar
+  los 300 ms de quietud (que siguen valiendo para una hoja visible que no estaba en el plan). El plan se reelige en cada
+  paso, así que lo que dejó de ser relevante no se genera. `_calcRange` arma al menos una hoja más en el sentido del
+  scroll (hace falta un painter armado para grabar la hoja).
+- **Franjas**: la imagen de una tanda son `stripCount` = 4 franjas horizontales (`<tanda>#<n>` en la caché), cada una un
+  `toImage` ~4 veces más chico y que graba solo los trazos que la tocan. **Un trabajo por cuadro como máximo**, programado
+  después del cuadro (`addPostFrameCallback`) y serializado; no se genera con el lápiz o un pellizco en curso (`busy`).
+  Mientras faltan franjas, las listas van como imagen y el resto como sustituto o vectorial recortado a esa franja. Con
+  todas las franjas el compuesto es igual (hasta el redondeo) a la imagen entera: test en `image_prefetch_test.dart`.
+  Una hoja que no se ve repinta solo cuando están todas (cada repintado graba los trazos de nuevo).
+- **Sustituto**: al terminar las franjas se baja una miniatura de 320 px de ancho (~0,6 MB, desde las franjas, sin tocar
+  los trazos), hasta 80 en memoria (~46 MB). Si la imagen buena se desaloja y la hoja vuelve a verse, se muestra la
+  miniatura estirada en vez de todos los trazos, hasta que llega la buena. Al editar la hoja (versión nueva) se descarta
+  todo y va vectorial, así el trazo nuevo se ve al instante. Sin miniatura: vectorial como antes.
+- **Presupuesto**: 8 tandas y 112 MB de franjas (antes 6 y 64 MB). Una hoja a 1000 u x dpr 1,5 son ~12,7 MB; la ventana
+  de scroll normal es 2-3 hojas visibles + 2 de prefetch + 1 detrás = ~6, con margen para hojas con varias tandas, y
+  112 MB entran 8 hojas de ese tamaño (con zoom hasta ~1,2x). Más las miniaturas: techo de ~160 MB sobre 4 GB. LRU por
+  uso; las hojas visibles y las del plan nunca se desalojan (si no entra, esa tanda queda vectorial). Una tanda desalojada
+  no se regenera por quietud mientras esté fuera de la ventana (evita que se desalojen una a otra).
+- **Medición** (`integration_test/perf_test.dart`): por cuadro se anota si había una hoja visible en vectorial / con
+  miniatura y si hubo generación (contadores baratos de la caché) y se reporta cuántos de los > 16 ms caen en cada grupo.
+  En el modo comparación solo cuentan los cuadros desde el primer cambio de offset hasta 500 ms después del último, y se
+  informa el recorrido total (suma de |delta| por cuadro).
+
 ### Formato `.sheet`
 
 - Cabecera `"ONS"` + versión + `zlib( JSON )`. El JSON tiene los textos, los elementos y los atributos
