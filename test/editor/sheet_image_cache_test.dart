@@ -51,6 +51,8 @@ void main() {
           ),
         );
     await t.pumpWidget(app());
+    // el trabajo de la caché va por scheduleTask (un Timer.run): se suelta el editor para que no quede pendiente
+    addTearDown(() => t.pumpWidget(const SizedBox(), duration: const Duration(milliseconds: 1)));
     await t.pump(const Duration(milliseconds: 300));
     return t.state<PageEditorState>(find.byType(PageEditor));
   }
@@ -59,7 +61,7 @@ void main() {
   Future<void> settle(WidgetTester t) async {
     await t.pump(const Duration(milliseconds: 400)); // vence el temporizador: se graba y se pide la imagen
     // un trabajo (franja o miniatura) por cuadro: se dan cuadros y tiempo real hasta que no quede nada
-    for (var i = 0; i < 14; i++) {
+    for (var i = 0; i < 30; i++) {
       await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 40)));
       await t.pump(const Duration(milliseconds: 20));
     }

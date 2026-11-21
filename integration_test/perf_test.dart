@@ -53,6 +53,10 @@ const _fullLoadMax = 100; // por encima de esto no se decodifica el cuaderno ent
 const _compareEnv = String.fromEnvironment('PERF_COMPARE', defaultValue: '');
 const _compareWindowSeconds = 40;
 
+// Modo traza (tool/traza.sh): --dart-define=PERF_TRACE=50 corre SOLO ese caso: genera N hojas, abre por la UI y hace
+// el scroll "medio" (6 flings) dentro de binding.traceAction, que deja la línea de tiempo en reportData['timeline'].
+const _traceEnv = String.fromEnvironment('PERF_TRACE', defaultValue: '');
+
 const _phrases = [
   'La ley de Snell relaciona los angulos de incidencia',
   'Ecuacion de la recta y = 3x + 2 con pendiente 3',
@@ -313,9 +317,11 @@ String modo() => kReleaseMode ? 'release' : (kProfileMode ? 'profile' : 'debug')
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   final compare = _compareEnv.isEmpty ? null : int.parse(_compareEnv.trim());
-  final sizes = compare != null ? <int>[] : [for (final s in _sizesEnv.split(',')) int.parse(s.trim())];
+  final trace = _traceEnv.isEmpty ? null : int.parse(_traceEnv.trim());
+  final sizes = compare != null || trace != null ? <int>[] : [for (final s in _sizesEnv.split(',')) int.parse(s.trim())];
   final results = <String, Object>{'modo': modo(), 'tamanios': sizes};
   if (compare != null) results['comparar_hojas'] = compare;
+  if (trace != null) results['traza_hojas'] = trace;
   final frames = FrameRecorder();
   final lines = <String>[];
 
@@ -614,6 +620,53 @@ void main() {
       } catch (e) {
         out['error'] = '$e';
         say('ERROR en $n hojas: $e');
+        rethrow;
+      } finally {
+        publish();
+        await t.pumpWidget(const SizedBox());
+        if (await root.exists()) await root.delete(recursive: true);
+      }
+    });
+  }
+
+  // ---------- caso aparte: traza de la línea de tiempo (tool/traza.sh) ----------
+  if (trace != null) {
+    testWidgets('perf: traza de scroll medio ($trace hojas)', timeout: const Timeout(Duration(minutes: 20)), (t) async {
+      final out = <String, Object?>{};
+      results['traza'] = out;
+      final root = await Directory.systemTemp.createTemp('apuntes_perf_trace');
+      try {
+        await generate(trace, root, out);
+        await openByUi(t, trace, root, out);
+        final ed = t.state<PageEditorState>(find.byType(PageEditor));
+        final scroll = ed.scroll;
+        scroll.jumpTo(scroll.position.maxScrollExtent / 2);
+        await settle(t, 600);
+        await frames.mark();
+        final sw = Stopwatch()..start();
+        // mismo scroll que 'medio' del caso normal; la traza lleva los eventos 'ON ...' de la app
+        await binding.traceAction(() async {
+          for (var i = 0; i < 6; i++) {
+            await t.fling(find.byType(PageEditor), const Offset(0, -500), 6000);
+            var last = -1.0, still = 0;
+            final until = sw.elapsed + const Duration(seconds: 5);
+            while (still < 3 && sw.elapsed < until) {
+              await t.pump(const Duration(milliseconds: 16));
+              still = (scroll.offset - last).abs() < .5 ? still + 1 : 0;
+              last = scroll.offset;
+            }
+          }
+        }, reportKey: 'timeline', streams: const ['Dart', 'Embedder', 'GC']);
+        results['timeline'] = binding.reportData?['timeline']; // publish() reemplaza reportData: se guarda acá
+        final f = await frames.take();
+        out['scroll_medio_traza'] = f;
+        say('traza scroll medio ($trace hojas): ${f['frames']} frames, build p90/p99 ${f['build_p90_ms']}/${f['build_p99_ms']} ms, '
+            'raster p90/p99 ${f['raster_p90_ms']}/${f['raster_p99_ms']} ms, >16 ms: ${f['frames_mas_16ms']}, peor ${f['total_peor_ms']} ms');
+        await t.tap(find.byKey(const Key('back')));
+        await settle(t, 1500);
+      } catch (e) {
+        out['error'] = '$e';
+        say('ERROR en traza: $e');
         rethrow;
       } finally {
         publish();

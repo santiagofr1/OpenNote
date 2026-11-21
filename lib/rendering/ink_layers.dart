@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'dart:math';
 import 'dart:ui' as ui;
 
@@ -33,6 +34,7 @@ class InkPainter extends CustomPainter {
   final double dpr, maxPx;
   final InkImage? _img;
   int? _points;
+  int? _stripN;
 
   InkPainter(this.doc, this.strokes, this.sheet, this.scale, this.version, this.hidden,
       {this.cache, this.cacheKey = '', this.sheetId = '', this.dpr = 1, this.maxPx = 4096})
@@ -44,12 +46,26 @@ class InkPainter extends CustomPainter {
 
   @override
   void paint(Canvas c, Size size) {
+    developer.Timeline.startSync('ON InkPainter.paint');
+    try {
+      _paint(c, size);
+    } finally {
+      // el modo con el que terminó de pintar queda como evento instantáneo dentro del paint
+      developer.Timeline.instantSync('ON InkPainter modo', arguments: {'modo': _img?.mode.name ?? 'sin-cache'});
+      developer.Timeline.finishSync();
+    }
+  }
+
+  void _paint(Canvas c, Size size) {
     final skip = hidden();
     final img = _img;
     Path? onlyVector; // zona (en coordenadas de la capa) que falta dibujar trazo por trazo; null: toda la capa
     if (img != null && cache != null) {
       final w = (size.width * dpr).round(), h = (size.height * dpr).round();
       _points ??= strokes.fold<int>(0, (a, s) => a + s.n);
+      _stripN ??= cache!.stripCount ??
+          SheetImageCache.stripCountFor(strokes, sheet,
+              maxPoints: cache!.maxPointsPerStrip, min: cache!.minStrips, max: cache!.maxStrips);
       img.cacheable = _points! >= cache!.minPoints;
       // con trazos arrastrándose (ocultos), muy ampliada o con poca tinta: vectorial y sin imagen
       if (skip.isNotEmpty || w > maxPx || !img.cacheable) {
@@ -63,6 +79,7 @@ class InkPainter extends CustomPainter {
         img.recStrokes = strokes;
         if (first) cache!.kick(); // si la hoja es de las del prefetch, ya hay con qué generarla
         img.blocked = false;
+        img.stripN = _stripN!;
         img.ensureStrips();
         cache!.touch(img);
         final n = img.strips.length;
@@ -80,6 +97,12 @@ class InkPainter extends CustomPainter {
               Paint()..filterQuality = FilterQuality.low);
         }
         img.schedule();
+        // hoja que todavía no se ve y sin imagen ni miniatura: no se dibuja nada (el prefetch la genera y al pasar a
+        // visible se repinta). Sin hojas visibles conocidas (primer cuadro) se dibuja como siempre.
+        if (missing.length == n && img.low == null && cache!.visibleSheets.isNotEmpty && !cache!.visibleSheets.contains(sheetId)) {
+          img.mode = InkPaintMode.skipped;
+          return;
+        }
         if (missing.isEmpty) {
           img.mode = InkPaintMode.image;
           return;
@@ -117,7 +140,7 @@ class InkPainter extends CustomPainter {
   /// Graba las filas [y0, y1) de la tanda de la hoja a [w] x [h] píxeles (para una franja de la imagen; toda la
   /// hoja es y0 = 0, y1 = h). Solo se dibujan los trazos que tocan esas filas. null si hay trazos ocultos.
   @visibleForTesting
-  ui.Picture? recordStrip(int w, int h, int y0, int y1) {
+  ui.Picture? recordStrip(int w, int h, int y0, int y1, {int step = 1}) {
     final skip = hidden();
     if (skip.isNotEmpty) return null;
     final rec = ui.PictureRecorder();
@@ -133,8 +156,21 @@ class InkPainter extends CustomPainter {
       final top = sheet.top + y0 * sheet.height / h - margin, bottom = sheet.top + y1 * sheet.height / h + margin;
       ss = ss.where((s) => s.bounds.bottom >= top && s.bounds.top <= bottom);
     }
+    if (step > 1) ss = ss.map((s) => _thinned(s, step));
     paintStrokes(c, ss);
     return rec.endRecording();
+  }
+
+  /// Copia del trazo con 1 de cada [k] puntos (siempre el primero y el último): para la miniatura, que se ve chica.
+  static Stroke _thinned(Stroke s, int k) {
+    final n = s.n;
+    if (n <= k + 1) return s;
+    final p = <double>[];
+    for (var i = 0; i < n; i += k) {
+      p.addAll([s.pts[i * 3], s.pts[i * 3 + 1], s.pts[i * 3 + 2]]);
+    }
+    if ((n - 1) % k != 0) p.addAll([s.pts[(n - 1) * 3], s.pts[(n - 1) * 3 + 1], s.pts[(n - 1) * 3 + 2]]);
+    return Stroke(s.id, s.k, s.c, s.w, p, s.o)..z = s.z;
   }
 
   @override

@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'dart:developer' as developer;
 import 'dart:ui';
 
 import 'elements.dart';
@@ -169,7 +170,9 @@ class NotebookDoc {
   /// Pone en memoria el contenido [c] (coordenadas locales, sin copiar) de la hoja [id], que estaba sin cargar.
   /// Si ya está cargada no hace NADA (nunca pisa lo que hay en memoria). No marca nada sucio: es lo que dice el disco,
   /// salvo que haya elementos que cayeron en esta hoja antes de cargarla. Devuelve si la cargó.
-  bool attachSheet(String id, SheetContent c) {
+  bool attachSheet(String id, SheetContent c) => developer.Timeline.timeSync('ON attachSheet', () => _attachSheet(id, c));
+
+  bool _attachSheet(String id, SheetContent c) {
     final k = indexOfSheet(id);
     if (k < 0 || _loaded.contains(id)) return false;
     _place(c, k * kSheetStep);
@@ -185,7 +188,9 @@ class NotebookDoc {
 
   /// Saca de memoria los elementos de la hoja [id] (no los borra del disco). Se niega (false) si la hoja
   /// no está cargada o tiene cambios sin guardar: soltar eso perdería datos.
-  bool detachSheet(String id) {
+  bool detachSheet(String id) => developer.Timeline.timeSync('ON detachSheet', () => _detachSheet(id));
+
+  bool _detachSheet(String id) {
     final k = indexOfSheet(id);
     if (k < 0 || !_loaded.contains(id) || isSheetDirty(id)) return false;
     _rawStrokes.removeWhere((_, s) => _sheetOfStroke(s) == k);

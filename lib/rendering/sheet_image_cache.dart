@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:developer' as developer;
+import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -11,6 +12,9 @@ import '../domain/domain.dart';
 enum InkPaintMode {
   /// poca tinta: vectorial barato, sin caché
   small,
+
+  /// hoja que todavía no se ve y no tiene imagen: no se dibujó nada (solo quedó registrada para el prefetch)
+  skipped,
 
   /// todas las franjas listas: solo imágenes
   image,
@@ -26,9 +30,10 @@ enum InkPaintMode {
 /// se scrollea se dibuja esa imagen (una sola textura) en vez de volver a rasterizar decenas de miles de puntos en
 /// cada cuadro (Impeller no tiene caché de pictures).
 ///
-/// Franjas: la imagen de una tanda se arma en [stripCount] franjas horizontales (4) que se generan en cuadros
-/// distintos (un trabajo por cuadro, después del cuadro; [_kick]). Cada franja es un `toImage` ~4 veces más chico que
-/// el de la hoja entera, así ningún cuadro paga la hoja de golpe. Mientras faltan franjas se dibujan las listas como
+/// Franjas: la imagen de una tanda se arma en franjas horizontales que se generan en cuadros distintos (un trabajo
+/// por cuadro, después del cuadro y fuera de él; [_kick]). La cantidad sale de los puntos ([stripCountFor]): ~[maxPointsPerStrip] (3000, con 25% de tolerancia) por franja, entre [minStrips] (4) y [maxStrips] (32); una hoja de 46k puntos son ~16.
+/// Cada franja es un `toImage` mucho más chico que el de la hoja entera, así ningún cuadro paga la hoja de golpe, y
+/// nunca hay dos `toImage` a la vez (el raster es un solo hilo). Mientras faltan franjas se dibujan las listas como
 /// imagen y el resto como baja resolución ([InkImage.low]) o, si no hay, vectorial recortado a esa franja.
 /// Cada franja tiene su clave ([InkImage.stripKey], `<tanda>#<n>`).
 ///
@@ -37,8 +42,9 @@ enum InkPaintMode {
 /// que queda quieta [quiet] (300 ms) también se genera. Siempre de a una franja por cuadro, y sin interrumpir al lápiz
 /// ([busy]). Los trabajos se reeligen en cada paso: si la hoja dejó de ser relevante, no se genera.
 ///
-/// Baja resolución: cuando una tanda termina todas sus franjas se guarda además una miniatura (ancho [lowWidth] px,
-/// ~0,6 MB) bajada de las franjas, sin volver a tocar los trazos. Sobrevive al desalojo de la imagen grande: si la hoja
+/// Baja resolución: de cada tanda del plan se genera primero una miniatura (ancho [lowWidth] px, ~0,6 MB) grabada
+/// desde los trazos salteando puntos (1 de cada [lowStep]; grabar es la parte cara y en chico no se nota), antes que
+/// las franjas. Sobrevive al desalojo de la imagen grande: si la hoja
 /// vuelve a verse antes de que se regenere, se muestra esa miniatura estirada en vez de rasterizar todos sus trazos.
 /// Se descarta al editar la hoja (así el trazo nuevo se ve al instante, vectorial) y en cuanto llega la imagen buena
 /// no se usa más.
@@ -59,8 +65,20 @@ class SheetImageCache {
   int maxImages;
   int maxBytes;
 
-  /// Franjas por tanda (1 = una sola imagen, como antes).
-  int stripCount;
+  /// Franjas por tanda fijas (null: según los puntos, ver [stripCountFor]; 1 = una sola imagen).
+  int? stripCount;
+
+  /// Máximo de puntos por franja y límites de la cantidad de franjas (modo adaptativo).
+  int maxPointsPerStrip;
+  int minStrips, maxStrips;
+
+  /// La miniatura se graba con 1 de cada [lowStep] puntos de cada trazo (conserva el primero y el último).
+  int lowStep;
+
+  /// Si el cuadro que acaba de dibujarse pasó de estos ms de UI, el trabajo se posterga al próximo (hasta
+  /// [maxDeferrals] veces seguidas, para no quedarse sin generar nunca).
+  double maxFrameMs = 8;
+  int maxDeferrals = 4;
 
   /// Ancho en píxeles de la miniatura y cuántas se guardan.
   int lowWidth;
@@ -79,6 +97,17 @@ class SheetImageCache {
   /// Hojas visibles: cada franja nueva las repinta enseguida (las demás, solo cuando terminan todas).
   Set<String> visibleSheets = const {};
 
+  /// Fija las hojas que se ven y repinta las que quedaron sin pintar (sin imagen y fuera de vista) o con franjas a
+  /// medias, que hasta ahora no mostraban nada nuevo.
+  void setVisible(Set<String> ids) {
+    visibleSheets = ids;
+    for (final id in ids) {
+      for (final e in entriesOf(id)) {
+        if (e.mode == InkPaintMode.skipped || (e.hasImage && e.mode != InkPaintMode.image)) e.notifyListeners();
+      }
+    }
+  }
+
   /// true: un trabajo por cuadro, después del cuadro (lo normal). false: uno atrás del otro sin esperar cuadros (tests
   /// que no dibujan cuadros).
   bool framePaced = true;
@@ -92,6 +121,9 @@ class SheetImageCache {
   /// Sube al empezar y al terminar cada trabajo de generación (el benchmark mira si cambió de un cuadro al otro).
   int activity = 0;
 
+  /// `toImage` en curso ahora y el máximo que hubo a la vez (para los tests: tiene que ser 1).
+  int rasterInFlight = 0, maxRasterInFlight = 0;
+
   /// Cuántos trabajos de generación empezaron (cada uno es una franja o una miniatura).
   int jobsStarted = 0;
 
@@ -103,18 +135,51 @@ class SheetImageCache {
   int _dir = 0; // dirección del scroll (+1 hacia abajo)
   final _ready = <InkImage>[]; // tandas cuyo temporizador de quietud venció
   bool _running = false, _stepPending = false, _disposed = false;
+  int _deferrals = 0;
   Timer? _busyTimer;
   int _stamp = 0;
 
   SheetImageCache({
     this.maxImages = 8,
     this.maxBytes = 112 << 20,
-    this.stripCount = 4,
+    this.stripCount,
+    this.maxPointsPerStrip = 3000,
+    this.minStrips = 4,
+    this.maxStrips = 32,
+    this.lowStep = 4,
     this.lowWidth = 320,
     this.maxLow = 80,
     int? minPoints,
     this.quiet = const Duration(milliseconds: 300),
   }) : minPoints = minPoints ?? defaultMinPoints;
+
+  /// Cuántas franjas iguales de alto hacen falta para que ninguna tenga más de [maxPoints] puntos, entre [min] y
+  /// [max]. Un trazo que cruza varias franjas cuenta en todas (se graba en todas).
+  static int stripCountFor(Iterable<Stroke> strokes, ui.Rect sheet, {int maxPoints = 3000, int min = 4, int max = 32}) {
+    var total = 0;
+    for (final s in strokes) {
+      total += s.n;
+    }
+    var n = (total / maxPoints).ceil().clamp(min, max);
+    for (var it = 0; it < 3 && n < max; it++) {
+      final counts = List.filled(n, 0);
+      for (final s in strokes) {
+        final b = s.bounds;
+        final i0 = ((b.top - sheet.top) / sheet.height * n).floor().clamp(0, n - 1);
+        final i1 = ((b.bottom - sheet.top) / sheet.height * n).floor().clamp(0, n - 1);
+        for (var i = i0; i <= i1; i++) {
+          counts[i] += s.n;
+        }
+      }
+      var mx = 0;
+      for (final c in counts) {
+        if (c > mx) mx = c;
+      }
+      if (mx <= maxPoints * 1.25) break; // ~maxPoints: no se persigue la franja más densa hasta el máximo
+      n = (n * mx / maxPoints).ceil().clamp(n + 1, max);
+    }
+    return n;
+  }
 
   /// Filas de píxeles [y0, y1) de la franja [i] de [n] en una imagen de [h] de alto.
   static (int, int) stripRange(int h, int n, int i) => ((h * i) ~/ n, i == n - 1 ? h : (h * (i + 1)) ~/ n);
@@ -218,13 +283,35 @@ class SheetImageCache {
     }
     final sb = SchedulerBinding.instance;
     sb.addPostFrameCallback((_) {
-      _stepPending = false;
-      _step();
+      if (_disposed) return;
+      // el cuadro que acaba de dibujarse ya gastó mucho en el hilo UI: el trabajo espera al siguiente
+      if (_deferrals < maxDeferrals && _frameUiMs() > maxFrameMs) {
+        _deferrals++;
+        _stepPending = false;
+        _kick();
+        return;
+      }
+      _deferrals = 0;
+      // fuera del cuadro: no se suma a su build (prioridad de animación: con idle no corre mientras hay un fling)
+      sb.scheduleTask(() {
+        _stepPending = false;
+        _step();
+      }, Priority.animation, debugLabel: 'ON cache job');
     });
     sb.scheduleFrame();
   }
 
-  void _step() {
+  /// ms de UI que lleva el cuadro actual (desde su vsync); 0 si no se puede saber.
+  double _frameUiMs() {
+    final st = SchedulerBinding.instance.currentSystemFrameTimeStamp;
+    if (st == Duration.zero) return 0;
+    final ms = (developer.Timeline.now - st.inMicroseconds) / 1000;
+    return ms < 0 || ms > 1000 ? 0 : ms;
+  }
+
+  void _step() => developer.Timeline.timeSync('ON cache step', _stepImpl);
+
+  void _stepImpl() {
     if (_disposed || _running) return;
     if (busy?.call() ?? false) {
       _busyTimer ??= Timer(const Duration(milliseconds: 150), () {
@@ -247,28 +334,37 @@ class SheetImageCache {
 
   bool _usable(InkImage e) => !e._gone && !e.refused && !e.blocked && e.record != null && e.wantW > 0;
 
-  ({InkImage e, int strip})? _jobOf(InkImage e) {
+  /// Falta la miniatura (se hace primero, no depende de las franjas).
+  bool _needsLow(InkImage e) => _usable(e) && e.low == null && !e.lowRefused;
+
+  ({InkImage e, int strip})? _stripJob(InkImage e) {
     if (!_usable(e)) return null;
-    final n = stripCount;
+    final n = e.stripN;
     for (var j = 0; j < n; j++) {
       final i = _dir < 0 ? n - 1 - j : j; // hacia arriba entra primero la parte de abajo
       if (!e.stripCurrent(i)) return (e: e, strip: i);
     }
-    if (e.low == null && !e.lowRefused && e.hasImage) return (e: e, strip: -1);
     return null;
   }
 
-  /// El próximo trabajo: primero las hojas del prefetch en su orden, después las tandas visibles que quedaron quietas.
+  /// El próximo trabajo: primero las miniaturas de las hojas del prefetch, después sus franjas en orden, y por último las
+  /// tandas visibles que quedaron quietas.
   ({InkImage e, int strip})? _nextJob() {
     for (final id in _wanted) {
       for (final e in entriesOf(id)) {
-        final j = _jobOf(e);
+        if (_needsLow(e)) return (e: e, strip: -1);
+      }
+    }
+    for (final id in _wanted) {
+      for (final e in entriesOf(id)) {
+        final j = _stripJob(e);
         if (j != null) return j;
       }
     }
     for (var k = 0; k < _ready.length; k++) {
       final e = _ready[k];
-      final j = _jobOf(e);
+      if (_needsLow(e)) return (e: e, strip: -1);
+      final j = _stripJob(e);
       if (j != null) return j;
       if (e._gone || (!e.needsImage && (e.low != null || e.lowRefused))) _ready.removeAt(k--); // ya está todo
     }
@@ -277,15 +373,18 @@ class SheetImageCache {
 
   Future<void> _runStrip(InkImage e, int i) async {
     e.ensureStrips();
-    final w = e.wantW, h = e.wantH, gen = e._gen, n = stripCount;
+    final w = e.wantW, h = e.wantH, gen = e._gen, n = e.stripN;
     final (y0, y1) = stripRange(h, n, i);
     final strokes = e.recStrokes;
-    final pic = e.record?.call(w, h, y0, y1);
+    final pic = developer.Timeline.timeSync('ON cache grabar franja', () => e.record?.call(w, h, y0, y1));
     if (pic == null || strokes == null) {
       e.blocked = true; // hay trazos ocultos: se vuelve a pedir al pintar
       return;
     }
     ui.Image img;
+    final tImg = developer.TimelineTask()..start('ON cache toImage franja', arguments: {'w': w, 'h': y1 - y0});
+    rasterInFlight++;
+    maxRasterInFlight = max(maxRasterInFlight, rasterInFlight);
     try {
       img = await pic.toImage(w, y1 - y0);
     } catch (err) {
@@ -293,9 +392,11 @@ class SheetImageCache {
       e.refused = true;
       return;
     } finally {
+      rasterInFlight--;
+      tImg.finish();
       pic.dispose();
     }
-    if (_disposed || e._gone || gen != e._gen || w != e.wantW || h != e.wantH || n != stripCount) {
+    if (_disposed || e._gone || gen != e._gen || w != e.wantW || h != e.wantH || n != e.stripN) {
       img.dispose(); // cambió mientras se rasterizaba
       if (!_disposed && !e._gone && e.needsImage) e.schedule();
       return;
@@ -316,23 +417,19 @@ class SheetImageCache {
     if (e.stripCurrentAll || visibleSheets.contains(e.sheetId)) e.notifyListeners();
   }
 
-  /// Baja la tanda (ya con todas las franjas) a una miniatura. No toca los trazos.
+  /// Graba la tanda entera a [lowWidth] px de ancho salteando puntos y la baja a una miniatura.
   Future<void> _runLow(InkImage e) async {
-    final gen = e._gen, n = stripCount;
-    if (!e.stripCurrentAll) return;
-    final fw = e.strips[0]!.fullW, fh = e.strips[0]!.fullH;
-    final lw = lowWidth, lh = (lowWidth * fh / fw).round().clamp(1, 1 << 14);
-    final rec = ui.PictureRecorder();
-    final c = ui.Canvas(rec);
-    final p = ui.Paint()..filterQuality = ui.FilterQuality.medium;
-    for (var i = 0; i < n; i++) {
-      final s = e.strips[i]!;
-      final (y0, y1) = stripRange(fh, n, i);
-      c.drawImageRect(s.image, ui.Rect.fromLTWH(0, 0, s.image.width.toDouble(), s.image.height.toDouble()),
-          ui.Rect.fromLTRB(0, y0 * lh / fh, lw.toDouble(), y1 * lh / fh), p);
+    final gen = e._gen;
+    final lw = min(lowWidth, e.wantW), lh = (lw * e.wantH / e.wantW).round().clamp(1, 1 << 14);
+    final pic = developer.Timeline.timeSync('ON cache grabar miniatura', () => e.record?.call(lw, lh, 0, lh, step: lowStep));
+    if (pic == null) {
+      e.blocked = true;
+      return;
     }
-    final pic = rec.endRecording();
     ui.Image img;
+    final tLow = developer.TimelineTask()..start('ON cache toImage miniatura', arguments: {'w': lw, 'h': lh});
+    rasterInFlight++;
+    maxRasterInFlight = max(maxRasterInFlight, rasterInFlight);
     try {
       img = await pic.toImage(lw, lh);
     } catch (err) {
@@ -340,6 +437,8 @@ class SheetImageCache {
       e.lowRefused = true;
       return;
     } finally {
+      rasterInFlight--;
+      tLow.finish();
       pic.dispose();
     }
     if (_disposed || e._gone || gen != e._gen) {
@@ -410,7 +509,10 @@ class InkImage extends ChangeNotifier {
 
   /// Graba las filas [y0, y1) de la tanda (con los trazos de la última pintura) a [w] x [h] píxeles; null si ahora no
   /// se puede (trazos ocultos).
-  ui.Picture? Function(int w, int h, int y0, int y1)? record;
+  ui.Picture? Function(int w, int h, int y0, int y1, {int step})? record;
+
+  /// Franjas de esta tanda (las fija el pintor según los puntos).
+  int stripN = 4;
   List<Stroke>? recStrokes;
 
   /// No entró en el presupuesto de memoria (o falló): queda vectorial hasta que cambie algo.
@@ -439,15 +541,13 @@ class InkImage extends ChangeNotifier {
   int get bytes => strips.fold(0, (a, s) => a + (s?.bytes ?? 0));
   int get lowBytes => low == null ? 0 : low!.width * low!.height * 4;
 
-  /// Cambió la cantidad de franjas de la caché: lo generado no encaja.
+  /// Cambió la cantidad de franjas de la tanda: lo generado no encaja (la miniatura sí).
   void ensureStrips() {
-    if (strips.length == _cache.stripCount) return;
+    if (strips.length == stripN) return;
     for (final s in strips) {
       s?.image.dispose();
     }
-    low?.dispose();
-    low = null;
-    strips = List.filled(_cache.stripCount, null);
+    strips = List.filled(stripN, null);
     _gen++;
   }
 

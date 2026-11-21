@@ -272,26 +272,24 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   /// Le dice a la caché de imágenes qué hojas se ven y cuáles vienen en la dirección del scroll (la próxima y la
   /// siguiente), para que las vaya generando por adelantado (ver [SheetImageCache.prefetch]). Barato: solo recalcula
   /// si cambió la hoja visible o el sentido.
-  void _updatePrefetch() {
+  void _updatePrefetch() => developer.Timeline.timeSync('ON updatePrefetch', _updatePrefetchImpl);
+
+  void _updatePrefetchImpl() {
     if (!scroll.hasClients || !scroll.position.hasPixels) return;
     final off = scroll.offset;
     if ((off - _lastOff).abs() > .5) _scrollDir = off > _lastOff ? 1 : -1;
     _lastOff = off;
     final v = _visibleSheets();
-    final key = (v.first * 100003 + v.last) * 4 + _scrollDir + 1 + doc.sheetCount * 7919;
+    final key = (v.first * 100003 + v.last) * 4 + _scrollDir + 1 + doc.sheetCount * 7919 + doc.sheets[v.first].id.hashCode + doc.sheets[v.last].id.hashCode * 31;
     if (key == _prefKey) return;
     _prefKey = key;
     final plan = SheetImageCache.prefetchPlan(first: v.first, last: v.last, dir: _scrollDir, count: doc.sheetCount);
     final ids = [for (final k in plan) doc.sheets[k].id];
-    _imgs.visibleSheets = {for (var k = v.first; k <= v.last; k++) doc.sheets[k].id};
+    final vis = {for (var k = v.first; k <= v.last; k++) doc.sheets[k].id};
     _imgs.protectedSheets = ids.toSet();
     _imgs.prefetch(ids, dir: _scrollDir);
-    // las hojas que ya tenían franjas a medias sin repintar (no se veían) pasan a mostrarlas
-    for (final id in _imgs.visibleSheets) {
-      for (final e in _imgs.entriesOf(id)) {
-        if (e.hasImage && e.mode != InkPaintMode.image) e.notifyListeners();
-      }
-    }
+    // visibles: las que no se habían dibujado (o tenían franjas a medias sin repintar) pasan a mostrarse
+    _imgs.setVisible(vis);
   }
 
   /// Para el benchmark: cómo se están dibujando las hojas que se ven ahora (hay alguna con trazos vectoriales de una
@@ -318,15 +316,19 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   }
 
   /// Al scrollear solo se rearma el cuaderno si cambió el rango de hojas armadas.
-  void _onScroll() {
+  void _onScroll() => developer.Timeline.timeSync('ON onScroll', _onScrollImpl);
+
+  void _onScrollImpl() {
     _scheduleVisibleSheet();
     _updatePrefetch();
     if (_calcRange() == _range) return;
     _scheduleUnload();
     void rebuild() {
       if (!mounted || _calcRange() == _range) return;
-      setState(() {});
-      if (sel.moving) liveTick.value++; // la capa en vivo dibuja solo lo visible
+      developer.Timeline.timeSync('ON rebuild-por-rango', () {
+        setState(() {});
+        if (sel.moving) liveTick.value++; // la capa en vivo dibuja solo lo visible
+      });
     }
 
     if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
@@ -352,7 +354,9 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     });
   }
 
-  void _syncLoaded() {
+  void _syncLoaded() => developer.Timeline.timeSync('ON syncLoaded', _syncLoadedImpl);
+
+  void _syncLoadedImpl() {
     _syncedRange = _range;
     _syncedCount = doc.sheetCount;
     final n = doc.sheetCount;
@@ -397,7 +401,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   Future<void> _unloadFar(int tries) async {
     if (!mounted) return;
-    final far = _farLoaded();
+    final far = developer.Timeline.timeSync('ON farLoaded', _farLoaded);
     if (far.isEmpty) return;
     final r = await widget.store.unloadSheets(doc, far, canUnload: (id) => mounted && !_pinnedSheets().contains(id));
     if (!mounted) return;
@@ -1275,8 +1279,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         _viewH = box.maxHeight;
         _viewW = box.maxWidth;
         _dpr = View.of(context).devicePixelRatio;
-        _range = _calcRange();
-        _requestSync();
+        developer.Timeline.timeSync('ON canvas range+sync', () {
+          _range = _calcRange();
+          _requestSync();
+        });
         final sheetSize = Size(layout.sheetWidth, doc.h * scale);
         // durante el pellizco no scrollea: si no, el zoom tironea
         final physics = touch.pinching ? const NeverScrollableScrollPhysics() : const ClampingScrollPhysics();
@@ -1399,13 +1405,15 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   ///   Una hoja normal tiene una sola tanda; cada imagen, nota o texto "en el medio" de su tinta suma una capa.
   /// - Cada hoja repinta con su propia versión ([_verOf]): borrar o dibujar en una no toca las otras.
   /// Los widgets llevan clave para conservar su estado (campos de texto, audio) al reordenarse o pasar de hoja.
-  Widget _layers(bool textMode) {
+  Widget _layers(bool textMode) => developer.Timeline.timeSync('ON layers', () => _layersImpl(textMode));
+
+  Widget _layersImpl(bool textMode) {
     final first = _range.first, last = _range.last;
     final rangeTop = first * kSheetStep;
     final fixed = <String>{...sel.texts, ...sel.items, ..._stickyFocus};
     final focusedText = texts.focused?.block.id;
     if (focusedText != null) fixed.add(focusedText);
-    _fillRuns(first, last);
+    developer.Timeline.timeSync('ON fillRuns', () => _fillRuns(first, last));
     _updatePrefetch();
     // lo que está armado fuera de las hojas del rango (textos / notas con foco, lo seleccionado, audios, desbordes de arriba)
     final extras = <Layered>[];
