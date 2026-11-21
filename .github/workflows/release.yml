@@ -110,3 +110,15 @@ jobs:
           body: ${{ env.RELEASE_BODY }}
           files: OpenNote-v${{ env.VERSION_NAME }}.apk
           make_latest: true
+
+      - name: Podar releases viejos
+        if: success()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          KEEP: 5
+          CURRENT_TAG: v${{ env.VERSION_NAME }}
+        run: |
+          gh release list --json tagName,createdAt,isLatest,isDraft,isPrerelease --limit 200 \
+            | tool/podar_releases.sh
