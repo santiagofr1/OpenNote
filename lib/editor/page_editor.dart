@@ -293,6 +293,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final behind = _scrollDir == 0 ? -1 : (_scrollDir > 0 ? v.first - 1 : v.last + 1);
     _imgs.protectedSheets = {...ids, if (behind >= 0 && behind < doc.sheetCount) doc.sheets[behind].id};
     _imgs.prefetch(ids, dir: _scrollDir);
+    _imgs.releaseOutsideWindow(); // las imágenes de las hojas que quedaron lejos se sueltan (ver SheetImageCache)
     // visibles: las que no se habían dibujado (o tenían franjas a medias sin repintar) pasan a mostrarse; sus franjas
     // que están en pantalla se generan primero
     final top = (off - kTopPad) / scale, bottom = top + _viewH / scale;

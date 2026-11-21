@@ -42,8 +42,8 @@ void main() {
     List<int> plan(int first, int last, int dir, {int count = 10}) =>
         SheetImageCache.prefetchPlan(first: first, last: last, dir: dir, count: count);
 
-    test('hacia abajo: las visibles y las 3 siguientes', () => expect(plan(3, 4, 1), [3, 4, 5, 6, 7]));
-    test('hacia arriba: las visibles y las 3 anteriores (la más cercana primero)', () => expect(plan(3, 4, -1), [3, 4, 2, 1, 0]));
+    test('hacia abajo: las visibles y las 2 siguientes', () => expect(plan(3, 4, 1), [3, 4, 5, 6]));
+    test('hacia arriba: las visibles y las 2 anteriores (la más cercana primero)', () => expect(plan(3, 4, -1), [3, 4, 2, 1]));
     test('quieto: solo las visibles', () => expect(plan(3, 4, 0), [3, 4]));
     test('en los bordes del cuaderno no se pasa', () {
       expect(plan(8, 9, 1), [8, 9]);

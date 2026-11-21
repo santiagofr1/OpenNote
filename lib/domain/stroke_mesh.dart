@@ -106,16 +106,31 @@ MeshPart _buildPart(Stroke s, int a, int b, double feather) {
         _circle(w, x(0), y(0), s.w * .4, alpha(s.o * .6), 12);
         return w.done();
       }
-      final p1 = pr(1);
+      // El dibujo viejo era un drawLine por tramo con tapas redondas: el alfa se apilaba en cada unión (cuentas) y
+      // eso daba el grano. Acá la tira lleva un vértice en cada punto (alfa apilado: 1-(1-a)(1-b), con una variación
+      // pseudoaleatoria estable) y otro en el medio de cada tramo (alfa del tramo): el color se interpola y queda la
+      // misma cuenta periódica, sin pasadas superpuestas.
+      double segA(int i) => s.o * (.28 + .6 * pr(i)); // alfa del tramo i-1..i
+      double segH(int i) => s.w * (.55 + .6 * pr(i)) / 2;
       final xs = <double>[], ys = <double>[], hw = <double>[], col = <int>[];
       final gx = <double>[], gy = <double>[], ghw = <double>[], gcol = <int>[];
       for (var i = 0; i < n; i++) {
-        final q = i == 0 ? p1 : pr(i);
+        final i1 = i == 0 ? 1 : i; // el primer punto copia al segundo
+        final next = i + 1 < n ? i + 1 : i;
+        final a0 = segA(i1), a1 = segA(next);
+        final stacked = i == 0 || i == n - 1 ? a0 : 1 - (1 - a0) * (1 - a1);
         xs.add(x(i));
         ys.add(y(i));
-        hw.add(s.w * (.55 + .6 * q) / 2);
-        col.add(alpha(s.o * (.28 + .6 * q)));
+        hw.add(i == 0 || i == n - 1 ? segH(i1) : (segH(i1) + segH(next)) / 2);
+        col.add(alpha(stacked * _grain(a + i, 1)));
+        if (i + 1 < n) {
+          xs.add((x(i) + x(i + 1)) / 2);
+          ys.add((y(i) + y(i + 1)) / 2);
+          hw.add(segH(i + 1));
+          col.add(alpha(a1));
+        }
         // grano: una línea fina corrida, pseudoaleatoria pero estable
+        final q = pr(i1);
         final j = ((max(1, a + i) * 7919) % 13 - 6) / 6 * s.w * .3;
         gx.add(x(i) + j);
         gy.add(y(i) - j);
@@ -174,6 +189,14 @@ MeshPart _buildPart(Stroke s, int a, int b, double feather) {
       _stripDedupe(w, xs, ys, hw, feather > 0 ? List<int>.filled(n, argb) : null, round: true, feather: feather);
       return w.done();
   }
+}
+
+/// Variación de alfa del lápiz por vértice: pseudoaleatoria pero estable (depende solo del índice global del punto),
+/// entre [_grainLo] y [_grainHi] (se probó: más variación aleja al lápiz del dibujo viejo en la métrica del test).
+const double _grainLo = .85, _grainHi = 1.15;
+double _grain(int i, int salt) {
+  final h = ((i * 7919 + salt * 104729) * 2654435761 >> 7) % 1021;
+  return _grainLo + (_grainHi - _grainLo) * h / 1020;
 }
 
 /// Curva del trazo suave: pasa por los puntos medios con los puntos como control (como el `Path` viejo).
