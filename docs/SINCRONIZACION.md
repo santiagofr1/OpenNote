@@ -560,12 +560,40 @@ Todo lo decide `SyncController` (`lib/sync/sync_controller.dart`); el motor solo
 | "Sincronizar ahora" | a mano; corta el retroceso | una pasada |
 
 **Nunca dos pasadas a la vez:** un pedido que llega mientras corre una (poll, debounce, "ahora"...) no arranca otra: marca
-"una más al terminar", y los que lleguen mientras tanto se juntan en esa misma. En segundo plano con la app cerrada: no hay
-(paso siguiente: WorkManager / servicio, no se hizo).
+"una más al terminar", y los que lleguen mientras tanto se juntan en esa misma. Con la app cerrada, ver "Segundo plano".
 
 **Indicador.** En la barra de arriba de la biblioteca y del editor, un icono chico (sin texto; el texto está en el
 tooltip): nube con tilde = sincronizado, nube que gira = sincronizando, nube con flecha = hay cambios por subir, nube
 tachada = sin conexión, triángulo = error. No se ve si no hay sesión con Google. Tocarlo abre la hoja de Sincronización.
+
+### Segundo plano (Android)
+
+Con la app cerrada o en segundo plano corre una tarea periódica de `workmanager` (cada **15 min**, el mínimo de Android,
+solo con red). Se registra al conectar con Google y al abrir la app si hay sesión (`ExistingPeriodicWorkPolicy.update`);
+se cancela al desconectar. Interruptor "Sincronizar en segundo plano" en la hoja de Sincronización (menú ⋮ de la
+biblioteca; por defecto encendido, se guarda como `bgSync` en `prefs.json`; solo se ve en Android: en Linux los timers ya
+corren con la ventana minimizada). Código: `lib/sync/background_sync.dart`.
+
+- **Otro isolate, sin UI.** El callback (`backgroundSyncDispatcher`) arma `Storage` + `GoogleBackend.restore()` + el motor
+  y llama a `runBackgroundPass`, que es una función común y testeable (sin WorkManager). Si `restore()` no da sesión o
+  lanza, termina sin hacer nada y sin error.
+- **Nunca a la vez que la app.** Un candado `sync.lock` en la carpeta de datos (PID, dueño y hora; se crea de forma
+  exclusiva; **vence a los 10 min** para que uno abandonado no bloquee para siempre) que toman las dos pasadas, la de
+  `SyncController` también (si lo tiene la de fondo espera 15 s y reintenta). Además la app marca `sync.fg` mientras
+  está en primer plano (se renueva cada consulta; vale 3 min): con la app en primer plano la tarea de fondo no hace nada.
+- **Cuadernos abiertos.** Al pasar a segundo plano la app anota en `sync.busy` los cuadernos abiertos en el editor: la
+  tarea de fondo solo les sube lo suyo, no les escribe encima (misma regla de oro). La marca se borra al abrir la app.
+- **Volver a primer plano.** Si la tarea bajó cambios deja `sync.bgchanged`; la próxima pasada de la app la consume y
+  relee el índice y las miniaturas del disco (`onBackgroundChanged`).
+- **Sesión en el isolate de fondo (Android): refresh token propio.** `google_sign_in` pide una `Activity` para retomar la
+  sesión y en la tarea de fondo no hay. Entonces, con la app en primer plano (al conectar, o al abrir la app si todavía
+  no hay token), se le pide a `google_sign_in` un `serverAuthCode` (`authorizeServer`), se canjea en
+  `https://oauth2.googleapis.com/token` con el cliente Web (`GOOGLE_WEB_CLIENT_ID` + `GOOGLE_WEB_CLIENT_SECRET`) y el
+  refresh token queda en el almacenamiento seguro junto con la cuenta (`lib/sync/refresh_token_auth.dart`). La tarea de
+  fondo (`GoogleBackend.restoreInBackground`) saca tokens de acceso con ese refresh token, sin tocar `google_sign_in`.
+  Si Google responde `invalid_grant` el token se borra y la app lo vuelve a pedir la próxima vez en primer plano. Al
+  desconectar se revoca en Google y se borra. La app en primer plano sigue usando `google_sign_in` como siempre. Si falta
+  el secreto `GOOGLE_WEB_CLIENT_SECRET`, todo anda igual y solo el segundo plano no sincroniza.
 
 ### Cuotas de Drive API: cuántas llamadas hacemos
 
@@ -629,6 +657,7 @@ ellos y avisa que falta configurar.
 | Valor | Secreto de GitHub (Settings > Secrets > Actions) | Local (`--dart-define`) |
 |---|---|---|
 | ID del cliente Web | `GOOGLE_WEB_CLIENT_ID` | `GOOGLE_WEB_CLIENT_ID` |
+| Secreto del cliente Web (segundo plano en Android, opcional) | `GOOGLE_WEB_CLIENT_SECRET` | `GOOGLE_WEB_CLIENT_SECRET` |
 | ID del cliente de escritorio | `GOOGLE_DESKTOP_CLIENT_ID` | `GOOGLE_DESKTOP_CLIENT_ID` |
 | Secreto del cliente de escritorio | `GOOGLE_DESKTOP_CLIENT_SECRET` | `GOOGLE_DESKTOP_CLIENT_SECRET` |
 
@@ -641,6 +670,7 @@ ellos y avisa que falta configurar.
 
 ### Riesgos conocidos
 
+- **Segundo plano sin probar en la tablet:** el canje del `serverAuthCode` (`authorizeServer` puede mostrar la pantalla de permiso la primera vez, y Google no siempre devuelve refresh token si ya había uno emitido para esa cuenta y cliente; en ese caso el segundo plano queda sin token hasta revocar el acceso de la app en la cuenta de Google y volver a conectar). El secreto del cliente Web va dentro de la app, igual que el de escritorio: no es confidencial.
 - Drive no tiene escritura condicional: dos dispositivos subiendo la misma hoja en el mismo instante pueden pisarse.
   Se mitiga comparando el hash justo antes de subir; el caso que queda es muy angosto.
 - Con `drive.file` solo se ven los archivos creados por esta app; si el usuario sube o mueve archivos a mano dentro de

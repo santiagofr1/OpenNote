@@ -19,6 +19,9 @@ abstract class SyncBackend {
   /// Retoma la sesión guardada sin pedir nada (null si no hay o hay que volver a conectar).
   Future<SyncSession?> restore();
 
+  /// Como [restore] pero desde la tarea de segundo plano (otro isolate, sin UI ni Activity). null si no se puede.
+  Future<SyncSession?> restoreInBackground();
+
   /// Login interactivo (abre el selector de cuentas o el navegador).
   Future<SyncSession> signIn();
 

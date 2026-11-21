@@ -6,6 +6,7 @@ import '../data/storage.dart';
 import 'remote_store.dart';
 import 'sync_backend.dart';
 import 'sync_engine.dart';
+import 'sync_lock.dart';
 import 'sync_state.dart';
 
 enum SyncPhase { notConfigured, disconnected, connecting, idle, syncing }
@@ -27,6 +28,12 @@ enum SyncStatus { off, synced, syncing, pending, offline, error }
 /// terminar. Si una pasada falla (sin red, error del servidor) se espera con retroceso (backoff) 30 s, 1 min, 2 min…
 /// hasta 10 min antes de reintentar; volver a primer plano o "Sincronizar ahora" lo reinician.
 /// Los cuadernos abiertos en el editor ([busyNotebooks]) los maneja el motor: solo sube, no escribe encima.
+///
+/// SEGUNDO PLANO (Android): una tarea de WorkManager sincroniza cada 15 min con la app cerrada (background_sync.dart).
+/// Para no pisarse con ella, si hay [lock] cada pasada lo toma antes de empezar (si lo tiene la de fondo, espera
+/// [lockRetry] y reintenta) y, con [marks], avisa que la app está en primer plano (la tarea de fondo no hace nada) y
+/// deja anotados los cuadernos abiertos al pasar a segundo plano. Si la tarea de fondo bajó cambios, al volver se llama
+/// a [onBackgroundChanged] para releer el disco. Ambos ([lock] y [marks]) son opcionales (los tests y Linux no los usan).
 class SyncController extends ChangeNotifier {
   SyncController({
     required this.store,
@@ -36,10 +43,31 @@ class SyncController extends ChangeNotifier {
     this.maxWait = const Duration(seconds: 30),
     this.backoffBase = const Duration(seconds: 30),
     this.backoffMax = const Duration(minutes: 10),
+    this.lockRetry = const Duration(seconds: 15),
   });
   final Storage store;
   final SyncBackend backend;
-  final Duration pollInterval, debounce, maxWait, backoffBase, backoffMax;
+  final Duration pollInterval, debounce, maxWait, backoffBase, backoffMax, lockRetry;
+
+  /// Candado y marcas con la tarea de fondo (se arman cuando ya se conoce la carpeta de datos).
+  SyncLock? lock;
+  SyncMarks? marks;
+
+  /// Si esta plataforma tiene sincronización en segundo plano (la pantalla muestra el interruptor solo si es true).
+  bool backgroundSupported = false;
+
+  /// Interruptor "Sincronizar en segundo plano" (por defecto encendido). Se carga de las preferencias.
+  bool backgroundEnabled = true;
+
+  /// Registra o cancela la tarea de fondo: se llama con `conectado && backgroundEnabled` cada vez que cambia alguna de
+  /// las dos cosas.
+  Future<void> Function(bool wanted)? applyBackground;
+
+  /// Cambió el interruptor (para guardarlo en las preferencias).
+  void Function(bool enabled)? onBackgroundToggled;
+
+  /// La tarea de fondo bajó cambios desde la última vez: hay que volver a leer lo del disco.
+  void Function()? onBackgroundChanged;
 
   SyncPhase phase = SyncPhase.disconnected;
   String? account;
@@ -65,7 +93,7 @@ class SyncController extends ChangeNotifier {
   Future<SyncReport> Function(SyncSession s)? passOverride;
 
   SyncSession? _session;
-  Timer? _debounceT, _maxWaitT, _pollT, _retryT;
+  Timer? _debounceT, _maxWaitT, _pollT, _retryT, _lockT;
   Future<void>? _running;
   bool _again = false, _pending = false, _foreground = true, _disposed = false;
   int _fails = 0;
@@ -110,6 +138,8 @@ class SyncController extends ChangeNotifier {
     final st = await SyncState.load(store);
     lastSync = st.lastSync > 0 ? DateTime.fromMillisecondsSinceEpoch(st.lastSync) : null;
     conflictCount = st.conflictCount;
+    unawaited(marks?.clearBusy()); // recién abierta: no hay cuadernos abiertos (puede quedar una marca vieja)
+    unawaited(marks?.beatForeground());
     if (!backend.configured) {
       _set(SyncPhase.notConfigured);
       return;
@@ -135,6 +165,21 @@ class SyncController extends ChangeNotifier {
     offline = false;
     _startPolling();
     _set(SyncPhase.idle);
+    _applyBackground();
+  }
+
+  void _applyBackground() {
+    final f = applyBackground;
+    if (f != null) unawaited(f(connected && backgroundEnabled).catchError((_) {}));
+  }
+
+  /// El usuario prendió o apagó el interruptor del segundo plano.
+  void setBackgroundEnabled(bool v) {
+    if (backgroundEnabled == v) return;
+    backgroundEnabled = v;
+    onBackgroundToggled?.call(v);
+    _applyBackground();
+    _changed();
   }
 
   void _startPolling() {
@@ -142,6 +187,7 @@ class SyncController extends ChangeNotifier {
     _pollT = null;
     if (_session == null || !_foreground) return;
     _pollT = Timer.periodic(pollInterval, (_) {
+      unawaited(marks?.beatForeground());
       if (_retryT == null) _request(); // en retroceso se espera al reintento programado
     });
   }
@@ -151,7 +197,8 @@ class SyncController extends ChangeNotifier {
     _maxWaitT?.cancel();
     _pollT?.cancel();
     _retryT?.cancel();
-    _debounceT = _maxWaitT = _pollT = _retryT = null;
+    _lockT?.cancel();
+    _debounceT = _maxWaitT = _pollT = _retryT = _lockT = null;
   }
 
   Future<void> connect() async {
@@ -186,6 +233,7 @@ class SyncController extends ChangeNotifier {
     }
     lastSync = null;
     conflictCount = 0;
+    _applyBackground();
     _set(SyncPhase.disconnected);
   }
 
@@ -194,6 +242,13 @@ class SyncController extends ChangeNotifier {
   void setForeground(bool fg) {
     if (_foreground == fg) return;
     _foreground = fg;
+    if (fg) {
+      unawaited(marks?.clearBusy());
+      unawaited(marks?.beatForeground());
+    } else {
+      unawaited(marks?.clearForeground());
+      unawaited(marks?.writeBusy(busyNotebooks()));
+    }
     if (_session == null) return;
     if (fg) {
       _startPolling();
@@ -279,8 +334,29 @@ class SyncController extends ChangeNotifier {
     });
   }
 
-  /// Una pasada. Devuelve false si falló del todo (se programa el reintento).
+  /// Una pasada con el candado tomado. Si lo tiene la tarea de fondo se reintenta en [lockRetry] (no cuenta como fallo).
   Future<bool> _run(SyncSession s) async {
+    final l = lock;
+    if (l == null) return _runLocked(s);
+    if (!await l.tryAcquire()) {
+      _lockT?.cancel();
+      _lockT = Timer(lockRetry, () {
+        _lockT = null;
+        if (_foreground) _request();
+      });
+      return true;
+    }
+    try {
+      // la tarea de fondo bajó cambios mientras la app no miraba: se relee el disco
+      if (await marks?.takeBackgroundChanged() ?? false) onBackgroundChanged?.call();
+      return await _runLocked(s);
+    } finally {
+      await l.release();
+    }
+  }
+
+  /// Una pasada. Devuelve false si falló del todo (se programa el reintento).
+  Future<bool> _runLocked(SyncSession s) async {
     // lo guardado hasta ahora entra en esta pasada (lo que se guarde durante ella vuelve a armar el debounce)
     _debounceT?.cancel();
     _maxWaitT?.cancel();
@@ -304,6 +380,7 @@ class SyncController extends ChangeNotifier {
       _cancelTimers();
       _session = null;
       _pending = false;
+      _applyBackground();
       _set(SyncPhase.disconnected);
       return false;
     } catch (e) {

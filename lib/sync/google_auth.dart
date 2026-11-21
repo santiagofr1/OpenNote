@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -10,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'drive_remote_store.dart';
 import 'google_config.dart';
+import 'refresh_token_auth.dart';
 import 'remote_store.dart';
 import 'secret_service.dart';
 import 'sync_backend.dart';
@@ -51,8 +53,13 @@ class SecureTokenStore implements TokenStore {
 ///    El refresh token se guarda en el almacenamiento seguro y el token de acceso se renueva solo.
 /// En otras plataformas [configured] es false.
 class GoogleBackend implements SyncBackend {
-  GoogleBackend([this._tokens = const SecureTokenStore()]);
+  GoogleBackend([this._tokens = const SecureTokenStore()])
+      : _refresh = RefreshTokenAuth(_tokens, clientId: GoogleConfig.webClientId, clientSecret: GoogleConfig.webClientSecret);
   final TokenStore _tokens;
+
+  /// Refresh token propio para el segundo plano en Android (ver refresh_token_auth.dart).
+  final RefreshTokenAuth _refresh;
+  static bool _askedRefresh = false; // una sola vez por proceso: no se insiste con la pantalla de permiso
 
   static const _kDesktopKey = 'opennote.google.desktop.credentials';
   static const _kDesktopMail = 'opennote.google.desktop.account';
@@ -72,6 +79,13 @@ class GoogleBackend implements SyncBackend {
     return _android ? _restoreAndroid() : _restoreDesktop();
   }
 
+  /// En Android la tarea de fondo no puede usar `google_sign_in` (pide una Activity): usa el refresh token propio.
+  @override
+  Future<SyncSession?> restoreInBackground() async {
+    if (!configured) return null;
+    return _android ? _refresh.backgroundSession() : _restoreDesktop();
+  }
+
   @override
   Future<SyncSession> signIn() async {
     if (!configured) throw const RemoteException('Falta configurar el proyecto de Google');
@@ -84,6 +98,7 @@ class GoogleBackend implements SyncBackend {
       try {
         await GoogleSignIn.instance.signOut();
       } catch (_) {}
+      await _refresh.revokeAndClear();
     } else {
       await _tokens.delete(_kDesktopKey);
       await _tokens.delete(_kDesktopMail);
@@ -104,6 +119,7 @@ class GoogleBackend implements SyncBackend {
     if (acc == null) return null;
     // ¿ya está dado el permiso? Si haría falta preguntar, se pide al conectar a mano
     if (await acc.authorizationClient.authorizationForScopes([kDriveScope]) == null) return null;
+    unawaited(_ensureRefreshToken(acc)); // si todavía no hay token para el segundo plano, se pide ahora (app en primer plano)
     return _androidSession(acc);
   }
 
@@ -112,10 +128,24 @@ class GoogleBackend implements SyncBackend {
     try {
       final acc = await GoogleSignIn.instance.authenticate(scopeHint: [kDriveScope]);
       await acc.authorizationClient.authorizeScopes([kDriveScope]);
+      await _ensureRefreshToken(acc);
       return _androidSession(acc);
     } on GoogleSignInException catch (e) {
       throw RemoteException(e.code == GoogleSignInExceptionCode.canceled ? 'Se canceló el inicio de sesión' : 'No se pudo iniciar sesión con Google (${e.code.name})');
     }
+  }
+
+  /// Saca un refresh token propio para el segundo plano: `serverAuthCode` de google_sign_in canjeado en el endpoint de
+  /// Google. Es de mejor esfuerzo: si falta el secreto del cliente Web o algo falla, solo no anda el segundo plano.
+  Future<void> _ensureRefreshToken(GoogleSignInAccount acc) async {
+    if (!_refresh.configured || _askedRefresh) return;
+    try {
+      if (await _refresh.hasToken()) return;
+      _askedRefresh = true;
+      final sa = await acc.authorizationClient.authorizeServer([kDriveScope]);
+      if (sa == null) return;
+      await _refresh.exchangeCode(sa.serverAuthCode, acc.email);
+    } catch (_) {}
   }
 
   SyncSession _androidSession(GoogleSignInAccount acc) {

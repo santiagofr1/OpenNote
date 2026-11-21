@@ -63,6 +63,17 @@ class SyncSheet extends StatelessWidget {
               Text('Hubo ${sync.conflictCount} conflicto(s): buscá las hojas "(conflicto)" y quedate con la que sirva.',
                   style: TextStyle(color: cs.onSurfaceVariant)),
             ],
+            if (sync.backgroundSupported && p != SyncPhase.notConfigured) ...[
+              const SizedBox(height: 6),
+              SwitchListTile(
+                key: const Key('syncBackground'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Sincronizar en segundo plano'),
+                subtitle: const Text('Cada 15 minutos con red, aunque la app esté cerrada.'),
+                value: sync.backgroundEnabled,
+                onChanged: sync.setBackgroundEnabled,
+              ),
+            ],
             const SizedBox(height: 14),
             Wrap(spacing: 10, runSpacing: 8, children: [
               if (p == SyncPhase.disconnected || p == SyncPhase.connecting)
