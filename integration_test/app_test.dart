@@ -369,9 +369,15 @@ void main() {
     final store = Storage(root: root);
     await store.init();
     final idx = await store.loadIndex();
-    expect(idx.notebooks.length, 2);
-    expect(idx.notebooks[0].id, isNot(idx.notebooks[1].id));
-    expect(idx.notebooks.any((n) => n.name == 'Tres (importado)'), isTrue);
+    // al arrancar la app crea "Mi cuaderno": se comparan solo el original y el importado
+    final names = idx.notebooks.map((n) => n.name).toList();
+    final orig = idx.notebooks.firstWhere((n) => n.name == 'Tres');
+    final imp = idx.notebooks.where((n) => n.name == 'Tres (importado)').toList();
+    expect(imp.length, 1, reason: 'cuadernos: $names');
+    expect(imp.single.id, isNot(orig.id));
+    final impDoc = await store.loadNotebook(imp.single);
+    expect(impDoc.sheetCount, 3, reason: 'el importado trae sus 3 hojas');
+    expect(impDoc.strokes.length, 3, reason: 'y un trazo en cada una');
   });
 
   testWidgets('nota adhesiva y búsqueda', (t) async {
