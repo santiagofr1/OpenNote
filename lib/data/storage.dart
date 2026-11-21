@@ -335,6 +335,23 @@ class Storage {
     await _writeJson(_nbFile(copy.id), copy.sheetsJson());
   }
 
+  /// Espera a que termine el guardado en curso de [nbId] (para leer sus archivos al exportar).
+  Future<void> settle(String nbId) => _idle(nbId);
+
+  /// Escribe en disco un cuaderno que viene de afuera (importar un `.opennote`): los archivos de las hojas tal cual
+  /// ([sheetFiles]: id de hoja → bytes) y su notebook.json. Si algo falla borra lo escrito.
+  Future<void> writeImportedNotebook(Notebook nb, Map<String, Uint8List> sheetFiles) async {
+    try {
+      for (final e in sheetFiles.entries) {
+        await _writeBytes(sheetFile(nb.id, e.key), e.value);
+      }
+      await _writeJson(_nbFile(nb.id), nb.sheetsJson());
+    } catch (_) {
+      await removeNotebookFiles(nb.id);
+      rethrow;
+    }
+  }
+
   /// El contenido de la hoja [m] leído de disco, sin tocar ningún documento (vacío si falta o está rota).
   Future<SheetContent> readSheetContent(Notebook nb, SheetMeta m) async {
     final f = sheetFile(nb.id, m.id);

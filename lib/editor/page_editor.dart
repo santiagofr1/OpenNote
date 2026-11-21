@@ -53,7 +53,12 @@ class PageEditor extends StatefulWidget {
   final ValueNotifier<int>? sheetNotifier; // hoja que se está viendo (la actualiza el editor al scrollear)
   final VoidCallback onChanged; // cambió el cuaderno (hay que guardarlo)
   final VoidCallback onPrefsChanged; // cambiaron las herramientas (prefs.json)
+
+  /// Cambiaron las hojas desde el editor (deshacer / rehacer una operación de hojas, hoja agregada tirando o con el menú):
+  /// el panel tiene que redibujarse. Recibe la hoja que conviene mostrar (null si no hay que moverse).
+  final ValueChanged<int?>? onSheetsChanged;
   const PageEditor({
+    this.onSheetsChanged,
     super.key,
     required this.doc,
     required this.tools,
@@ -617,6 +622,11 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final a = undo ? history.undo() : history.redo();
     if (a == null) return;
     a.apply(doc, undo: undo, putText: texts.put);
+    if (a.sheetOps.isNotEmpty) {
+      _afterSheetOps();
+      widget.onSheetsChanged?.call(a.sheetFocus(doc, undo: undo));
+      return;
+    }
     _clearSel();
     _touchAll();
     _changed();
@@ -1063,6 +1073,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   void _addSheetFromPull() {
     final oldH = doc.h;
     setState(doc.addSheet);
+    _sheetAddedAtEnd();
     _changed();
     // lleva a la hoja nueva
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1178,6 +1189,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         liveTick.value++;
       case SheetMenuAction.addSheet:
         setState(doc.addSheet);
+        _sheetAddedAtEnd();
         _changed();
       case SheetMenuAction.zoomToWidth:
         _setZoom(1);
@@ -1235,11 +1247,20 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     }
   }
 
-  /// Después de agregar, duplicar, mover o borrar hojas desde afuera: lo que dependía del orden
-  /// anterior (deshacer, selección, campos de texto) ya no sirve. Las operaciones de hojas no se deshacen.
-  void sheetsChanged() {
+  /// Después de agregar, duplicar, mover o borrar hojas desde afuera: lo que dependía del orden anterior
+  /// (selección, campos de texto) ya no sirve. Con [action] la operación queda en el historial y se puede deshacer;
+  /// sin ella (algo que no se sabe deshacer) el historial se vacía.
+  void sheetsChanged([EditAction? action]) {
+    if (action != null) {
+      history.push(action);
+    } else {
+      history.clear();
+    }
+    _afterSheetOps();
+  }
+
+  void _afterSheetOps() {
     texts.attach(doc);
-    history.clear();
     sel.clear();
     pointer = null;
     live = null;
@@ -1253,6 +1274,12 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     _syncedRange = null;
     _requestSync();
     _scheduleUnload();
+  }
+
+  /// Hoja agregada al final (tirar o menú): se puede deshacer.
+  void _sheetAddedAtEnd() {
+    _pushUndo(EditAction(sheetOps: [SheetPresenceOp.added(doc, doc.sheets.last)]));
+    widget.onSheetsChanged?.call(null);
   }
 
   /// Agrega un elemento centrado en lo que se está viendo y lo deja seleccionado.

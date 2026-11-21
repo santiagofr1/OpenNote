@@ -8,8 +8,10 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../data/export.dart';
 import '../../data/media_import.dart';
+import '../../data/opennote_file.dart';
 import '../../data/storage.dart';
 import '../../domain/domain.dart';
+import '../../editor/history.dart';
 import '../../editor/page_editor.dart';
 import '../../widgets/dialogs.dart';
 import '../../widgets/pdf_progress.dart';
@@ -152,16 +154,29 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
   }
 
   /// Aplica una operación que cambia las hojas de lugar (los elementos corren) y va a la hoja [goTo].
-  void _sheetOp(void Function(NotebookDoc d) op, {int? goTo}) {
+  /// [op] hace el cambio en el documento y devuelve lo que hay que poder deshacer (vacío = no cambió nada).
+  void _sheetOp(List<SheetOp> Function(NotebookDoc d) op, {int? goTo}) {
     final d = doc!;
-    op(d);
+    final ops = op(d);
+    if (ops.isEmpty) return;
     _structure.value++;
-    editorKey.currentState?.sheetsChanged();
-    if (goTo != null) {
-      sheetNotifier.value = goTo;
-      // el scroll mide el nuevo largo recién después de este cuadro
-      WidgetsBinding.instance.addPostFrameCallback((_) => editorKey.currentState?.scrollToSheet(goTo));
-    }
+    editorKey.currentState?.sheetsChanged(EditAction(sheetOps: ops));
+    _showSheet(goTo);
+    setState(() {});
+  }
+
+  void _showSheet(int? goTo) {
+    if (goTo == null) return;
+    goTo = goTo.clamp(0, doc!.sheetCount - 1);
+    sheetNotifier.value = goTo;
+    // el scroll mide el nuevo largo recién después de este cuadro
+    WidgetsBinding.instance.addPostFrameCallback((_) => editorKey.currentState?.scrollToSheet(goTo!));
+  }
+
+  /// El editor deshizo / rehizo una operación de hojas, o agregó una hoja al final.
+  void _sheetsChangedByEditor(int? goTo) {
+    _structure.value++;
+    _showSheet(goTo);
     setState(() {});
   }
 
@@ -172,7 +187,8 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     setState(() {});
   }
 
-  void _addSheetAfter(int k) => _sheetOp((d) => d.insertSheet(k + 1), goTo: k + 1);
+  void _addSheetAfter(int k) =>
+      _sheetOp((d) => [SheetPresenceOp.added(d, d.insertSheet(k + 1))], goTo: k + 1);
 
   Future<void> _renameSheet(int k) async {
     final m = doc!.sheets[k];
@@ -188,8 +204,18 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
       snack(context, 'No se puede borrar la única hoja del cuaderno');
       return;
     }
-    if (!await confirmDelete(context, 'Borrar la hoja ${k + 1}', 'Se borra la hoja con todo lo que tiene.')) return;
-    _sheetOp((d) => d.deleteSheet(k), goTo: k.clamp(0, d.sheetCount - 2));
+    if (!await confirmDelete(context, 'Borrar la hoja ${k + 1}', 'Se borra la hoja con todo lo que tiene (se puede deshacer).')) return;
+    // para poder restaurarla, la hoja tiene que estar en memoria: si no está cargada se lee de disco antes
+    final id = d.sheets[k].id;
+    try {
+      await store.loadSheets(d, [id]);
+    } catch (e) {
+      if (mounted) snack(context, 'No se pudo leer la hoja: $e');
+      return;
+    }
+    final i = d.indexOfSheet(id);
+    if (!mounted || i < 0 || !d.isLoadedAt(i)) return;
+    _sheetOp((d) => [?SheetPresenceOp.delete(d, i)], goTo: i.clamp(0, d.sheetCount - 2));
   }
 
   /// Duplica la hoja [k]: si no está cargada se lee de disco antes (la copia se arma en memoria y se guarda).
@@ -203,8 +229,11 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     }
     final i = d.indexOfSheet(id); // pudo moverse mientras se leía
     if (!mounted || i < 0 || !d.isLoadedAt(i)) return;
-    _sheetOp((d) => d.duplicateSheet(i), goTo: i + 1);
+    _sheetOp((d) => [SheetPresenceOp.added(d, d.duplicateSheet(i))], goTo: i + 1);
   }
+
+  /// Lleva la hoja [from] a la posición [to] (menú del panel o arrastrando la miniatura).
+  void _moveSheet(int from, int to) => _sheetOp((d) => [?SheetMoveOp.run(d, from, to)], goTo: to);
 
   void _toggleBookmark(int k) {
     final m = doc!.sheets[k];
@@ -222,9 +251,9 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
       case SheetAction.duplicate:
         _duplicateSheet(k);
       case SheetAction.moveUp:
-        _sheetOp((d) => d.moveSheet(k, k - 1), goTo: k - 1);
+        _moveSheet(k, k - 1);
       case SheetAction.moveDown:
-        _sheetOp((d) => d.moveSheet(k, k + 1), goTo: k + 1);
+        _moveSheet(k, k + 1);
       case SheetAction.delete:
         _deleteSheet(k);
     }
@@ -280,11 +309,10 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     if (sheets.isEmpty || !mounted) return;
     // después de la hoja actual
     final at = curSheet + 1;
-    _sheetOp((d) {
-      for (var i = 0; i < sheets.length; i++) {
-        d.insertSheet(at + i, meta: sheets[i].$1, content: sheets[i].$2);
-      }
-    }, goTo: at);
+    _sheetOp((d) => [
+          for (var i = 0; i < sheets.length; i++)
+            SheetPresenceOp.added(d, d.insertSheet(at + i, meta: sheets[i].$1, content: sheets[i].$2)),
+        ], goTo: at);
     if (mounted) snack(context, '${sheets.length} ${sheets.length == 1 ? 'hoja importada' : 'hojas importadas'}');
   }
 
@@ -301,6 +329,8 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         await _styleDialog();
       case 'saveas':
         await _saveAs();
+      case 'opennote':
+        await _exportOpennote();
       case 'fav':
         setState(() => nb.favorite = !nb.favorite);
         await _saveIndex();
@@ -358,6 +388,19 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     setState(() => nb.pin = hashPin(a));
     await _saveIndex();
     if (mounted) snack(context, 'Cuaderno bloqueado: se pide el PIN al abrirlo');
+  }
+
+  /// Exporta el cuaderno entero como `.opennote`: guarda lo pendiente y copia los archivos de disco.
+  Future<void> _exportOpennote() async {
+    if (doc == null) return;
+    try {
+      await _flush();
+      final bytes = await exportNotebookBytes(store, nb);
+      final ok = await saveOpennote(bytes, nb.name);
+      if (ok && mounted) snack(context, 'Cuaderno guardado');
+    } catch (e) {
+      if (mounted) snack(context, 'No se pudo exportar: $e');
+    }
   }
 
   Future<void> _saveAs() async {
@@ -495,6 +538,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
                             readOnly: reading,
                             onChanged: _docChanged,
                             onPrefsChanged: _prefsChanged,
+                            onSheetsChanged: _sheetsChangedByEditor,
                           ),
                   ),
                 ]),
@@ -540,6 +584,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         onOpen: _goTo,
         onToggleBookmark: _toggleBookmark,
         onAction: _sheetAction,
+        onMove: _moveSheet,
       );
 
   Widget _topBar(ColorScheme cs) {
