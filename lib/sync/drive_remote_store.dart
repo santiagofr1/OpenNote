@@ -149,12 +149,13 @@ class DriveRemoteStore implements RemoteStore {
 
   @override
   Future<RemoteChanges> changes(String? token) => _g(() async {
-        if (token == null) {
+        // Sin token, o proceso nuevo (todavía no se leyó el mapa de Drive): listado COMPLETO. Con un delta no alcanza: lo
+        // borrado mientras la app no corría no figura en el mapa recién cargado y nunca saldría en `removed`.
+        if (token == null || !_loaded) {
           final start = (await _api.changes.getStartPageToken()).startPageToken!;
           await _loadAll(); // el token se pide ANTES de listar: lo que cambie en el medio llega en el próximo delta
           return RemoteChanges(files: [for (final e in _snapshot().entries) _rf(e.key, e.value)], nextToken: start, full: true);
         }
-        if (!_loaded) await _loadAll(); // proceso nuevo: hace falta el mapa para resolver las rutas
         final before = {for (final e in _snapshot().entries) e.key: e.value.md5};
         var page = token;
         String? next;

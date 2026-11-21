@@ -13,9 +13,11 @@ import '../../data/storage.dart';
 import '../../domain/domain.dart';
 import '../../editor/history.dart';
 import '../../editor/page_editor.dart';
+import '../../sync/sync_controller.dart';
 import '../../widgets/dialogs.dart';
 import '../../widgets/pdf_progress.dart';
 import '../../widgets/record_voice_dialog.dart';
+import '../library/sync_indicator.dart';
 import 'menus.dart';
 import 'pages_panel.dart';
 import 'search.dart';
@@ -29,7 +31,12 @@ class NotebookScreen extends StatefulWidget {
   final NotesIndex index;
   final Notebook nb;
   final ToolState tools;
-  const NotebookScreen({super.key, required this.store, required this.index, required this.nb, required this.tools});
+
+  /// La sincronización (para el indicador y el aviso de cambios de otro dispositivo) y cómo abrir su hoja. Opcionales.
+  final SyncController? sync;
+  final VoidCallback? onOpenSync;
+  const NotebookScreen(
+      {super.key, required this.store, required this.index, required this.nb, required this.tools, this.sync, this.onOpenSync});
   @override
   State<NotebookScreen> createState() => NotebookScreenState();
 }
@@ -518,6 +525,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
           child: Stack(children: [
             Column(children: [
               if (!fullscreen) _topBar(cs),
+              if (!fullscreen && widget.sync != null) _remoteBanner(cs),
               Expanded(
                 child: Row(children: [
                   AnimatedSize(
@@ -625,6 +633,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         if (searching)
           act(Symbols.close, 'Cerrar búsqueda', _closeSearch)
         else ...[
+          if (widget.sync != null && widget.onOpenSync != null) SyncIndicator(sync: widget.sync!, onTap: widget.onOpenSync!),
           act(Symbols.menu_book, reading ? 'Salir del modo lectura' : 'Modo lectura', () => setState(() => reading = !reading),
               on: reading, key: const Key('reading')),
           menuBtn(Symbols.add, 'Insertar', const Key('insert'), (at) async {
@@ -641,6 +650,30 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
       ]),
     );
   }
+
+  /// Aviso discreto: otro dispositivo cambió este cuaderno y acá no se le escribe encima mientras está abierto.
+  /// "Actualizar" guarda, lo cierra, baja los cambios y lo vuelve a abrir.
+  Widget _remoteBanner(ColorScheme cs) => ListenableBuilder(
+        listenable: widget.sync!,
+        builder: (context, _) {
+          if (!widget.sync!.remoteWaiting.contains(nb.id)) return const SizedBox.shrink();
+          return Container(
+            key: const Key('remoteBanner'),
+            height: 40,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            color: cs.secondaryContainer,
+            child: Row(children: [
+              Icon(Symbols.devices, size: 18, weight: 300, color: cs.onSecondaryContainer),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('Hay cambios de otro dispositivo',
+                    maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, color: cs.onSecondaryContainer)),
+              ),
+              TextButton(key: const Key('remoteRefresh'), onPressed: () => leave('refresh'), child: const Text('Actualizar')),
+            ]),
+          );
+        },
+      );
 
   Widget _searchField() => TextField(
         key: const Key('searchField'),

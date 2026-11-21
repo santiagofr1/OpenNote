@@ -232,8 +232,8 @@ puede ni establecer la conexión.
 ### 2.3 Riesgos
 
 - **Android en segundo plano.** Según el resumen de la doc de energía de Android, las apps en primer plano no
-  tienen límites de ejecución; en segundo plano aplican Doze y App Standby [24]. La sincronización va al abrir y
-  al cerrar la app. Para sincronizar en continuo haría falta un servicio en primer plano con notificación
+  tienen límites de ejecución; en segundo plano aplican Doze y App Standby [24]. La sincronización va al abrir la app, al volver a
+  primer plano, poco después de cada guardado y cada 45 s con la app visible (ver "Cuándo sincroniza"). Para sincronizar en continuo haría falta un servicio en primer plano con notificación
   **(sin confirmar cómo lo trata el sistema en la práctica)**.
 - **Redes que bloquean multicast.** Wi-Fi de invitados, puntos de acceso con aislamiento de clientes
   **(sin confirmar: no lo busqué)**. Fallback: IP:puerto en el QR o escribir la IP a mano.
@@ -499,30 +499,97 @@ pisan entre dispositivos.
 - **Cuadernos y carpetas nuevos:** aparecen en `index.json` y en `notebooks/<id>/`; el otro lado los crea. **Renombrar o
   mover** cambia solo `index.json` (el `id` no cambia), así que el cuaderno no se vuelve a subir.
 - Cambiar de cuenta de Google empieza de cero (sin borrar nada local).
+- **Cuaderno de ejemplo.** Cada instalación crea "Mi cuaderno" al primer arranque. En la PRIMERA sincronización de un
+  dispositivo (sin base), si la nube ya tiene cuadernos y el local es ese ejemplo intacto (único cuaderno, sin carpetas,
+  sin PIN, una sola hoja vacía), se descarta (se borra de disco sin lápida, no se sube) para que no queden dos "Mi cuaderno".
+  Si tiene algo escrito, o la nube está vacía, se conserva y se sube.
+- **Borrado con la app cerrada (Drive).** El primer `changes()` de un proceso nuevo siempre es un listado COMPLETO
+  (`getStartPageToken` + `files.list`), aunque haya token guardado: con un delta, lo borrado mientras la app no corría
+  no figuraría en el mapa recién cargado y nunca saldría como borrado. El motor trata el listado completo como verdad
+  (lo que está en la base y no en la nube se borra acá); si la carpeta aparece de verdad vacía no se borra nada y se vuelve a subir.
 
 ### Cuaderno abierto (regla de oro)
 
-El motor **no toca un cuaderno abierto en el editor**: ni sube ni baja ni borra sus archivos, porque lo que hay en
-memoria pisaría lo escrito. Mientras haya un cuaderno abierto tampoco se toca `index.json` (la biblioteca lo tiene en
-memoria). Se sincroniza **al cerrarlo** (al volver a la biblioteca se hace una pasada). Antes de una pasada el editor
-ya guardó (el guardado se hace al salir). Después de una pasada que cambió algo local, la biblioteca vuelve a leer el
-índice. Lo que se escribe en disco desde la sync va por las mismas escrituras atómicas (temporal + rename) de
-`Storage`, y no se pisa un archivo que cambió entre que se leyó y que se escribió (queda para la próxima pasada).
+**Decisión (2026-11-21): con un cuaderno abierto el motor SUBE pero NUNCA escribe ni borra nada local de ese cuaderno.**
+
+- **Subir sí.** Lo que `Storage` ya guardó en disco (hojas `.sheet` y `notebook.json`) se puede subir aunque el cuaderno esté
+  abierto: el archivo en disco es consistente porque cada escritura es atómica (temporal + rename). Así lo que escribís
+  llega a la nube a los pocos segundos de guardar, sin cerrar el cuaderno. Solo se sube si la nube sigue en la base
+  (nadie más lo tocó); un borrado hecho acá (hoja borrada) también se propaga. `index.json` es igual: con algún cuaderno
+  abierto es solo-subida (la biblioteca lo tiene en memoria).
+- **Bajar no.** Si la nube cambió (o borró) algo de un cuaderno abierto, no se aplica: el cuaderno queda en
+  `SyncReport.remoteWaiting` y el editor muestra arriba un aviso discreto **"Hay cambios de otro dispositivo"** con el botón
+  **Actualizar**. Actualizar guarda, cierra el cuaderno, hace una pasada (ya sin el cuaderno abierto: se aplican las reglas
+  de siempre, o sea, hoja "(conflicto)" si cambiaron las dos) y lo vuelve a abrir. Si no se toca el aviso, se aplica solo al cerrar el
+  cuaderno (la biblioteca sincroniza al volver).
+- **Por qué no se aplica en vivo (recargar la hoja dentro del documento abierto).** Se evaluó (detach + attach de la hoja, o
+  el mecanismo de carga perezosa) y se descartó por riesgo: (1) `NotebookDoc` guarda también `notebook.json` (orden, títulos,
+  hojas agregadas o borradas) en `nb.sheets`, que la pantalla, el panel de hojas y el deshacer comparten; una hoja nueva o
+  movida desde otro dispositivo obligaría a reconciliar eso con el historial de deshacer, que apunta a elementos que
+  desaparecerían; (2) una hoja "sucia o con cambios sin guardar" puede estar a medio gesto (trazo en curso, selección); (3)
+  `Storage` recuerda el hash de cada archivo en disco para guardar solo lo que cambió, y un cambio externo lo invalidaría
+  justo cuando se escribe; (4) el costo de un error es perder escritura del usuario, y el aviso con botón no tiene ese
+  riesgo. Queda como mejora futura: aplicar en vivo solo las hojas remotas cambiadas que no estén sucias, sin cambios
+  de estructura.
+- **Carreras.** Se consulta qué cuadernos están abiertos antes de CADA archivo y otra vez justo antes de escribirlo en
+  disco; si el usuario lo abrió mientras tanto, esa escritura se saltea y queda para después. Lo que se escribe en
+  disco desde la sync (cuadernos cerrados) va por las mismas escrituras atómicas de `Storage`, y no se pisa un archivo que
+  cambió entre que se leyó y que se escribió (queda para la próxima pasada).
 
 ### Sin red, cortes y errores
 
-Sin red la pasada se corta con un aviso y se reintenta en el próximo disparador; no se pierde nada. El estado se
-guarda **después de cada archivo**, así que repetir la pasada converge (es idempotente). Un archivo que falla no frena
-a los demás. Si la sesión venció o se revocó, el estado pasa a "desconectado" y hay que tocar "Conectar con Google".
+Sin red la pasada se corta y se reintenta con **retroceso** (30 s, 1 min, 2 min, 4 min, 8 min y de ahí cada 10 min);
+volver a primer plano o "Sincronizar ahora" cortan la espera y reintentan ya. En segundo plano no se reintenta (se retoma al
+volver). No se pierde nada. El estado se guarda **después de cada archivo**, así que repetir la pasada converge (es
+idempotente). Un archivo que falla no frena a los demás. Si la sesión venció o se revocó, el estado pasa a
+"desconectado" y hay que tocar "Conectar con Google". No hay un plugin de conectividad: la "vuelta de la red" se detecta por
+el próximo reintento, la próxima consulta periódica o volver a primer plano.
 
 ### Cuándo sincroniza
 
-1. Al abrir la app (si está conectado).
-2. Al cerrar un cuaderno.
-3. Cada 10 minutos con la app abierta.
-4. Con el botón "Sincronizar ahora".
+Todo lo decide `SyncController` (`lib/sync/sync_controller.dart`); el motor solo hace una pasada cuando se lo piden.
 
-Segundo plano con la app cerrada: no está (paso siguiente).
+| Disparador | Cuándo | Costo |
+|---|---|---|
+| Abrir la app | al arrancar, si hay sesión | una pasada |
+| **Subir pronto** | `Storage` avisa (`onSaved`) cuando termina de escribir algo (hojas sucias, `notebook.json`, o un cambio del índice que se sincroniza: abrir un cuaderno no cuenta). Espera **5 s desde el último guardado**, y **como mucho 30 s desde el primero** si se sigue escribiendo sin parar | una pasada por ráfaga |
+| **Bajar pronto** | con la app **en primer plano**, cada **45 s**, una sola llamada `changes.list` con el token guardado; si no hay cambios no se baja nada | 1 llamada |
+| Volver a primer plano | `AppLifecycleState.resumed`: pasada ya, y se retoman las consultas | una pasada |
+| Pasar a segundo plano | si hay algo guardado sin subir, se sube ya (Android puede cerrar la app); sin consultas periódicas | una pasada |
+| Cerrar un cuaderno | al volver a la biblioteca | una pasada |
+| "Sincronizar ahora" | a mano; corta el retroceso | una pasada |
+
+**Nunca dos pasadas a la vez:** un pedido que llega mientras corre una (poll, debounce, "ahora"...) no arranca otra: marca
+"una más al terminar", y los que lleguen mientras tanto se juntan en esa misma. En segundo plano con la app cerrada: no hay
+(paso siguiente: WorkManager / servicio, no se hizo).
+
+**Indicador.** En la barra de arriba de la biblioteca y del editor, un icono chico (sin texto; el texto está en el
+tooltip): nube con tilde = sincronizado, nube que gira = sincronizando, nube con flecha = hay cambios por subir, nube
+tachada = sin conexión, triángulo = error. No se ve si no hay sesión con Google. Tocarlo abre la hoja de Sincronización.
+
+### Cuotas de Drive API: cuántas llamadas hacemos
+
+Con la app abierta en primer plano:
+
+- **Quieto** (nada que subir ni bajar): 1 `changes.list` cada 45 s = **80 llamadas por hora**.
+- **Escribiendo sin parar:** como mucho una pasada cada 30 s (2 por minuto, 120 por hora); cada pasada = 1 `changes.list` + las
+  subidas de lo que cambió (típicamente 1 o 2 hojas + `notebook.json`, y cada subida con control optimista, o sea 1 a 3 llamadas
+  por archivo) = alrededor de 5 a 10 llamadas. Orden de **300 a 1200 llamadas por hora** en el peor caso, y solo mientras
+  se escribe de verdad.
+- **Dos dispositivos abiertos a la vez:** se suman las consultas (160 por hora quietos).
+- Segundo plano: **0** consultas periódicas.
+
+Contra la cuota: Google mide ahora la Drive API en "unidades de cuota": **1 000 000 por minuto por proyecto y 325 000 por
+minuto por usuario por proyecto**, sin límite diario de peticiones mientras se respete lo por minuto (el único tope diario
+que figura es de 1 TB de subida por proyecto) [Google, "Usage limits | Google Drive",
+<https://developers.google.com/workspace/drive/api/guides/limits>, consultada el 2026-11-21]. Cuántas unidades cuesta cada
+llamada concreta **(sin confirmar: la página no lo muestra en la parte leída)**; aun suponiendo unas decenas de unidades por
+llamada, 80 a 1200 llamadas por hora son del orden de 0,1 a 6 llamadas por minuto, miles de veces por debajo del tope de un
+solo usuario. (Antes la cuota se contaba en consultas: "12 000 por 60 s por proyecto" y "1 000 000 000 por día" **(sin
+confirmar, de documentación vieja)**; también muy por encima.) La cuota es **por proyecto de Google Cloud** y se
+comparte entre todos los usuarios de la app: con muchos usuarios el tope por minuto del proyecto (1 000 000 unidades) es lo
+que habría que mirar; con 1 000 usuarios consultando cada 45 s son unas 1 300 llamadas por minuto en total.
+La consulta periódica es barata para la batería: una petición HTTPS chica cada 45 s con la pantalla prendida y la app visible.
 
 ### Seguridad
 

@@ -20,6 +20,10 @@ class SyncReport {
   /// Cuadernos que se saltearon porque estaban abiertos en el editor.
   final skippedBusy = <String>[];
 
+  /// Cuadernos abiertos en el editor que tienen cambios de la nube sin aplicar (el motor no escribe en un cuaderno
+  /// abierto: solo sube lo suyo). Se aplican al cerrarlo o con "Actualizar".
+  final remoteWaiting = <String>{};
+
   /// Cambió algo del disco local: la biblioteca tiene que volver a leer el índice.
   bool localChanged = false;
 
@@ -50,9 +54,12 @@ class _Skip implements Exception {
 /// índice que apunte a algo que todavía no llegó. El estado se guarda después de CADA archivo y todo lo local se
 /// escribe de forma atómica, así que repetir la pasada converge (es idempotente).
 ///
-/// REGLA DE ORO: un cuaderno abierto en el editor ([openNotebooks]) no se toca (ni sube ni baja: la memoria del
-/// editor pisaría lo que escribamos). Mientras haya alguno abierto tampoco se toca `index.json` (la biblioteca lo
-/// tiene en memoria). Se sincroniza cuando se cierra.
+/// REGLA DE ORO: en un cuaderno abierto en el editor ([openNotebooks]) el motor NUNCA escribe ni borra archivos locales
+/// (la memoria del editor los pisaría). Lo único que hace ahí es SUBIR: una hoja o `notebook.json` que cambió acá
+/// (lo guardado en disco es consistente: la escritura es atómica) mientras la nube sigue en la base. Si la nube
+/// también cambió (o borró) algo de ese cuaderno, queda sin aplicar y se anota en [SyncReport.remoteWaiting]: se
+/// aplica al cerrarlo o con "Actualizar" (ver `docs/SINCRONIZACION.md`). Con algún cuaderno abierto `index.json` también
+/// es solo-subida (la biblioteca lo tiene en memoria). Lo abierto se consulta en cada archivo, no al empezar.
 class SyncEngine {
   SyncEngine(this.store, this.remote, {Set<String> Function()? busy, this.account = ''})
       : openNotebooks = busy ?? (() => const {});
@@ -71,6 +78,7 @@ class SyncEngine {
   final _active = <String>{}; // cuadernos con alguna hoja subida/bajada en esta pasada
   final _kept = <String>{}; // cuadernos salvados de un borrado porque se editaron del otro lado
   final _deferred = <(String, bool)>[]; // (ruta, true = borrar local / false = borrar remoto)
+  bool _upOnly = false; // el archivo que se está procesando es de un cuaderno abierto: solo se sube
 
   /// Corre una pasada (si ya hay una en curso devuelve esa). Si el remoto falla del todo (sin red, sesión vencida)
   /// guarda el error en el estado y lo relanza ([RemoteException]); los errores de un solo archivo van a `errors`.
@@ -83,7 +91,6 @@ class SyncEngine {
     _active.clear();
     _kept.clear();
     _deferred.clear();
-    final open = openNotebooks();
     try {
       final ch = await remote.changes(_st.token);
       if (ch.full) {
@@ -104,6 +111,8 @@ class SyncEngine {
       _st.lastAttempt = DateTime.now().millisecondsSinceEpoch;
       await _st.save(store);
 
+      await _dropUntouchedSample();
+
       final paths = <String>{..._st.base.keys, ..._st.remote.keys, ...await _localPaths()}.where(isSyncPath).toList();
       int order(String p) => switch (syncKind(p)!) {
             SyncKind.media => 0,
@@ -114,11 +123,8 @@ class SyncEngine {
       paths.sort((a, b) => order(a) != order(b) ? order(a).compareTo(order(b)) : a.compareTo(b));
       for (final p in paths) {
         final nb = notebookIdOf(p);
-        if ((nb != null && open.contains(nb)) || (p == 'index.json' && open.isNotEmpty)) {
-          _rep.skipped++;
-          if (nb != null && !_rep.skippedBusy.contains(nb)) _rep.skippedBusy.add(nb);
-          continue;
-        }
+        final open = openNotebooks();
+        _upOnly = (nb != null && open.contains(nb)) || (p == 'index.json' && open.isNotEmpty);
         try {
           switch (syncKind(p)!) {
             case SyncKind.media:
@@ -131,6 +137,7 @@ class SyncEngine {
           }
         } on _Skip {
           _rep.skipped++;
+          if (nb != null && openNotebooks().contains(nb)) _wait(p);
         } on RemoteOfflineException {
           rethrow;
         } on RemoteAuthException {
@@ -155,6 +162,44 @@ class SyncEngine {
     }
     await _st.save(store);
     return _rep;
+  }
+
+  /// Primera sincronización de este dispositivo (sin base) y la nube ya tiene cuadernos: el cuaderno de ejemplo
+  /// "Mi cuaderno" que crea cada instalación al primer arranque, si sigue intacto (una sola hoja vacía), se descarta acá
+  /// en vez de subirlo (si no, quedarían dos "Mi cuaderno"). Se borra de disco sin lápida: la nube nunca lo tuvo.
+  Future<void> _dropUntouchedSample() async {
+    if (_st.base.isNotEmpty || !_st.remote.containsKey('index.json')) return;
+    try {
+      final idxFile = store.syncFile('index.json');
+      if (!await idxFile.exists()) return;
+      final local = jsonDecode(await idxFile.readAsString()) as Map;
+      final nbs = local['notebooks'];
+      if (nbs is! List || nbs.length != 1 || (local['folders'] as List? ?? const []).isNotEmpty) return;
+      final n = nbs.single as Map;
+      final id = n['id'] as String;
+      if (n['name'] != 'Mi cuaderno' || n['folder'] != null || n['pin'] != null || openNotebooks().contains(id)) return;
+      // la nube tiene que tener algún cuaderno
+      final remoteIdx = jsonDecode(utf8.decode(await remote.download('index.json'))) as Map;
+      if (remoteIdx['notebooks'] is! List || (remoteIdx['notebooks'] as List).isEmpty) return;
+      // intacto: una hoja y sin nada escrito
+      final nj = store.syncFile(notebookJsonPath(id));
+      if (await nj.exists()) {
+        final sheets = (jsonDecode(await nj.readAsString()) as Map)['sheets'] as List;
+        if (sheets.length != 1) return;
+        final f = store.syncFile(sheetPath(id, (sheets.single as Map)['id'] as String));
+        if (await f.exists() && !decodeSheet(await f.readAsBytes()).isEmpty) return;
+      }
+      local['notebooks'] = [];
+      if (local['last'] == id) local['last'] = null;
+      await store.writeSyncFile('index.json', utf8.encode(jsonEncode(local)));
+      await store.removeNotebookFiles(id);
+      _rep.localChanged = true;
+      _rep.indexChanged = true;
+    } on RemoteException {
+      rethrow;
+    } catch (_) {
+      // cualquier cosa rara: no se descarta nada
+    }
   }
 
   static bool validNotebook(Map j) => j['format'] == Notebook.kFormat && j['sheets'] is List;
@@ -188,6 +233,8 @@ class SyncEngine {
   /// Escribe [bytes] en [p] solo si en disco sigue lo que se vio ([expect], null = no existía): si alguien lo tocó
   /// mientras tanto (la biblioteca guardó el índice, por ejemplo) no se pisa y queda para la próxima pasada.
   Future<void> _writeLocal(String p, Uint8List bytes, String? expect) async {
+    final nb = notebookIdOf(p);
+    if (nb != null && openNotebooks().contains(nb)) throw const _Skip(); // se abrió mientras tanto
     if ((await _stat(p))?.md5 != expect) throw const _Skip();
     if (p == 'index.json') {
       final cur = await store.syncFile(p).exists() ? await store.syncFile(p).readAsString() : '{}';
@@ -196,6 +243,23 @@ class SyncEngine {
     await store.writeSyncFile(p, bytes);
     _rep.localChanged = true;
     if (p == 'index.json') _rep.indexChanged = true;
+  }
+
+  /// Lo de la nube para [p] no se aplica ahora porque el cuaderno está abierto.
+  void _wait(String p) {
+    final nb = notebookIdOf(p);
+    if (nb != null) {
+      _rep.remoteWaiting.add(nb);
+      if (!_rep.skippedBusy.contains(nb)) _rep.skippedBusy.add(nb);
+    }
+  }
+
+  /// En un cuaderno abierto solo se sube. Es seguro seguir si no hay nada que escribir acá: iguales, o cambió solo lo local
+  /// (la nube sigue en la base o no existe), o se borró acá y la nube sigue en la base (el borrado es solo remoto).
+  bool _upOnlyOk(String? L, String? R, String? B) {
+    if (L == R) return true;
+    if (L != null) return L != B && (R == null || R == B);
+    return B != null && R == B;
   }
 
   Future<void> _markBase(String p, String hash, {String? text}) async {
@@ -229,6 +293,7 @@ class SyncEngine {
   Future<void> _opaque(String p) async {
     final l = await _stat(p), L = l?.md5, R = _st.remote[p], B = _st.base[p]?.md5;
     final nb = notebookIdOf(p);
+    if (_upOnly && !_upOnlyOk(L, R, B)) return _wait(p);
     if (L == null && R == null) return _unBase(p);
     if (L == R) return _markBase(p, L!);
     if (L != null && R == null) {
@@ -340,6 +405,11 @@ class SyncEngine {
       await _markBase(p, _md5(b), text: t);
     }
 
+    if (_upOnly && !_upOnlyOk(L, R, B)) {
+      _rep.skipped++;
+      if (isIndex) return;
+      return _wait(p);
+    }
     if (L == null && R == null) return _unBase(p);
     if (L == R) return _markBase(p, L!, text: await localText());
     if (L != null && R == null) {
@@ -380,11 +450,12 @@ class SyncEngine {
     for (final (p, local) in _deferred) {
       try {
         if (local) {
+          final nb = notebookIdOf(p);
+          if (nb != null && openNotebooks().contains(nb)) continue; // se abrió mientras tanto
           if ((await _stat(p))?.md5 != _st.base[p]?.md5) continue; // lo tocaron mientras tanto
           await store.deleteSyncFile(p);
           _rep.deletedLocal++;
           _rep.localChanged = true;
-          final nb = notebookIdOf(p);
           if (nb != null) touched.add(nb);
         } else {
           await remote.delete(p);
