@@ -910,27 +910,31 @@ void main() {
     expect(find.byType(SelectionMenu), findsNothing);
   });
 
-  testWidgets('selección: "Solo resaltador" sobre texto y tinta mueve solo el resaltador', (t) async {
+  testWidgets('selección: "Solo resaltador" sobre un texto escrito mueve solo el resaltador', (t) async {
     await start(t);
     await createNotebook(t, 'SoloHl');
-    final p = docToScreen(t);
     final ed = editor(t);
-    // tinta, un texto escrito y el resaltador encima
-    await stylusLine(t, p(const Offset(200, 200)), p(const Offset(400, 200)));
-    final tb = TextBlock('tx', 200, 160, 300, 'hola');
-    ed.doc.texts[tb.id] = tb;
+    final p = docToScreen(t);
+    // un texto escrito con el teclado, como lo hace el usuario
+    await t.tap(find.byTooltip('Texto con teclado'));
+    await settle(t, 600);
+    final tb = ed.doc.texts.values.single;
+    await t.enterText(find.byKey(Key('para-${tb.id}-0')), 'hola mundo escrito');
+    await settle(t, 300);
+    final tbY = tb.y;
+    final y = tb.y + ed.doc.lineAt(tb.y) * .5; // mitad del renglón
+    // tinta a mano debajo del texto y el resaltador encima del texto
     await t.tap(find.byTooltip('Resaltador · tocá de nuevo para opciones'));
-    await settle(t);
-    await stylusLine(t, p(const Offset(200, 200)), p(const Offset(400, 200)));
-    final hl = ed.doc.strokes.values.firstWhere((s) => s.k == 'hl');
-    final ink = ed.doc.strokes.values.firstWhere((s) => s.k != 'hl');
-    final hlBefore = hl.bounds, inkBefore = ink.bounds;
+    await settle(t, 600);
+    await stylusLine(t, p(Offset(tb.x + 10, y)), p(Offset(tb.x + 220, y)));
+    final hl = ed.doc.strokes.values.firstWhere((s) => s.k == 'hl', orElse: () => throw StateError('el resaltador no dibujó sobre el texto'));
+    final hlBefore = hl.bounds;
 
     await t.tap(find.byTooltip('Seleccionar'));
     await settle(t);
     // recuadro de captura (derecha a izquierda) sobre todo
-    await stylusDrag(t, p(const Offset(500, 260)), p(const Offset(100, 100)));
-    expect(ed.sel.strokes, {ink.id, hl.id});
+    await stylusDrag(t, p(Offset(tb.x + 400, y + 60)), p(Offset(tb.x - 20, tbY - 20)));
+    expect(ed.sel.strokes, {hl.id});
     expect(ed.sel.texts, {tb.id});
     expect(find.text('Solo resaltador'), findsOneWidget);
     expect(find.text('Sin resaltador'), findsOneWidget);
@@ -940,9 +944,8 @@ void main() {
     expect(ed.sel.strokes, {hl.id});
     expect(ed.sel.texts, isEmpty);
 
-    await stylusDrag(t, p(const Offset(300, 200)), p(const Offset(300, 260)));
-    expect(ed.doc.strokes[ink.id]!.bounds, inkBefore);
-    expect(ed.doc.texts[tb.id]!.y, 160);
+    await stylusDrag(t, p(Offset(tb.x + 100, y)), p(Offset(tb.x + 100, y + 80)));
+    expect(ed.doc.texts[tb.id]!.y, tbY, reason: 'el texto no se movió');
     expect(ed.doc.strokes[hl.id]!.bounds.top, greaterThan(hlBefore.top + 40));
   });
 
