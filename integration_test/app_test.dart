@@ -4,6 +4,7 @@
 //   flutter test integration_test -d <id de la tablet>
 
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:apuntes/app.dart';
@@ -281,6 +282,96 @@ void main() {
     expect(nb.sheets.length, 1);
     final sheets = Directory('${root.path}/notebooks/${nb.id}/sheets').listSync().where((e) => e.path.endsWith('.sheet'));
     expect(sheets.length, 1);
+  });
+
+  testWidgets('hojas: borrar y deshacer, mover con el asa y deshacer, exportar e importar .opennote', (t) async {
+    await start(t);
+    await createNotebook(t, 'Tres');
+    await t.tap(find.byKey(const Key('pagesBtn')));
+    await settle(t, 600);
+    await t.tap(find.byKey(const Key('addPage')));
+    await settle(t, 900);
+    await t.tap(find.byKey(const Key('addPage')));
+    await settle(t, 900);
+    expect(editor(t).doc.sheetCount, 3);
+    await t.tap(find.byKey(const Key('pagesBtn'))); // cierra el panel
+    await settle(t, 600);
+
+    // un trazo por hoja: se reconocen por la hoja donde caen
+    final ed = editor(t);
+    for (var k = 0; k < 3; k++) {
+      final st = Stroke('st$k', 'pen', '#22211e', 2.6, [100, k * kSheetStep + 200, .5, 500, k * kSheetStep + 200, .5]);
+      ed.doc.strokes[st.id] = st;
+      ed.doc.markDirtyElement(st);
+    }
+    // ignore: invalid_use_of_protected_member
+    ed.setState(() {});
+    await settle(t, 600);
+    int sheetOf(String id) => editor(t).doc.sheetOfY(editor(t).doc.strokes[id]!.bounds.top);
+    expect([sheetOf('st0'), sheetOf('st1'), sheetOf('st2')], [0, 1, 2]);
+
+    // borrar la hoja 2 y deshacer: vuelve con su trazo
+    await t.tap(find.byKey(const Key('pagesBtn')));
+    await settle(t, 600);
+    await holdOn(t, find.byKey(const Key('thumb-2')));
+    await settle(t, 500);
+    await t.tap(find.text('Borrar'));
+    await settle(t, 500);
+    await t.tap(find.byKey(const Key('confirmDelete')));
+    await settle(t, 900);
+    expect(editor(t).doc.sheetCount, 2);
+    expect(editor(t).doc.strokes.containsKey('st1'), isFalse);
+    await t.tap(find.byTooltip('Deshacer'));
+    await settle(t, 900);
+    expect(editor(t).doc.sheetCount, 3);
+    expect(editor(t).doc.strokes.containsKey('st1'), isTrue, reason: 'volvió con su trazo');
+    expect(sheetOf('st1'), 1);
+
+    // mover la 3 antes de la 1 con el asa, y deshacer
+    final from = t.getCenter(find.byKey(const Key('thumbHandle-3')));
+    final to = t.getCenter(find.byKey(const Key('thumbDrop-1')));
+    final g = await t.startGesture(from);
+    await t.pump(const Duration(milliseconds: 50));
+    for (var i = 1; i <= 8; i++) {
+      await g.moveTo(Offset.lerp(from, to, i / 8)!);
+      await t.pump(const Duration(milliseconds: 30));
+    }
+    await g.up();
+    await settle(t, 900);
+    expect(sheetOf('st2'), 0, reason: 'la hoja 3 quedó primera');
+    await t.tap(find.byTooltip('Deshacer'));
+    await settle(t, 900);
+    expect(sheetOf('st2'), 2);
+    expect(sheetOf('st0'), 0);
+
+    // exportar .opennote (el diálogo del sistema se reemplaza) e importarlo
+    await t.tap(find.byKey(const Key('pagesBtn')));
+    await settle(t, 600);
+    Uint8List? saved;
+    final savedSave = saveOpennote, savedPick = Pickers.opennote;
+    saveOpennote = (bytes, name) async {
+      saved = bytes;
+      return true;
+    };
+    addTearDown(() {
+      saveOpennote = savedSave;
+      Pickers.opennote = savedPick;
+    });
+    await openMore(t, 'Exportar cuaderno (.opennote)');
+    expect(saved, isNotNull);
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+    Pickers.opennote = () async => saved;
+    await t.tap(find.byKey(const Key('new')));
+    await settle(t, 600);
+    await t.tap(find.byKey(const Key('importNotebook')));
+    await settle(t, 2000);
+    final store = Storage(root: root);
+    await store.init();
+    final idx = await store.loadIndex();
+    expect(idx.notebooks.length, 2);
+    expect(idx.notebooks[0].id, isNot(idx.notebooks[1].id));
+    expect(idx.notebooks.any((n) => n.name == 'Tres (importado)'), isTrue);
   });
 
   testWidgets('nota adhesiva y búsqueda', (t) async {

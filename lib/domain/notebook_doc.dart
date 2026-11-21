@@ -22,6 +22,13 @@ class SheetContent {
         items = items ?? [];
 
   bool get isEmpty => strokes.isEmpty && texts.isEmpty && items.isEmpty;
+
+  /// Copia independiente (mismos ids, mismas coordenadas locales).
+  SheetContent copy() => SheetContent(
+        strokes: [for (final s in strokes) s.moved(Offset.zero)],
+        texts: [for (final t in texts) t.copy()],
+        items: [for (final i in items) i.copy()],
+      );
 }
 
 /// Mapa de elementos que avisa cada vez que se agrega, reemplaza o saca uno (para saber qué hoja cambió).
@@ -438,6 +445,8 @@ class NotebookDoc {
     sheets.insert(at, m);
     _loaded.add(m.id); // una hoja nueva está entera en memoria
     if (content != null) _place(content, at * kSheetStep);
+    _dirty.add(m.id); // hay que escribirla (también al restaurar una borrada: en disco puede haber algo viejo)
+    _touch(m.id);
     return m;
   }
 
