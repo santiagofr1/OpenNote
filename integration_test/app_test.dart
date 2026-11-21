@@ -768,4 +768,78 @@ void main() {
     await s2.init();
     expect((await s2.loadNotebook(saved)).strokes.length, total + 1, reason: 'el trazo nuevo quedó en disco');
   });
+
+  testWidgets('hojas con lápiz y bolígrafo: abrir, desplazar, descargar y volver; las hojas se ven con malla', (t) async {
+    // 12 hojas, cada una con trazos de lápiz y de bolígrafo (las mallas se arman al cargar y se sueltan al descargar)
+    final s = Storage(root: root);
+    await s.init();
+    final nb = Notebook.create('Mallas');
+    while (nb.sheets.length < 12) {
+      nb.sheets.add(nb.newSheet());
+    }
+    final doc = NotebookDoc(nb);
+    for (var k = 0; k < nb.sheets.length; k++) {
+      for (var j = 0; j < 20; j++) {
+        final y = k * kSheetStep + 80 + j * 40.0;
+        final kind = j.isEven ? 'pencil' : 'pen';
+        doc.strokes['m$k-$j'] = Stroke('m$k-$j', kind, '#22211e', 3, [
+          for (var i = 0; i < 120; i++) ...[100 + i * 6.0, y + (i % 5) * 3, .3 + (i % 7) * .08]
+        ]);
+      }
+    }
+    await s.saveIndex(NotesIndex(last: nb.id, notebooks: [nb]));
+    await s.saveNotebook(doc);
+
+    await start(t);
+    await t.tap(find.byKey(const Key('nb-Mallas')));
+    await settle(t, 1500);
+    final ed = editor(t);
+    expect(ed.doc.sheetCount, 12);
+
+    bool conMalla(int k) {
+      final id = ed.doc.sheets[k].id;
+      if (!ed.doc.isLoaded(id)) return false;
+      final mine = [for (final st in ed.doc.strokes.values) if (ed.doc.sheetOfElement(st) == k) st];
+      return mine.length == 20 && mine.every((st) => st.mesh != null);
+    }
+
+    await settle(t, 800);
+    expect(conMalla(ed.visibleSheet), isTrue, reason: 'la hoja inicial llega con malla');
+
+    // hasta el final y de vuelta, rápido
+    final max = ed.scroll.position.maxScrollExtent;
+    for (var i = 0; i < 25 && ed.scroll.offset < max - 50; i++) {
+      await t.fling(find.byType(PageEditor), const Offset(0, -600), 6000);
+      await settle(t, 250);
+    }
+    for (var i = 0; i < 25 && ed.scroll.offset > 50; i++) {
+      await t.fling(find.byType(PageEditor), const Offset(0, 600), 6000);
+      await settle(t, 250);
+    }
+    expect(t.takeException(), isNull);
+
+    // descargar una hoja lejana a mano (suelta mallas y lotes) y volver a ella: se recarga y se ve con malla
+    final far = ed.doc.sheetCount - 1;
+    final farId = ed.doc.sheets[far].id;
+    final farStrokes = [for (final st in ed.doc.strokes.values) if (ed.doc.sheetOfElement(st) == far) st];
+    final r = await t.runAsync(() => ed.widget.store.unloadSheets(ed.doc, [farId]));
+    if (r != null && r.unloaded.contains(farId)) {
+      for (final st in farStrokes) {
+        expect(st.mesh, isNull, reason: 'la hoja descargada soltó la malla');
+        expect(st.batchCache, isNull, reason: 'y el lote');
+      }
+      expect(ed.doc.isLoaded(farId), isFalse);
+    }
+    ed.scrollToSheet(far, animate: false);
+    for (var i = 0; i < 40 && !conMalla(far); i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await t.pump(const Duration(milliseconds: 50));
+    }
+    expect(t.takeException(), isNull);
+    expect(ed.doc.isLoaded(farId), isTrue, reason: 'volvió a cargarse');
+    // las mallas del trazo recién cargado llegan del isolate o se arman al primer dibujo
+    await settle(t, 600);
+    expect(conMalla(far), isTrue, reason: 'tras recargar, la hoja vuelve con malla');
+    expect(t.takeException(), isNull);
+  });
 }

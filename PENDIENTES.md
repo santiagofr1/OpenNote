@@ -1,8 +1,7 @@
 # Pendientes
 
-1. **Restos de rendimiento / hojas** (lo grande está hecho y medido, ver Hecho y docs/perf): RAM tras desplazar
-   mucho ~580 MB por el caché de imágenes (192 MB; se puede bajar); "abrir perezoso" 0,5–1 s en el benchmark por
-   armar las mallas (abrir desde la app sigue en 0,4 s); el lápiz con mallas queda algo más parejo que antes.
+1. **Hojas** (el rendimiento está hecho y medido, ver Hecho y docs/TECNICO.md; falta medir en la tablet la RAM tras
+   desplazar con el presupuesto nuevo del caché de imágenes, objetivo < ~400 MB):
    - Mover hojas arrastrando en el panel (hoy: menú "Mover antes / después").
    - Las operaciones de hojas (agregar, duplicar, mover, borrar) no se pueden deshacer: vacían el historial.
    - Exportar/backup del cuaderno entero como un archivo `.opennote` (ZIP).
