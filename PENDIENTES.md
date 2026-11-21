@@ -12,7 +12,7 @@
     `googleapis_auth` con PKCE), pantalla en el menú ⋮ de la biblioteca, workflow de release con los IDs desde secretos.
     **Falta:** que el dueño cree el proyecto de Google Cloud y cargue los secretos (pasos en la doc, "Configurar Google
     Cloud"); probar con Google de verdad en la tablet y en Linux; pasar la app a "In production"; segundo plano;
-    cifrado de extremo a extremo; empaquetar la app de Linux. Lo que sigue es la investigación original:
+    cifrado de extremo a extremo. **Hecho:** app de Linux empaquetada como `.deb` (`tool/build_deb.sh`, job `linux` del release, repo apt `santiagofr1/apt`); falta probar la instalación en una máquina limpia y agregar `santiagofr1/OpenNote` a `apps.txt` del repo apt. Lo que sigue es la investigación original:
     - PC: Flutter desktop compila el mismo código para Linux, Windows y macOS. Investigar qué cambia: entrada
       (mouse/teclado y tabletas Wacom en PC), atajos de teclado, rutas de datos, empaquetado (AppImage/Flatpak/.deb,
       instalador .msi/MSIX en Windows).

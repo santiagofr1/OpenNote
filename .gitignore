@@ -58,3 +58,4 @@ android/.kotlin/
 
 # Datos del proyecto de Google (ver google_config.example.json)
 /google_config.json
+/dist/

@@ -66,6 +66,26 @@ querés instalarla. Nunca toca tus cuadernos.
 > clave oficial no se puede instalar encima. Hacé un backup de tus cuadernos, desinstalá OpenNote una vez e instalá
 > el APK. Después, las actualizaciones son normales. Detalles en [docs/RELEASES.md](docs/RELEASES.md).
 
+### En Linux (Debian/Ubuntu)
+
+Con el repo apt (se actualiza con `apt upgrade`):
+
+```sh
+sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://santiagofr1.github.io/apt/key.asc | sudo gpg --dearmor -o /etc/apt/keyrings/santiagofr1.gpg
+echo "deb [signed-by=/etc/apt/keyrings/santiagofr1.gpg] https://santiagofr1.github.io/apt stable main" | sudo tee /etc/apt/sources.list.d/santiagofr1.list
+sudo apt update
+sudo apt install opennote
+```
+
+O bajando el `.deb` de la [última release](https://github.com/santiagofr1/OpenNote/releases/latest):
+
+```sh
+sudo apt install ./opennote_<versión>_amd64.deb
+```
+
+Después lo abrís desde el menú de aplicaciones o con `opennote`. Para armar el `.deb` vos mismo: `tool/build_deb.sh <versión>`.
+
 ### Desde el código
 
 Necesitás [Flutter](https://flutter.dev) en canal *stable*:

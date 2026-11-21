@@ -117,6 +117,21 @@ jobs:
             echo ""
             echo "**APK:** OpenNote-v${VERSION_NAME}.apk"
             echo "**Código de versión:** ${VERSION_CODE}"
+            echo ""
+            echo "**Linux (Debian/Ubuntu):** opennote_${VERSION_NAME}_amd64.deb (lo sube el job linux unos minutos después)."
+            echo ""
+            echo "Desde el repo apt:"
+            echo '```sh'
+            echo 'sudo install -d -m 0755 /etc/apt/keyrings'
+            echo 'curl -fsSL https://santiagofr1.github.io/apt/key.asc | sudo gpg --dearmor -o /etc/apt/keyrings/santiagofr1.gpg'
+            echo 'echo "deb [signed-by=/etc/apt/keyrings/santiagofr1.gpg] https://santiagofr1.github.io/apt stable main" | sudo tee /etc/apt/sources.list.d/santiagofr1.list'
+            echo 'sudo apt update'
+            echo 'sudo apt install opennote'
+            echo '```'
+            echo "O con el .deb suelto:"
+            echo '```sh'
+            echo "sudo apt install ./opennote_${VERSION_NAME}_amd64.deb"
+            echo '```'
             echo "EOF"
           } >> "$GITHUB_ENV"
 
@@ -140,3 +155,61 @@ jobs:
         run: |
           gh release list --json tagName,createdAt,isLatest,isDraft,isPrerelease --limit 200 \
             | tool/podar_releases.sh
+
+  # App de Linux: corre cuando la release ya está publicada y le suma el .deb como asset. Si falla, el APK
+  # y el aviso de actualización de Android no se ven afectados.
+  linux:
+    needs: release
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Dependencias de sistema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Set version
+        run: echo "VERSION_NAME=1.0.${{ github.run_number }}" >> "$GITHUB_ENV"
+
+      - name: Datos de Google (opcional)
+        env:
+          GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+          GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.GOOGLE_DESKTOP_CLIENT_ID }}
+          GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
+        run: |
+          if [ -n "$GOOGLE_WEB_CLIENT_ID" ]; then
+            jq -n --arg web "$GOOGLE_WEB_CLIENT_ID" --arg did "$GOOGLE_DESKTOP_CLIENT_ID" --arg dsec "$GOOGLE_DESKTOP_CLIENT_SECRET" \
+              '{GOOGLE_WEB_CLIENT_ID: $web, GOOGLE_DESKTOP_CLIENT_ID: $did, GOOGLE_DESKTOP_CLIENT_SECRET: $dsec}' > google_config.json
+          else
+            echo "::warning::Falta el secreto GOOGLE_WEB_CLIENT_ID: el .deb sale sin sincronización con Google."
+          fi
+
+      - name: Armar .deb
+        run: |
+          tool/build_deb.sh "$VERSION_NAME"
+          rm -f google_config.json
+
+      - name: Subir el .deb a la release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "v${VERSION_NAME}" "dist/opennote_${VERSION_NAME}_amd64.deb" --clobber
+
+      # Sin el secreto no pasa nada: el repo apt lo levanta igual con su cron horario.
+      - name: Avisar al repo apt (santiagofr1/apt)
+        env:
+          TOKEN: ${{ secrets.APT_DISPATCH_TOKEN }}
+        run: |
+          [ -n "$TOKEN" ] || { echo "sin APT_DISPATCH_TOKEN, lo levanta el cron"; exit 0; }
+          GH_TOKEN="$TOKEN" gh api repos/santiagofr1/apt/dispatches -f event_type=publish
