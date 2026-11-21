@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../sync/sync_controller.dart';
+import 'crypto_section.dart';
 
 /// Hoja "Sincronización con Google Drive": estado y botones Conectar / Sincronizar ahora / Desconectar.
 /// Sin configuración de Google avisa qué falta; nunca lanza.
@@ -86,6 +87,7 @@ class SyncSheet extends StatelessWidget {
                 ),
               ],
             ]),
+            if (p == SyncPhase.idle || p == SyncPhase.syncing) CryptoSection(sync: sync),
           ]),
         );
       },

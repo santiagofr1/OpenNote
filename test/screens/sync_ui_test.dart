@@ -155,4 +155,38 @@ void main() {
     expect(after, ['escrito en la otra tablet']);
     expect(t.takeException(), isNull);
   });
+
+  testWidgets('Cifrado: aparece con la sesión abierta y el diálogo de frase valida largo y coincidencia', (t) async {
+    final r = FakeRemoteStore();
+    await open(t, FakeBackend(r));
+    expect(find.byKey(const Key('cryptoStatus')), findsNothing, reason: 'sin conectar no hay sección Cifrado');
+    await t.tap(find.byKey(const Key('syncConnect')));
+    await until(t, () => find.byKey(const Key('cryptoEnable')).evaluate().isNotEmpty);
+    await until(t, () => find.byType(LinearProgressIndicator).evaluate().isEmpty);
+    expect(find.text('Cifrado'), findsOneWidget);
+    expect(find.textContaining('Si olvidás la frase'), findsOneWidget);
+    await until(t, () => find.textContaining('Desactivado').evaluate().isNotEmpty);
+    expect(find.byKey(const Key('cryptoStatus')), findsOneWidget);
+
+    await t.tap(find.byKey(const Key('cryptoEnable')));
+    await settle(t);
+    expect(find.byKey(const Key('cryptoPass1')), findsOneWidget);
+    expect(find.byKey(const Key('cryptoPass2')), findsOneWidget);
+    // corta
+    await t.enterText(find.byKey(const Key('cryptoPass1')), 'corta');
+    await t.enterText(find.byKey(const Key('cryptoPass2')), 'corta');
+    await t.tap(find.byKey(const Key('cryptoDialogOk')));
+    await settle(t, 300);
+    expect(find.byKey(const Key('cryptoDialogError')), findsOneWidget);
+    expect(find.textContaining('al menos'), findsOneWidget);
+    // no coinciden
+    await t.enterText(find.byKey(const Key('cryptoPass1')), 'una frase larga');
+    await t.enterText(find.byKey(const Key('cryptoPass2')), 'una frase larga distinta');
+    await t.tap(find.byKey(const Key('cryptoDialogOk')));
+    await settle(t, 300);
+    expect(find.textContaining('no coinciden'), findsOneWidget);
+    expect(find.byKey(const Key('cryptoPass1')), findsOneWidget, reason: 'el diálogo sigue abierto');
+    expect(r.has('crypto.json'), isFalse);
+    expect(t.takeException(), isNull);
+  });
 }

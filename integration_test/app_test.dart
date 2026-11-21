@@ -1137,4 +1137,33 @@ void main() {
     expect(editor(t).doc.strokes, hasLength(1));
     expect(t.takeException(), isNull);
   });
+
+  testWidgets('sincronización: sección Cifrado y el diálogo de frase valida que coincidan', (t) async {
+    final remote = FakeRemoteStore();
+    await t.pumpWidget(ApuntesApp(root: root, backend: FakeBackend(remote)));
+    await settle(t, 1500);
+    await t.tap(find.byKey(const Key('libraryMenu')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('syncMenu')));
+    await settle(t, 600);
+    expect(find.byKey(const Key('cryptoStatus')), findsNothing, reason: 'sin conectar no hay sección Cifrado');
+    await t.tap(find.byKey(const Key('syncConnect')));
+    for (var i = 0; i < 60 && find.byKey(const Key('cryptoEnable')).evaluate().isEmpty; i++) {
+      await settle(t, 100);
+    }
+    expect(find.text('Cifrado'), findsOneWidget);
+    expect(find.byKey(const Key('cryptoStatus')), findsOneWidget);
+    expect(find.textContaining('Si olvidás la frase'), findsOneWidget);
+
+    await t.tap(find.byKey(const Key('cryptoEnable')));
+    await settle(t, 600);
+    await t.enterText(find.byKey(const Key('cryptoPass1')), 'una frase larga');
+    await t.enterText(find.byKey(const Key('cryptoPass2')), 'otra frase larga');
+    await t.tap(find.byKey(const Key('cryptoDialogOk')));
+    await settle(t, 400);
+    expect(find.textContaining('no coinciden'), findsOneWidget);
+    expect(find.byKey(const Key('cryptoPass1')), findsOneWidget, reason: 'el diálogo sigue abierto');
+    expect(remote.has('crypto.json'), isFalse, reason: 'no se activó nada');
+    expect(t.takeException(), isNull);
+  });
 }

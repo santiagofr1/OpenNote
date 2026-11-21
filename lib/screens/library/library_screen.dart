@@ -16,6 +16,7 @@ import '../../sync/google_auth.dart';
 import '../../sync/google_config.dart';
 import '../../sync/sync_backend.dart';
 import '../../sync/sync_controller.dart';
+import '../../sync/sync_crypto.dart';
 import '../../widgets/dialogs.dart';
 import '../../widgets/pdf_progress.dart';
 import '../../widgets/update_dialog.dart';
@@ -54,6 +55,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
   late final SyncController sync = SyncController(
       store: store,
       backend: widget.backend ?? GoogleBackend(),
+      crypto: SyncCrypto(store: store),
       pollInterval: widget.syncPoll ?? const Duration(seconds: 45),
       debounce: widget.syncDebounce ?? const Duration(seconds: 5))
     ..busyNotebooks = (() => {?_openId})
