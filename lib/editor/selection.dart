@@ -65,6 +65,8 @@ class Selection {
   /// Ids de todo lo seleccionado (trazos, textos y elementos).
   Set<String> get allIds => {...strokes, ...texts, ...items};
 
+  /// "Seleccionar todo": todo lo de las hojas CARGADAS (las visibles y las cercanas), no el cuaderno entero:
+  /// las hojas lejanas no están en memoria (ver la carga perezosa en [NotebookDoc]).
   void selectAll(NotebookDoc p) => replace(strokes: p.strokes.keys, texts: p.texts.keys, items: p.items.keys);
 
   // lo seleccionado que sigue existiendo en la página

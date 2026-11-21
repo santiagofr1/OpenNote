@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
@@ -18,6 +19,10 @@ import 'sheet_codec.dart';
 ///   `<dir>/notebooks/<id>/sheets/<hoja>.sheet`      contenido de cada hoja (binario, ver [encodeSheet])
 ///   `<dir>/media/`                                  imágenes y audios (compartidos)
 /// Al guardar solo se escriben las hojas que cambiaron.
+///
+/// Carga perezosa: [openNotebook] lee solo las hojas cercanas a la que se ve; [loadSheets] / [unloadSheets] cargan y
+/// sueltan hojas mientras se scrollea. REGLA DE ORO: una hoja sin cargar NUNCA se escribe (su archivo en disco es la
+/// verdad), y una hoja solo se suelta si lo que hay en memoria es lo mismo que hay en disco (misma huella de contenido).
 class Storage {
   /// [root]: carpeta propia (los tests usan una temporal para no tocar tus cuadernos)
   Storage({this.root});
@@ -31,6 +36,9 @@ class Storage {
   // lo último que hay en disco de cada cuaderno, para guardar solo lo que cambió
   final _disk = <String, _DiskState>{};
   final _queues = <String, _SaveQueue>{};
+
+  /// Solo para los tests: se llama con (id del cuaderno, id de la hoja) cada vez que se escribe un `.sheet`.
+  void Function(String nbId, String sheetId)? onSheetWrite;
 
   Future<void> init() async {
     dir = root ?? Directory('${(await _defaultBase()).path}/apuntes');
@@ -131,33 +139,162 @@ class Storage {
   }
 
   // ================= cuadernos =================
-  /// Lee todas las hojas del cuaderno (decodificadas en otro isolate).
+  /// Lee todas las hojas del cuaderno (decodificadas en otro isolate): todo queda cargado.
+  /// Para duplicar, exportar y los tests; la app abre con [openNotebook].
   /// Una hoja que falta o está rota queda vacía; la rota se aparta como `.roto` para no pisarla.
   Future<NotebookDoc> loadNotebook(Notebook nb) async {
     if (nb.sheets.isEmpty) await _readSheetList(nb);
-    final raw = <Uint8List?>[];
-    for (final s in nb.sheets) {
-      final f = sheetFile(nb.id, s.id);
-      raw.add(await f.exists() ? await f.readAsBytes() : null);
+    return openNotebook(nb, radius: nb.sheets.length);
+  }
+
+  /// Abre el cuaderno leyendo notebook.json y SOLO las hojas de [around] - [radius] a [around] + [radius]
+  /// (con [radius] negativo no carga ninguna). Las demás quedan sin cargar: se piden con [loadSheets].
+  Future<NotebookDoc> openNotebook(Notebook nb, {int around = 0, int radius = 2}) async {
+    if (nb.sheets.isEmpty) await _readSheetList(nb);
+    final onDisk = {for (final s in nb.sheets) s.id};
+    final doc = NotebookDoc.lazy(nb);
+    // los hashes de las hojas sin cargar son desconocidos: no se tocan hasta leerlas
+    _disk[nb.id] = _DiskState({}, jsonEncode(nb.sheetsJson()), onDisk);
+    final n = nb.sheets.length;
+    if (radius >= 0 && n > 0) {
+      final from = (around - radius).clamp(0, n - 1), to = (around + radius).clamp(0, n - 1);
+      await loadSheets(doc, [for (var k = from; k <= to; k++) nb.sheets[k].id]);
     }
-    final decoded = await _decodeInIsolate(raw);
-    final contents = <SheetContent>[];
-    final hashes = <String, String>{};
-    for (var k = 0; k < nb.sheets.length; k++) {
-      final s = nb.sheets[k];
-      final c = decoded[k];
-      if (c != null) {
-        contents.add(c);
-        hashes[s.id] = _hash(raw[k]!);
-      } else {
-        contents.add(SheetContent());
-        if (raw[k] != null) await sheetFile(nb.id, s.id).rename('${sheetFile(nb.id, s.id).path}.roto');
-      }
-    }
-    final doc = NotebookDoc.fromSheets(nb, contents);
-    _disk[nb.id] = _DiskState(hashes, jsonEncode(nb.sheetsJson()));
     await _sweep(nb);
     return doc;
+  }
+
+  /// Carga de disco las hojas [ids] que no estén cargadas (leyendo y decodificando en otro isolate) y las pone en [doc].
+  /// Devuelve los ids que cargó. Si falla la lectura no se carga NINGUNA (y se lanza el error): una hoja sin cargar
+  /// no se pisa, pero una hoja "cargada vacía" por un error de lectura sí se guardaría vacía.
+  Future<List<String>> loadSheets(NotebookDoc doc, Iterable<String> ids) async {
+    final nb = doc.nb;
+    final want = [
+      for (final id in ids.toSet())
+        if (!doc.isLoaded(id) && doc.indexOfSheet(id) >= 0) id
+    ];
+    if (want.isEmpty) return [];
+    final raw = <Uint8List?>[];
+    final tRead = developer.TimelineTask()..start('ON loadSheets leer disco', arguments: {'hojas': want.length});
+    try {
+      for (final id in want) {
+        final f = sheetFile(nb.id, id);
+        raw.add(await f.exists() ? await f.readAsBytes() : null);
+      }
+    } catch (_) {
+      if (want.every((id) => doc.indexOfSheet(id) < 0)) return []; // se borraron mientras tanto
+      rethrow;
+    } finally {
+      tRead.finish();
+    }
+    final tDec = developer.TimelineTask()..start('ON loadSheets decodificar (isolate)', arguments: {'hojas': want.length});
+    final List<(SheetContent, String)?> decoded;
+    try {
+      decoded = await _decodeDigestInIsolate(raw);
+    } finally {
+      tDec.finish();
+    }
+    final state = _disk.putIfAbsent(nb.id, () => _DiskState({}, '', {for (final s in nb.sheets) s.id}));
+    final done = <String>[];
+    for (var i = 0; i < want.length; i++) {
+      final id = want[i];
+      if (doc.isLoaded(id) || doc.indexOfSheet(id) < 0) continue; // otro la cargó, o se borró: no se pisa nada
+      final c = decoded[i]?.$1;
+      if (c == null && raw[i] != null) {
+        final f = sheetFile(nb.id, id);
+        if (await f.exists()) await f.rename('${f.path}.roto');
+      }
+      if (doc.isLoaded(id) || doc.indexOfSheet(id) < 0) continue; // (el rename esperó)
+      if (doc.attachSheet(id, c ?? SheetContent())) {
+        if (c != null) {
+          state.hashes[id] = _hash(raw[i]!);
+          state.digests[id] = decoded[i]!.$2;
+        }
+        done.add(id);
+      }
+    }
+    return done;
+  }
+
+  /// Suelta de memoria las hojas [ids] cargadas. Solo suelta una hoja si TODO esto se cumple:
+  /// no hay un guardado en curso, no tiene cambios sin guardar, se conoce su archivo en disco, [canUnload] lo permite
+  /// y el contenido en memoria tiene la misma huella ([sheetDigest]) que el archivo (si no, se la marca sucia para que se guarde:
+  /// va en [healed], hay que pedir un guardado). Lo que no se suelta queda cargado.
+  Future<({List<String> unloaded, List<String> healed})> unloadSheets(NotebookDoc doc, Iterable<String> ids,
+      {bool Function(String id)? canUnload}) async {
+    final nb = doc.nb;
+    final unloaded = <String>[], healed = <String>[];
+    await _idle(nb.id);
+    final state = _disk[nb.id];
+    bool ok(String id) =>
+        doc.isLoaded(id) && !doc.isSheetDirty(id) && state != null && state.hashes.containsKey(id) && state.digests.containsKey(id) && (canUnload?.call(id) ?? true);
+    final cand = [for (final id in ids.toSet()) if (ok(id)) id];
+    if (state == null || cand.isEmpty) return (unloaded: unloaded, healed: healed);
+    final contents = developer.Timeline.timeSync('ON unloadSheets splitSheets', () => doc.splitSheets(cand.toSet()));
+    final tDig = developer.TimelineTask()..start('ON unloadSheets huella (isolate)', arguments: {'hojas': cand.length});
+    final List<String> digests;
+    try {
+      digests = await _digestInIsolate([for (final id in cand) contents[id]!]);
+    } finally {
+      tDig.finish();
+    }
+    for (var i = 0; i < cand.length; i++) {
+      final id = cand[i];
+      // desde acá todo es sincrónico: lo que se chequea es lo que vale al soltar
+      if (_queues[nb.id]?.running != null) continue; // empezó un guardado mientras se codificaba: otra vez será
+      if (!ok(id)) continue;
+      if (state.digests[id] != digests[i]) {
+        developer.log('la hoja $id en memoria no es igual a su archivo: se marca para guardar y no se suelta', name: 'storage');
+        doc.markDirtySheet(doc.indexOfSheet(id));
+        healed.add(id);
+        continue;
+      }
+      if (doc.detachSheet(id)) unloaded.add(id);
+    }
+    return (unloaded: unloaded, healed: healed);
+  }
+
+  /// Espera a que no haya ningún guardado en curso de ese cuaderno.
+  Future<void> _idle(String nbId) async {
+    while (true) {
+      final r = _queues[nbId]?.running;
+      if (r == null) return;
+      try {
+        await r;
+      } catch (_) {}
+    }
+  }
+
+  /// Copia los archivos de las hojas de [src] a [copy] (con sus mismas hojas y ids) sin cargar nada.
+  Future<void> copyNotebookFiles(Notebook src, Notebook copy) async {
+    await _idle(src.id);
+    if (src.sheets.isEmpty) await _readSheetList(src);
+    for (final m in src.sheets) {
+      final from = sheetFile(src.id, m.id);
+      if (!await from.exists()) continue;
+      final to = sheetFile(copy.id, m.id);
+      await to.parent.create(recursive: true);
+      final tmp = File('${to.path}.tmp');
+      await from.copy(tmp.path);
+      await tmp.rename(to.path);
+    }
+    await _writeJson(_nbFile(copy.id), copy.sheetsJson());
+  }
+
+  /// El contenido de la hoja [m] leído de disco, sin tocar ningún documento (vacío si falta o está rota).
+  Future<SheetContent> readSheetContent(Notebook nb, SheetMeta m) async {
+    final f = sheetFile(nb.id, m.id);
+    if (!await f.exists()) return SheetContent();
+    return (await _decodeInIsolate([await f.readAsBytes()])).single ?? SheetContent();
+  }
+
+  /// Los textos y notas de la hoja [m] leyéndola de disco (en otro isolate), sin dejarla en memoria. Para buscar
+  /// en las hojas sin cargar. `y` es local a la hoja.
+  Future<List<SheetText>> readSheetTexts(Notebook nb, SheetMeta m) async {
+    final f = sheetFile(nb.id, m.id);
+    if (!await f.exists()) return [];
+    final bytes = await f.readAsBytes();
+    return _compute(() => _textsOf(bytes));
   }
 
   /// Una sola hoja (miniatura de la biblioteca), sin tocar el resto del cuaderno.
@@ -172,8 +309,8 @@ class Storage {
     }
   }
 
-  /// Guarda el cuaderno: codifica las hojas en otro isolate y escribe SOLO las que cambiaron
-  /// (más notebook.json si cambió algún dato de las hojas). Los guardados de un mismo cuaderno
+  /// Guarda el cuaderno: codifica en otro isolate SOLO las hojas sucias (ver [NotebookDoc.takeDirty]) y escribe
+  /// las que cambiaron (más notebook.json si cambió algún dato de las hojas). Los guardados de un mismo cuaderno
   /// se hacen de a uno; si llegan varios mientras se guarda, se juntan en uno solo.
   Future<void> saveNotebook(NotebookDoc doc) {
     final q = _queues.putIfAbsent(doc.id, _SaveQueue.new);
@@ -208,38 +345,65 @@ class Storage {
 
   Future<void> _saveNow(NotebookDoc doc) async {
     final nb = doc.nb;
-    final contents = doc.splitBySheet(); // copia lo que hay ahora: se puede seguir editando
-    final sheets = List.of(nb.sheets);
-    final encoded = await _encodeInIsolate(contents);
-    final disk = _disk.putIfAbsent(nb.id, () => _DiskState({}, ''));
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final written = <String, String>{};
-    for (var k = 0; k < sheets.length; k++) {
-      final m = sheets[k];
-      final (bytes, hash) = encoded[k];
-      if (disk.hashes[m.id] == hash && await sheetFile(nb.id, m.id).exists()) {
-        written[m.id] = hash;
-        continue;
+    // lo sucio se toma y se copia SIN esperar nada en el medio: lo que se edite desde ahora
+    // se marca de nuevo y queda para el próximo guardado
+    final taken = doc.takeDirty();
+    try {
+      final sheets = List.of(nb.sheets);
+      final disk = _disk[nb.id];
+      final loaded = doc.loadedSheets;
+      // sin estado en disco (primer guardado) o todo sucio: se guardan todas las CARGADAS.
+      // Si no, las sucias y las que nunca se escribieron (hojas nuevas, o una rota que se apartó).
+      // Las hojas sin cargar NUNCA entran: su archivo es la verdad y no hay nada en memoria para escribir.
+      final ids = <String>{
+        for (final m in sheets)
+          if (loaded.contains(m.id) && (disk == null || taken.all || taken.ids.contains(m.id) || !disk.hashes.containsKey(m.id)))
+            m.id
+      };
+      assert(ids.every(loaded.contains), 'se intenta guardar una hoja sin cargar');
+      final contents = doc.splitSheets(ids); // copia solo esas hojas: se puede seguir editando
+      final order = [for (final m in sheets) if (ids.contains(m.id) && contents.containsKey(m.id)) m];
+      final encoded = await _encodeInIsolate([for (final m in order) contents[m.id]!]);
+      final state = _disk.putIfAbsent(nb.id, () => _DiskState({}, '', {}));
+      final now = DateTime.now().millisecondsSinceEpoch;
+      for (var k = 0; k < order.length; k++) {
+        final m = order[k];
+        final (bytes, hash, digest) = encoded[k];
+        if (!doc.isLoaded(m.id)) {
+          developer.log('NO se escribe la hoja ${m.id}: no está cargada', name: 'storage', level: 1000);
+          continue;
+        }
+        if (state.hashes[m.id] == hash && await sheetFile(nb.id, m.id).exists()) {
+          state.digests[m.id] = digest;
+          continue;
+        }
+        m
+          ..rev += 1
+          ..updated = now;
+        await _writeBytes(sheetFile(nb.id, m.id), bytes);
+        onSheetWrite?.call(nb.id, m.id);
+        state.hashes[m.id] = hash;
+        state.digests[m.id] = digest; // ya está en disco: si algo falla más adelante, el hash es el cierto
       }
-      m
-        ..rev += 1
-        ..updated = now;
-      await _writeBytes(sheetFile(nb.id, m.id), bytes);
-      written[m.id] = hash;
+      final metaJson = jsonEncode(nb.sheetsJson());
+      if (metaJson != state.meta || !await _nbFile(nb.id).exists()) {
+        await _writeBytes(_nbFile(nb.id), utf8.encode(metaJson));
+        state.meta = metaJson;
+      }
+      // las hojas borradas, al final: si se corta antes, solo sobran archivos
+      // (también las que no estaban cargadas: su archivo se conoce por notebook.json)
+      final alive = {for (final m in sheets) m.id};
+      for (final gone in {...state.onDisk, ...state.hashes.keys}.where((id) => !alive.contains(id)).toList()) {
+        final f = sheetFile(nb.id, gone);
+        if (await f.exists()) await f.delete();
+        state.hashes.remove(gone);
+        state.digests.remove(gone);
+      }
+      state.onDisk = alive;
+    } catch (_) {
+      doc.restoreDirty(taken); // no se guardó: sigue sucio
+      rethrow;
     }
-    final metaJson = jsonEncode(nb.sheetsJson());
-    if (metaJson != disk.meta || !await _nbFile(nb.id).exists()) {
-      await _writeBytes(_nbFile(nb.id), utf8.encode(metaJson));
-      disk.meta = metaJson;
-    }
-    // las hojas borradas, al final: si se corta antes, solo sobran archivos
-    for (final gone in disk.hashes.keys.where((id) => !written.containsKey(id))) {
-      final f = sheetFile(nb.id, gone);
-      if (await f.exists()) await f.delete();
-    }
-    disk.hashes
-      ..clear()
-      ..addAll(written);
   }
 
   /// Borra los archivos sueltos de una hoja que ya no está en el cuaderno ni en el disco cache.
@@ -295,13 +459,32 @@ Future<List<SheetContent?>> _decodeInIsolate(List<Uint8List?> raw) => _compute((
         if (b == null) null else _tryDecode(b)
     ]);
 
-Future<List<(Uint8List, String)>> _encodeInIsolate(List<SheetContent> contents) => _compute(() => [
+/// Decodifica y saca la huella del contenido de cada hoja.
+Future<List<(SheetContent, String)?>> _decodeDigestInIsolate(List<Uint8List?> raw) => _compute(() => [
+      for (final b in raw)
+        if (b == null) null else _tryDecodeDigest(b)
+    ]);
+
+(SheetContent, String)? _tryDecodeDigest(Uint8List b) {
+  final c = _tryDecode(b);
+  if (c == null) return null;
+  // las mallas de los trazos se arman acá, fuera del hilo de la UI (los buffers viajan sin copiarse)
+  for (final s in c.strokes) {
+    s.mesh = buildStrokeMesh(s);
+  }
+  return (c, sheetDigest(c));
+}
+
+Future<List<String>> _digestInIsolate(List<SheetContent> contents) => _compute(() => [for (final c in contents) sheetDigest(c)]);
+
+/// (bytes, hash de los bytes, huella del contenido)
+Future<List<(Uint8List, String, String)>> _encodeInIsolate(List<SheetContent> contents) => _compute(() => [
       for (final c in contents) _encodeHashed(c),
     ]);
 
-(Uint8List, String) _encodeHashed(SheetContent c) {
+(Uint8List, String, String) _encodeHashed(SheetContent c) {
   final b = encodeSheet(c);
-  return (b, _hash(b));
+  return (b, _hash(b), sheetDigest(c));
 }
 
 SheetContent? _tryDecode(Uint8List b) {
@@ -315,9 +498,24 @@ SheetContent? _tryDecode(Uint8List b) {
 String _hash(Uint8List b) => md5.convert(b).toString();
 
 class _DiskState {
-  final Map<String, String> hashes; // id de hoja → hash de su archivo
+  final Map<String, String> hashes; // id de hoja → hash de su archivo (solo las hojas cuyo archivo se leyó o escribió)
+  final digests = <String, String>{}; // id de hoja → huella de su contenido en disco (ver [sheetDigest])
   String meta; // notebook.json como está escrito
-  _DiskState(this.hashes, this.meta);
+  Set<String> onDisk; // ids de las hojas que figuran en el notebook.json de disco (aunque no estén cargadas)
+  _DiskState(this.hashes, this.meta, this.onDisk);
+}
+
+/// Un texto o nota de una hoja leída de disco (ver [Storage.readSheetTexts]).
+typedef SheetText = ({String id, double y, String text, bool sticky});
+
+List<SheetText> _textsOf(Uint8List b) {
+  final c = _tryDecode(b);
+  if (c == null) return [];
+  return [
+    for (final t in c.texts) (id: t.id, y: t.y, text: t.text, sticky: false),
+    for (final it in c.items)
+      if (it.type == 'sticky') (id: it.id, y: it.y, text: it.text, sticky: true),
+  ];
 }
 
 class _SaveQueue {

@@ -1,3 +1,5 @@
+import 'dart:collection';
+import 'dart:developer' as developer;
 import 'dart:ui';
 
 import 'elements.dart';
@@ -22,6 +24,53 @@ class SheetContent {
   bool get isEmpty => strokes.isEmpty && texts.isEmpty && items.isEmpty;
 }
 
+/// Mapa de elementos que avisa cada vez que se agrega, reemplaza o saca uno (para saber qué hoja cambió).
+class _TrackedMap<V extends Layered> extends MapBase<String, V> {
+  final Map<String, V> inner;
+  final void Function(V) _touch;
+  _TrackedMap(this.inner, this._touch);
+
+  @override
+  V? operator [](Object? key) => inner[key];
+  @override
+  void operator []=(String key, V value) {
+    final old = inner[key];
+    if (old != null) _touch(old); // la hoja donde estaba
+    inner[key] = value;
+    _touch(value); // y la hoja donde queda
+  }
+
+  @override
+  V? remove(Object? key) {
+    final old = inner.remove(key);
+    if (old != null) _touch(old);
+    return old;
+  }
+
+  @override
+  void clear() {
+    inner.values.forEach(_touch);
+    inner.clear();
+  }
+
+  @override
+  Iterable<String> get keys => inner.keys;
+  @override
+  Iterable<V> get values => inner.values;
+  @override
+  Iterable<MapEntry<String, V>> get entries => inner.entries;
+  @override
+  int get length => inner.length;
+  @override
+  bool get isEmpty => inner.isEmpty;
+  @override
+  bool get isNotEmpty => inner.isNotEmpty;
+  @override
+  bool containsKey(Object? key) => inner.containsKey(key);
+  @override
+  void forEach(void Function(String, V) action) => inner.forEach(action);
+}
+
 /// El cuaderno abierto en memoria: una tira continua de hojas.
 ///
 /// Trazos, textos y elementos viven en coordenadas GLOBALES de la tira (la hoja k ocupa
@@ -29,18 +78,52 @@ class SheetContent {
 /// y el deshacer funcionan igual que con una sola página larga.
 /// Cada elemento pertenece a la hoja que contiene su borde de arriba ([sheetOfY]).
 /// El orden de dibujo es uno solo para todo (ver [Layered]): [drawOrder]. El orden de los mapas no cuenta.
+///
+/// Hojas sucias (para guardar solo lo que cambió): agregar, reemplazar o sacar de [strokes] / [texts] / [items]
+/// marca solo la hoja de antes y la de después. Lo que se cambia EN EL LUGAR (x, y, tamaño, texto, z)
+/// hay que marcarlo a mano con [markDirtyElement] antes y después del cambio. El contenido de cada hoja
+/// no incluye sus datos (título, fondo...): eso va en notebook.json y se compara aparte al guardar.
+///
+/// Carga perezosa: [sheets] (los [SheetMeta]) siempre están todas, pero los elementos (trazos, textos, items)
+/// solo existen de las hojas CARGADAS ([loadedSheets]). Una hoja no cargada es lo que dice su archivo en disco:
+/// NUNCA se escribe desde acá (el guardado solo toca las cargadas) y se carga con [attachSheet] / se suelta con
+/// [detachSheet] (los usa la `Storage`, que sabe cuándo es seguro). Las operaciones de hojas (mover, borrar,
+/// insertar) funcionan igual con hojas sin cargar porque lo que se guarda en cada archivo son coordenadas locales.
 class NotebookDoc {
   final Notebook nb;
-  final Map<String, Stroke> strokes;
-  final Map<String, TextBlock> texts;
-  final Map<String, Item> items;
+  final Map<String, Stroke> _rawStrokes;
+  final Map<String, TextBlock> _rawTexts;
+  final Map<String, Item> _rawItems;
+  late final Map<String, Stroke> strokes = _TrackedMap(_rawStrokes, markDirtyElement);
+  late final Map<String, TextBlock> texts = _TrackedMap(_rawTexts, markDirtyElement);
+  late final Map<String, Item> items = _TrackedMap(_rawItems, markDirtyElement);
 
-  NotebookDoc(this.nb, {Map<String, Stroke>? strokes, Map<String, TextBlock>? texts, Map<String, Item>? items})
-      : strokes = strokes ?? {},
-        texts = texts ?? {},
-        items = items ?? {} {
-    if (nb.sheets.isEmpty) nb.sheets.add(nb.newSheet()); // un cuaderno siempre tiene al menos una hoja
+  // ids (SheetMeta.id, no el índice: las hojas se mueven) de las hojas con cambios sin guardar
+  final _dirty = <String>{};
+  bool _allDirty = false;
+
+  // ids de las hojas cuyos elementos están en memoria
+  final _loaded = <String>{};
+  // hojas NO cargadas donde cayó un elemento (se lo movió o pegó ahí): al cargarlas hay que guardarlas
+  final _misplaced = <String>{};
+  final _loadListeners = <void Function(String id, bool loaded)>[];
+
+  /// [lazy]: ninguna hoja empieza cargada (las carga la `Storage` con [attachSheet]).
+  NotebookDoc(this.nb,
+      {Map<String, Stroke>? strokes, Map<String, TextBlock>? texts, Map<String, Item>? items, bool lazy = false})
+      : _rawStrokes = strokes ?? {},
+        _rawTexts = texts ?? {},
+        _rawItems = items ?? {} {
+    if (nb.sheets.isEmpty) {
+      final m = nb.newSheet(); // un cuaderno siempre tiene al menos una hoja (nueva: no hay nada que cargar)
+      nb.sheets.add(m);
+      _loaded.add(m.id);
+    }
+    if (!lazy) _loaded.addAll(nb.sheets.map((m) => m.id));
   }
+
+  /// Cuaderno con todas las hojas sin cargar.
+  factory NotebookDoc.lazy(Notebook nb) => NotebookDoc(nb, lazy: true);
 
   /// Un documento de una sola hoja suelta (miniaturas de la biblioteca).
   factory NotebookDoc.single(SheetMeta meta, SheetContent c) =>
@@ -52,6 +135,79 @@ class NotebookDoc {
 
   /// Alto de toda la tira.
   double get h => heightFor(sheets.length);
+
+  // ================= hojas cargadas =================
+  /// Ids de las hojas cuyos elementos están en memoria.
+  Set<String> get loadedSheets => Set.unmodifiable(_loaded);
+  bool isLoaded(String sheetId) => _loaded.contains(sheetId);
+  bool isLoadedAt(int k) => k >= 0 && k < sheets.length && _loaded.contains(sheets[k].id);
+  bool get allLoaded => sheets.every((m) => _loaded.contains(m.id));
+
+  /// Índice de la hoja [sheetId] (-1 si ya no está).
+  int indexOfSheet(String sheetId) => sheets.indexWhere((m) => m.id == sheetId);
+
+  /// Hojas sin cargar donde cayó algún elemento: hay que cargarlas cuanto antes (al cargar se marcan para guardar).
+  Set<String> get misplacedSheets => Set.unmodifiable(_misplaced);
+  bool get hasMisplaced => _misplaced.isNotEmpty;
+
+  /// Avisa cuando una hoja se carga (true) o se descarga (false). Lo usan el editor y el panel de hojas.
+  void addLoadListener(void Function(String id, bool loaded) f) => _loadListeners.add(f);
+  void removeLoadListener(void Function(String id, bool loaded) f) => _loadListeners.remove(f);
+
+  /// Ids de las hojas que toca el rectángulo [r].
+  Iterable<String> sheetIdsOfRect(Rect r) sync* {
+    for (var k = sheetOfY(r.top); k <= sheetOfY(r.bottom); k++) {
+      yield sheets[k].id;
+    }
+  }
+
+  /// Id de la hoja donde está ahora el elemento [elementId] (trazo, texto o item); null si no está en memoria.
+  String? sheetIdOfElementId(String elementId) {
+    final e = _rawStrokes[elementId] ?? _rawTexts[elementId] ?? _rawItems[elementId];
+    return e == null ? null : sheets[sheetOfElement(e)].id;
+  }
+
+  /// Pone en memoria el contenido [c] (coordenadas locales, sin copiar) de la hoja [id], que estaba sin cargar.
+  /// Si ya está cargada no hace NADA (nunca pisa lo que hay en memoria). No marca nada sucio: es lo que dice el disco,
+  /// salvo que haya elementos que cayeron en esta hoja antes de cargarla. Devuelve si la cargó.
+  bool attachSheet(String id, SheetContent c) => developer.Timeline.timeSync('ON attachSheet', () => _attachSheet(id, c));
+
+  bool _attachSheet(String id, SheetContent c) {
+    final k = indexOfSheet(id);
+    if (k < 0 || _loaded.contains(id)) return false;
+    _place(c, k * kSheetStep);
+    _loaded.add(id);
+    if (_misplaced.remove(id)) _dirty.add(id);
+    _touch(id);
+    if (k + 1 < sheets.length) _touch(sheets[k + 1].id); // un trazo puede pasarse a la hoja de abajo
+    for (final f in List.of(_loadListeners)) {
+      f(id, true);
+    }
+    return true;
+  }
+
+  /// Saca de memoria los elementos de la hoja [id] (no los borra del disco). Se niega (false) si la hoja
+  /// no está cargada o tiene cambios sin guardar: soltar eso perdería datos.
+  bool detachSheet(String id) => developer.Timeline.timeSync('ON detachSheet', () => _detachSheet(id));
+
+  bool _detachSheet(String id) {
+    final k = indexOfSheet(id);
+    if (k < 0 || !_loaded.contains(id) || isSheetDirty(id)) return false;
+    _rawStrokes.removeWhere((_, s) {
+      if (_sheetOfStroke(s) != k) return false;
+      s.releaseMesh(); // las mallas se sueltan con la hoja
+      return true;
+    });
+    _rawTexts.removeWhere((_, t) => sheetOfY(t.y) == k);
+    _rawItems.removeWhere((_, it) => sheetOfY(it.y) == k);
+    _loaded.remove(id);
+    _touch(id);
+    if (k + 1 < sheets.length) _touch(sheets[k + 1].id);
+    for (final f in List.of(_loadListeners)) {
+      f(id, false);
+    }
+    return true;
+  }
 
   bool get isEmpty => strokes.isEmpty && texts.isEmpty && items.isEmpty;
 
@@ -69,6 +225,101 @@ class NotebookDoc {
   double snapTextY(double y, {bool floor = false}) {
     final k = sheetOfY(y), m = sheets[k];
     return k * kSheetStep + paper.snapTextY(y - k * kSheetStep, m.bg, m.spacing, floor: floor);
+  }
+
+  // ================= hojas sucias =================
+  /// Hoja (índice) a la que se guarda [e]: la de su borde de arriba, igual que en [splitBySheet].
+  int sheetOfElement(Layered e) => switch (e) {
+        Stroke s => _sheetOfStroke(s),
+        TextBlock t => sheetOfY(t.y),
+        Item i => sheetOfY(i.y),
+        _ => 0,
+      };
+
+  // Avisos para el render (repintar solo la hoja que cambió). Es aparte de lo sucio: takeDirty (el guardado)
+  // no los toca. id null = todas las hojas.
+  final _renderListeners = <void Function(String? sheetId)>[];
+  void addRenderListener(void Function(String? sheetId) f) => _renderListeners.add(f);
+  void removeRenderListener(void Function(String? sheetId) f) => _renderListeners.remove(f);
+
+  void _touch(String? id) {
+    if (_renderListeners.isEmpty) return;
+    for (final f in List.of(_renderListeners)) {
+      f(id);
+    }
+  }
+
+  // Un elemento de la hoja k cambió. Si la hoja no está cargada, el elemento cayó ahí sin que la hoja esté en memoria
+  // (hay que cargarla; ver [misplacedSheets]).
+  void _mark(int k) {
+    final id = sheets[k].id;
+    if (_loaded.contains(id)) {
+      _dirty.add(id);
+    } else {
+      _misplaced.add(id);
+    }
+    _touch(id);
+  }
+
+  // Cambió algo de la hoja k que no es un elemento (la hoja de arriba de una nueva): una hoja sin cargar no se toca,
+  // su archivo no cambia.
+  void _markSheet(int k) {
+    final id = sheets[k].id;
+    if (!_loaded.contains(id)) return;
+    _dirty.add(id);
+    _touch(id);
+  }
+
+  /// Marca la hoja que contiene la altura [y].
+  void markDirtyAt(double y) => _mark(sheetOfY(y));
+
+  /// Marca todas las hojas que toca el rectángulo [r].
+  void markDirtyRect(Rect r) {
+    for (var k = sheetOfY(r.top); k <= sheetOfY(r.bottom); k++) {
+      _mark(k);
+    }
+  }
+
+  /// Marca la hoja donde está ahora [e]. Si lo cambiás en el lugar, llamalo ANTES y DESPUÉS del cambio.
+  /// Para el guardado cuenta solo la hoja de su borde de arriba; para el render, un trazo avisa a todas
+  /// las hojas que toca (se dibuja recortado en cada una).
+  void markDirtyElement(Layered e) {
+    final k = sheetOfElement(e);
+    _mark(k);
+    if (e is Stroke) {
+      final b = e.bounds;
+      for (var j = sheetOfY(b.top); j <= sheetOfY(b.bottom); j++) {
+        if (j != k) _touch(sheets[j].id);
+      }
+    }
+  }
+
+  /// Marca la hoja de índice [k] (si no está cargada no hay nada que guardar y no hace nada).
+  void markDirtySheet(int k) => _markSheet(k);
+
+  /// Todo cambió (operaciones de hojas): se guarda todo.
+  void markAllDirty() {
+    _allDirty = true;
+    _touch(null);
+  }
+
+  bool get hasDirty => _allDirty || _dirty.isNotEmpty;
+
+  /// La hoja [id] tiene cambios sin guardar (o está todo sucio).
+  bool isSheetDirty(String id) => _allDirty || _dirty.contains(id);
+
+  /// Lo sucio hasta ahora, y lo deja limpio (lo usa el guardado; lo que se marque después queda para el próximo).
+  ({Set<String> ids, bool all}) takeDirty() {
+    final r = (ids: Set<String>.of(_dirty), all: _allDirty);
+    _dirty.clear();
+    _allDirty = false;
+    return r;
+  }
+
+  /// Vuelve a marcar lo que [takeDirty] devolvió (el guardado falló).
+  void restoreDirty(({Set<String> ids, bool all}) d) {
+    _dirty.addAll(d.ids);
+    if (d.all) _allDirty = true;
   }
 
   // ================= orden de dibujo =================
@@ -94,6 +345,7 @@ class NotebookDoc {
   void stackOnTop(Iterable<Layered> els) {
     var z = nextZ();
     for (final e in sortByZ(els)) {
+      markDirtyElement(e);
       e.z = z++;
     }
   }
@@ -101,7 +353,10 @@ class NotebookDoc {
   /// Cambia el [z] del elemento [id] (trazo, texto o elemento), donde esté.
   void setZ(String id, int z) {
     final e = strokes[id] ?? texts[id] ?? items[id];
-    if (e != null) e.z = z;
+    if (e != null) {
+      markDirtyElement(e);
+      e.z = z;
+    }
   }
 
   /// Mueve en el orden de dibujo lo que tenga alguno de los ids de [ids] (ver [computeReorder]).
@@ -116,7 +371,12 @@ class NotebookDoc {
 
   // ================= hojas al final =================
   /// Agrega una hoja al final con el estilo del cuaderno.
-  void addSheet() => sheets.add(nb.newSheet());
+  void addSheet() {
+    markDirtySheet(sheets.length - 1); // lo que estaba pasado del final de la última puede caer en la nueva
+    final m = nb.newSheet();
+    sheets.add(m);
+    _loaded.add(m.id); // una hoja nueva está entera en memoria
+  }
 
   /// Agrega hojas hasta que [y] quede a menos de una hoja del final (escribir o pegar abajo).
   void growFor(double y) {
@@ -131,6 +391,7 @@ class NotebookDoc {
   /// La última hoja no tiene nada: se puede quitar.
   bool get lastSheetEmpty {
     final top = (sheets.length - 1) * kSheetStep;
+    if (!isLoadedAt(sheets.length - 1)) return false; // sin cargar no se sabe: no se quita
     return !strokes.values.any((s) => s.bounds.bottom > top) &&
         !texts.values.any((t) => t.y + lineAt(t.y) > top) &&
         !items.values.any((i) => i.y + i.h > top);
@@ -139,7 +400,9 @@ class NotebookDoc {
   /// Quita la última hoja si hay más de una y está vacía.
   bool removeLastSheetIfEmpty() {
     if (sheets.length < 2 || !lastSheetEmpty) return false;
-    sheets.removeLast();
+    final gone = sheets.removeLast().id;
+    _loaded.remove(gone);
+    _dirty.remove(gone);
     return true;
   }
 
@@ -165,15 +428,22 @@ class NotebookDoc {
   /// [content] (coordenadas locales) se pone adentro; se usa tal cual, sin copiar.
   SheetMeta insertSheet(int at, {SheetMeta? meta, SheetContent? content}) {
     at = at.clamp(0, sheets.length);
+    if (at < sheets.length) {
+      markAllDirty(); // corre las de abajo
+    } else {
+      markDirtySheet(sheets.length - 1);
+    }
     _shiftWhere((k) => k >= at, kSheetStep);
     final m = meta ?? nb.newSheet();
     sheets.insert(at, m);
+    _loaded.add(m.id); // una hoja nueva está entera en memoria
     if (content != null) _place(content, at * kSheetStep);
     return m;
   }
 
   /// Copia la hoja [i] justo después de ella (con ids nuevos). Devuelve la hoja nueva.
   SheetMeta duplicateSheet(int i) {
+    if (!isLoadedAt(i)) throw StateError('la hoja $i no está cargada: cargala antes de duplicarla');
     final src = sheets[i];
     final copy = _contentOf(i, fresh: true);
     return insertSheet(i + 1,
@@ -184,11 +454,15 @@ class NotebookDoc {
   /// Borra la hoja [i] con todo lo que tiene; lo de abajo sube. No se puede borrar la última que queda.
   bool deleteSheet(int i) {
     if (sheets.length < 2 || i < 0 || i >= sheets.length) return false;
+    markAllDirty();
     strokes.removeWhere((_, s) => _sheetOfStroke(s) == i);
     texts.removeWhere((_, t) => sheetOfY(t.y) == i);
     items.removeWhere((_, it) => sheetOfY(it.y) == i);
     _shiftWhere((k) => k > i, -kSheetStep);
-    sheets.removeAt(i);
+    final gone = sheets.removeAt(i).id; // si no estaba cargada no hay nada en memoria; su archivo lo borra la Storage
+    _loaded.remove(gone);
+    _misplaced.remove(gone);
+    _dirty.remove(gone);
     return true;
   }
 
@@ -196,6 +470,7 @@ class NotebookDoc {
   void moveSheet(int from, int to) {
     final n = sheets.length;
     if (from < 0 || from >= n || to < 0 || to >= n || from == to) return;
+    markAllDirty();
     // nueva posición de cada hoja vieja
     final order = List.generate(n, (i) => i)
       ..removeAt(from)
@@ -243,7 +518,9 @@ class NotebookDoc {
   /// Parte el documento en el contenido de cada hoja, en coordenadas locales (copias).
   /// Cada elemento va a la hoja que contiene el borde de arriba de su rectángulo.
   /// Cada copia conserva su [Layered.z]: dentro de cada hoja queda el orden de dibujo.
+  /// Solo para documentos con todo cargado (una hoja sin cargar saldría vacía).
   List<SheetContent> splitBySheet() {
+    assert(allLoaded, 'splitBySheet con hojas sin cargar');
     final out = List.generate(sheets.length, (_) => SheetContent());
     for (final s in strokes.values) {
       final k = _sheetOfStroke(s);
@@ -258,6 +535,29 @@ class NotebookDoc {
       out[k].items.add(it.copy(d: Offset(0, -k * kSheetStep)));
     }
     return out;
+  }
+
+  /// Como [splitBySheet] pero solo de las hojas con id en [ids] (copias; clave: id de la hoja).
+  /// No copia el resto del cuaderno. Las hojas pedidas sin nada devuelven un contenido vacío.
+  /// Las hojas SIN CARGAR no aparecen nunca (su contenido no está en memoria: no se puede guardar).
+  Map<String, SheetContent> splitSheets(Set<String> ids) {
+    final out = <int, SheetContent>{};
+    for (var k = 0; k < sheets.length; k++) {
+      if (ids.contains(sheets[k].id) && _loaded.contains(sheets[k].id)) out[k] = SheetContent();
+    }
+    for (final s in strokes.values) {
+      final k = _sheetOfStroke(s);
+      out[k]?.strokes.add(s.moved(Offset(0, -k * kSheetStep)));
+    }
+    for (final t in texts.values) {
+      final k = sheetOfY(t.y);
+      out[k]?.texts.add(t.copy(d: Offset(0, -k * kSheetStep)));
+    }
+    for (final it in items.values) {
+      final k = sheetOfY(it.y);
+      out[k]?.items.add(it.copy(d: Offset(0, -k * kSheetStep)));
+    }
+    return {for (final e in out.entries) sheets[e.key].id: e.value};
   }
 
   /// Arma el documento global del cuaderno [nb] con el contenido local de cada hoja
@@ -280,15 +580,15 @@ class NotebookDoc {
     }
     for (final s in c.strokes) {
       if (top != 0) s.translateY(top);
-      strokes[s.id] = s;
+      _rawStrokes[s.id] = s;
     }
     for (final t in c.texts) {
       t.y += top;
-      texts[t.id] = t;
+      _rawTexts[t.id] = t;
     }
     for (final i in c.items) {
       i.y += top;
-      items[i.id] = i;
+      _rawItems[i.id] = i;
     }
   }
 }

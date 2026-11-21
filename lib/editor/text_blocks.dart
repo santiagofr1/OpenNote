@@ -44,6 +44,20 @@ class TextFields {
     }
   }
 
+  /// Arma los campos de los textos de la página que todavía no tienen (hojas que se cargaron).
+  void adoptNew() {
+    for (final t in doc.texts.values.toList()) {
+      if (!_eds.containsKey(t.id)) _bind(t);
+    }
+  }
+
+  /// Suelta los campos de los textos que ya no están en la página (hojas que se descargaron).
+  void releaseGone() {
+    for (final id in _eds.keys.toList()) {
+      if (!doc.texts.containsKey(id)) _unbind(id);
+    }
+  }
+
   BlockEditor? editor(String id) => _eds[id];
   bool get anyFocused => _eds.values.any((e) => e.hasFocus);
 
@@ -66,6 +80,7 @@ class TextFields {
         onFocusChange();
       },
       onEdited: () {
+        doc.markDirtyElement(ed.block); // cambió su contenido: la hoja se guarda
         lastEdited = ed.block.id;
         _notify();
         onEdited(ed.block);
