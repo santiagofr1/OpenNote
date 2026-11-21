@@ -504,10 +504,20 @@ void main() {
         final p0 = ed.scroll.offset;
         await frames.mark();
         final sw = Stopwatch()..start();
+        // el binding de test descarta los toques reales y no dibuja frames por su cuenta: durante la ventana
+        // se dejan pasar los toques de adb y los frames los pide la app como en uso normal
+        final lb = t.binding as LiveTestWidgetsFlutterBinding;
+        final policy = lb.framePolicy;
+        lb.shouldPropagateDevicePointerEvents = true;
+        lb.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
         say('LISTO_PARA_SWIPES');
-        // sin pump: los frames los pide el motor con los toques reales (un pump forzado agregaría frames vacíos)
-        while (sw.elapsed < const Duration(seconds: _compareWindowSeconds)) {
-          await Future<void>.delayed(const Duration(milliseconds: 250));
+        try {
+          while (sw.elapsed < const Duration(seconds: _compareWindowSeconds)) {
+            await Future<void>.delayed(const Duration(milliseconds: 250));
+          }
+        } finally {
+          lb.shouldPropagateDevicePointerEvents = false;
+          lb.framePolicy = policy;
         }
         final f = await frames.take();
         f['recorrido_px'] = r1((ed.scroll.offset - p0).abs());
