@@ -1096,8 +1096,9 @@ void main() {
     final ed = editor(t);
     final image = ed.doc.items.values.firstWhere((i) => i.type == 'image');
     final audio = ed.doc.items.values.firstWhere((i) => i.type == 'audio');
-    // cada uno en su lugar (los dos se insertaron en el centro)
-    for (final (it, x, y) in [(image, 150.0, 200.0), (audio, 150.0, 700.0)]) {
+    // cada uno en su lugar (los dos se insertaron en el centro), uno al lado del otro: en la tablet en horizontal
+    // se ven menos de 800 unidades de alto y un audio más abajo quedaba fuera de pantalla
+    for (final (it, x, y) in [(image, 40.0, 150.0), (audio, 620.0, 250.0)]) {
       ed.doc.markDirtyElement(it);
       it..x = x..y = y;
       ed.doc.markDirtyElement(it);
