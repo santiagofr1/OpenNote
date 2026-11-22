@@ -39,6 +39,16 @@ void main() {
       expect(x.apply(const Offset(50, 50)), near(const Offset(50, 50)));
     });
 
+    test('kx y ky estiran cada eje antes de escalar y girar', () {
+      const x = Xform(pivot: Offset(100, 100), kx: 2);
+      expect(x.isMove, isFalse);
+      expect(x.apply(const Offset(150, 120)), const Offset(200, 120));
+      expect(x.applyRect(const Rect.fromLTWH(100, 100, 50, 20)), const Rect.fromLTWH(100, 100, 100, 20));
+      const y = Xform(pivot: Offset(100, 100), ky: 3, scale: 2);
+      expect(y.apply(const Offset(150, 120)), const Offset(200, 220));
+      expect(const Xform(kx: 1, ky: 1).isMove, isTrue);
+    });
+
     test('imán: a menos de 4° de 0, 90, 180 y 270 queda justo', () {
       double deg(double a) => a * pi / 180;
       expect(snapAngle(deg(3)), 0);
@@ -71,6 +81,13 @@ void main() {
       expect(Offset(m.pts[6], m.pts[7]), near(const Offset(150, 150)));
       expect(m.w, 4);
       expect(m.pts[2], .5, reason: 'la presión no cambia');
+    });
+
+    test('estirar en x: duplica el ancho, no engorda el trazo', () {
+      final s = line('a', 100, 100, 200, 130, w: 4);
+      final m = s.transformed(const Xform(pivot: Offset(100, 100), kx: 2));
+      expect(m.pts, [100, 100, .5, 200, 115, .6, 300, 130, .7]);
+      expect(m.w, 4);
     });
 
     test('la copia no hereda la malla y conserva el z', () {
@@ -177,6 +194,61 @@ void main() {
       sel.applyToBlocks(d);
       expect(sel.bounds(d), before);
       expect(sel.contentRect(d), r);
+    });
+
+    test('estirar con el lado derecho: solo kx, el lado izquierdo queda fijo', () {
+      final d = page(), sel = Selection()..replace(strokes: ['a']);
+      final r = sel.contentRect(d)!;
+      sel.startHandle(d, Handle.right, r.centerRight);
+      expect(sel.drag!.pivot, r.centerLeft);
+      sel.dragTo(r.centerLeft + (r.centerRight - r.centerLeft) * 2);
+      expect(sel.drag!.xf.kx, closeTo(2, 1e-9));
+      expect(sel.drag!.xf.ky, 1);
+      expect(sel.drag!.xf.scale, 1);
+    });
+
+    test('estirar con el lado izquierdo respeta el mínimo', () {
+      final d = page(), sel = Selection()..replace(items: ['i']);
+      final r = sel.contentRect(d)!;
+      sel.startHandle(d, Handle.left, r.centerLeft);
+      sel.dragTo(r.centerRight + const Offset(50, 0)); // pasa al otro lado del ancla
+      expect(sel.drag!.xf.kx, closeTo(60 / 100, 1e-9));
+    });
+
+    test('estirar hacia abajo: solo ky', () {
+      final d = page(), sel = Selection()..replace(items: ['i']);
+      final r = sel.contentRect(d)!;
+      sel.startHandle(d, Handle.bottom, r.bottomCenter);
+      sel.dragTo(r.bottomCenter + Offset(0, r.height));
+      expect(sel.drag!.xf.ky, closeTo(2, 1e-9));
+      expect(sel.drag!.xf.kx, 1);
+    });
+
+    test('estirar un elemento: el ancho se duplica, el alto no y el lado opuesto queda fijo', () {
+      final d = page(), sel = Selection()..replace(items: ['i']);
+      final r = sel.contentRect(d)!;
+      sel.startHandle(d, Handle.right, r.centerRight);
+      sel.dragTo(r.centerRight + Offset(r.width, 0));
+      sel.applyToBlocks(d);
+      final it = d.items['i']!;
+      expect(it.w, closeTo(200, 1e-9));
+      expect(it.h, 80);
+      expect(it.x, closeTo(300, 1e-9));
+      expect(it.y, closeTo(100, 1e-9));
+    });
+
+    test('estirar un texto: el ancho se duplica y la escala no cambia', () {
+      final d = page(), sel = Selection()..replace(texts: ['t']);
+      final r = sel.contentRect(d)!;
+      sel.startHandle(d, Handle.right, r.centerRight);
+      sel.dragTo(r.centerRight + Offset(r.width, 0)); // kx = 2
+      sel.applyToBlocks(d);
+      final t = d.texts['t']!;
+      expect(sel.drag!.xf.kx, closeTo(2, 1e-9));
+      expect(t.w, closeTo(r.width * 2, 1e-6), reason: 'parte del ancho que se ve (el texto corto no llena la caja)');
+      expect(t.scale, 1);
+      expect(t.x, closeTo(100, 1e-6));
+      expect(sel.contentRect(d), r, reason: 'el original se reconstruye con su ancho');
     });
   });
 }

@@ -60,7 +60,7 @@ void paintLiveLayer(
     c.save();
     c.translate(xf.pivot.dx + xf.shift.dx, xf.pivot.dy + xf.shift.dy);
     c.rotate(xf.angle);
-    c.scale(xf.scale);
+    c.scale(xf.scale * xf.kx, xf.scale * xf.ky);
     c.translate(-xf.pivot.dx, -xf.pivot.dy);
     draw();
     c.restore();

@@ -147,6 +147,18 @@ class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
         )),
         const SizedBox(height: 6),
 
+        Row(children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              _label('Figuras inteligentes'),
+              Text('Mantené el lápiz quieto al terminar una forma',
+                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            ]),
+          ),
+          Switch(key: const Key('shapeSnapSwitch'), value: ts.shapeSnap, onChanged: (v) => _set(() => ts.shapeSnap = v)),
+        ]),
+        const SizedBox(height: 6),
+
         _label('Color'),
         if (isHl)
           Wrap(spacing: 6, runSpacing: 6, children: [for (final c in hlPalette) _swatch(c, c == p.color)])
