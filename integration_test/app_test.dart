@@ -188,7 +188,7 @@ void main() {
 
   testWidgets('pinceles de diseño: el panel del lápiz tiene la sección Diseños y cada uno deja un trazo con su punta (issue #6)', (t) async {
     await start(t);
-    await createNotebook(t, 'Diseños');
+    await createNotebook(t, 'Pinceles');
     final c = sheetCenter(t);
     var y = -120.0;
     for (final (id, name) in designTips) {

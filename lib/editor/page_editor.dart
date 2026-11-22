@@ -1104,6 +1104,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       _ => Alignment.topCenter
     };
     await showPenPanel(context, ts, () {
+      if (!mounted) return; // el panel se cierra (dispose) después del editor: ya no hay a quién avisar
       setState(() {});
       widget.onPrefsChanged();
     }, align);
