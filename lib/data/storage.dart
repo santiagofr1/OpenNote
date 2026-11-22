@@ -70,13 +70,15 @@ class Storage {
 
   Future<String> addMedia(List<int> bytes, String ext) async {
     final name = '${newId('m')}.$ext';
-    await media(name).writeAsBytes(bytes, flush: true);
+    await _writeBytes(media(name), bytes); // temporal + rename: la sync nunca ve el archivo a medias
     return name;
   }
 
   Future<String> addMediaFile(File src, String ext) async {
     final name = '${newId('m')}.$ext';
-    await src.copy(media(name).path);
+    final tmp = '${media(name).path}.tmp'; // la sync ignora los .tmp: nunca ve la copia a medias
+    await src.copy(tmp);
+    await File(tmp).rename(media(name).path);
     return name;
   }
 

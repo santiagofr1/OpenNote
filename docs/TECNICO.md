@@ -428,6 +428,27 @@ Detalle y decisiones en `docs/SINCRONIZACION.md` (sección "Decisión: Google Dr
   (planificador con reloj falso), `test/screens/sync_ui_test.dart` (indicador y aviso), y en `integration_test/app_test.dart`
   el caso de sincronización automática (tarda ~15 s en la tablet: usa tiempos acortados `syncPoll` / `syncDebounce`).
 
+### Imágenes y audios en la sync (issue #11b)
+
+"Puse una imagen y un audio y falla la sincronización": no se pudo probar contra Drive real, así que la causa se buscó
+leyendo el camino de `media/` y se reprodujo con el remoto falso y un `http.Client` falso (`test/sync/sync_media_test.dart`).
+Causas encontradas, todas arregladas:
+
+1. **Nombre del archivo.** `makeAudioFileItem` sacaba la extensión de lo que viniera después del último punto de la RUTA
+   entera. Un audio sin extensión dentro de una carpeta con punto (el paquete de Android es `com.apuntes.apuntes`), o con
+   espacios / fechas con puntos en el nombre, daba un nombre en `media/` que no encaja en la regex de `sync_paths.dart`
+   (el motor lo ignora en silencio: el audio nunca llega al otro dispositivo) o que ni siquiera se podía copiar. Ahora
+   `mediaExt` toma solo la extensión del NOMBRE y solo si son 1 a 8 letras / números; si no, usa `m4a` (audio) o `jpg`.
+2. **Subida de archivos grandes.** `DriveRemoteStore.upload` mandaba todo en un solo pedido multipart, que Google recomienda
+   solo hasta 5 MB. Un audio importado o una foto grande se cortaba con facilidad. Desde `kResumableFrom` (5 MB) se usa la
+   subida reanudable (partes de 4 MiB, con reintento de la parte que falla). Ojo: probado solo contra un Drive falso.
+3. **Archivos a medio escribir y hash viejo.** `Storage.addMedia` / `addMediaFile` escribían directo al nombre final, así
+   que la sync podía subir un archivo a medias; y el motor anotaba en la base el hash de una lectura anterior a la subida:
+   un archivo que seguía creciendo dejaba un hash equivocado, la próxima subida mandaba `ifRemoteMd5` viejo y Drive
+   devolvía "El archivo cambió en la nube". Ahora los medios se escriben a `<nombre>.tmp` y se renombran (la sync ignora
+   `.tmp`), y `SyncEngine._readStable` lee los bytes una vez, calcula el hash de ESOS bytes y, si el archivo cambió
+   mientras se leía, lo deja para la próxima pasada.
+
 ## Compilar e instalar en la tablet
 
 ```

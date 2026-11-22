@@ -34,6 +34,9 @@ class Pickers {
     return p == null ? null : File(p).readAsBytes();
   };
 
+  /// Cuánto dura un audio (ms); variable para que los tests no necesiten el plugin de audio.
+  static Future<int> Function(File) audioLength = (f) => audioDuration(f);
+
   static Future<File?> Function() audio = () async {
     final r = await FilePicker.pickFiles(type: FileType.audio);
     final p = r.isEmpty ? null : r.first.path;
@@ -47,7 +50,7 @@ Future<Item?> makeImageItem(Storage store, {required bool camera}) async {
   if (f == null) return null;
   final bytes = await f.readAsBytes();
   final img = await decodeImage(bytes);
-  final ext = f.path.toLowerCase().endsWith('.png') ? 'png' : 'jpg';
+  final ext = mediaExt(f.path, 'jpg') == 'png' ? 'png' : 'jpg';
   final name = await store.addMedia(bytes, ext);
   const w = 560.0;
   final h = w * img.height / img.width;
@@ -74,12 +77,22 @@ Future<int> audioDuration(File f) async {
   }
 }
 
+/// La extensión para el nombre en media/ de un archivo elegido ([path]): solo la del NOMBRE del archivo (no la de las
+/// carpetas) y solo si son letras y números (hasta 8). Si no, [fallback]. Todo nombre de media/ tiene que encajar en
+/// sync_paths.dart: una extensión con espacios, barras o muy larga dejaba el archivo sin sincronizar (o sin copiar).
+String mediaExt(String path, String fallback) {
+  final name = path.split(RegExp(r'[/\\]')).last;
+  final dot = name.lastIndexOf('.');
+  final ext = dot < 0 ? '' : name.substring(dot + 1).toLowerCase();
+  return RegExp(r'^[a-z0-9]{1,8}$').hasMatch(ext) ? ext : fallback;
+}
+
 Future<Item?> makeAudioFileItem(Storage store) async {
   final f = await Pickers.audio();
   if (f == null) return null;
-  final ext = f.path.contains('.') ? f.path.split('.').last.toLowerCase() : 'm4a';
+  final ext = mediaExt(f.path, 'm4a');
   final name = await store.addMediaFile(f, ext);
-  return makeAudioItem(name, await audioDuration(store.media(name)));
+  return makeAudioItem(name, await Pickers.audioLength(store.media(name)));
 }
 
 /// PDF → una hoja nueva por cada página del PDF, con la página como imagen. Cada hoja viene con su

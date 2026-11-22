@@ -263,8 +263,8 @@ class SyncEngine {
     return B != null && R == B;
   }
 
-  Future<void> _markBase(String p, String hash, {String? text}) async {
-    final st = await store.syncFile(p).stat();
+  Future<void> _markBase(String p, String hash, {String? text, FileStat? stat}) async {
+    final st = stat ?? await store.syncFile(p).stat();
     _st.base[p] = FileBase(hash, st.size, st.modified.millisecondsSinceEpoch);
     _st.remote[p] = hash;
     if (text != null) _st.baseText[p] = text;
@@ -291,6 +291,25 @@ class SyncEngine {
   String _md5(List<int> b) => md5.convert(b).toString();
 
   // ---------- hojas y medios ----------
+  /// Lee [p] para subirlo: sus bytes, el hash DE ESOS BYTES y el `stat` tomado antes de leer. Si el archivo cambia mientras
+  /// se lee (una grabación o una copia que sigue escribiéndose) no se sube a medias: queda para la próxima pasada. La base
+  /// se anota con este hash y este `stat` (no con los de una lectura anterior): si no, un archivo que creció entre el hash
+  /// y la subida quedaba anotado con el hash viejo, la próxima subida pedía el hash equivocado y Drive devolvía conflicto.
+  Future<(Uint8List, String, FileStat)> _readStable(String p) async {
+    final f = store.syncFile(p);
+    final before = await f.stat();
+    final bytes = await f.readAsBytes();
+    final after = await f.stat();
+    if (before.size != after.size || before.modified != after.modified || bytes.length != after.size) throw const _Skip();
+    return (bytes, _md5(bytes), after);
+  }
+
+  Future<void> _uploadFile(String p) async {
+    final (bytes, h, st) = await _readStable(p);
+    await _upload(p, bytes);
+    await _markBase(p, h, stat: st);
+  }
+
   Future<void> _opaque(String p) async {
     final l = await _stat(p), L = l?.md5, R = _st.remote[p], B = _st.base[p]?.md5;
     final nb = notebookIdOf(p);
@@ -303,8 +322,7 @@ class SyncEngine {
         return;
       }
       if (nb != null) _active.add(nb);
-      await _upload(p, await store.syncFile(p).readAsBytes());
-      return _markBase(p, L);
+      return _uploadFile(p);
     }
     if (L == null && R != null) {
       if (B != null && R == B) {
@@ -324,10 +342,7 @@ class SyncEngine {
     await _putLocal(p, L!);
   }
 
-  Future<void> _putLocal(String p, String L) async {
-    await _upload(p, await store.syncFile(p).readAsBytes());
-    await _markBase(p, L);
-  }
+  Future<void> _putLocal(String p, String L) => _uploadFile(p);
 
   Future<void> _takeRemote(String p, String? expectLocal) async {
     final bytes = await _download(p);
@@ -367,8 +382,7 @@ class SyncEngine {
       await _upload(np, bytes);
       await _markBase(np, rMd5);
     }
-    await _upload(p, await store.syncFile(p).readAsBytes());
-    await _markBase(p, L);
+    await _uploadFile(p);
     _rep.conflicts++;
     _st.conflictCount++;
   }
