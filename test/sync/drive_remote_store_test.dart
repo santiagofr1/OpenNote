@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:apuntes/sync/drive_remote_store.dart';
+import 'package:apuntes/sync/remote_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -49,11 +50,23 @@ void main() {
   test('proceso nuevo con token guardado: listado COMPLETO (lo borrado antes no figura y el motor lo ve como borrado)', () async {
     // se borró notebook.json en otro dispositivo mientras esta app no corría
     final (c, calls) = fake(() => [for (final f in tree) if (f['id'] != 'nb') f]);
-    final store = DriveRemoteStore(c);
+    final store = DriveRemoteStore(c, rootName: 'OpenNote');
     final ch = await store.changes('T0-viejo');
     expect(ch.full, isTrue);
     expect(ch.files.map((f) => f.path), ['index.json']);
     expect(ch.nextToken, 'T1');
+    expect(calls.any((p) => p.endsWith('/changes') && !p.endsWith('startPageToken')), isFalse, reason: 'no se usó el delta');
+  });
+
+  test('un download previo (crypto.json) carga el mapa pero igual el primer changes es listado COMPLETO con el md5 actual', () async {
+    // index.json cambió en Drive antes de que el proceso cargara el mapa
+    final (c, calls) = fake(() => [for (final f in tree) f['id'] == 'i' ? {...f, 'md5Checksum': 'nuevo'} : f]);
+    final store = DriveRemoteStore(c, rootName: 'OpenNote');
+    await expectLater(store.download('crypto.json'), throwsA(isA<RemoteNotFoundException>()));
+    calls.clear();
+    final ch = await store.changes('T0-viejo');
+    expect(ch.full, isTrue);
+    expect(ch.files.firstWhere((f) => f.path == 'index.json').md5, 'nuevo');
     expect(calls.any((p) => p.endsWith('/changes') && !p.endsWith('startPageToken')), isFalse, reason: 'no se usó el delta');
   });
 
@@ -64,7 +77,7 @@ void main() {
             {'fileId': 'nb', 'removed': false, 'file': {...file('nb', 'notebook.json', 'f2', md5: 'bb'), 'trashed': true}},
           ],
         });
-    final store = DriveRemoteStore(c);
+    final store = DriveRemoteStore(c, rootName: 'OpenNote');
     final first = await store.changes(null);
     expect(first.full, isTrue);
     expect(first.files.map((f) => f.path).toSet(), {'index.json', 'notebooks/n1/notebook.json'});

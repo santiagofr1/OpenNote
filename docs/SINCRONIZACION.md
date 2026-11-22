@@ -507,6 +507,11 @@ pisan entre dispositivos.
   (`getStartPageToken` + `files.list`), aunque haya token guardado: con un delta, lo borrado mientras la app no corría
   no figuraría en el mapa recién cargado y nunca saldría como borrado. El motor trata el listado completo como verdad
   (lo que está en la base y no en la nube se borra acá); si la carpeta aparece de verdad vacía no se borra nada y se vuelve a subir.
+- **"Mapa cargado" no es "listado entregado" (issue #9).** `crypto.wrap` baja `crypto.json` antes del primer `changes()`
+  y eso ya carga el mapa de Drive; si el delta se decidiera por "mapa cargado", lo que cambió en Drive antes (otro
+  dispositivo, o la tarea de fondo de Android, que es otro proceso) no aparecería nunca y `index.json` daría conflicto
+  para siempre. Por eso `DriveRemoteStore` lleva `_listed`: hasta que el motor recibió un listado completo, `changes()`
+  lista todo. Defensa extra: si un archivo da `RemoteConflictException`, el motor borra el token y la próxima pasada lista todo.
 
 ### Cuaderno abierto (regla de oro)
 

@@ -3,6 +3,7 @@
 //
 //   flutter test integration_test -d <id de la tablet>
 
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -1198,6 +1199,49 @@ void main() {
     await s2.init();
     await SyncEngine(s2, remote, account: 'x').sync();
     expect((await s2.loadIndex()).notebooks.map((n) => n.name), contains('Para nube'));
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('sincronización: borrar un cuaderno sincronizado lo borra de la nube (remoto falso)', (t) async {
+    final remote = FakeRemoteStore();
+    await t.pumpWidget(ApuntesApp(root: root, backend: FakeBackend(remote)));
+    await settle(t, 1500);
+    await createNotebook(t, 'Para borrar');
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+    Future<void> syncNow() async {
+      await t.tap(find.byKey(const Key('libraryMenu')));
+      await settle(t);
+      await t.tap(find.byKey(const Key('syncMenu')));
+      await settle(t, 600);
+      if (find.byKey(const Key('syncConnect')).evaluate().isNotEmpty) {
+        await t.tap(find.byKey(const Key('syncConnect')));
+        for (var i = 0; i < 60 && find.byKey(const Key('syncNow')).evaluate().isEmpty; i++) {
+          await settle(t, 100);
+        }
+      }
+      await t.tap(find.byKey(const Key('syncNow')));
+      await settle(t, 3000);
+      await t.tapAt(const Offset(5, 5)); // cierra la hoja de sincronización
+      await settle(t, 600);
+    }
+
+    await syncNow();
+    expect(remote.paths.where((p) => p.endsWith('/notebook.json')), isNotEmpty);
+    final before = remote.paths.where((p) => p.endsWith('/notebook.json')).length;
+    expect(utf8.decode(remote.bytesOf('index.json')!), contains('Para borrar'));
+
+    // mantener apretado el cuaderno → Borrar → confirmar → sincronizar
+    await holdOn(t, find.byKey(const Key('nb-Para borrar')));
+    await settle(t);
+    await t.tap(find.text('Borrar'));
+    await settle(t);
+    await t.tap(find.byKey(const Key('confirmDelete')));
+    await settle(t, 800);
+    expect(find.byKey(const Key('nb-Para borrar')), findsNothing);
+    await syncNow();
+    expect(utf8.decode(remote.bytesOf('index.json')!), isNot(contains('Para borrar')), reason: 'el índice de la nube ya no lo tiene');
+    expect(remote.paths.where((p) => p.endsWith('/notebook.json')).length, before - 1, reason: 'sus archivos se borraron de la nube');
     expect(t.takeException(), isNull);
   });
 

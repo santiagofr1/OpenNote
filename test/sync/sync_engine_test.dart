@@ -398,6 +398,31 @@ void main() {
     expect(await texts(b, keep.id, 0), ['Se queda 0']);
   });
 
+  test('borrar con el estado de la nube desfasado (index.json cambió y el delta no lo informó): conflicto una vez y la segunda pasada lo resuelve', () async {
+    final a = await device(), b = await device(), r = FakeRemoteStore();
+    final keep = await create(a, 'Se queda', n: 1);
+    final gone = await create(a, 'Se borra', n: 2);
+    await sync(a, r);
+    await sync(b, r);
+    // B agrega un cuaderno y sincroniza: index.json cambia en la nube
+    final fromB = await create(b, 'De B');
+    await sync(b, r);
+    // A borra un cuaderno y sincroniza con un remoto que no le cuenta lo que cambió en index.json (queda desfasado)
+    final idxA = await a.loadIndex();
+    await a.deleteNotebook(idxA, idxA.notebooks.firstWhere((n) => n.id == gone.id));
+    final blind = _BlindDelta(r);
+    final first = await SyncEngine(a, blind, account: 'a@b.c').sync();
+    expect(first.errors.any((e) => e.startsWith('index.json')), isTrue, reason: 'el desfase se nota como conflicto');
+    expect(blind.blindCalls, 1);
+    // la segunda pasada pide listado completo y se cura sola
+    final second = await SyncEngine(a, blind, account: 'a@b.c').sync();
+    expect(second.ok, isTrue, reason: second.errors.join('; '));
+    expect(r.paths.where((p) => p.contains(gone.id)), isEmpty, reason: 'sus archivos se borraron de la nube');
+    final remoteIdx = NotesIndex.fromJson(jsonDecode(utf8.decode(r.bytesOf('index.json')!)) as Map);
+    expect(remoteIdx.notebooks.map((n) => n.id).toSet(), {keep.id, fromB.id}, reason: 'sin el borrado y con lo de B');
+    expect((await index(a)).notebooks.map((n) => n.id).toSet(), {keep.id, fromB.id});
+  });
+
   test('borrar en A y B con un proceso NUEVO de Drive (token viejo, el borrado pasó antes): el listado completo lo detecta', () async {
     final a = await device(), b = await device(), r = FakeRemoteStore();
     final keep = await create(a, 'Se queda');
@@ -566,6 +591,29 @@ class _FreshProcess implements RemoteStore {
       return inner.changes(null);
     }
     return inner.changes(token);
+  }
+
+  @override
+  Future<Uint8List> download(String path) => inner.download(path);
+  @override
+  Future<RemoteFile> upload(String path, Uint8List bytes, {String? ifRemoteMd5}) => inner.upload(path, bytes, ifRemoteMd5: ifRemoteMd5);
+  @override
+  Future<void> delete(String path) => inner.delete(path);
+  @override
+  Future<void> createFolder(String path) => inner.createFolder(path);
+}
+
+/// Un remoto cuyo primer delta (con token) no informa ningún cambio aunque los haya: el estado del motor queda desfasado.
+class _BlindDelta implements RemoteStore {
+  _BlindDelta(this.inner);
+  final FakeRemoteStore inner;
+  int blindCalls = 0;
+  @override
+  Future<RemoteChanges> changes(String? token) async {
+    final ch = await inner.changes(token);
+    if (token == null || blindCalls > 0) return ch;
+    blindCalls++;
+    return RemoteChanges(files: const [], nextToken: ch.nextToken);
   }
 
   @override
