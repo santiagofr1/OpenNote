@@ -4,7 +4,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'selection.dart';
 import 'slop_drag.dart';
 
-/// Manijas sobre el recuadro de la selección: una en cada esquina para escalar y, si hay trazos, una arriba del centro
+/// Manijas sobre el recuadro de la selección: una en cada esquina para escalar, una en el medio de cada lado para estirar y, si hay trazos, una arriba del centro
 /// del borde de arriba (unida con una rayita) para rotar. Todo en pantalla, del mismo tamaño con cualquier zoom.
 /// Las posiciones ([corners]: arriba-izquierda, arriba-derecha, abajo-derecha, abajo-izquierda; [rotateAt]) vienen en
 /// coordenadas del widget y siguen a la transformación en curso. El arrastre avisa con la posición GLOBAL del dedo o el
@@ -13,6 +13,9 @@ class SelectionHandles extends StatelessWidget {
   /// Zona de toque (cómoda para lápiz y dedo) y círculo que se dibuja adentro.
   static const double hit = 28, dot = 16;
   final List<Offset> corners;
+
+  /// Puntos medios de los lados (arriba, derecha, abajo, izquierda); null = esa manija no se muestra.
+  final List<Offset?>? sides;
   final Offset? rotateAt, topMid;
   final void Function(Handle h, Offset global) onStart, onUpdate;
   final VoidCallback onEnd;
@@ -25,6 +28,7 @@ class SelectionHandles extends StatelessWidget {
     required this.onStart,
     required this.onUpdate,
     required this.onEnd,
+    this.sides,
     this.rotateAt,
     this.topMid,
     this.onPointerDown,
@@ -73,6 +77,9 @@ class SelectionHandles extends StatelessWidget {
             child: IgnorePointer(child: CustomPaint(painter: _RodPainter(topMid!, rotateAt!, cs.primary))),
           ),
         for (final (i, h) in const [Handle.tl, Handle.tr, Handle.br, Handle.bl].indexed) handle(h, corners[i]),
+        if (sides != null)
+          for (final (i, h) in const [Handle.top, Handle.right, Handle.bottom, Handle.left].indexed)
+            if (sides![i] != null) handle(h, sides![i]!),
         if (rotateAt != null) handle(Handle.rotate, rotateAt!, icon: Symbols.rotate_right),
       ]),
     );

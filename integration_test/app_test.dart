@@ -1195,6 +1195,75 @@ void main() {
     expect(ed.sel.strokes, {far}, reason: 'el segundo toque, ya sin selección, elige');
   });
 
+  testWidgets('selección: las manijas del medio estiran solo a lo ancho o solo a lo alto (trazos e imagen)', (t) async {
+    final img = await fakeImage(400, 300);
+    Pickers.image = (_) async => img;
+    await start(t);
+    await createNotebook(t, 'Estirar');
+    final p = docToScreen(t);
+    final ed = editor(t);
+    // igual que en el test de escalar: todo dentro de la parte visible de la hoja
+    final view = t.getRect(find.byType(PageEditor)), origin = p(Offset.zero);
+    final visH = view.height / ed.scale;
+    final top = (view.top - origin.dy) / ed.scale + visH * .22, ky = (visH * .5 / 600).clamp(0.2, 1.0);
+    Offset q(double x, double y) => p(Offset(x, top + (y - 100) * ky));
+    // un trazo en L
+    await stylusLine(t, q(200, 200), q(200, 450));
+    await stylusLine(t, q(200, 450), q(450, 450));
+    expect(ed.doc.strokes.length, 2);
+
+    await t.tap(find.byTooltip('Seleccionar'));
+    await settle(t);
+    await stylusDrag(t, q(150, 150), q(500, 500)); // ventana sobre la L
+    expect(ed.sel.strokes.length, 2);
+    for (final n in ['top', 'right', 'bottom', 'left']) {
+      expect(find.byKey(Key('selHandle-$n')), findsOneWidget, reason: 'manija $n');
+    }
+    final r0 = ed.sel.contentRect(ed.doc)!;
+
+    // a la derecha: crece el ancho, el alto no
+    final right = t.getCenter(find.byKey(const Key('selHandle-right')));
+    await stylusDrag(t, right, right + const Offset(120, 0));
+    final r1 = ed.sel.contentRect(ed.doc)!;
+    expect(r1.width, greaterThanOrEqualTo(r0.width * 1.3), reason: 'se estiró a lo ancho');
+    expect((r1.height - r0.height).abs(), lessThan(2), reason: 'el alto no cambia');
+
+    // deshacer vuelve
+    await t.tap(find.byTooltip('Deshacer'));
+    await settle(t);
+    final r2 = ed.sel.contentRect(ed.doc)!;
+    expect(r2.width, closeTo(r0.width, 1e-6));
+    expect(r2.height, closeTo(r0.height, 1e-6));
+
+    // hacia abajo: crece el alto, el ancho no
+    final bottom = t.getCenter(find.byKey(const Key('selHandle-bottom')));
+    await stylusDrag(t, bottom, bottom + const Offset(0, 40));
+    final r3 = ed.sel.contentRect(ed.doc)!;
+    expect(r3.height, greaterThan(r0.height * 1.05), reason: 'se estiró a lo alto');
+    expect((r3.width - r0.width).abs(), lessThan(2), reason: 'el ancho no cambia');
+
+    // una imagen sola: estirada a la derecha pierde la proporción
+    await t.tap(find.byKey(const Key('insert')));
+    await settle(t);
+    await t.tap(find.text('Imagen'));
+    await settle(t, 1200);
+    final it = ed.doc.items.values.single;
+    await t.tap(find.byTooltip('Seleccionar'));
+    await settle(t);
+    final g = await t.startGesture(p(it.rect.center), kind: PointerDeviceKind.stylus);
+    await g.up();
+    await settle(t);
+    expect(ed.sel.items, {it.id});
+    expect(ed.sel.strokes, isEmpty);
+    final w0 = it.w, h0 = it.h;
+    final side = t.getCenter(find.byKey(const Key('selHandle-right')));
+    final target = Offset(min(side.dx + 60, view.right - 20), side.dy);
+    await stylusDrag(t, side, target);
+    final it2 = ed.doc.items[it.id]!;
+    expect(it2.w, greaterThan(w0 * 1.02), reason: 'la imagen se ensanchó');
+    expect(it2.h, closeTo(h0, 1e-6), reason: 'el alto queda igual: la proporción se rompe');
+  });
+
   testWidgets('con el dedo se selecciona y mueve una imagen / audio (issue #11a)', (t) async {
     final img = await fakeImage(400, 300);
     Pickers.image = (_) async => img;
@@ -1929,5 +1998,77 @@ void main() {
     expect(find.byKey(const Key('cryptoPass1')), findsOneWidget, reason: 'el diálogo sigue abierto');
     expect(remote.has('crypto.json'), isFalse, reason: 'no se activó nada');
     expect(t.takeException(), isNull);
+  });
+
+  testWidgets('figuras inteligentes: un círculo a mano con el lápiz quieto se convierte, se agranda arrastrando, el interruptor la apaga (issue #3)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Figuras');
+    final p = docToScreen(t);
+    final ed = editor(t);
+    // todo dentro de la parte visible de la hoja (ver el test de la selección)
+    final view = t.getRect(find.byType(PageEditor)), origin = p(Offset.zero);
+    final visH = view.height / ed.scale;
+    final cy = (view.top - origin.dy) / ed.scale + visH * .4, r = min(90.0, visH * .22);
+    final center = Offset(400, cy);
+
+    /// círculo a mano (40 puntos, ruido determinístico) y se queda quieto ~800 ms reales; devuelve el lápiz apoyado
+    Future<TestGesture> circleAndHold() async {
+      Offset pt(int i) {
+        final a = 2 * pi * i / 40, k = 1 + .02 * sin(i * 2.3);
+        return p(center + Offset(cos(a), sin(a)) * r * k);
+      }
+
+      final g = await t.startGesture(pt(0), kind: PointerDeviceKind.stylus);
+      for (var i = 1; i <= 41; i++) {
+        await g.moveTo(pt(i % 40 == 0 ? 0 : i));
+        await t.pump(const Duration(milliseconds: 16));
+      }
+      final end = DateTime.now().add(const Duration(milliseconds: 800));
+      while (DateTime.now().isBefore(end)) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        await t.pump();
+      }
+      return g;
+    }
+
+    var g = await circleAndHold();
+    expect(ed.snappedKind, ShapeKind.circle);
+    final w0 = ed.live!.bounds.width;
+    // alejar el lápiz del centro agranda la figura
+    final from = p(center + Offset(r, 0));
+    for (var i = 1; i <= 5; i++) {
+      await g.moveTo(from + Offset(i * 12.0, 0));
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    await g.up();
+    await settle(t);
+    expect(ed.snappedKind, isNull, reason: 'al soltar se limpia');
+    expect(ed.doc.strokes.length, 1);
+    expect(ed.doc.strokes.values.single.bounds.width, greaterThan(w0 + 5));
+
+    await t.tap(find.byTooltip('Deshacer'));
+    await settle(t);
+    expect(ed.doc.strokes, isEmpty);
+
+    // apagar el interruptor en el panel del lápiz
+    await t.tap(find.byTooltip('Lápiz · tocá de nuevo para opciones'));
+    await settle(t);
+    expect(ed.ts.shapeSnap, isTrue);
+    await t.ensureVisible(find.byKey(const Key('shapeSnapSwitch')));
+    await t.tap(find.byKey(const Key('shapeSnapSwitch')));
+    await settle(t);
+    expect(ed.ts.shapeSnap, isFalse);
+    Navigator.of(t.element(find.byKey(const Key('shapeSnapSwitch')))).pop();
+    await settle(t);
+    expect(find.byKey(const Key('shapeSnapSwitch')), findsNothing);
+
+    g = await circleAndHold();
+    expect(ed.snappedKind, isNull);
+    await g.up();
+    await settle(t);
+    expect(ed.doc.strokes.length, 1);
+    final s = ed.doc.strokes.values.single;
+    // a mano quedan los ~42 puntos del gesto; la figura limpia tiene uno cada 2 unidades (más de 100 con este radio)
+    expect(s.n, inInclusiveRange(30, 60), reason: 'sigue siendo el trazo a mano');
   });
 }

@@ -11,6 +11,7 @@ export 'paint_shapes.dart';
 export 'notebook_doc.dart';
 export 'paper_layout.dart';
 export 'rich_text.dart';
+export 'shape_recognizer.dart';
 export 'stroke.dart';
 export 'stroke_mesh.dart';
 export 'tools.dart';

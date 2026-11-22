@@ -23,6 +23,14 @@ void main() {
     expect([b.eraserSize, b.dock, b.zoom, b.zoomLocked], [2, 'left', 1.5, true]);
   });
 
+  test('prefs: figuras inteligentes, ida y vuelta y por defecto prendidas', () {
+    expect(ToolState().shapeSnap, isTrue);
+    final a = ToolState()..shapeSnap = false;
+    final b = ToolState()..load(jsonDecode(jsonEncode(a.toJson())) as Map);
+    expect(b.shapeSnap, isFalse);
+    expect((ToolState()..load({'tool': 'pen'})).shapeSnap, isTrue, reason: 'sin la clave queda prendido');
+  });
+
   test('prefs viejas o raras: valores por defecto y límites', () {
     final t = ToolState()..load({'tool': 'laser', 'dock': 'bottom', 'zoom': 9, 'eraserSize': 7, 'pen': {'width': 3}});
     expect(t.tool, Tool.pen);

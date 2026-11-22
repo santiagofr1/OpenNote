@@ -98,6 +98,7 @@ class ToolState {
   String dock = 'top'; // top | left | right
   double zoom = 1; // 1 = la hoja entra justa a lo ancho
   bool zoomLocked = false;
+  bool shapeSnap = true; // figuras inteligentes: lápiz quieto al final del trazo lo vuelve figura limpia
   final clipboard = SelectionClipboard(); // no se guarda
 
   bool get drawing => tool == Tool.pen || tool == Tool.hl || tool == Tool.paint;
@@ -135,6 +136,7 @@ class ToolState {
         'dock': dock,
         'zoom': zoom,
         'zoomLocked': zoomLocked,
+        'shapeSnap': shapeSnap,
       };
 
   void load(Map? j) {
@@ -157,5 +159,6 @@ class ToolState {
     if (const ['top', 'left', 'right'].contains(j['dock'])) dock = j['dock'] as String;
     zoom = ((j['zoom'] ?? 1) as num).toDouble().clamp(.5, 4.0);
     zoomLocked = (j['zoomLocked'] ?? false) as bool;
+    shapeSnap = j['shapeSnap'] is bool ? j['shapeSnap'] as bool : true;
   }
 }

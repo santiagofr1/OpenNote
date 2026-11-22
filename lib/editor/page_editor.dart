@@ -119,6 +119,25 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   // trazo o goma en curso: un solo puntero de lápiz/mouse a la vez
   int? pointer;
   Stroke? live;
+
+  // figuras inteligentes: lápiz quieto al final de un trazo lo vuelve figura limpia; apoyado, arrastrar la agranda
+  Timer? _shapeHold;
+  Offset? _holdAnchor; // dónde empezó la quietud
+  ShapeFit? _snapFit, _snapBase; // figura actual y la que salió del reconocimiento (se escala siempre desde ésta)
+  Offset? _snapGrab; // dónde estaba el lápiz al convertirse
+  double _snapPressure = .5;
+
+  @visibleForTesting
+  ShapeKind? get snappedKind => _snapFit?.kind;
+
+  bool get _snapOn => (ts.tool == Tool.pen || ts.tool == Tool.hl) && ts.shapeSnap;
+
+  void _endShapeHold() {
+    _shapeHold?.cancel();
+    _shapeHold = null;
+    _snapFit = _snapBase = _snapGrab = _holdAnchor = null;
+  }
+
   Offset? eraserAt;
   List<Stroke>? erased;
 
@@ -175,6 +194,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       sel.clear();
       pointer = null;
       live = null;
+      _endShapeHold();
       erased = null;
       eraserAt = null;
       liveTick.value++;
@@ -200,6 +220,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       v.dispose();
     }
     _stillTimer?.cancel();
+    _shapeHold?.cancel();
     _imgs.dispose();
     liveTick.dispose();
     _zoomPillTimer?.cancel();
@@ -538,8 +559,53 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         live = Stroke(newId('s'), ts.tool == Tool.hl ? 'hl' : pr.tip, pr.color, pr.width, [], pr.opacity,
             ts.tool == Tool.paint ? ts.paintParams : null);
         appendInkPoint(live!, p, pressureOf(e));
+        _snapFit = _snapBase = _snapGrab = null;
+        _shapeHold?.cancel();
+        if (_snapOn) {
+          _holdAnchor = p;
+          _shapeHold = Timer(const Duration(milliseconds: 550), _snapShape);
+        }
         liveTick.value++;
     }
+  }
+
+  /// El lápiz quedó quieto: si el trazo parece una figura, se reemplaza por la figura limpia.
+  void _snapShape() {
+    final s = live;
+    if (s == null || pointer == null || !mounted) return;
+    final fit = recognizeShape(s.pts);
+    if (fit == null) return;
+    var sum = 0.0;
+    for (var i = 2; i < s.pts.length; i += 3) {
+      sum += s.pts[i];
+    }
+    _snapPressure = (sum / s.n).clamp(.3, 1.0);
+    s.pts
+      ..clear()
+      ..addAll(fit.toPoints(_snapPressure));
+    s.invalidate();
+    _snapBase = _snapFit = fit;
+    _snapGrab = _holdAnchor;
+    HapticFeedback.selectionClick();
+    liveTick.value++;
+  }
+
+  /// Con la figura ya hecha y el lápiz apoyado: arrastrar la agranda/achica (la recta mueve su extremo).
+  void _dragSnap(Stroke s, Offset p) {
+    final base = _snapBase!;
+    final ShapeFit fit;
+    if (base.kind == ShapeKind.line) {
+      fit = base.withLineEnd(p);
+    } else {
+      final d0 = (_snapGrab! - base.center).distance;
+      final k = d0 < 1e-6 ? 1.0 : ((p - base.center).distance / d0).clamp(.15, 8.0);
+      fit = base.scaled(k);
+    }
+    _snapFit = fit;
+    s.pts
+      ..clear()
+      ..addAll(fit.toPoints(_snapPressure));
+    s.invalidate();
   }
 
   void _move(PointerMoveEvent e) {
@@ -558,7 +624,9 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     if (s != null && wantsEraser(e)) {
       // apretó el botón a mitad del trazo: lo que venía queda, y sigue borrando
       live = null;
-      _commitStroke(s);
+      final snapped = _snapFit != null;
+      _endShapeHold();
+      _commitStroke(s, smooth: !snapped);
       _startErase(p);
       return;
     }
@@ -566,7 +634,17 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       _eraseAt(p);
       eraserAt = p;
     } else if (s != null) {
-      appendInkPoint(s, p, pressureOf(e));
+      if (_snapFit != null) {
+        _dragSnap(s, p);
+      } else {
+        appendInkPoint(s, p, pressureOf(e));
+        final a = _holdAnchor;
+        if (a != null && (p - a).distance * scale > 6) {
+          _holdAnchor = p; // se movió: la quietud empieza de nuevo
+          _shapeHold?.cancel();
+          _shapeHold = Timer(const Duration(milliseconds: 550), _snapShape);
+        }
+      }
     }
     liveTick.value++;
   }
@@ -608,16 +686,18 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     }
     final s = live;
     live = null;
+    final snapped = _snapFit != null;
+    _endShapeHold();
     liveTick.value++;
     // cancelado por el sistema (ej. lo tomó como palma) apenas empezó: se descarta
     if (s == null || (e is PointerCancelEvent && s.n < 3)) return;
-    _commitStroke(s);
+    _commitStroke(s, smooth: !snapped);
   }
 
   /// El trazo terminado pasa a la página (suavizado), con su deshacer.
-  void _commitStroke(Stroke s) {
+  void _commitStroke(Stroke s, {bool smooth = true}) {
     if (s.n < 2) return;
-    s.smooth();
+    if (smooth) s.smooth(); // una figura limpia no se suaviza
     s.z = doc.nextZ(); // arriba de todo
     doc.strokes[s.id] = s; // avisa a las hojas que toca
     _pushUndo(EditAction(added: [s]));
@@ -809,10 +889,11 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         t.x = t.x.clamp(0.0, kW - 60);
       }
       doc.markDirtyElement(t);
-      final st = drag.textState[id] ?? (t.scale, t.angle);
+      final st = drag.textState[id] ?? (t.scale, t.angle, t.w);
       textBefore[id] = t.copy(d: o.topLeft - Offset(t.x, t.y))
         ..scale = st.$1
-        ..angle = st.$2;
+        ..angle = st.$2
+        ..w = st.$3;
       textAfter[id] = t.copy();
     });
     final itemBefore = <String, Item?>{}, itemAfter = <String, Item?>{};
@@ -1730,6 +1811,19 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     Offset px(Offset p) => xf.apply(p) * scale;
     final up = Offset(sin(xf.angle), -cos(xf.angle)); // "arriba" del recuadro, ya rotado
     final topMid = box == null ? null : px(box.topCenter);
+    // manijas de los lados: solo si el lado en pantalla es largo (que no se encimen con las esquinas)
+    // (además, el centro del recuadro queda libre de manijas: un toque ahí sigue siendo un toque sobre la tinta)
+    final wpx = box == null ? 0.0 : box.width * scale * xf.scale * xf.kx, hpx = box == null ? 0.0 : box.height * scale * xf.scale * xf.ky;
+    final wide = wpx >= 3 * SelectionHandles.hit && hpx >= 2 * SelectionHandles.hit;
+    final tall = hpx >= 3 * SelectionHandles.hit && wpx >= 2 * SelectionHandles.hit;
+    final sides = box == null
+        ? null
+        : <Offset?>[
+            wide ? px(box.topCenter) : null,
+            tall ? px(box.centerRight) : null,
+            wide ? px(box.bottomCenter) : null,
+            tall ? px(box.centerLeft) : null,
+          ];
     // dedo sobre lo seleccionado: lo mueve (la zona queda montada mientras se arrastra, o el gesto se perdería)
     final body = !widget.readOnly && !sel.isEmpty && (idle || (drag != null && drag.handle == Handle.move)) ? sel.bounds(doc) : null;
     return Stack(clipBehavior: Clip.none, children: [
@@ -1781,6 +1875,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         SelectionHandles(
           key: const ValueKey('selHandles'), // la misma al pasar de quieta a arrastrada: no pierde el gesto
           corners: [for (final c in [box.topLeft, box.topRight, box.bottomRight, box.bottomLeft]) px(c)],
+          sides: sides,
           topMid: canRotate ? topMid : null,
           rotateAt: canRotate ? topMid! + up * 34 : null,
           onPointerDown: _selUiDown,
