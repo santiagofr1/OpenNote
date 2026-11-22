@@ -24,7 +24,7 @@ PenAction? penActionFor(PointerDownEvent e, Tool tool) {
   return switch (tool) {
     Tool.text => null,
     Tool.select => PenAction.select,
-    Tool.pen || Tool.hl => PenAction.draw,
+    Tool.pen || Tool.hl || Tool.paint => PenAction.draw,
   };
 }
 

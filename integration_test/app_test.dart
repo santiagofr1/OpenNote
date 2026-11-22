@@ -186,28 +186,57 @@ void main() {
     await settle(t, 1200);
   });
 
-  testWidgets('pinceles de diseño: el panel del lápiz tiene la sección Diseños y cada uno deja un trazo con su punta (issue #6)', (t) async {
+  testWidgets('decorador: su botón abre el panel, elige forma, tipo de trazo y fondo (y lo apaga una vez), y cada franja deja su trazo con su malla (issue #6)', (t) async {
     await start(t);
-    await createNotebook(t, 'Pinceles');
+    await createNotebook(t, 'Franjas');
     final c = sheetCenter(t);
-    var y = -120.0;
-    for (final (id, name) in designTips) {
-      await t.tap(find.byTooltip('Lápiz · tocá de nuevo para opciones'));
+    expect(find.byTooltip('Decorador · tocá de nuevo para opciones'), findsOneWidget);
+    await t.tap(find.byTooltip('Decorador · tocá de nuevo para opciones'));
+    await settle(t);
+    expect(editor(t).ts.tool, Tool.paint);
+    var y = -150.0;
+    final fondos = ['8fd8e0', 'e3cfa0', 'c9b3ec', 'f8c4a0', 'a8e2c4'];
+    final estilos = ['brush', 'hl', 'marker', 'brush'];
+    var i = 0;
+    for (final id in ['paint-stars', 'paint-hearts', 'paint-moons', 'paint-clouds']) {
+      await t.tap(find.byTooltip('Decorador · tocá de nuevo para opciones'));
       await settle(t);
-      expect(find.text('Diseños'), findsOneWidget);
-      await t.tap(find.text(name));
+      expect(find.byKey(const Key('paintPreview')), findsOneWidget);
+      await t.ensureVisible(find.byKey(Key('paintShape-$id')));
+      await t.tap(find.byKey(Key('paintShape-$id')));
       await settle(t);
-      expect(editor(t).ts.pen.tip, id);
-      expect(editor(t).ts.pen.width, greaterThanOrEqualTo(5), reason: 'al elegir un diseño el grosor queda útil');
-      await t.tapAt(const Offset(4, 4)); // cierra el panel (toca la cortina)
+      expect(editor(t).ts.paint.tip, id);
+      await t.ensureVisible(find.byKey(Key('paintSt-${estilos[i]}')));
+      await t.tap(find.byKey(Key('paintSt-${estilos[i]}')));
       await settle(t);
+      expect(editor(t).ts.paintParams.style, estilos[i]);
+      await t.ensureVisible(find.byKey(Key('paint-${fondos[i]}')));
+      await t.tap(find.byKey(Key('paint-${fondos[i]}')));
+      await settle(t);
+      expect(editor(t).ts.paint.color, '#${fondos[i]}');
+      if (i == 3) {
+        await t.ensureVisible(find.byKey(const Key('paintBgSwitch')));
+        await t.tap(find.byKey(const Key('paintBgSwitch'))); // apaga el fondo: quedan formas y brillo
+        await settle(t);
+        expect(editor(t).ts.paintParams.bg, false);
+      }
+      // cierra el panel desde adentro (no a ciegas sobre la cortina)
+      Navigator.of(t.element(find.byKey(const Key('paintPreview')))).pop();
+      await settle(t);
+      expect(find.byKey(const Key('paintPreview')), findsNothing);
       final before = editor(t).doc.strokes.length;
       await stylusLine(t, c + Offset(-100, y), c + Offset(100, y));
-      y += 60;
-      expect(editor(t).doc.strokes.length, before + 1, reason: name);
-      expect(editor(t).doc.strokes.values.last.k, id);
-      expect(editor(t).doc.strokes.values.last.ensureMesh()!.vertexCount, greaterThan(0));
+      y += 70;
+      expect(editor(t).doc.strokes.length, before + 1, reason: id);
+      final s = editor(t).doc.strokes.values.last;
+      expect(s.k, id);
+      expect(s.c, '#${fondos[i]}');
+      expect(s.pp, isNotNull);
+      expect(s.pp!.style, estilos[i]);
+      expect(s.ensureMesh()!.vertexCount, greaterThan(0));
+      i++;
     }
+    expect(editor(t).doc.strokes.values.last.pp!.bg, false);
     await t.tap(find.byKey(const Key('back')));
     await settle(t, 1200);
   });
@@ -1299,6 +1328,14 @@ void main() {
     await settle(t);
     expect(first.text, 'Clase 3');
     expect(find.textContaining('Clase 3 ·'), findsOneWidget);
+
+    // volver: se guarda (sin esto el guardado pendiente escribe cuando el test siguiente ya borró la carpeta)
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1500);
+    final st = Storage(root: root);
+    await st.init();
+    final saved = (await st.loadNotebook(await savedNotebook('Indicador'))).items;
+    expect(saved[first.id]?.text, 'Clase 3', reason: 'el nombre quedó guardado');
   });
 
   testWidgets('texto con teclado: seleccionar, escalar y rotar como una entidad, deshacer (issue #12)', (t) async {

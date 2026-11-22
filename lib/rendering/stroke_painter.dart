@@ -54,7 +54,7 @@ void _drawParts(Canvas c, Iterable<MeshPart> parts, Color color, bool colored) {
   }
 }
 
-bool _layered(Stroke s) => s.o < .999 && s.k != 'pencil';
+bool _layered(Stroke s) => s.o < .999 && s.k != 'pencil' && !isPaint(s.k); // lápiz y pintura llevan el alfa en los vértices
 
 /// Dibuja un trazo según su punta (ver [tips]; 'hl' es el resaltador) con su malla de triángulos
 /// (un `drawVertices` por trazo). Los trazos con opacidad menor a 1 van en una capa para que no se
@@ -91,7 +91,7 @@ void _pass(Canvas c, List<Stroke> list, Rect? cull, bool hl) {
   }
 
   for (final s in list) {
-    if ((s.k == 'hl') != hl || s.n == 0) continue;
+    if (isUnderInk(s.k) != hl || s.n == 0) continue;
     if (_layered(s)) {
       flush();
       if (cull == null || s.bounds.overlaps(cull)) paintStroke(c, s);

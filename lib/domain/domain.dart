@@ -7,6 +7,7 @@ export 'format.dart';
 export 'elements.dart';
 export 'geometry.dart';
 export 'notebook.dart';
+export 'paint_shapes.dart';
 export 'notebook_doc.dart';
 export 'paper_layout.dart';
 export 'rich_text.dart';

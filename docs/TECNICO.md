@@ -424,13 +424,20 @@ una **malla de triángulos** (`lib/domain/stroke_mesh.dart`, `buildStrokeMesh`) 
     (se veían cuentas); la malla es continua, así que el lápiz queda un poco más parejo.
   - Caligrafía: cinta con la punta plana a 45° (2 vértices por punto) más una tira fina que mantiene el trazo visible
     cuando se mueve en la dirección de la punta.
-  - Pinceles de diseño (`dots`, `stars`, `hearts`, `flowers`, `scallop`; sección "Diseños" del panel del lápiz): la
-    línea central suavizada se re-muestrea por largo de arco y en cada parada se estampa una forma rellena de radio
-    `w * kDesignRadius` (1,25; paso 2,3 radios, 1,6 en puntitos), la primera en el inicio y un toque deja una forma.
-    La rotación de las estrellas sale del índice de la estampa (estable). Ondas es una tira continua de semicírculos
-    sobre una cinta fina. `Stroke.bounds` (1,6 x grosor) cubre la forma; la goma y la selección usan ese radio. Tope:
-    se corta el muestreo al llegar a `maxVertices`. Una punta desconocida (sync desde una versión nueva) cae en el
-    `default` del `switch` y se arma como bolígrafo. Al elegir un diseño con grosor < 5 el panel lo sube a 8.
+  - Decorador (herramienta propia, `k = 'paint-<forma>'`; `paint-none` es de los trazos viejos = formas apagadas; `c`
+    fondo, `w` ancho de franja, `o` opacidad, y `pp` opcional: `g` brillo, `sd`/`ss` cantidad/tamaño de formas, `sc`
+    color de formas y, solo si difieren del default, `st` tipo de trazo (`brush` | `hl` | `marker`), `bg` y `sh`
+    (fondo y formas prendidos; al menos uno de fondo/formas/brillo queda prendido). Solo se guarda en trazos de
+    este tipo): malla de colores por vértice, determinística (`_rnd`, hash de índices, nunca `Random`). Orden: fondo
+    (`brush`: 8-14 cerdas, tiras paralelas con desplazamiento, grosor, alfa y largo propios, puntas desflecadas solo en
+    el inicio/fin real; `hl`: banda plana translúcida con extremos rectos; `marker`: banda sólida con extremos
+    redondeados), puntitos de brillo y formas (`paint_shapes.dart`, un generador por forma dentro de su radio).
+    Pensado para dibujarse en vivo y en curvas: partes de 250 puntos alineadas al inicio (solo cambia la última al
+    seguir dibujando) cortadas de la misma curva suave con contexto de las vecinas (sin costuras); lo azaroso se ancla
+    al largo de arco (brillo en celdas fijas, formas por arco), no al largo total; normales suavizadas por arco
+    (cuerda de ±ancho/4) y corrimientos del lado interno recortados al radio de curvatura (sin pliegues).
+    Va en la pasada del resaltador (`isUnderInk`) y sin `saveLayer` (alfa en los vértices).
+    Una versión vieja que lee `paint-*` lo arma como bolígrafo (`default`).
 - **Opacidad < 1** (todas las puntas menos el lápiz): el trazo va en un `saveLayer` con el alfa, como antes, para que
   no se oscurezcan sus uniones. Esto incluye a fibra y resaltador, que antes usaban un `Path` sin capa.
 - **Lotes**: `paintStrokes` junta los trazos seguidos opacos del mismo color (y las mallas de colores entre sí) en

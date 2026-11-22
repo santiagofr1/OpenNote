@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:ui' show Vertices, VertexMode;
 
 import 'package:flutter/material.dart';
 
@@ -7,8 +8,18 @@ import '../rendering/stroke_painter.dart';
 import '../theme/colors.dart';
 
 /// Trazo de muestra (una ola con presión variable) para previsualizar una punta.
-Stroke _sampleStroke(String tip, String color, double w, double o, Size size) {
+Stroke _sampleStroke(String tip, String color, double w, double o, Size size, [PaintParams? pp]) {
   final pts = <double>[];
+  if (pp != null || isPaint(tip)) {
+    // la pintura se muestra en una S suave (con las puntas a la vista) que deja ver cómo toma las curvas
+    final x0 = w * .4 + 6;
+    final amp = max(0.0, (size.height - w * .9) / 2 - 2);
+    for (var i = 0; i < 60; i++) {
+      final t = i / 59;
+      pts.addAll([x0 + (size.width - 2 * x0) * t, size.height / 2 + sin(t * 2 * pi) * amp, .5]);
+    }
+    return Stroke('preview', tip, color, w, pts, o, pp);
+  }
   const n = 60;
   for (var i = 0; i < n; i++) {
     final t = i / (n - 1);
@@ -22,14 +33,15 @@ Stroke _sampleStroke(String tip, String color, double w, double o, Size size) {
 class _SamplePainter extends CustomPainter {
   final String tip, color;
   final double w, o;
-  _SamplePainter(this.tip, this.color, this.w, this.o);
+  final PaintParams? pp;
+  _SamplePainter(this.tip, this.color, this.w, this.o, [this.pp]);
   @override
-  void paint(Canvas c, Size size) => paintStroke(c, _sampleStroke(tip, color, w, o, size));
+  void paint(Canvas c, Size size) => paintStroke(c, _sampleStroke(tip, color, w, o, size, pp));
   @override
-  bool shouldRepaint(_SamplePainter x) => x.tip != tip || x.color != color || x.w != w || x.o != o;
+  bool shouldRepaint(_SamplePainter x) => x.tip != tip || x.color != color || x.w != w || x.o != o || x.pp != pp;
 }
 
-/// Opciones del lápiz o del resaltador (según la herramienta actual): punta, grosor, opacidad,
+/// Opciones del lápiz, del resaltador o del Decorador (pintura) (según la herramienta actual): punta, grosor, opacidad,
 /// color y goma. [align]: del lado de la barra. [onChange] se llama en cada cambio.
 /// Al cerrarse, el color elegido entra a "recientes" y se avisa con [onChange]. Va después del cierre y no en el `dispose`
 /// del panel: ahí el árbol está bloqueado y el `setState` del editor tira una excepción.
@@ -51,15 +63,30 @@ Future<void> showPenPanel(BuildContext context, ToolState ts, VoidCallback onCha
           borderRadius: BorderRadius.circular(18),
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: 460, maxHeight: MediaQuery.of(ctx).size.height - 90),
-            child: _PenPanel(ts: ts, onChange: onChange),
+            child: ts.tool == Tool.paint ? _PaintPanel(ts: ts, onChange: onChange) : _PenPanel(ts: ts, onChange: onChange),
           ),
         ),
       ),
     ),
   ).then((_) {
     ts.pickColor(ts.current.color);
+    if (ts.tool == Tool.paint) ts.rememberShapeColor();
     onChange();
   });
+}
+
+/// Rótulo y fila con slider que comparten los paneles.
+mixin _PanelParts<T extends StatefulWidget> on State<T> {
+  Widget _label(String t) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Text(t, style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+      );
+
+  Widget _sliderRow(String label, String value, Widget slider) => Row(children: [
+        SizedBox(width: 72, child: Text(label, style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600))),
+        Expanded(child: slider),
+        SizedBox(width: 44, child: Text(value, textAlign: TextAlign.right, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]))),
+      ]);
 }
 
 class _PenPanel extends StatefulWidget {
@@ -70,10 +97,9 @@ class _PenPanel extends StatefulWidget {
   State<_PenPanel> createState() => _PenPanelState();
 }
 
-class _PenPanelState extends State<_PenPanel> {
+class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
   ToolState get ts => widget.ts;
   bool custom = false;
-  late HSVColor hsv = HSVColor.fromColor(parseColor(ts.current.color));
 
   bool get isHl => ts.tool == Tool.hl;
 
@@ -81,8 +107,6 @@ class _PenPanelState extends State<_PenPanel> {
     setState(f);
     widget.onChange();
   }
-
-  String _hex(Color c) => '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
 
   @override
   Widget build(BuildContext context) {
@@ -98,8 +122,6 @@ class _PenPanelState extends State<_PenPanel> {
           _label('Punta'),
           Row(children: [for (final (id, name) in tips) _tipCell(p, id, name)]),
           const SizedBox(height: 10),
-          _label('Diseños'),
-          Row(children: [for (final (id, name) in designTips) _tipCell(p, id, name)]),
           const SizedBox(height: 14),
         ],
 
@@ -142,32 +164,11 @@ class _PenPanelState extends State<_PenPanel> {
         ],
         const SizedBox(height: 10),
         TextButton.icon(
-          onPressed: () => setState(() {
-            custom = !custom;
-            hsv = HSVColor.fromColor(parseColor(p.color));
-          }),
+          onPressed: () => setState(() => custom = !custom),
           icon: Icon(custom ? Icons.expand_less : Icons.palette_outlined, size: 18),
           label: const Text('Color personalizado'),
         ),
-        if (custom) ...[
-          _GradientBar(
-            colors: [for (var h = 0; h <= 360; h += 30) HSVColor.fromAHSV(1, h.toDouble(), 1, 1).toColor()],
-            value: hsv.hue / 360,
-            onChanged: (v) => _custom(hsv.withHue(v * 360)),
-          ),
-          const SizedBox(height: 10),
-          _GradientBar(
-            colors: [hsv.withSaturation(0).toColor(), hsv.withSaturation(1).toColor()],
-            value: hsv.saturation,
-            onChanged: (v) => _custom(hsv.withSaturation(v)),
-          ),
-          const SizedBox(height: 10),
-          _GradientBar(
-            colors: [Colors.black, hsv.withValue(1).toColor()],
-            value: hsv.value,
-            onChanged: (v) => _custom(hsv.withValue(v)),
-          ),
-        ],
+        if (custom) _HsvPicker(color: p.color, onChanged: (hex) => _set(() => ts.current.color = hex)),
 
         if (!isHl) ...[
           const SizedBox(height: 14),
@@ -190,18 +191,12 @@ class _PenPanelState extends State<_PenPanel> {
     );
   }
 
-  /// Una punta de la lista (normal o de diseño) con su muestra. Al pasar a un diseño el grosor se sube a uno útil
-  /// (la forma mide ~2,5 x grosor) y al volver a una punta normal se baja, para no quedar con un grosor ridículo.
+  /// Una punta de la lista con su muestra.
   Widget _tipCell(PenPreset p, String id, String name) {
     final scheme = Theme.of(context).colorScheme;
     return Expanded(
       child: GestureDetector(
-        onTap: () => _set(() {
-          final toDesign = isDesignTip(id), wasDesign = isDesignTip(p.tip);
-          p.tip = id;
-          if (toDesign && p.width < 5) p.width = 8;
-          if (!toDesign && wasDesign && p.width > 6) p.width = 2.6;
-        }),
+        onTap: () => _set(() => p.tip = id),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
           margin: const EdgeInsets.symmetric(horizontal: 3),
@@ -215,7 +210,7 @@ class _PenPanelState extends State<_PenPanel> {
             SizedBox(
               height: 34,
               width: double.infinity,
-              child: CustomPaint(painter: _SamplePainter(id, p.color, isDesignTip(id) ? 4 : id == 'fine' ? 2.5 : 3.2, 1)),
+              child: CustomPaint(painter: _SamplePainter(id, p.color, id == 'fine' ? 2.5 : 3.2, 1)),
             ),
             const SizedBox(height: 4),
             Text(name, style: TextStyle(fontSize: 11.5, color: p.tip == id ? scheme.primary : scheme.onSurface), overflow: TextOverflow.ellipsis),
@@ -225,29 +220,323 @@ class _PenPanelState extends State<_PenPanel> {
     );
   }
 
-  void _custom(HSVColor c) {
-    setState(() => hsv = c);
-    final hex = _hex(c.toColor());
-    _set(() => ts.current.color = hex);
+  Widget _swatch(String c, bool on) => GestureDetector(
+        onTap: () => _set(() => ts.pickColor(c)),
+        child: Container(
+          width: 30,
+          height: 30,
+          decoration: BoxDecoration(
+            color: parseColor(c),
+            shape: BoxShape.circle,
+            border: Border.all(color: on ? Colors.white : const Color(0x22000000), width: on ? 3 : 1),
+            boxShadow: on ? const [BoxShadow(color: kAccent, spreadRadius: 2)] : null,
+          ),
+        ),
+      );
+}
+
+/// Selector de color libre: tono, saturación y brillo. Mantiene su propio HSV (para que el tono no se pierda en los
+/// grises) y se vuelve a sincronizar si el color cambia desde afuera. Lo usan el lápiz y el Decorador.
+class _HsvPicker extends StatefulWidget {
+  final String color;
+  final ValueChanged<String> onChanged;
+  const _HsvPicker({required this.color, required this.onChanged});
+  @override
+  State<_HsvPicker> createState() => _HsvPickerState();
+}
+
+class _HsvPickerState extends State<_HsvPicker> {
+  late HSVColor hsv = HSVColor.fromColor(parseColor(widget.color));
+
+  static String _hex(Color c) => '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
+
+  @override
+  void didUpdateWidget(_HsvPicker old) {
+    super.didUpdateWidget(old);
+    // un cambio de afuera (otro color elegido); el que salió de acá vuelve igual y no se toca
+    if (widget.color != old.color && widget.color != _hex(hsv.toColor())) hsv = HSVColor.fromColor(parseColor(widget.color));
   }
 
-  Widget _label(String t) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Text(t, style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
-      );
+  void _set(HSVColor c) {
+    setState(() => hsv = c);
+    widget.onChanged(_hex(c.toColor()));
+  }
 
-  Widget _sliderRow(String label, String value, Widget slider) => Row(children: [
-        SizedBox(width: 72, child: Text(label, style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600))),
-        Expanded(child: slider),
-        SizedBox(width: 44, child: Text(value, textAlign: TextAlign.right, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]))),
+  @override
+  Widget build(BuildContext context) {
+    return Column(children: [
+      _GradientBar(
+        colors: [for (var h = 0; h <= 360; h += 30) HSVColor.fromAHSV(1, h.toDouble(), 1, 1).toColor()],
+        value: hsv.hue / 360,
+        onChanged: (v) => _set(hsv.withHue(v * 360)),
+      ),
+      const SizedBox(height: 10),
+      _GradientBar(
+        colors: [hsv.withSaturation(0).toColor(), hsv.withSaturation(1).toColor()],
+        value: hsv.saturation,
+        onChanged: (v) => _set(hsv.withSaturation(v)),
+      ),
+      const SizedBox(height: 10),
+      _GradientBar(
+        colors: [Colors.black, hsv.withValue(1).toColor()],
+        value: hsv.value,
+        onChanged: (v) => _set(hsv.withValue(v)),
+      ),
+    ]);
+  }
+}
+
+/// Vértices de una forma suelta (para la muestra de las celdas).
+class _VertSink implements ShapeSink {
+  final pos = <Offset>[], cols = <Color>[], idx = <int>[];
+  final Color color;
+  _VertSink(this.color);
+  @override
+  int get count => pos.length;
+  @override
+  int v(double x, double y, [int c = 0]) {
+    pos.add(Offset(x, y));
+    cols.add(color);
+    return pos.length - 1;
+  }
+
+  @override
+  void tri(int a, int b, int c) => idx..add(a)..add(b)..add(c);
+}
+
+/// Una forma de la pintura dibujada sola (en la celda del panel).
+class _ShapePainter extends CustomPainter {
+  final String shape;
+  final Color color;
+  _ShapePainter(this.shape, this.color);
+  @override
+  void paint(Canvas c, Size size) {
+    final sink = _VertSink(color);
+    paintShape(sink, shape, size.width / 2, size.height / 2, size.shortestSide / 2 - 1, 1.2, 0xFF000000);
+    if (sink.idx.isEmpty) return;
+    c.drawVertices(Vertices(VertexMode.triangles, sink.pos, colors: sink.cols, indices: sink.idx), BlendMode.dst, Paint());
+  }
+
+  @override
+  bool shouldRepaint(_ShapePainter x) => x.shape != shape || x.color != color;
+}
+
+/// Panel del Decorador (pintura): arriba, fija, la vista previa de la franja; abajo (con scroll) el tipo de trazo, el
+/// ancho y los tres componentes activables: fondo, brillo y formas (al menos uno queda prendido).
+class _PaintPanel extends StatefulWidget {
+  final ToolState ts;
+  final VoidCallback onChange;
+  const _PaintPanel({required this.ts, required this.onChange});
+  @override
+  State<_PaintPanel> createState() => _PaintPanelState();
+}
+
+class _PaintPanelState extends State<_PaintPanel> with _PanelParts<_PaintPanel> {
+  ToolState get ts => widget.ts;
+  PenPreset get p => ts.paint;
+  PaintParams get pp => ts.paintParams;
+  bool bgCustom = false, shapeCustom = false;
+
+  void _set(VoidCallback f) {
+    setState(f);
+    widget.onChange();
+  }
+
+  void _pp(PaintParams Function(PaintParams) f) => _set(() => ts.paintParams = f(pp));
+
+  bool get _glitterOn => pp.glitter > 0;
+
+  /// ¿Se puede apagar el componente? Solo si queda otro prendido.
+  bool _canOff(bool bg, bool glitter, bool shapes) => [pp.bg && bg, _glitterOn && glitter, pp.shapes && shapes].any((x) => x);
+
+  Widget _switchRow(String label, Key key, bool on, bool canOff, ValueChanged<bool> set) => Row(children: [
+        Expanded(child: _label(label)),
+        Switch(key: key, value: on, onChanged: on && !canOff ? null : set),
       ]);
 
-  Widget _swatch(String c, bool on) => GestureDetector(
-        onTap: () => _set(() {
-          ts.pickColor(c);
-          hsv = HSVColor.fromColor(parseColor(c));
-        }),
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+      // fijo: siempre a la vista, aunque se scrolleen los ajustes
+      Padding(
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Decorador', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 10),
+          Container(
+            key: const Key('paintPreview'),
+            height: 72,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(color: const Color(0xFFFFFEFB), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFDCD9D0))),
+            child: CustomPaint(painter: _SamplePainter(p.tip, p.color, p.width, p.opacity, pp), size: Size.infinite),
+          ),
+        ]),
+      ),
+      const Divider(height: 1),
+      Flexible(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _label('Trazo'),
+            Row(children: [for (final (id, name) in paintStyles) _styleCell(scheme, id, name)]),
+            const SizedBox(height: 10),
+            _sliderRow('Ancho', p.width.round().toString(), Slider(
+              value: p.width.clamp(16.0, 70.0),
+              min: 16,
+              max: 70,
+              onChanged: (v) => _set(() => p.width = v.roundToDouble()),
+            )),
+            const Divider(height: 20),
+            _switchRow('Fondo', const Key('paintBgSwitch'), pp.bg, _canOff(false, true, true), (on) => _pp((q) => q.copyWith(bg: on))),
+            if (pp.bg) ...[
+              Wrap(spacing: 6, runSpacing: 6, children: [
+                for (final c in [...paintPalette, ...ts.paintRecent.where((c) => !paintPalette.contains(c))]) _dot(c, c == p.color, () => _set(() => ts.pickColor(c))),
+              ]),
+              TextButton.icon(
+                key: const Key('paintBgCustom'),
+                onPressed: () => setState(() => bgCustom = !bgCustom),
+                icon: Icon(bgCustom ? Icons.expand_less : Icons.palette_outlined, size: 18),
+                label: const Text('Color personalizado'),
+              ),
+              if (bgCustom) _HsvPicker(color: p.color, onChanged: (hex) => _set(() => p.color = hex)),
+              const SizedBox(height: 4),
+              _sliderRow('Opacidad', '${(p.opacity * 100).round()}%', Slider(
+                value: p.opacity.clamp(.2, 1.0),
+                min: .2,
+                max: 1,
+                onChanged: (v) => _set(() => p.opacity = (v * 100).round() / 100),
+              )),
+            ],
+            const Divider(height: 20),
+            _switchRow('Brillo', const Key('paintGlitterSwitch'), _glitterOn, _canOff(true, false, true), (on) => _pp((q) => q.copyWith(glitter: on ? .5 : 0))),
+            if (_glitterOn)
+              _sliderRow('Cantidad', '${(pp.glitter * 100).round()}%', Slider(
+                value: pp.glitter,
+                min: .05,
+                onChanged: (v) => _pp((q) => q.copyWith(glitter: (v * 100).round() / 100)),
+              )),
+            const Divider(height: 20),
+            _switchRow('Formas', const Key('paintShapesSwitch'), pp.shapes, _canOff(true, true, false), (on) => _pp((q) => q.copyWith(shapes: on))),
+            if (pp.shapes) ..._shapeOptions(scheme),
+          ]),
+        ),
+      ),
+    ]);
+  }
+
+  /// Una opción del tipo de trazo, con su muestra (usa el color, el ancho y los ajustes actuales, con el fondo prendido).
+  Widget _styleCell(ColorScheme scheme, String id, String name) {
+    final on = pp.style == id;
+    return Expanded(
+      child: GestureDetector(
+        key: Key('paintSt-$id'),
+        onTap: () => _pp((q) => q.copyWith(style: id)),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          margin: const EdgeInsets.symmetric(horizontal: 3),
+          padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
+          decoration: BoxDecoration(
+            color: on ? scheme.surfaceContainerHighest : scheme.onSurface.withValues(alpha: .04),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: on ? scheme.primary : Colors.transparent, width: 1.5),
+          ),
+          child: Column(children: [
+            Container(
+              height: 40,
+              width: double.infinity,
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(color: const Color(0xFFFFFEFB), borderRadius: BorderRadius.circular(8)),
+              child: CustomPaint(painter: _SamplePainter(p.tip, p.color, min(p.width, 22), p.opacity, pp.copyWith(style: id, bg: true))),
+            ),
+            const SizedBox(height: 4),
+            Text(name, style: TextStyle(fontSize: 11.5, color: on ? scheme.primary : scheme.onSurface), overflow: TextOverflow.ellipsis),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  /// Grilla de formas, color (Auto, paleta, recientes, propio), cantidad y tamaño.
+  List<Widget> _shapeOptions(ColorScheme scheme) {
+    final custom = pp.shapeColor != null && pp.shapeColor!.startsWith('#') ? pp.shapeColor! : '#ffffff';
+    return [
+      Wrap(spacing: 6, runSpacing: 6, children: [
+        for (final (id, name) in paintShapes)
+          GestureDetector(
+            key: Key('paintShape-$id'),
+            onTap: () => _set(() => p.tip = id),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              width: 56,
+              height: 62,
+              padding: const EdgeInsets.fromLTRB(2, 6, 2, 4),
+              decoration: BoxDecoration(
+                color: p.tip == id ? scheme.surfaceContainerHighest : scheme.onSurface.withValues(alpha: .04),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: p.tip == id ? scheme.primary : Colors.transparent, width: 1.5),
+              ),
+              // el nombre toma lo que sobre (con la letra del sistema agrandada no desborda la celda)
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                SizedBox(height: 28, width: 28, child: CustomPaint(painter: _ShapePainter(id.substring(6), scheme.onSurface.withValues(alpha: .75)))),
+                const SizedBox(height: 2),
+                Flexible(
+                  child: Text(name, style: TextStyle(fontSize: 10.5, color: p.tip == id ? scheme.primary : scheme.onSurface), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ),
+              ]),
+            ),
+          ),
+      ]),
+      const SizedBox(height: 12),
+      Wrap(spacing: 6, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+        // "Auto": el color de cada forma (blanco, fondo aclarado, dorado)
+        GestureDetector(
+          onTap: () => _pp((q) => q.copyWith(autoColor: true)),
+          child: Container(
+            key: const Key('paintShapeAuto'),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: pp.shapeColor == null ? kAccent : const Color(0x33000000), width: pp.shapeColor == null ? 2 : 1),
+            ),
+            child: const Text('Auto', style: TextStyle(fontSize: 12)),
+          ),
+        ),
+        for (final c in paintShapeColors) _dot(_shapeSwatch(c), c == pp.shapeColor, () => _pp((q) => q.copyWith(shapeColor: c)), key: Key('shapeColor-$c')),
+        for (final c in ts.paintRecent.where((c) => !paintShapeColors.contains(c)).take(5))
+          _dot(c, c == pp.shapeColor, () => _pp((q) => q.copyWith(shapeColor: c)), key: Key('shapeColor-$c')),
+      ]),
+      TextButton.icon(
+        key: const Key('paintShapeCustom'),
+        onPressed: () => setState(() => shapeCustom = !shapeCustom),
+        icon: Icon(shapeCustom ? Icons.expand_less : Icons.palette_outlined, size: 18),
+        label: const Text('Color personalizado'),
+      ),
+      if (shapeCustom) _HsvPicker(color: custom, onChanged: (hex) => _pp((q) => q.copyWith(shapeColor: hex))),
+      const SizedBox(height: 6),
+      _sliderRow('Cantidad', '${(pp.density * 100).round()}%', Slider(
+        value: pp.density,
+        onChanged: (v) => _pp((q) => q.copyWith(density: (v * 100).round() / 100)),
+      )),
+      _sliderRow('Tamaño', '${(pp.size * 100).round()}%', Slider(
+        value: pp.size,
+        onChanged: (v) => _pp((q) => q.copyWith(size: (v * 100).round() / 100)),
+      )),
+    ];
+  }
+
+  /// Color para mostrar de una opción de forma ('light' / 'dark' salen del fondo).
+  String _shapeSwatch(String c) {
+    if (c != 'light' && c != 'dark') return c;
+    final bg = parseColor(p.color);
+    final t = c == 'light' ? Color.lerp(bg, Colors.white, .6)! : Color.lerp(bg, Colors.black, .35)!;
+    return '#${(t.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
+  }
+
+  Widget _dot(String c, bool on, VoidCallback onTap, {Key? key}) => GestureDetector(
+        onTap: onTap,
         child: Container(
+          key: key ?? Key('paint-${c.substring(1)}'),
           width: 30,
           height: 30,
           decoration: BoxDecoration(

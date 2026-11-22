@@ -217,7 +217,7 @@ class Selection {
     for (final run in zRuns(doc.drawOrder())) {
       final ink = run.strokes;
       if (ink != null) {
-        seen..addAll(ink.where((s) => s.k == 'hl'))..addAll(ink.where((s) => s.k != 'hl'));
+        seen..addAll(ink.where((s) => isUnderInk(s.k)))..addAll(ink.where((s) => !isUnderInk(s.k)));
       } else {
         seen.add(run.single!);
       }
