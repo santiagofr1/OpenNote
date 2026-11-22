@@ -421,6 +421,8 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
       case 'sheet':
         await exportPdfFlow(context, store, d, only: [k], name: '${nb.name} - hoja ${k + 1}');
       case 'png':
+        await exportPngFlow(context, store, d);
+      case 'sheetpng':
         final ok = await saveSheetPng(store, d, k, '${nb.name} - hoja ${k + 1}');
         if (ok && mounted) snack(context, 'Imagen guardada');
       case 'opennote':

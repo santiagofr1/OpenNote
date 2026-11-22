@@ -333,8 +333,9 @@ espaciado, cantidad de hojas), `notebook.json`, `sheets/<hoja>.sheet` (copiados 
 y `media/<archivo>` (solo lo que usan las hojas). Al importar se valida el manifest (versión, nombres de archivo
 seguros, hojas que coinciden) antes de escribir; un archivo roto lanza `OpennoteException` y no deja nada en disco.
 El cuaderno nuevo recibe un id nuevo y "X (importado)" si el nombre ya existe. Exportar: una sola entrada "Exportar" en el menú ⋮ del cuaderno y en el menú de mantener apretado de la biblioteca;
-abre `showExportSheet` (`menus.dart`) con PDF, PDF de esta hoja (solo dentro del cuaderno), PNG (en la biblioteca, la
-última hoja vista, `nb.last`) y `.opennote` (`saveOpennote` en `export.dart`); importar: "+" de la biblioteca
+abre `showExportSheet` (`menus.dart`) y todo exporta el cuaderno entero: PDF, "Imágenes (PNG)" (`buildNotebookPngs`: un PNG
+por hoja, de a una con `sheetSource`, en un ZIP con nombres "<cuaderno> - hoja 01.png", o el PNG directo si hay una sola
+hoja; progreso cancelable en `exportPngFlow`; guardado sustituible `saveImages`) y `.opennote` (`saveOpennote` en `export.dart`); dentro del cuaderno se suman "PDF de esta hoja" e "Imagen de esta hoja (PNG)"; importar: "+" de la biblioteca
 (`Pickers.opennote`). Ambos son sustituibles en los tests.
 
 ### Migración

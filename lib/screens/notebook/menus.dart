@@ -78,9 +78,9 @@ class _IconRowState extends State<_IconRow> {
   }
 }
 
-/// "Exportar": una sola hoja con todo. Devuelve 'pdf' (cuaderno entero), 'sheet' (PDF de la hoja que se ve, solo si
-/// hay [sheetName]), 'png' (imagen de una hoja) o 'opennote'. Cada opción tiene key `export-<valor>`.
-Future<String?> showExportSheet(BuildContext context, {String? sheetName, String? pngSubtitle}) {
+/// "Exportar": una sola hoja con todo. Devuelve 'pdf' y 'png' (cuaderno entero), 'opennote', y solo si hay [sheetName]
+/// (dentro del cuaderno) 'sheet' (PDF de la hoja que se ve) y 'sheetpng' (su imagen). Keys `export-<valor>`.
+Future<String?> showExportSheet(BuildContext context, {String? sheetName}) {
   final cs = Theme.of(context).colorScheme;
   Widget tile(IconData i, String t, String sub, String v) => ListTile(
         key: Key('export-$v'),
@@ -101,7 +101,8 @@ Future<String?> showExportSheet(BuildContext context, {String? sheetName, String
               child: Text('Exportar', style: Theme.of(ctx).textTheme.titleLarge)),
           tile(Symbols.picture_as_pdf, 'PDF', 'Todo el cuaderno', 'pdf'),
           if (sheetName != null) tile(Symbols.description, 'PDF de esta hoja', sheetName, 'sheet'),
-          tile(Symbols.image, 'Imagen (PNG)', pngSubtitle ?? 'La hoja que estás viendo', 'png'),
+          if (sheetName != null) tile(Symbols.image, 'Imagen de esta hoja (PNG)', sheetName, 'sheetpng'),
+          tile(Symbols.photo_library, 'Imágenes (PNG)', 'Todas las hojas, en un .zip', 'png'),
           tile(Symbols.archive, 'Cuaderno de OpenNote (.opennote)', 'Para pasarlo a otro dispositivo o hacer copia',
               'opennote'),
         ]),

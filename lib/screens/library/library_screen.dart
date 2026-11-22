@@ -398,16 +398,15 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
 
   /// "Exportar" de la biblioteca: la misma hoja que el cuaderno, sin "PDF de esta hoja".
   Future<void> _export(Notebook nb) async {
-    final v = await showExportSheet(context, pngSubtitle: 'La última hoja que viste');
+    final v = await showExportSheet(context);
     if (v == null || !mounted) return;
     switch (v) {
       case 'pdf':
         await _exportPdf(nb);
       case 'png':
-        final k = nb.last.clamp(0, nb.sheets.isEmpty ? 0 : nb.sheets.length - 1);
-        final doc = await store.openNotebook(nb, around: k, radius: 0);
-        final ok = await saveSheetPng(store, doc, k, '${nb.name} - hoja ${k + 1}');
-        if (ok && mounted) snack(context, 'Imagen guardada');
+        // solo la primera hoja queda cargada; las demás se leen de disco de a una
+        final doc = await store.openNotebook(nb, radius: 0);
+        if (mounted) await exportPngFlow(context, store, doc);
       case 'opennote':
         await _exportOpennote(nb);
     }
