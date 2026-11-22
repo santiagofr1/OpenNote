@@ -25,6 +25,7 @@ import 'live_layer.dart';
 import 'pen_panel.dart';
 import 'pull_to_add.dart';
 import 'selection.dart';
+import 'selection_handles.dart';
 import 'selection_menu.dart';
 import 'text_blocks.dart';
 import 'toolbar.dart';
@@ -504,7 +505,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   // ---------------- lápiz: dibujar, borrar, seleccionar ----------------
   void _down(PointerDownEvent e) {
-    if (widget.readOnly || pointer != null) return;
+    if (widget.readOnly || pointer != null || sel.moving) return;
     final action = penActionFor(e, ts.tool);
     if (action == null) return;
     final p = _toPage(e.localPosition);
@@ -567,6 +568,13 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       if (band.longestSide * scale < 6) {
         // un toque, no un recuadro: elige el elemento de más arriba bajo el lápiz (o nada)
         sel.bandA = sel.bandB = null;
+        if (_selBefore.isNotEmpty) {
+          // había selección y el toque cayó afuera: solo la cancela (ya se soltó en _selDown); no elige nada
+          _tapAt = null;
+          setState(() {});
+          liveTick.value++;
+          return;
+        }
         _tapSelect(band.topLeft, _selBefore);
         return;
       }
@@ -656,7 +664,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     liveTick.value++;
   }
 
-  /// Lo que estaba seleccionado al apoyar el lápiz (el toque de afuera lo deselecciona antes de resolverse).
+  /// Lo que estaba seleccionado al apoyar el lápiz (el toque de afuera lo deselecciona antes de resolverse; si había algo,
+  /// ese toque solo cancela y no elige).
   Set<String> _selBefore = const {};
 
   /// Dónde fue el último toque que eligió algo (para alternar al tocar de nuevo en el mismo lugar).
@@ -685,7 +694,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   }
 
   /// Lápiz abajo con "seleccionar": dentro de la selección la mueve; afuera estira un rectángulo nuevo
-  /// (y si queda en un toque, deselecciona o elige lo que haya abajo).
+  /// (y si queda en un toque, deselecciona: con algo seleccionado no elige nada, un segundo toque elige).
   void _selDown(Offset p) {
     _selBefore = sel.allIds;
     final r = sel.bounds(doc);
@@ -701,44 +710,51 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   }
 
   void _selDrag(Offset p) {
-    final drag = sel.drag!;
-    final d = drag.delta = p - drag.from;
-    setState(() {
-      drag.textOrig.forEach((id, o) {
-        final t = doc.texts[id];
-        if (t != null) {
-          doc.markDirtyElement(t); // hoja de antes y de después: puede guardarse a mitad del arrastre
-          t.x = o.dx + d.dx;
-          t.y = o.dy + d.dy;
-          doc.markDirtyElement(t);
-        }
-      });
-      drag.itemOrig.forEach((id, o) {
-        final it = doc.items[id];
-        if (it != null) {
-          doc.markDirtyElement(it);
-          it.x = o.dx + d.dx;
-          it.y = o.dy + d.dy;
-          doc.markDirtyElement(it);
-        }
-      });
-    });
+    sel.dragTo(p);
+    setState(() => sel.applyToBlocks(doc));
     liveTick.value++;
   }
 
+  // ---- manijas (escalar con las esquinas, rotar con la de arriba) ----
+  Offset _pageOfGlobal(Offset g) => _toPage((_sheetKey.currentContext!.findRenderObject() as RenderBox).globalToLocal(g));
+
+  void _handleStart(Handle h, Offset global) {
+    if (sel.isEmpty || sel.moving) return;
+    sel.startHandle(doc, h, _pageOfGlobal(global));
+    _touchStrokes(sel.strokesOf(doc)); // oculta los seleccionados de la capa fija
+    setState(() {});
+  }
+
+  void _handleUpdate(Offset global) {
+    if (sel.moving) _selDrag(_pageOfGlobal(global));
+  }
+
+  void _handleEnd() {
+    if (sel.moving) _selDrop();
+  }
+
   void _selDrop() {
-    final drag = sel.drag!, d = drag.delta;
-    sel.drag = null;
-    if (d.distance < .5) {
-      // fue un toque: nada se movió; elige (o alterna) lo que haya bajo el lápiz
+    final drag = sel.drag!, xf = drag.xf;
+    final move = drag.handle == Handle.move;
+    if (move ? xf.shift.distance < .5 : xf.isIdentity) {
+      // nada cambió (un toque, o la manija quedó en el lugar): vuelve todo a donde estaba
+      drag.xf = const Xform();
+      sel.applyToBlocks(doc);
+      sel.drag = null;
       _touchStrokes(sel.strokesOf(doc));
-      _tapSelect(drag.from, sel.allIds, keepIfEmpty: true);
+      if (move) {
+        _tapSelect(drag.from, sel.allIds, keepIfEmpty: true); // fue un toque: elige (o alterna) lo que haya bajo el lápiz
+      } else {
+        setState(() {});
+        liveTick.value++;
+      }
       return;
     }
-    // si algo va a caer en una hoja sin cargar, se deshace el movimiento (y se pide cargarla): nada se pierde
+    // si algo va a caer en una hoja sin cargar, se deshace el cambio (y se pide cargarla): nada se pierde
+    final olds = sel.strokesOf(doc), news = [for (final s in olds) s.transformed(xf)];
     var lands = true;
-    for (final s in sel.strokesOf(doc)) {
-      lands &= _loadedAt(s.bounds.top + d.dy);
+    for (final s in news) {
+      lands &= _loadedAt(s.bounds.top) && (move || _loadedAt(s.bounds.bottom));
     }
     for (final id in drag.textOrig.keys) {
       final t = doc.texts[id];
@@ -749,36 +765,22 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       if (it != null) lands &= _loadedAt(it.y);
     }
     if (!lands) {
-      drag.textOrig.forEach((id, o) {
-        final t = doc.texts[id];
-        if (t == null) return;
-        doc.markDirtyElement(t);
-        t.x = o.dx;
-        t.y = o.dy;
-        doc.markDirtyElement(t);
-      });
-      drag.itemOrig.forEach((id, o) {
-        final it = doc.items[id];
-        if (it == null) return;
-        doc.markDirtyElement(it);
-        it.x = o.dx;
-        it.y = o.dy;
-        doc.markDirtyElement(it);
-      });
-      _touchStrokes(sel.strokesOf(doc));
+      drag.xf = const Xform();
+      sel.applyToBlocks(doc);
+      sel.drag = null;
+      _touchStrokes(olds);
       _requestSync();
       setState(() {});
       liveTick.value++;
       return;
     }
+    sel.drag = null;
     final removed = <Stroke>[], added = <Stroke>[];
-    for (final id in sel.strokes) {
-      final s = doc.strokes.remove(id);
-      if (s == null) continue;
-      final m = s.moved(d);
-      removed.add(s);
-      added.add(m);
-      doc.strokes[id] = m;
+    for (var i = 0; i < olds.length; i++) {
+      doc.strokes.remove(olds[i].id);
+      removed.add(olds[i]);
+      added.add(news[i]);
+      doc.strokes[news[i].id] = news[i];
     }
     final textBefore = <String, TextBlock?>{}, textAfter = <String, TextBlock?>{};
     drag.textOrig.forEach((id, o) {
@@ -788,14 +790,14 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       t.y = max(0.0, doc.snapTextY(t.y)); // que caiga sobre el renglón de su hoja
       t.x = t.x.clamp(0.0, kW - 60);
       doc.markDirtyElement(t);
-      textBefore[id] = t.copy(d: o - Offset(t.x, t.y));
+      textBefore[id] = t.copy(d: o.topLeft - Offset(t.x, t.y));
       textAfter[id] = t.copy();
     });
     final itemBefore = <String, Item?>{}, itemAfter = <String, Item?>{};
     drag.itemOrig.forEach((id, o) {
       final it = doc.items[id];
       if (it == null) return;
-      itemBefore[id] = it.copy(d: o - Offset(it.x, it.y));
+      itemBefore[id] = it.copy(d: o.topLeft - Offset(it.x, it.y))..w = o.width..h = o.height;
       itemAfter[id] = it.copy();
     });
     _pushUndo(EditAction(
@@ -888,13 +890,6 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     if (r != null) _growIfNeeded(r.bottom);
     _changed();
     setState(() {});
-  }
-
-  /// Filtro de la barrita: deja solo el resaltador o todo menos el resaltador (la selección no entra al historial).
-  void _keepInk({required bool hl}) {
-    sel.keepOnly(doc, hl: hl);
-    setState(() {});
-    liveTick.value++;
   }
 
   /// Menú "Orden": mueve la selección en el orden de dibujo (con deshacer).
@@ -1541,17 +1536,28 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     );
   }
 
-  /// La página: capas + menú de la selección + esquina para agrandar un elemento.
+  /// La página: capas + menú de la selección + manijas para escalar y rotar.
   Widget _sheet() {
     final textMode = ts.tool == Tool.text;
-    final r = !sel.isEmpty && !sel.moving ? sel.bounds(doc) : null;
-    final resizable = r != null && sel.singleItem ? doc.items[sel.items.first] : null;
+    final idle = !sel.isEmpty && !sel.moving;
+    final r = idle ? sel.bounds(doc) : null;
+    // las manijas siguen a la transformación en curso (mientras se mueve a mano, no se ven)
+    final drag = sel.drag;
+    final handled = !sel.isEmpty && (idle || (drag != null && drag.handle != Handle.move));
+    final box = handled ? sel.bounds(doc) : null;
+    final canRotate = sel.strokes.isNotEmpty;
+    final xf = drag?.xf ?? const Xform();
+    Offset px(Offset p) => xf.apply(p) * scale;
+    final up = Offset(sin(xf.angle), -cos(xf.angle)); // "arriba" del recuadro, ya rotado
+    final topMid = box == null ? null : px(box.topCenter);
     return Stack(clipBehavior: Clip.none, children: [
       _layers(textMode),
       if (r != null)
         Positioned.fill(
+            key: const ValueKey('selMenu'),
             child: CustomSingleChildLayout(
-          delegate: _MenuLayout(max(0.0, r.left * scale), r.top * scale - 8, r.bottom * scale + 8),
+          // con la manija de rotar arriba, la barrita se sube para no taparla
+          delegate: _MenuLayout(max(0.0, r.left * scale), r.top * scale - 8 - (canRotate ? 40 : 0), r.bottom * scale + 8),
           child: FittedBox(fit: BoxFit.scaleDown, child: SelectionMenu(
             onCopy: () {
               _copySel();
@@ -1565,22 +1571,17 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             onDelete: _deleteSel,
             onClose: _clearSel,
             onOrder: _reorderSel,
-            onOnlyHl: sel.mixedInk(doc) ? () => _keepInk(hl: true) : null,
-            onOnlyInk: sel.mixedInk(doc) ? () => _keepInk(hl: false) : null,
           )),
         )),
-      if (resizable != null)
-        ResizeHandle(
-          item: resizable,
-          scale: scale,
-          onResize: () {
-            doc.markDirtyElement(resizable); // cambió de tamaño en el lugar (puede pasar de hoja)
-            setState(() => liveTick.value++);
-          },
-          onResizeEnd: (before) {
-            _pushUndo(EditAction(itemBefore: {resizable.id: before}, itemAfter: {resizable.id: resizable.copy()}));
-            _changed();
-          },
+      if (box != null)
+        SelectionHandles(
+          key: const ValueKey('selHandles'), // la misma al pasar de quieta a arrastrada: no pierde el gesto
+          corners: [for (final c in [box.topLeft, box.topRight, box.bottomRight, box.bottomLeft]) px(c)],
+          topMid: canRotate ? topMid : null,
+          rotateAt: canRotate ? topMid! + up * 34 : null,
+          onStart: _handleStart,
+          onUpdate: (_, g) => _handleUpdate(g),
+          onEnd: _handleEnd,
         ),
     ]);
   }

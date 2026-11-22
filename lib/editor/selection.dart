@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:ui';
 
 import '../domain/domain.dart';
@@ -15,13 +16,27 @@ Rect? contentBounds(Iterable<Stroke> strokes, Iterable<TextBlock> texts, Iterabl
 
 Rect? clipboardBounds(SelectionClipboard c) => contentBounds(c.strokes, c.texts, c.items);
 
-/// Arrastre de la selección: los trazos se dibujan corridos [delta] hasta soltar;
-/// textos y elementos se mueven en vivo y acá queda dónde estaban.
+/// Qué se agarró de la selección: el interior (mover), una esquina (escalar) o la manija de arriba (rotar).
+enum Handle { move, tl, tr, br, bl, rotate }
+
+/// Arrastre de la selección: los trazos se dibujan transformados por [xf] hasta soltar; textos y elementos se
+/// actualizan en vivo y acá queda dónde (y de qué tamaño) estaban.
 class MoveDrag {
   final Offset from;
-  Offset delta = Offset.zero;
-  final Map<String, Offset> textOrig, itemOrig;
-  MoveDrag(this.from, this.textOrig, this.itemOrig);
+  final Handle handle;
+
+  /// Escalar: [pivot] es la esquina opuesta (ancla) y [corner] la que se arrastra. Rotar: [pivot] es el centro.
+  final Offset pivot, corner;
+
+  /// Escala mínima (que nada quede de 0 ni más chico que lo permitido para un elemento).
+  final double minScale;
+  Xform xf = const Xform();
+  final Map<String, Rect> textOrig, itemOrig;
+  MoveDrag(this.from, this.textOrig, this.itemOrig,
+      {this.handle = Handle.move, this.pivot = Offset.zero, this.corner = Offset.zero, this.minScale = .1});
+
+  /// Cuánto se corrió (el arrastre de mover).
+  Offset get delta => xf.shift;
 }
 
 /// Lo seleccionado (por id), el rectángulo que se está estirando y el arrastre en curso.
@@ -37,9 +52,6 @@ class Selection {
   /// El rectángulo se estira de derecha a izquierda: es de "captura" (toma todo lo que toca);
   /// de izquierda a derecha es de "ventana" (solo lo que queda adentro).
   bool get capture => bandA != null && bandB != null && bandB!.dx < bandA!.dx;
-
-  /// Un solo elemento y nada más: se puede agrandar con la esquina.
-  bool get singleItem => items.length == 1 && strokes.isEmpty && texts.isEmpty;
 
   void clear() {
     strokes.clear();
@@ -82,24 +94,95 @@ class Selection {
   List<TextBlock> textsOf(NotebookDoc p) => [for (final id in texts) ?p.texts[id]];
   List<Item> itemsOf(NotebookDoc p) => [for (final id in items) ?p.items[id]];
 
-  /// Rectángulo de lo seleccionado en su posición original (sin el arrastre en curso), con margen.
-  Rect? bounds(NotebookDoc p) {
+  /// Rectángulo de lo seleccionado en su posición original (sin el arrastre en curso), sin margen.
+  Rect? contentRect(NotebookDoc p) {
     final d = drag;
-    Offset back(Offset? orig, double x, double y) => orig == null ? Offset.zero : orig - Offset(x, y);
     return contentBounds(
       strokesOf(p),
-      [for (final t in textsOf(p)) t.copy(d: back(d?.textOrig[t.id], t.x, t.y))],
-      [for (final it in itemsOf(p)) it.copy(d: back(d?.itemOrig[it.id], it.x, it.y))],
+      [for (final t in textsOf(p)) t.copy(d: (d?.textOrig[t.id]?.topLeft ?? Offset(t.x, t.y)) - Offset(t.x, t.y))],
+      [for (final it in itemsOf(p)) if (d?.itemOrig[it.id] case final r?) it.copy()..x = r.left..y = r.top..w = r.width..h = r.height else it],
       lineOf: (t) => p.lineAt(t.y),
-    )?.inflate(6);
+    );
   }
 
+  /// [contentRect] con margen: el recuadro que se ve.
+  Rect? bounds(NotebookDoc p) => contentRect(p)?.inflate(6);
+
   /// Empieza a mover lo seleccionado desde [p].
-  void startDrag(NotebookDoc doc, Offset p) => drag = MoveDrag(
-        p,
-        {for (final t in textsOf(doc)) t.id: Offset(t.x, t.y)},
-        {for (final it in itemsOf(doc)) it.id: Offset(it.x, it.y)},
-      );
+  void startDrag(NotebookDoc doc, Offset p) => drag = _newDrag(doc, p, Handle.move);
+
+  /// Empieza a escalar (esquina [h]) o rotar ([Handle.rotate]) lo seleccionado; [p] es donde está el lápiz.
+  void startHandle(NotebookDoc doc, Handle h, Offset p) {
+    final r = contentRect(doc);
+    if (r == null) return;
+    drag = _newDrag(doc, p, h, r);
+  }
+
+  MoveDrag _newDrag(NotebookDoc doc, Offset p, Handle h, [Rect? r]) {
+    final texts = {for (final t in textsOf(doc)) t.id: textRect(t, doc.lineAt(t.y))};
+    final items = {for (final it in itemsOf(doc)) it.id: it.rect};
+    var pivot = Offset.zero, corner = Offset.zero, minScale = .1;
+    if (r != null && h == Handle.rotate) pivot = r.center;
+    if (r != null && h != Handle.move && h != Handle.rotate) {
+      corner = switch (h) { Handle.tl => r.topLeft, Handle.tr => r.topRight, Handle.br => r.bottomRight, _ => r.bottomLeft };
+      pivot = switch (h) { Handle.tl => r.bottomRight, Handle.tr => r.bottomLeft, Handle.br => r.topLeft, _ => r.topRight };
+      // un elemento no baja de 60 de ancho (ni de alto, salvo el audio, que es de 56)
+      for (final it in itemsOf(doc)) {
+        final need = max(60 / it.w, it.type == 'image' ? 0.0 : (it.type == 'audio' ? 56 : 60) / it.h);
+        minScale = max(minScale, min(need, 1.0));
+      }
+    }
+    return MoveDrag(p, texts, items, handle: h, pivot: pivot, corner: corner, minScale: minScale);
+  }
+
+  /// El lápiz (o el dedo) está en [p]: calcula la transformación del arrastre en curso.
+  void dragTo(Offset p) {
+    final d = drag;
+    if (d == null) return;
+    switch (d.handle) {
+      case Handle.move:
+        d.xf = Xform.move(p - d.from);
+      case Handle.rotate:
+        final a = (p - d.pivot).direction - (d.from - d.pivot).direction;
+        d.xf = Xform(pivot: d.pivot, angle: snapAngle(atan2(sin(a), cos(a))));
+      default:
+        // escala uniforme: cuánto se alejó el lápiz del ancla, sobre la diagonal, respecto de donde agarró la esquina
+        final v = d.corner - d.pivot;
+        double along(Offset q) => (q.dx - d.pivot.dx) * v.dx + (q.dy - d.pivot.dy) * v.dy;
+        final s = along(d.from).abs() < 1e-6 ? 1.0 : along(p) / along(d.from);
+        d.xf = Xform(pivot: d.pivot, scale: max(d.minScale, s));
+    }
+  }
+
+  /// Deja textos y elementos como corresponde a la transformación del arrastre (en vivo, y al volver a la identidad
+  /// quedan donde estaban). Marca sucias las hojas de antes y de después. Los textos solo cambian de lugar; los
+  /// elementos, de tamaño y de lugar (el centro; no rotan).
+  void applyToBlocks(NotebookDoc doc) {
+    final d = drag;
+    if (d == null) return;
+    final xf = d.xf;
+    d.textOrig.forEach((id, r) {
+      final t = doc.texts[id];
+      if (t == null) return;
+      doc.markDirtyElement(t);
+      final m = xf.displacement(r.center);
+      t.x = r.left + m.dx;
+      t.y = r.top + m.dy;
+      doc.markDirtyElement(t);
+    });
+    d.itemOrig.forEach((id, r) {
+      final it = doc.items[id];
+      if (it == null) return;
+      doc.markDirtyElement(it);
+      if (xf.isMove) {
+        it..x = r.left + xf.shift.dx..y = r.top + xf.shift.dy..w = r.width..h = r.height;
+      } else {
+        final c = xf.apply(r.center), w = r.width * xf.scale, h = r.height * xf.scale;
+        it..x = c.dx - w / 2..y = c.dy - h / 2..w = w..h = h;
+      }
+      doc.markDirtyElement(it);
+    });
+  }
 
   /// Lo que hay bajo [pt] (con margen [tol], en unidades de documento), de arriba hacia abajo en lo que se VE:
   /// el orden de dibujo, con el resaltador debajo de la tinta de su tanda (ver [zRuns]). Hit test real:
@@ -126,20 +209,6 @@ class Selection {
   /// Deja seleccionado solo [e].
   void selectOne(Layered e) => replace(
       strokes: [if (e is Stroke) e.id], texts: [if (e is TextBlock) e.id], items: [if (e is Item) e.id]);
-
-  /// ¿Hay resaltador y además cualquier otra cosa (tinta, textos, imágenes, notas, audios)? Entonces la barrita
-  /// ofrece los filtros "Solo resaltador" / "Sin resaltador".
-  bool mixedInk(NotebookDoc doc) {
-    final s = strokesOf(doc);
-    return s.any((x) => x.k == 'hl') && (s.any((x) => x.k != 'hl') || texts.isNotEmpty || items.isNotEmpty);
-  }
-
-  /// Filtra la selección. Con [hl]: queda solo el resaltador (se sueltan tinta, textos y elementos).
-  /// Sin [hl]: se saca el resaltador y queda todo lo demás (tinta, textos y elementos).
-  void keepOnly(NotebookDoc doc, {required bool hl}) {
-    final keep = [for (final s in strokesOf(doc)) if ((s.k == 'hl') == hl) s.id];
-    replace(strokes: keep, texts: hl ? const [] : texts.toList(), items: hl ? const [] : items.toList());
-  }
 
   /// Selecciona lo que queda dentro de [r] ("ventana"): trazos con la mitad o más de sus puntos adentro;
   /// textos y elementos, si su centro cae adentro. Con [capture], todo lo que [r] toca: trazos cuyo

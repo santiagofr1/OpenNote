@@ -54,19 +54,31 @@ void paintLiveLayer(
     }
   }
   final drag = sel.drag;
-  if (drag != null) {
+  final xf = drag?.xf ?? const Xform();
+  // transforma el lienzo como la selección: mover, escalar y rotar alrededor del pivote
+  void withXform(void Function() draw) {
     c.save();
-    c.translate(drag.delta.dx, drag.delta.dy);
-    for (final s in sel.strokesOf(doc)) {
-      if (visible != null && !s.bounds.shift(drag.delta).overlaps(visible)) continue;
-      paintStroke(c, s);
-    }
+    c.translate(xf.pivot.dx + xf.shift.dx, xf.pivot.dy + xf.shift.dy);
+    c.rotate(xf.angle);
+    c.scale(xf.scale);
+    c.translate(-xf.pivot.dx, -xf.pivot.dy);
+    draw();
     c.restore();
+  }
+
+  if (drag != null) {
+    withXform(() {
+      for (final s in sel.strokesOf(doc)) {
+        if (visible != null && !xf.applyRect(s.bounds).overlaps(visible)) continue;
+        paintStroke(c, s);
+      }
+    });
   }
   final r = sel.bounds(doc);
   if (r != null) {
-    final rr = r.shift(drag?.delta ?? Offset.zero);
-    c.drawRect(rr, Paint()..color = const Color(0x0F2F5BD3));
-    dashedRect(c, rr, border, 6 / scale);
+    withXform(() {
+      c.drawRect(r, Paint()..color = const Color(0x0F2F5BD3));
+      dashedRect(c, r, border..strokeWidth = 1.5 / scale / xf.scale, 6 / scale / xf.scale);
+    });
   }
 }

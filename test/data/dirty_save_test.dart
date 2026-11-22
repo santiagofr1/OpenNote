@@ -450,7 +450,7 @@ void main() {
       await save(t, doc, 'nota');
       final it = doc.items.values.single;
       final w = it.w;
-      await t.drag(find.byType(ResizeHandle), const Offset(50, 40));
+      await t.drag(find.byKey(const ValueKey('selHandle-br')), const Offset(50, 40));
       await t.pump();
       expect(it.w, isNot(w), reason: 'la agarradera tiene que haber cambiado el tamaño');
       await save(t, doc, 'redimensionar');

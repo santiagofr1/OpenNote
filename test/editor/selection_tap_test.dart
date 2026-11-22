@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Seleccionar con un toque: elige UN elemento (el de más arriba que se ve) y alterna al tocar de nuevo;
-/// tocar afuera deselecciona; el filtro de la barrita separa resaltador y tinta.
+/// tocar afuera solo cancela (no elige lo que hay abajo); el resaltador se selecciona con las mismas reglas que la tinta.
 void main() {
   late Directory root;
   setUp(() => root = Directory.systemTemp.createTempSync('apuntes_seltap'));
@@ -68,15 +68,28 @@ void main() {
     expect(h.ed.sel.strokes, {'hl'});
   });
 
-  testWidgets('tocar afuera deselecciona; tocar otro elemento lo elige', (t) async {
+  testWidgets('tocar afuera solo deselecciona: no elige lo que haya abajo; un segundo toque sí', (t) async {
     final h = await open(t, palabra());
     await tap(t, h.at(300, 400));
     expect(h.ed.sel.isEmpty, isFalse);
     await tap(t, h.at(500, 600));
     expect(h.ed.sel.isEmpty, isTrue);
     expect(find.text('Copiar'), findsNothing);
+    // con algo seleccionado, tocar justo sobre OTRO trazo (afuera del recuadro) solo cancela
     await tap(t, h.at(300, 400));
     await tap(t, h.at(700, 800));
+    expect(h.ed.sel.isEmpty, isTrue, reason: 'no elige "lejos": solo cancela');
+    expect(find.text('Copiar'), findsNothing);
+    expect(h.ed.history.canUndo, isFalse);
+    // ya sin selección, el toque elige como siempre
+    await tap(t, h.at(700, 800));
+    expect(h.ed.sel.strokes, {'lejos'});
+  });
+
+  testWidgets('estirar un rectángulo afuera con algo seleccionado hace una selección nueva', (t) async {
+    final h = await open(t, palabra());
+    await tap(t, h.at(300, 400));
+    await tester(t, h, const Offset(550, 750), const Offset(850, 850)); // ventana sobre "lejos"
     expect(h.ed.sel.strokes, {'lejos'});
   });
 
@@ -95,18 +108,20 @@ void main() {
     expect(h.ed.history.canUndo, isFalse);
   });
 
-  testWidgets('filtro "Solo resaltador" / "Sin resaltador" con la selección mezclada', (t) async {
+  testWidgets('el resaltador adentro del recuadro se selecciona igual que la tinta (ventana y captura)', (t) async {
     final h = await open(t, palabra());
-    await tester(t, h, const Offset(500, 500), const Offset(100, 300)); // captura: tinta + resaltador
+    await tester(t, h, const Offset(100, 300), const Offset(500, 500)); // ventana: los dos quedan enteros adentro
     expect(h.ed.sel.strokes, {'ink', 'hl'});
-    await t.tap(find.text('Solo resaltador'));
+    expect(find.text('Solo resaltador'), findsNothing);
+    expect(find.text('Sin resaltador'), findsNothing);
+    await t.tap(find.byTooltip('Deseleccionar'));
     await t.pump();
-    expect(h.ed.sel.strokes, {'hl'});
-    expect(find.text('Solo resaltador'), findsNothing, reason: 'ya no está mezclado');
-    await tester(t, h, const Offset(500, 500), const Offset(100, 300));
-    await t.tap(find.text('Sin resaltador'));
-    await t.pump();
-    expect(h.ed.sel.strokes, {'ink'});
+    // ventana que deja afuera casi todo: ni la tinta ni el resaltador
+    await tester(t, h, const Offset(100, 300), const Offset(260, 500));
+    expect(h.ed.sel.strokes, isEmpty);
+    // captura (derecha a izquierda) que solo roza el borde: los dos
+    await tester(t, h, const Offset(260, 500), const Offset(100, 300));
+    expect(h.ed.sel.strokes, {'ink', 'hl'});
   });
 }
 
