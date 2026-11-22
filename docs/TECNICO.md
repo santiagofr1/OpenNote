@@ -424,6 +424,13 @@ una **malla de triángulos** (`lib/domain/stroke_mesh.dart`, `buildStrokeMesh`) 
     (se veían cuentas); la malla es continua, así que el lápiz queda un poco más parejo.
   - Caligrafía: cinta con la punta plana a 45° (2 vértices por punto) más una tira fina que mantiene el trazo visible
     cuando se mueve en la dirección de la punta.
+  - Pinceles de diseño (`dots`, `stars`, `hearts`, `flowers`, `scallop`; sección "Diseños" del panel del lápiz): la
+    línea central suavizada se re-muestrea por largo de arco y en cada parada se estampa una forma rellena de radio
+    `w * kDesignRadius` (1,25; paso 2,3 radios, 1,6 en puntitos), la primera en el inicio y un toque deja una forma.
+    La rotación de las estrellas sale del índice de la estampa (estable). Ondas es una tira continua de semicírculos
+    sobre una cinta fina. `Stroke.bounds` (1,6 x grosor) cubre la forma; la goma y la selección usan ese radio. Tope:
+    se corta el muestreo al llegar a `maxVertices`. Una punta desconocida (sync desde una versión nueva) cae en el
+    `default` del `switch` y se arma como bolígrafo. Al elegir un diseño con grosor < 5 el panel lo sube a 8.
 - **Opacidad < 1** (todas las puntas menos el lápiz): el trazo va en un `saveLayer` con el alfa, como antes, para que
   no se oscurezcan sus uniones. Esto incluye a fibra y resaltador, que antes usaban un `Path` sin capa.
 - **Lotes**: `paintStrokes` junta los trazos seguidos opacos del mismo color (y las mallas de colores entre sí) en
