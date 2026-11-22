@@ -8,7 +8,7 @@ import 'z_order.dart';
 
 /// Trazo: puntos guardados planos como [x, y, presión, x, y, presión, ...]
 class Stroke extends Layered {
-  // k = punta: pen | fountain | pencil | fine | calli | hl
+  // k = punta: pen | fountain | pencil | fine | calli | hl | pinceles de diseño (dots | stars | hearts | flowers | scallop)
   @override
   final String id;
   final String k, c;
@@ -55,7 +55,7 @@ class Stroke extends Layered {
       y0 = min(y0, pts[i + 1]);
       y1 = max(y1, pts[i + 1]);
     }
-    final r = w * 1.6;
+    final r = w * 1.6; // cubre también las formas de los pinceles de diseño (radio w * kDesignRadius)
     return _bounds = Rect.fromLTRB(x0 - r, y0 - r, x1 + r, y1 + r);
   }
 
@@ -81,11 +81,14 @@ class Stroke extends Layered {
     return Stroke(id ?? this.id, k, c, w * t.scale, p, o)..z = z;
   }
 
+  /// Cuánto se aleja la tinta de la línea central: la mitad del grosor, o el radio de la forma en los diseños.
+  double get _reach => isDesignTip(k) ? w * kDesignRadius : w / 2;
+
   /// ¿El trazo toca el rectángulo [r]? Real: algún tramo del recorrido, engordado la mitad del grosor,
   /// cruza el rectángulo (no alcanza con que se superpongan los rectángulos que envuelven).
   bool touchesRect(Rect r) {
     if (!bounds.overlaps(r)) return false;
-    final g = r.inflate(w / 2), p = pts;
+    final g = r.inflate(_reach), p = pts;
     if (n == 1) return g.contains(Offset(p[0], p[1]));
     for (var i = 1; i < n; i++) {
       if (segmentIntersectsRect(Offset(p[i * 3 - 3], p[i * 3 - 2]), Offset(p[i * 3], p[i * 3 + 1]), g)) return true;
@@ -115,7 +118,7 @@ class Stroke extends Layered {
   /// ¿La goma de radio [r] en [pt] toca este trazo?
   bool hitBy(Offset pt, double r) {
     if (!bounds.inflate(r).contains(pt)) return false;
-    final lim = r + w * .75, p = pts;
+    final lim = r + (isDesignTip(k) ? _reach : w * .75), p = pts;
     if (n == 1) return (Offset(p[0], p[1]) - pt).distance < lim;
     for (var i = 1; i < n; i++) {
       if (distToSegment(pt, Offset(p[i * 3 - 3], p[i * 3 - 2]), Offset(p[i * 3], p[i * 3 + 1])) < lim) return true;

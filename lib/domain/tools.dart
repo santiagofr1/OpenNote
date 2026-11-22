@@ -12,6 +12,15 @@ const tips = [
   ('calli', 'Caligrafía'),
 ];
 
+/// Pinceles de diseño (formas estampadas para decorar títulos y resúmenes): se muestran aparte de las puntas.
+const designTips = [
+  ('dots', 'Puntitos'),
+  ('stars', 'Estrellas'),
+  ('hearts', 'Corazones'),
+  ('flowers', 'Flores'),
+  ('scallop', 'Ondas'),
+];
+
 /// Radio de la goma: chica, mediana, grande.
 const eraserSizes = [8.0, 16.0, 30.0];
 

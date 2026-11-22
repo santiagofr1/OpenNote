@@ -186,6 +186,32 @@ void main() {
     await settle(t, 1200);
   });
 
+  testWidgets('pinceles de diseño: el panel del lápiz tiene la sección Diseños y cada uno deja un trazo con su punta (issue #6)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Diseños');
+    final c = sheetCenter(t);
+    var y = -120.0;
+    for (final (id, name) in designTips) {
+      await t.tap(find.byTooltip('Lápiz · tocá de nuevo para opciones'));
+      await settle(t);
+      expect(find.text('Diseños'), findsOneWidget);
+      await t.tap(find.text(name));
+      await settle(t);
+      expect(editor(t).ts.pen.tip, id);
+      expect(editor(t).ts.pen.width, greaterThanOrEqualTo(5), reason: 'al elegir un diseño el grosor queda útil');
+      await t.tapAt(const Offset(4, 4)); // cierra el panel (toca la cortina)
+      await settle(t);
+      final before = editor(t).doc.strokes.length;
+      await stylusLine(t, c + Offset(-100, y), c + Offset(100, y));
+      y += 60;
+      expect(editor(t).doc.strokes.length, before + 1, reason: name);
+      expect(editor(t).doc.strokes.values.last.k, id);
+      expect(editor(t).doc.strokes.values.last.ensureMesh()!.vertexCount, greaterThan(0));
+    }
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+  });
+
   testWidgets('panel de páginas: contador, agregar hoja y marcador', (t) async {
     await start(t);
     await createNotebook(t, 'Panel');

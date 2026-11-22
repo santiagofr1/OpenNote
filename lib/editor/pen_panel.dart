@@ -91,33 +91,10 @@ class _PenPanelState extends State<_PenPanel> {
 
         if (!isHl) ...[
           _label('Punta'),
-          Row(children: [
-            for (final (id, name) in tips)
-              Expanded(
-                child: GestureDetector(
-                  onTap: () => _set(() => p.tip = id),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 120),
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
-                    decoration: BoxDecoration(
-                      color: p.tip == id ? Theme.of(context).colorScheme.surfaceContainerHighest : Theme.of(context).colorScheme.onSurface.withValues(alpha: .04),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: p.tip == id ? Theme.of(context).colorScheme.primary : Colors.transparent, width: 1.5),
-                    ),
-                    child: Column(children: [
-                      SizedBox(
-                        height: 34,
-                        width: double.infinity,
-                        child: CustomPaint(painter: _SamplePainter(id, p.color, id == 'fine' ? 2.5 : 3.2, 1)),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(name, style: TextStyle(fontSize: 11.5, color: p.tip == id ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface), overflow: TextOverflow.ellipsis),
-                    ]),
-                  ),
-                ),
-              ),
-          ]),
+          Row(children: [for (final (id, name) in tips) _tipCell(p, id, name)]),
+          const SizedBox(height: 10),
+          _label('Diseños'),
+          Row(children: [for (final (id, name) in designTips) _tipCell(p, id, name)]),
           const SizedBox(height: 14),
         ],
 
@@ -205,6 +182,41 @@ class _PenPanelState extends State<_PenPanel> {
           ]),
         ],
       ]),
+    );
+  }
+
+  /// Una punta de la lista (normal o de diseño) con su muestra. Al pasar a un diseño el grosor se sube a uno útil
+  /// (la forma mide ~2,5 x grosor) y al volver a una punta normal se baja, para no quedar con un grosor ridículo.
+  Widget _tipCell(PenPreset p, String id, String name) {
+    final scheme = Theme.of(context).colorScheme;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => _set(() {
+          final toDesign = isDesignTip(id), wasDesign = isDesignTip(p.tip);
+          p.tip = id;
+          if (toDesign && p.width < 5) p.width = 8;
+          if (!toDesign && wasDesign && p.width > 6) p.width = 2.6;
+        }),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          margin: const EdgeInsets.symmetric(horizontal: 3),
+          padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
+          decoration: BoxDecoration(
+            color: p.tip == id ? scheme.surfaceContainerHighest : scheme.onSurface.withValues(alpha: .04),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: p.tip == id ? scheme.primary : Colors.transparent, width: 1.5),
+          ),
+          child: Column(children: [
+            SizedBox(
+              height: 34,
+              width: double.infinity,
+              child: CustomPaint(painter: _SamplePainter(id, p.color, isDesignTip(id) ? 4 : id == 'fine' ? 2.5 : 3.2, 1)),
+            ),
+            const SizedBox(height: 4),
+            Text(name, style: TextStyle(fontSize: 11.5, color: p.tip == id ? scheme.primary : scheme.onSurface), overflow: TextOverflow.ellipsis),
+          ]),
+        ),
+      ),
     );
   }
 

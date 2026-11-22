@@ -86,6 +86,12 @@ MeshPart _buildPart(Stroke s, int a, int b, double feather) {
   int alpha(double al) => ((al.clamp(0.0, 1.0)) * 255).round() << 24 | rgb;
 
   switch (s.k) {
+    case 'dots':
+    case 'stars':
+    case 'hearts':
+    case 'flowers':
+    case 'scallop':
+      return _designPart(s, a, b);
     case 'hl':
     case 'fine':
       final w = _W(feather > 0);
@@ -188,6 +194,154 @@ MeshPart _buildPart(Stroke s, int a, int b, double feather) {
       if (fountain) hw[0] = hw.length > 1 ? hw[1] : hw[0];
       _stripDedupe(w, xs, ys, hw, feather > 0 ? List<int>.filled(n, argb) : null, round: true, feather: feather);
       return w.done();
+  }
+}
+
+/// Pinceles de diseño: estampan una forma rellena repetida a lo largo del trazo (el tamaño sale del grosor).
+const designTipIds = {'dots', 'stars', 'hearts', 'flowers', 'scallop'};
+bool isDesignTip(String k) => designTipIds.contains(k);
+
+/// Radio de la forma = [kDesignRadius] x grosor (con el slider de 0,6 a 16: de chiquitas a ~40 de diámetro).
+/// Todas las formas entran en ese radio; [Stroke.bounds] (margen de 1,6 x grosor) las cubre enteras.
+const kDesignRadius = 1.25;
+
+/// Malla de un pincel de diseño para los puntos [a]..[b] del trazo. Se re-muestrea la línea central (ya suavizada)
+/// por largo de arco, con la primera estampa en el inicio (un solo punto deja una forma). Todo es determinístico:
+/// la rotación de las estrellas sale del índice global de la estampa, nunca de un Random.
+MeshPart _designPart(Stroke s, int a, int b) {
+  final p = s.pts;
+  final xs = <double>[], ys = <double>[];
+  _smoothCenterline([for (var i = a; i < b; i++) ...[p[i * 3], p[i * 3 + 1]]], xs, ys);
+  final w = _W(false);
+  final r = max(s.w, .1) * kDesignRadius;
+  const maxV = StrokeMesh.maxVertices - 100; // tope duro: un trazo larguísimo con pocos puntos se corta acá
+  if (s.k == 'scallop') {
+    _scallop(w, xs, ys, r, s.w, maxV);
+    return w.done();
+  }
+  final step = r * (s.k == 'dots' ? 1.6 : 2.3);
+  var idx = 0;
+  void stamp(double x, double y) {
+    switch (s.k) {
+      case 'dots':
+        _circle(w, x, y, r * .6, 0, 12);
+      case 'stars':
+        // simétrica cada 72°: la rotación pseudoaleatoria estable va por el índice global de punto y de estampa
+        final rot = ((a * 31 + idx) * 7919 % 72) / 72 * 2 * pi / 5;
+        _star(w, x, y, r, rot);
+      case 'hearts':
+        _heart(w, x, y, r);
+      default:
+        _flower(w, x, y, r);
+    }
+    idx++;
+  }
+
+  stamp(xs[0], ys[0]);
+  var next = step, acc = 0.0;
+  for (var i = 1; i < xs.length && w.count < maxV; i++) {
+    final len = sqrt(pow(xs[i] - xs[i - 1], 2) + pow(ys[i] - ys[i - 1], 2));
+    while (len > 0 && acc + len >= next && w.count < maxV) {
+      final t = (next - acc) / len;
+      stamp(xs[i - 1] + (xs[i] - xs[i - 1]) * t, ys[i - 1] + (ys[i] - ys[i - 1]) * t);
+      next += step;
+    }
+    acc += len;
+  }
+  return w.done();
+}
+
+/// Abanico desde ([cx],[cy]) por el contorno [px],[py] (la forma tiene que ser estrellada respecto del centro).
+void _fan(_W w, double cx, double cy, List<double> px, List<double> py) {
+  final c = w.v(cx, cy);
+  final first = w.v(px[0], py[0]);
+  var prev = first;
+  for (var i = 1; i < px.length; i++) {
+    final cur = w.v(px[i], py[i]);
+    w.tri(c, prev, cur);
+    prev = cur;
+  }
+  w.tri(c, prev, first);
+}
+
+/// Estrella de 5 puntas de radio [r], rotada [rot].
+void _star(_W w, double cx, double cy, double r, double rot) {
+  final px = <double>[], py = <double>[];
+  for (var k = 0; k < 10; k++) {
+    final ang = rot - pi / 2 + k * pi / 5, rr = k.isEven ? r : r * .45;
+    px.add(cx + rr * cos(ang));
+    py.add(cy + rr * sin(ang));
+  }
+  _fan(w, cx, cy, px, py);
+}
+
+/// Corazón derecho que entra en el radio [r] (curva paramétrica clásica, 16 = semiancho en sus unidades).
+void _heart(_W w, double cx, double cy, double r) {
+  final sc = r / 16, px = <double>[], py = <double>[];
+  for (var k = 0; k < 24; k++) {
+    final t = 2 * pi * k / 24;
+    final hx = 16 * pow(sin(t), 3);
+    final hy = 13 * cos(t) - 5 * cos(2 * t) - 2 * cos(3 * t) - cos(4 * t);
+    px.add(cx + hx * sc);
+    py.add(cy - (hy + 2.5) * sc); // +2.5: centra el alto (de -17 a 12) en el punto
+  }
+  _fan(w, cx, cy - 2.5 * sc, px, py);
+}
+
+/// Flor de 5 pétalos (círculos solapados) con el centro del mismo color: se lee como flor aun chica.
+void _flower(_W w, double cx, double cy, double r) {
+  for (var k = 0; k < 5; k++) {
+    final ang = -pi / 2 + k * 2 * pi / 5;
+    _circle(w, cx + r * .58 * cos(ang), cy + r * .58 * sin(ang), r * .4, 0, 10);
+  }
+  _circle(w, cx, cy, r * .3, 0, 10);
+}
+
+/// Festón: guarda continua de semicírculos (arcos hacia arriba) sobre una cinta fina que sigue el trazo.
+void _scallop(_W w, List<double> xs0, List<double> ys0, double r, double sw, int maxV) {
+  var xs = xs0, ys = ys0;
+  final ar = r * .7, period = ar * 2, base = max(sw * .3, .2); // radio del arco, largo del arco, grosor de la cinta
+  if (xs.length < 2) {
+    xs = [xs0[0] - period / 2, xs0[0] + period / 2];
+    ys = [ys0[0], ys0[0]];
+  }
+  final ds = period / 16;
+  // muestras por largo de arco: (x, y, distancia desde el inicio) y tangente
+  final sx = <double>[xs[0]], sy = <double>[ys[0]];
+  var next = ds, acc = 0.0;
+  for (var i = 1; i < xs.length && sx.length * 2 < maxV; i++) {
+    final len = sqrt(pow(xs[i] - xs[i - 1], 2) + pow(ys[i] - ys[i - 1], 2));
+    while (len > 0 && acc + len >= next && sx.length * 2 < maxV) {
+      final t = (next - acc) / len;
+      sx.add(xs[i - 1] + (xs[i] - xs[i - 1]) * t);
+      sy.add(ys[i - 1] + (ys[i] - ys[i - 1]) * t);
+      next += ds;
+    }
+    acc += len;
+  }
+  if (sx.length < 2) {
+    sx.add(xs.last);
+    sy.add(ys.last);
+  }
+  int? prev;
+  for (var i = 0; i < sx.length; i++) {
+    final j0 = i == 0 ? 0 : i - 1, j1 = i == sx.length - 1 ? i : i + 1;
+    var tx = sx[j1] - sx[j0], ty = sy[j1] - sy[j0];
+    final tl = sqrt(tx * tx + ty * ty);
+    if (tl < 1e-9) {
+      tx = 1;
+      ty = 0;
+    } else {
+      tx /= tl;
+      ty /= tl;
+    }
+    final local = (i * ds) % period - ar; // -ar..ar dentro de cada arco
+    final h = sqrt(max(0, ar * ar - local * local));
+    final nx = ty, ny = -tx; // hacia arriba cuando el trazo va de izquierda a derecha
+    final top = w.v(sx[i] + nx * h, sy[i] + ny * h);
+    w.v(sx[i] - nx * base, sy[i] - ny * base);
+    if (prev != null) w.quad(prev, prev + 1, top + 1, top);
+    prev = top;
   }
 }
 
