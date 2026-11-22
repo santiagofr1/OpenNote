@@ -1,8 +1,8 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'selection.dart';
+import 'slop_drag.dart';
 
 /// Manijas sobre el recuadro de la selección: una en cada esquina para escalar y, si hay trazos, una arriba del centro
 /// del borde de arriba (unida con una rayita) para rotar. Todo en pantalla, del mismo tamaño con cualquier zoom.
@@ -16,6 +16,9 @@ class SelectionHandles extends StatelessWidget {
   final Offset? rotateAt, topMid;
   final void Function(Handle h, Offset global) onStart, onUpdate;
   final VoidCallback onEnd;
+
+  /// Se apoyó un puntero sobre una manija (el editor no lo toma por un toque suelto sobre la hoja).
+  final void Function(PointerDownEvent e)? onPointerDown;
   const SelectionHandles({
     super.key,
     required this.corners,
@@ -24,6 +27,7 @@ class SelectionHandles extends StatelessWidget {
     required this.onEnd,
     this.rotateAt,
     this.topMid,
+    this.onPointerDown,
   });
 
   @override
@@ -35,24 +39,29 @@ class SelectionHandles extends StatelessWidget {
           top: at.dy - hit / 2,
           width: hit,
           height: hit,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            dragStartBehavior: DragStartBehavior.down,
-            onPanStart: (d) => onStart(h, d.globalPosition),
-            onPanUpdate: (d) => onUpdate(h, d.globalPosition),
-            onPanEnd: (_) => onEnd(),
-            onPanCancel: onEnd,
-            child: Center(
+          // con el dedo también: SlopDrag gana la arena antes que el scroll (un Pan necesita 36 px y el scroll 18)
+          child: Listener(
+            onPointerDown: onPointerDown,
+            child: SlopDrag(
+              slop: 4,
+              onStart: (g) => onStart(h, g),
+              onUpdate: (g) => onUpdate(h, g),
+              onEnd: onEnd,
+              // zona de toque de la manija entera, no solo de su círculo
               child: Container(
-                width: dot,
-                height: dot,
-                decoration: BoxDecoration(
-                  color: cs.surface,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: cs.primary, width: 2),
-                  boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 3)],
+                color: const Color(0x00000000),
+                alignment: Alignment.center,
+                child: Container(
+                  width: dot,
+                  height: dot,
+                  decoration: BoxDecoration(
+                    color: cs.surface,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: cs.primary, width: 2),
+                    boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 3)],
+                  ),
+                  child: icon == null ? null : Icon(icon, size: 10, color: cs.primary),
                 ),
-                child: icon == null ? null : Icon(icon, size: 10, color: cs.primary),
               ),
             ),
           ),

@@ -155,17 +155,27 @@ class _AudioChipState extends State<AudioChip> {
   @override
   Widget build(BuildContext context) {
     final s = widget.scale;
-    return GestureDetector(
-      // solo el dedo o el mouse reproducen; el lápiz sigue escribiendo encima
-      supportedDevices: const {PointerDeviceKind.touch, PointerDeviceKind.mouse},
-      onTap: _toggle,
-      child: Container(
-        decoration: BoxDecoration(color: const Color(0xFFE9E6F5), borderRadius: BorderRadius.circular(999)),
-        padding: EdgeInsets.symmetric(horizontal: 10 * s),
-        child: Row(children: [
-          Icon(playing ? Symbols.pause_circle : Symbols.play_circle, size: 34 * s, fill: 1, color: const Color(0xFF5B4FC4)),
-          SizedBox(width: 8 * s),
-          Expanded(
+    // Solo el botón de reproducir (los primeros ~54 unidades, ver PageEditor.kAudioPlayZone) reproduce: el resto del audio
+    // es para elegirlo y moverlo con el dedo. Con el lápiz no reproduce: sigue escribiendo / eligiendo encima.
+    return Container(
+      decoration: BoxDecoration(color: const Color(0xFFE9E6F5), borderRadius: BorderRadius.circular(999)),
+      padding: EdgeInsets.only(right: 10 * s),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          supportedDevices: const {PointerDeviceKind.touch, PointerDeviceKind.mouse},
+          onTap: _toggle,
+          child: Padding(
+            padding: EdgeInsets.only(left: 10 * s, right: 8 * s),
+            child: Center(
+              child: Icon(playing ? Symbols.pause_circle : Symbols.play_circle,
+                  size: 34 * s, fill: 1, color: const Color(0xFF5B4FC4)),
+            ),
+          ),
+        ),
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerLeft,
             child: Text(
               playing || pos > Duration.zero
                   ? '${fmtDuration(pos.inMilliseconds)} / ${fmtDuration(widget.dur)}'
@@ -175,9 +185,9 @@ class _AudioChipState extends State<AudioChip> {
               style: TextStyle(fontSize: 19 * s, color: _stickyInk, fontFeatures: const [FontFeature.tabularFigures()]),
             ),
           ),
-          SizedBox(width: 24 * s), // equilibra el ícono de la izquierda
-        ]),
-      ),
+        ),
+        SizedBox(width: 24 * s), // equilibra el ícono de la izquierda
+      ]),
     );
   }
 }

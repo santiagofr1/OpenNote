@@ -303,6 +303,22 @@ se reemplazan por `Stroke.transformed` (todos los puntos; el grosor por la escal
 objeto), los elementos escalan su rectángulo y al rotar solo mueven su centro (no rotan), y los textos solo cambian de
 lugar. Todo es UN `EditAction`; deshacer devuelve los objetos originales, exactos.
 
+**Elementos con el dedo** (issue #11a). El dedo scrollea (la hoja es un `SingleChildScrollView`), así que para elegir y
+mover con él hay dos piezas en `page_editor.dart`:
+- *Toque*: `_touchDown/_touchMove/_touchUp` (el `Listener` del visor, el mismo del pellizco y del menú de la hoja) siguen un
+  `_tapCand`: un solo dedo, sin moverse más de 10 px, sin que la hoja se haya movido, sin que `StillPressTimer` haya disparado
+  (el menú de la hoja cancela el candidato) y que no apoyó sobre la barrita ni las manijas (`_selUiPointers`). Al levantar,
+  `_fingerTap` elige la imagen / nota / audio de más arriba bajo el dedo (`hitStack`, solo `Item`), SIN cambiar de herramienta;
+  tocar vacío con algo elegido deselecciona (un hueco del recuadro no). En modo texto no elige (tocar es para escribir y
+  las notas se editan; un PDF importado es una imagen que cubre la hoja entera). En un audio, el botón de reproducir (los
+  primeros `kAudioPlayZone` = 54 unidades, y SOLO ahí tiene su `GestureDetector`) reproduce y no elige.
+- *Arrastre*: `SlopDragRecognizer` / `SlopDrag` (`slop_drag.dart`) es un reconocedor de un puntero que gana la arena a los
+  6 px (el scroll necesita 18 y un `PanGestureRecognizer` 36: por eso las manijas con `onPan` nunca andaban con el dedo) y es
+  traslúcido (no tapa el toque del botón de reproducir). Con algo elegido, `_sheet()` monta `selBody` (recuadro de la
+  selección + 12 px, solo dedo) que mueve con `Selection.startDrag/dragTo` y `_selDrop`, igual que el lápiz; se queda montado
+  mientras se arrastra (si no, se perdería el gesto). Las manijas usan el mismo reconocedor con 4 px y todos los dispositivos.
+  Un segundo dedo (`touch.length != 1`) lo retira: el pellizco sigue andando. Arrastrar el dedo fuera de lo elegido scrollea.
+
 ### Guardado
 
 - Guardar codifica en otro isolate solo las hojas sucias (`NotebookDoc.takeDirty`; los mapas de elementos avisan

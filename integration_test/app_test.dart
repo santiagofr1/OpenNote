@@ -1070,6 +1070,74 @@ void main() {
     expect(ed.sel.strokes, {far}, reason: 'el segundo toque, ya sin selección, elige');
   });
 
+  testWidgets('con el dedo se selecciona y mueve una imagen / audio (issue #11a)', (t) async {
+    final img = await fakeImage(400, 300);
+    Pickers.image = (_) async => img;
+    final audioSrc = File('${root.path}/clase.m4a')..writeAsBytesSync(List.filled(2048, 3));
+    Pickers.audio = () async => audioSrc;
+    Pickers.audioLength = (_) async => 4000;
+    await start(t);
+    await createNotebook(t, 'Dedo');
+    for (final label in ['Imagen', 'Archivo de audio']) {
+      await t.tap(find.byKey(const Key('insert')));
+      await settle(t);
+      await t.tap(find.text(label));
+      await settle(t, 1200);
+    }
+    final ed = editor(t);
+    final image = ed.doc.items.values.firstWhere((i) => i.type == 'image');
+    final audio = ed.doc.items.values.firstWhere((i) => i.type == 'audio');
+    // cada uno en su lugar (los dos se insertaron en el centro)
+    for (final (it, x, y) in [(image, 150.0, 200.0), (audio, 150.0, 700.0)]) {
+      ed.doc.markDirtyElement(it);
+      it..x = x..y = y;
+      ed.doc.markDirtyElement(it);
+    }
+    ed.refresh();
+    await t.tap(find.byTooltip('Lápiz · tocá de nuevo para opciones'));
+    await settle(t);
+    final p = docToScreen(t);
+    Future<void> fingerTap(Offset a) async {
+      final g = await t.startGesture(a, kind: PointerDeviceKind.touch);
+      await t.pump(const Duration(milliseconds: 50));
+      await g.up();
+      await settle(t, 300);
+    }
+
+    // un toque del dedo elige (con el lápiz como herramienta) y aparecen la barrita y las manijas
+    await fingerTap(p(Offset(image.x + image.w / 2, image.y + image.h / 2)));
+    expect(ed.selI, {image.id});
+    expect(find.byKey(const Key('selHandle-br')), findsOneWidget);
+    await fingerTap(p(Offset(audio.x + 200, audio.y + 32)));
+    expect(ed.selI, {audio.id}, reason: 'el audio también, tocando afuera del botón de reproducir');
+
+    // arrastrar con el dedo lo elegido lo mueve, sin scrollear
+    final y0 = ed.scroll.offset, x0 = audio.x, yy0 = audio.y;
+    final from = p(Offset(audio.x + 200, audio.y + 32));
+    final g = await t.startGesture(from, kind: PointerDeviceKind.touch);
+    for (var i = 1; i <= 10; i++) {
+      await g.moveTo(from + Offset(0, -12.0 * i));
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    await g.up();
+    await settle(t, 300);
+    expect(ed.scroll.offset, y0, reason: 'no scrolleó');
+    expect(audio.y, lessThan(yy0 - 40), reason: 'el audio subió');
+    expect(audio.x, closeTo(x0, 2));
+
+    // arrastrar en otro lado sigue scrolleando
+    final y1 = ed.scroll.offset;
+    final other = t.getCenter(find.byType(PageEditor)) + const Offset(300, 0);
+    final g2 = await t.startGesture(other, kind: PointerDeviceKind.touch);
+    for (var i = 1; i <= 10; i++) {
+      await g2.moveTo(other + Offset(0, -25.0 * i));
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    await g2.up();
+    await settle(t, 300);
+    expect(ed.scroll.offset, greaterThan(y1 + 50), reason: 'sigue scrolleando');
+  });
+
   testWidgets('scroll rápido de punta a punta: sin errores; quieto usa imágenes; un trazo nuevo se ve y se guarda', (t) async {
     // cuaderno de 6 hojas con bastante tinta por hoja (más de SheetImageCache.defaultMinPoints: vale una imagen)
     final perStroke = SheetImageCache.defaultMinPoints ~/ 40 + 20;

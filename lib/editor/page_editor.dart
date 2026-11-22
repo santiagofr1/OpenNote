@@ -27,6 +27,7 @@ import 'pull_to_add.dart';
 import 'selection.dart';
 import 'selection_handles.dart';
 import 'selection_menu.dart';
+import 'slop_drag.dart';
 import 'text_blocks.dart';
 import 'toolbar.dart';
 import 'touch_gestures.dart';
@@ -99,6 +100,12 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   late final pull = PullToAddSheet(vsync: this, onComplete: _addSheetFromPull);
   final touch = TouchTracker();
   late final stillPress = StillPressTimer(_onStillPress);
+
+  /// Dedo apoyado que todavía puede ser un toque (para elegir un elemento): dónde y con qué scroll apoyó.
+  ({int pointer, Offset global, double scrollY})? _tapCand;
+
+  /// Punteros apoyados sobre la barrita o las manijas de la selección: no cuentan como un toque sobre la hoja.
+  final _selUiPointers = <int>{};
   SheetLayout layout = SheetLayout.initial;
   double get scale => layout.scale;
 
@@ -1125,11 +1132,14 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   void _touchDown(PointerDownEvent e) {
     if (e.kind != PointerDeviceKind.touch) return;
     touch.down(e.pointer, e.position);
+    final onSelUi = _selUiPointers.remove(e.pointer);
     if (touch.length == 1 && pointer == null) {
       stillPress.start(e.position);
       _pressScrollY = scroll.hasClients ? scroll.offset : 0;
+      _tapCand = widget.readOnly || onSelUi ? null : (pointer: e.pointer, global: e.position, scrollY: _pressScrollY);
     } else {
       stillPress.cancel(); // segundo dedo: es zoom, no menú
+      _tapCand = null;
     }
     // dos dedos = pellizco (salvo que el zoom esté fijado o se esté escribiendo con el lápiz)
     if (touch.length == 2 && !ts.zoomLocked && pointer == null) {
@@ -1143,6 +1153,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     if (!touch.tracks(e.pointer)) return;
     touch.move(e.pointer, e.position);
     stillPress.moved(e.position);
+    final c = _tapCand;
+    if (c != null && c.pointer == e.pointer && (e.position - c.global).distance > 10) _tapCand = null; // arrastra: no es un toque
     final p = touch.pinch();
     if (p == null) return;
     final box = _viewportKey.currentContext!.findRenderObject() as RenderBox;
@@ -1151,8 +1163,14 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   void _touchUp(PointerEvent e) {
     if (e.kind != PointerDeviceKind.touch) return;
+    final cand = _tapCand;
+    _tapCand = null;
+    final wasAlone = touch.length == 1 && touch.tracks(e.pointer) && !touch.pinching;
     touch.up(e.pointer);
     stillPress.cancel();
+    if (cand != null && cand.pointer == e.pointer && e is PointerUpEvent && wasAlone && (!scroll.hasClients || (scroll.offset - cand.scrollY).abs() < 1)) {
+      _fingerTap(cand.global);
+    }
     if (touch.pinching && touch.length < 2) {
       setState(() => touch.pinching = false);
       widget.onPrefsChanged();
@@ -1169,6 +1187,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   /// Un dedo quieto sobre la hoja: menú contextual (si no se está scrolleando ni escribiendo).
   void _onStillPress(Offset g) {
+    _tapCand = null; // mantener quieto abre el menú: al levantar no es un toque que elige
     if (!mounted || touch.pinching || touch.length != 1 || pointer != null) return;
     // Ojo: `isScrollingNotifier` no sirve acá: con un solo scroll posible (zoom 1, sin scroll horizontal) el dedo
     // gana la arena apenas toca y el scroll figura "en curso" aunque no se mueva. Se mira si la hoja se movió.
@@ -1181,6 +1200,61 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     if (!(Offset.zero & box.size).contains(local)) return;
     touch.clear(); // el menú se abre con el dedo apoyado: si el "levantó" no llega, no queda un dedo fantasma
     _sheetMenu(g, _toPage(local));
+  }
+
+  /// Ancho (unidades de la hoja, desde el borde izquierdo del audio) del botón de reproducir: un toque ahí reproduce y
+  /// no elige (ver `AudioChip`).
+  static const kAudioPlayZone = 54.0;
+
+  /// Toque con el dedo en [global] (en cualquier herramienta menos texto, donde tocar es para escribir): sobre una imagen,
+  /// un audio o una nota adhesiva la elige (la misma barrita y manijas que con el lápiz, sin cambiar de herramienta);
+  /// afuera, si había algo elegido, lo deselecciona. No entra al historial.
+  void _fingerTap(Offset global) {
+    if (!mounted || widget.readOnly || ts.tool == Tool.text) return;
+    final box = _sheetKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final local = box.globalToLocal(global);
+    if (!(Offset.zero & box.size).contains(local)) return;
+    final p = _toPage(local);
+    if (!_loadedAt(p.dy)) return;
+    Item? hit;
+    for (final e in sel.hitStack(doc, p, 4 / scale)) {
+      if (e is Item) {
+        hit = e;
+        break;
+      }
+    }
+    if (hit == null) {
+      final r = sel.bounds(doc);
+      if (!sel.isEmpty && !(r != null && r.inflate(12).contains(p))) _clearSel();
+      return;
+    }
+    if (hit.type == 'audio' && p.dx - hit.x < kAudioPlayZone) return; // es el botón de reproducir
+    if (sel.items.length == 1 && sel.strokes.isEmpty && sel.texts.isEmpty && sel.items.contains(hit.id)) return;
+    setState(() => sel.selectOne(hit!));
+    liveTick.value++;
+  }
+
+  void _selUiDown(PointerDownEvent e) {
+    if (e.kind == PointerDeviceKind.touch) _selUiPointers.add(e.pointer);
+  }
+
+  // ---- mover con el dedo lo ya seleccionado ----
+  void _fingerMoveStart(Offset global) {
+    if (sel.isEmpty || sel.moving) return;
+    stillPress.cancel();
+    _tapCand = null;
+    sel.startDrag(doc, _pageOfGlobal(global));
+    _touchStrokes(sel.strokesOf(doc)); // oculta los seleccionados de la capa fija
+    setState(() {});
+  }
+
+  void _fingerMoveUpdate(Offset global) {
+    if (sel.moving) _selDrag(_pageOfGlobal(global));
+  }
+
+  void _fingerMoveEnd() {
+    if (sel.moving) _selDrop();
   }
 
   Future<void> _sheetMenu(Offset global, Offset p) async {
@@ -1550,15 +1624,32 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     Offset px(Offset p) => xf.apply(p) * scale;
     final up = Offset(sin(xf.angle), -cos(xf.angle)); // "arriba" del recuadro, ya rotado
     final topMid = box == null ? null : px(box.topCenter);
+    // dedo sobre lo seleccionado: lo mueve (la zona queda montada mientras se arrastra, o el gesto se perdería)
+    final body = !widget.readOnly && !sel.isEmpty && (idle || (drag != null && drag.handle == Handle.move)) ? sel.bounds(doc) : null;
     return Stack(clipBehavior: Clip.none, children: [
       _layers(textMode),
+      if (body != null)
+        Positioned.fromRect(
+          key: const ValueKey('selBody'),
+          rect: Rect.fromLTWH(body.left * scale, body.top * scale, body.width * scale, body.height * scale).inflate(12),
+          child: SlopDrag(
+            devices: const {PointerDeviceKind.touch},
+            canStart: () => touch.length == 1 && !touch.pinching && !sel.moving,
+            onStart: _fingerMoveStart,
+            onUpdate: _fingerMoveUpdate,
+            onEnd: _fingerMoveEnd,
+          ),
+        ),
       if (r != null)
         Positioned.fill(
             key: const ValueKey('selMenu'),
             child: CustomSingleChildLayout(
           // con la manija de rotar arriba, la barrita se sube para no taparla
           delegate: _MenuLayout(max(0.0, r.left * scale), r.top * scale - 8 - (canRotate ? 40 : 0), r.bottom * scale + 8),
-          child: FittedBox(fit: BoxFit.scaleDown, child: SelectionMenu(
+          child: Listener(
+            behavior: HitTestBehavior.translucent,
+            onPointerDown: _selUiDown,
+            child: FittedBox(fit: BoxFit.scaleDown, child: SelectionMenu(
             onCopy: () {
               _copySel();
               snack(context, 'Copiado', duration: const Duration(milliseconds: 1200), width: 260);
@@ -1571,7 +1662,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             onDelete: _deleteSel,
             onClose: _clearSel,
             onOrder: _reorderSel,
-          )),
+          ))),
         )),
       if (box != null)
         SelectionHandles(
@@ -1579,6 +1670,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
           corners: [for (final c in [box.topLeft, box.topRight, box.bottomRight, box.bottomLeft]) px(c)],
           topMid: canRotate ? topMid : null,
           rotateAt: canRotate ? topMid! + up * 34 : null,
+          onPointerDown: _selUiDown,
           onStart: _handleStart,
           onUpdate: (_, g) => _handleUpdate(g),
           onEnd: _handleEnd,
