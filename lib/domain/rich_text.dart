@@ -14,10 +14,13 @@ enum ParaAlign { left, center, right, justify }
 enum Fmt { bold, italic, underline, strike }
 
 /// Formato de un tramo de texto. Los colores son ARGB (null = el de la tinta / sin resaltado).
+/// [size] es el tamaño de letra en puntos (null = automático: el que da el interlineado de la hoja).
 class RunStyle {
   final bool bold, italic, underline, strike;
   final int? color, highlight;
-  const RunStyle({this.bold = false, this.italic = false, this.underline = false, this.strike = false, this.color, this.highlight});
+  final double? size;
+  const RunStyle(
+      {this.bold = false, this.italic = false, this.underline = false, this.strike = false, this.color, this.highlight, this.size});
 
   static const plain = RunStyle();
 
@@ -35,12 +38,15 @@ class RunStyle {
         strike: f == Fmt.strike ? on : strike,
         color: color,
         highlight: highlight,
+        size: size,
       );
 
   RunStyle withColor(int? c) =>
-      RunStyle(bold: bold, italic: italic, underline: underline, strike: strike, color: c, highlight: highlight);
+      RunStyle(bold: bold, italic: italic, underline: underline, strike: strike, color: c, highlight: highlight, size: size);
   RunStyle withHighlight(int? c) =>
-      RunStyle(bold: bold, italic: italic, underline: underline, strike: strike, color: color, highlight: c);
+      RunStyle(bold: bold, italic: italic, underline: underline, strike: strike, color: color, highlight: c, size: size);
+  RunStyle withSize(double? pt) =>
+      RunStyle(bold: bold, italic: italic, underline: underline, strike: strike, color: color, highlight: highlight, size: pt);
 
   @override
   bool operator ==(Object other) =>
@@ -50,9 +56,10 @@ class RunStyle {
       other.underline == underline &&
       other.strike == strike &&
       other.color == color &&
-      other.highlight == highlight;
+      other.highlight == highlight &&
+      other.size == size;
   @override
-  int get hashCode => Object.hash(bold, italic, underline, strike, color, highlight);
+  int get hashCode => Object.hash(bold, italic, underline, strike, color, highlight, size);
 }
 
 /// Tramo de texto con un solo formato.
@@ -74,6 +81,7 @@ class Run {
         if (style.strike) 'k': 1,
         if (style.color != null) 'c': style.color,
         if (style.highlight != null) 'h': style.highlight,
+        if (style.size != null) 'size': style.size,
       };
 
   factory Run.fromJson(Map j) => Run(
@@ -85,6 +93,7 @@ class Run {
         strike: j['k'] != null,
         color: (j['c'] as num?)?.toInt(),
         highlight: (j['h'] as num?)?.toInt(),
+        size: (j['size'] as num?)?.toDouble(),
       ));
 }
 
@@ -299,6 +308,22 @@ class RichBody {
 
   RichBody setColor(int s, int e, int? color) => mapRuns(s, e, (st) => st.withColor(color));
   RichBody setHighlight(int s, int e, int? color) => mapRuns(s, e, (st) => st.withHighlight(color));
+  RichBody setSize(int s, int e, double? pt) => mapRuns(s, e, (st) => st.withSize(pt));
+
+  /// Tamaño común (en pt) de los caracteres de [s, e); null si es automático o si hay mezcla.
+  double? commonSize(int s, int e) {
+    double? size;
+    var first = true, mixed = false;
+    _eachRun(s, e, (_, st) {
+      if (first) {
+        size = st.size;
+        first = false;
+      } else if (st.size != size) {
+        mixed = true;
+      }
+    });
+    return mixed ? null : size;
+  }
 
   /// Cambia el formato de todos los caracteres de [s, e).
   RichBody mapRuns(int s, int e, RunStyle Function(RunStyle) fn) {

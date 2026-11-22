@@ -157,4 +157,42 @@ void main() {
       expect(p.list, ListKind.none);
     });
   });
+
+  group('tamaño de letra', () {
+    test('setSize sobre una selección parcial parte los tramos y conserva lo demás', () {
+      final r = b('hola mundo').toggle(0, 4, Fmt.bold).setSize(2, 7, 24);
+      expect([for (final x in r.paras[0].runs) x.text], ['ho', 'la', ' mu', 'ndo']);
+      expect([for (final x in r.paras[0].runs) x.style.size], [null, 24, 24, null]);
+      expect(r.paras[0].runs[1].style.bold, isTrue, reason: 'el tamaño conserva la negrita');
+      expect(r.paras[0].runs[2].style.bold, isFalse);
+      expect(r.setColor(0, 10, 0xFF112233).paras[0].runs[1].style.size, 24, reason: 'los demás with* conservan size');
+      expect(r.setSize(2, 7, null), b('hola mundo').toggle(0, 4, Fmt.bold), reason: 'null vuelve a automático');
+    });
+
+    test('setSize entre párrafos y commonSize', () {
+      final r = b('uno\ndos').setSize(1, 6, 18);
+      expect(r.paras[0].runs.last.style.size, 18);
+      expect(r.paras[1].runs.first.style.size, 18);
+      expect(r.commonSize(1, 6), 18);
+      expect(r.commonSize(0, 6), isNull, reason: 'mezcla de automático y 18');
+      expect(r.commonSize(0, 1), isNull, reason: 'automático');
+    });
+
+    test('JSON con y sin size; los viejos cargan null', () {
+      final r = b('hola').setSize(0, 2, 24).setSize(2, 4, 10.5);
+      final j = r.toJson();
+      expect(j[0]['runs'][0]['size'], 24);
+      expect(RichBody.fromJson(j), r);
+      expect(RichBody.fromJson(j).paras[0].runs[1].style.size, 10.5);
+      expect(b('hola').toJson()[0]['runs'][0].containsKey('size'), isFalse);
+      expect(Run.fromJson({'t': 'x', 'b': 1}).style.size, isNull);
+      expect(r.isPlain, isFalse);
+    });
+
+    test('puntos y unidades: 12 pt son 4,23 mm reales', () {
+      expect(unitsToMm(ptToUnits(12)), closeTo(4.233, .001));
+      expect(ptToUnits(12) * 210 / 1000, closeTo(4.233, .001));
+      expect(autoPt(textLine('lined', 8)), closeTo(12, .5));
+    });
+  });
 }
