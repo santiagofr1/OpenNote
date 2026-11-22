@@ -71,3 +71,41 @@ bool segmentIntersectsRect(Offset a, Offset b, Rect r) {
       clip(-d.dy, a.dy - r.top) &&
       clip(d.dy, r.bottom - a.dy);
 }
+
+/// Transformación de la selección: se escala [scale] y se rota [angle] (radianes) alrededor de [pivot], y después
+/// se corre [shift]. Mover es solo [shift]; escalar desde una esquina es [pivot] = la esquina opuesta; rotar,
+/// [pivot] = el centro del recuadro.
+class Xform {
+  final Offset pivot;
+  final double scale, angle;
+  final Offset shift;
+  const Xform({this.pivot = Offset.zero, this.scale = 1, this.angle = 0, this.shift = Offset.zero});
+
+  /// Solo trasladar [d].
+  const Xform.move(Offset d) : this(shift: d);
+
+  /// No escala ni rota: es una traslación (y se calcula exacta, sin pasar por senos y cosenos).
+  bool get isMove => scale == 1 && angle == 0;
+  bool get isIdentity => isMove && shift == Offset.zero;
+
+  Offset apply(Offset p) {
+    if (isMove) return p + shift;
+    final v = (p - pivot) * scale, c = cos(angle), s = sin(angle);
+    return pivot + shift + Offset(v.dx * c - v.dy * s, v.dx * s + v.dy * c);
+  }
+
+  /// Cuánto se corre [p] (para lo que solo cambia de lugar, como los textos).
+  Offset displacement(Offset p) => isMove ? shift : apply(p) - p;
+
+  /// Rectángulo que envuelve a [r] ya transformado.
+  Rect applyRect(Rect r) {
+    final q = [r.topLeft, r.topRight, r.bottomRight, r.bottomLeft].map(apply);
+    return unionRects(q.map((p) => Rect.fromPoints(p, p)))!;
+  }
+}
+
+/// Imán de la rotación: a menos de [tol] radianes (~4°) de 0, 90, 180 o 270° queda justo en ese ángulo.
+double snapAngle(double a, {double tol = 4 * pi / 180}) {
+  final q = pi / 2, k = (a / q).round();
+  return (a - k * q).abs() < tol ? k * q : a;
+}

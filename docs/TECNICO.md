@@ -283,13 +283,25 @@ arrastre va de derecha a izquierda; en ese caso toma todo lo que toca el recuadr
 hay bajo el lápiz de arriba hacia abajo en lo que se VE (orden de `zRuns`, con el resaltador debajo de la tinta de su
 tanda; trazos con `Stroke.hitBy` y 6 px de pantalla de margen, textos y elementos contra su rectángulo). Tocar de
 nuevo a menos de 12 px, con eso como única selección, pasa al siguiente hacia abajo (cíclico: tinta, resaltador,
-tinta). Un toque afuera del recuadro arma una banda mínima que en `_up` se resuelve como toque (`_tapSelect`): elige
-lo que haya o deselecciona; un toque en un hueco dentro del recuadro no hace nada. Si la selección tiene resaltador y cualquier otra cosa (tinta, textos, elementos; `Selection.mixedInk`), la barrita suma
-una fila aparte arriba con dos botones con texto: "Solo resaltador" (deja solo los trazos de resaltador) y "Sin
-resaltador" (saca el resaltador y conserva tinta, textos y elementos), ambos en `Selection.keepOnly`. La barrita pasa a
-dos filas (Column) y `_MenuLayout` la pone arriba si entra o abajo del recuadro. No hay interruptor "seleccionar solo
-resaltador" en la herramienta: Seleccionar no tiene sub-menú de opciones en la barra, y los filtros ya cubren el caso. Cambiar la selección nunca entra al historial. La barrita se acomoda con `_MenuLayout` para no
-salirse del ancho de la hoja.
+tinta). Un toque afuera del recuadro arma una banda mínima que en `_up` se resuelve como toque: si había selección al apoyar
+(`_selBefore`) SOLO la cancela y no elige nada (un segundo toque, ya sin selección, elige con `_tapSelect`); un toque en
+un hueco dentro del recuadro no hace nada. Estirar un rectángulo afuera sigue haciendo una selección nueva. No hay
+filtros de resaltador: lo que queda dentro del recuadro queda seleccionado, resaltador incluido, con las mismas reglas
+de ventana y captura que la tinta (`Selection.selectIn` no distingue la punta). Cambiar la selección nunca entra al historial. La barrita se acomoda con `_MenuLayout` para no
+salirse del ancho de la hoja (se sube un poco si arriba está la manija de rotar).
+
+**Manijas y transformación de la selección.** Con algo seleccionado (y sin estar moviendo) `SelectionHandles`
+(`selection_handles.dart`) dibuja 4 manijas en las esquinas del recuadro, para escalar, y, si hay algún trazo, una
+manija de rotar arriba del centro del borde de arriba, unida con una rayita; son de zona de toque de 28 px de pantalla,
+sin importar el zoom, y avisan con la posición global (`_pageOfGlobal`). `MoveDrag` ya no guarda un corrimiento sino
+una `Xform` (`geometry.dart`: pivote, escala, ángulo y corrimiento): mover es solo corrimiento; escalar es uniforme con
+pivote en la esquina opuesta y mínimo (`MoveDrag.minScale`: 0,1, y un elemento no baja de 60); rotar gira alrededor del
+centro del recuadro, relativo a donde se agarró, con imán (`snapAngle`) a 0/90/180/270° a menos de 4°. `Selection.dragTo`
+calcula la `Xform` y `applyToBlocks` actualiza en vivo textos y elementos (y marca sucias las hojas de antes y de
+después); los trazos se dibujan transformados en la capa en vivo (`live_layer.dart`). Al soltar (`_selDrop`) los trazos
+se reemplazan por `Stroke.transformed` (todos los puntos; el grosor por la escala; malla y bounds nuevos porque es otro
+objeto), los elementos escalan su rectángulo y al rotar solo mueven su centro (no rotan), y los textos solo cambian de
+lugar. Todo es UN `EditAction`; deshacer devuelve los objetos originales, exactos.
 
 ### Guardado
 

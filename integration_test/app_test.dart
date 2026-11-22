@@ -959,9 +959,9 @@ void main() {
     expect(find.byType(SelectionMenu), findsNothing);
   });
 
-  testWidgets('selección: "Solo resaltador" sobre un texto escrito mueve solo el resaltador', (t) async {
+  testWidgets('selección: el resaltador sobre un texto queda seleccionado con él (sin filtros) y se mueven juntos', (t) async {
     await start(t);
-    await createNotebook(t, 'SoloHl');
+    await createNotebook(t, 'HlTexto');
     final ed = editor(t);
     final p = docToScreen(t);
     // un texto escrito con el teclado, como lo hace el usuario
@@ -972,7 +972,7 @@ void main() {
     await settle(t, 300);
     final tbY = tb.y;
     final y = tb.y + ed.doc.lineAt(tb.y) * .5; // mitad del renglón
-    // tinta a mano debajo del texto y el resaltador encima del texto
+    // el resaltador encima del texto
     await t.tap(find.byTooltip('Resaltador · tocá de nuevo para opciones'));
     await settle(t, 600);
     await stylusLine(t, p(Offset(tb.x + 10, y)), p(Offset(tb.x + 220, y)));
@@ -985,17 +985,89 @@ void main() {
     await stylusDrag(t, p(Offset(tb.x + 400, y + 60)), p(Offset(tb.x - 20, tbY - 20)));
     expect(ed.sel.strokes, {hl.id});
     expect(ed.sel.texts, {tb.id});
-    expect(find.text('Solo resaltador'), findsOneWidget);
-    expect(find.text('Sin resaltador'), findsOneWidget);
+    expect(find.text('Solo resaltador'), findsNothing, reason: 'ya no hay filtros: lo de adentro queda seleccionado');
+    expect(find.text('Sin resaltador'), findsNothing);
 
-    await t.tap(find.text('Solo resaltador'));
-    await settle(t);
-    expect(ed.sel.strokes, {hl.id});
-    expect(ed.sel.texts, isEmpty);
-
+    // se mueven juntos
     await stylusDrag(t, p(Offset(tb.x + 100, y)), p(Offset(tb.x + 100, y + 80)));
-    expect(ed.doc.texts[tb.id]!.y, tbY, reason: 'el texto no se movió');
+    expect(ed.doc.texts[tb.id]!.y, greaterThan(tbY + 30), reason: 'el texto se movió con el resaltador');
     expect(ed.doc.strokes[hl.id]!.bounds.top, greaterThan(hlBefore.top + 40));
+  });
+
+  testWidgets('selección: escalar con la esquina, rotar con la manija, deshacer y tocar afuera cancela', (t) async {
+    await start(t);
+    await createNotebook(t, 'Manijas');
+    final p = docToScreen(t);
+    final ed = editor(t);
+    // dos trazos que se estiran juntos y uno lejos que no entra al recuadro
+    await stylusLine(t, p(const Offset(200, 200)), p(const Offset(400, 200)));
+    await stylusLine(t, p(const Offset(200, 260)), p(const Offset(400, 320)));
+    await stylusLine(t, p(const Offset(600, 700)), p(const Offset(800, 700)));
+    expect(ed.doc.strokes.length, 3);
+    final ids = ed.doc.strokes.keys.toList();
+    final far = ids.last;
+    List<double> ptsOf(String id) => List<double>.of(ed.doc.strokes[id]!.pts);
+    final before = {for (final id in ids) id: ptsOf(id)};
+    final w0 = ed.doc.strokes[ids.first]!.w;
+
+    await t.tap(find.byTooltip('Seleccionar'));
+    await settle(t);
+    await stylusDrag(t, p(const Offset(150, 150)), p(const Offset(450, 360))); // ventana sobre los dos primeros
+    expect(ed.sel.strokes, {ids[0], ids[1]});
+    for (final n in ['tl', 'tr', 'br', 'bl', 'rotate']) {
+      expect(find.byKey(Key('selHandle-$n')), findsOneWidget, reason: 'manija $n');
+    }
+
+    // escalar: la esquina de abajo-derecha se aleja el 50 % de la diagonal respecto de la de arriba-izquierda
+    final tl = t.getCenter(find.byKey(const Key('selHandle-tl'))), br = t.getCenter(find.byKey(const Key('selHandle-br')));
+    var live = 0.0;
+    await stylusDrag(t, br, tl + (br - tl) * 1.5, during: () => live = ed.sel.drag!.xf.scale);
+    expect(live, greaterThan(1.3));
+    expect(ed.sel.isEmpty, isFalse, reason: 'después de escalar sigue seleccionado');
+    final k = ed.doc.strokes[ids.first]!.w / w0;
+    expect(k, closeTo(live, .01), reason: 'el grosor se multiplica por la escala');
+    final sizeAfter = ed.doc.strokes[ids.first]!.bounds.width;
+    expect(sizeAfter, greaterThan(200 * 1.3), reason: 'el trazo de 200 de largo quedó más grande');
+    expect(ptsOf(far), before[far], reason: 'lo de afuera no se toca');
+
+    // rotar ~90° con la manija de arriba (pantalla: del centro hacia arriba -> hacia la derecha)
+    final rot = t.getCenter(find.byKey(const Key('selHandle-rotate')));
+    final c = (t.getCenter(find.byKey(const Key('selHandle-tl'))) + t.getCenter(find.byKey(const Key('selHandle-br')))) / 2;
+    final r = (rot - c).distance;
+    final lenBefore = ed.doc.strokes[ids.first]!.bounds;
+    await stylusDrag(t, rot, c + Offset(r, 0));
+    final after = ed.doc.strokes[ids.first]!.bounds;
+    expect(after.height, greaterThan(lenBefore.height), reason: 'giró: lo que era ancho ahora es más alto');
+    expect(ed.doc.strokes[ids.first]!.w, closeTo(w0 * k, 1e-6), reason: 'rotar no cambia el grosor');
+
+    // deshacer: rotar, escalar; cada uno es UN paso y vuelve todo exacto
+    await t.tap(find.byTooltip('Deshacer'));
+    await settle(t);
+    expect(ed.doc.strokes[ids.first]!.bounds.width, closeTo(sizeAfter, 1e-6));
+    await t.tap(find.byTooltip('Deshacer'));
+    await settle(t);
+    for (final id in ids) {
+      expect(ptsOf(id), before[id], reason: 'deshacer vuelve los puntos exactos');
+    }
+    expect(ed.doc.strokes[ids.first]!.w, w0);
+
+    // tocar afuera, sobre el trazo lejano: solo cancela (no elige nada); otro toque sí elige
+    await t.tap(find.byTooltip('Rehacer'));
+    await settle(t);
+    await stylusDrag(t, p(const Offset(100, 100)), p(const Offset(600, 450))); // vuelve a seleccionar los dos
+    expect(ed.sel.strokes.length, 2);
+    Future<void> tapAt(Offset d) async {
+      final g = await t.startGesture(p(d), kind: PointerDeviceKind.stylus);
+      await g.up();
+      await settle(t);
+    }
+
+    await tapAt(const Offset(700, 700));
+    expect(ed.sel.isEmpty, isTrue, reason: 'no quedó nada seleccionado');
+    expect(find.byType(SelectionMenu), findsNothing);
+    expect(find.byKey(const Key('selHandle-br')), findsNothing);
+    await tapAt(const Offset(700, 700));
+    expect(ed.sel.strokes, {far}, reason: 'el segundo toque, ya sin selección, elige');
   });
 
   testWidgets('scroll rápido de punta a punta: sin errores; quieto usa imágenes; un trazo nuevo se ve y se guarda', (t) async {

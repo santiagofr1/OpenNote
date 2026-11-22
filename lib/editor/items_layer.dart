@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/gestures.dart';
@@ -178,62 +177,6 @@ class _AudioChipState extends State<AudioChip> {
           ),
           SizedBox(width: 24 * s), // equilibra el ícono de la izquierda
         ]),
-      ),
-    );
-  }
-}
-
-/// Esquina para agrandar/achicar el elemento seleccionado. Las imágenes mantienen la proporción.
-class ResizeHandle extends StatefulWidget {
-  final Item item;
-  final double scale;
-  final VoidCallback onResize; // en cada movimiento (redibujar)
-  final void Function(Item before) onResizeEnd; // [before]: cómo estaba al empezar
-  const ResizeHandle(
-      {super.key, required this.item, required this.scale, required this.onResize, required this.onResizeEnd});
-
-  @override
-  State<ResizeHandle> createState() => _ResizeHandleState();
-}
-
-class _ResizeHandleState extends State<ResizeHandle> {
-  Item? before;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final it = widget.item, scale = widget.scale;
-    final aspect = it.h / max(1, it.w);
-    return Positioned(
-      left: (it.x + it.w) * scale - 18,
-      top: (it.y + it.h) * scale - 18,
-      child: GestureDetector(
-        onPanStart: (_) => before = it.copy(),
-        onPanUpdate: (d) {
-          it.w = max(60, it.w + d.delta.dx / scale);
-          it.h = it.type == 'image' ? it.w * aspect : max(it.type == 'audio' ? 56 : 60, it.h + d.delta.dy / scale);
-          widget.onResize();
-        },
-        onPanEnd: (_) {
-          final b = before;
-          before = null;
-          if (b != null) widget.onResizeEnd(b);
-        },
-        child: Container(
-          width: 36,
-          height: 36,
-          alignment: Alignment.center,
-          child: Container(
-            width: 18,
-            height: 18,
-            decoration: BoxDecoration(
-              color: cs.surface,
-              shape: BoxShape.circle,
-              border: Border.all(color: cs.primary, width: 2),
-              boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 3)],
-            ),
-          ),
-        ),
       ),
     );
   }

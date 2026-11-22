@@ -69,6 +69,18 @@ class Stroke extends Layered {
     return Stroke(id ?? this.id, k, c, w, p, o)..z = z;
   }
 
+  /// Copia transformada por [t] (con otro [id] si hace falta): todos los puntos, y el grosor se multiplica por la escala.
+  Stroke transformed(Xform t, {String? id}) {
+    if (t.isMove) return moved(t.shift, id: id);
+    final p = List<double>.of(pts);
+    for (var i = 0; i < p.length; i += 3) {
+      final q = t.apply(Offset(p[i], p[i + 1]));
+      p[i] = q.dx;
+      p[i + 1] = q.dy;
+    }
+    return Stroke(id ?? this.id, k, c, w * t.scale, p, o)..z = z;
+  }
+
   /// ¿El trazo toca el rectángulo [r]? Real: algún tramo del recorrido, engordado la mitad del grosor,
   /// cruza el rectángulo (no alcanza con que se superpongan los rectángulos que envuelven).
   bool touchesRect(Rect r) {

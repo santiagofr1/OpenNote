@@ -8,8 +8,6 @@ class SelectionMenu extends StatelessWidget {
   final VoidCallback onCopy, onCut, onDuplicate, onDelete, onClose;
   final ValueChanged<ZMove> onOrder;
 
-  /// Filtros "Solo resaltador" / "Sin resaltador": solo se pasan si la selección tiene resaltador y algo más.
-  final VoidCallback? onOnlyHl, onOnlyInk;
   const SelectionMenu({
     super.key,
     required this.onCopy,
@@ -18,8 +16,6 @@ class SelectionMenu extends StatelessWidget {
     required this.onDelete,
     required this.onClose,
     required this.onOrder,
-    this.onOnlyHl,
-    this.onOnlyInk,
   });
 
   @override
@@ -38,31 +34,6 @@ class SelectionMenu extends StatelessWidget {
             const SizedBox(width: 6),
             Text(label, style: TextStyle(color: fg, fontSize: 14)),
           ],
-        ),
-      ),
-    );
-    // filtros: botones con texto, en una fila aparte (para que se vean y la barrita entre en el ancho)
-    Widget only(Key k, IconData i, String label, VoidCallback f) => Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
-      child: TextButton.icon(
-        key: k,
-        onPressed: f,
-        style: TextButton.styleFrom(
-          backgroundColor: fg.withValues(alpha: .16),
-          foregroundColor: fg,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-        icon: Icon(i, size: 19, weight: 300, color: fg),
-        label: Text(
-          label,
-          style: TextStyle(
-            color: fg,
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-          ),
         ),
       ),
     );
@@ -95,48 +66,18 @@ class SelectionMenu extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       child: Padding(
         padding: const EdgeInsets.all(3),
-        child: Column(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (onOnlyHl != null || onOnlyInk != null)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (onOnlyHl != null)
-                    only(
-                      const Key('selOnlyHl'),
-                      Symbols.ink_highlighter,
-                      'Solo resaltador',
-                      onOnlyHl!,
-                    ),
-                  if (onOnlyInk != null)
-                    only(
-                      const Key('selNoHl'),
-                      Symbols.layers_clear,
-                      'Sin resaltador',
-                      onOnlyInk!,
-                    ),
-                ],
-              ),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                b(Symbols.content_copy, 'Copiar', onCopy),
-                b(Symbols.content_cut, 'Cortar', onCut),
-                b(Symbols.control_point_duplicate, 'Duplicar', onDuplicate),
-                order(),
-                b(Symbols.delete, 'Eliminar', onDelete),
-                IconButton(
-                  onPressed: onClose,
-                  icon: Icon(
-                    Symbols.close,
-                    size: 19,
-                    weight: 300,
-                    color: fg.withValues(alpha: .75),
-                  ),
-                  tooltip: 'Deseleccionar',
-                ),
-              ],
+            b(Symbols.content_copy, 'Copiar', onCopy),
+            b(Symbols.content_cut, 'Cortar', onCut),
+            b(Symbols.control_point_duplicate, 'Duplicar', onDuplicate),
+            order(),
+            b(Symbols.delete, 'Eliminar', onDelete),
+            IconButton(
+              onPressed: onClose,
+              icon: Icon(Symbols.close, size: 19, weight: 300, color: fg.withValues(alpha: .75)),
+              tooltip: 'Deseleccionar',
             ),
           ],
         ),
