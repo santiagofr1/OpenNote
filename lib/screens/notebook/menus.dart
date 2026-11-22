@@ -90,21 +90,26 @@ Future<String?> showExportSheet(BuildContext context, {String? sheetName}) {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         onTap: () => Navigator.pop(context, v),
       );
+  // Con la tablet en horizontal no entran todas: la hoja puede ocupar toda la altura y se scrollea.
   return showModalBottomSheet<String>(
     context: context,
+    isScrollControlled: true,
     builder: (ctx) => SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
               child: Text('Exportar', style: Theme.of(ctx).textTheme.titleLarge)),
           tile(Symbols.picture_as_pdf, 'PDF', 'Todo el cuaderno', 'pdf'),
-          if (sheetName != null) tile(Symbols.description, 'PDF de esta hoja', sheetName, 'sheet'),
-          if (sheetName != null) tile(Symbols.image, 'Imagen de esta hoja (PNG)', sheetName, 'sheetpng'),
           tile(Symbols.photo_library, 'Imágenes (PNG)', 'Todas las hojas, en un .zip', 'png'),
           tile(Symbols.archive, 'Cuaderno de OpenNote (.opennote)', 'Para pasarlo a otro dispositivo o hacer copia',
               'opennote'),
+          if (sheetName != null) ...[
+            const Divider(indent: 16, endIndent: 16),
+            tile(Symbols.description, 'PDF de esta hoja', sheetName, 'sheet'),
+            tile(Symbols.image, 'Imagen de esta hoja (PNG)', sheetName, 'sheetpng'),
+          ],
         ]),
       ),
     ),
