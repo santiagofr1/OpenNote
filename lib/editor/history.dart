@@ -195,6 +195,17 @@ class History {
     _redo.clear();
   }
 
+  /// Cambia el elemento [id] en las copias guardadas del historial (deshacer y rehacer lo vuelven a poner con esos datos).
+  /// Lo usa la grabación de voz: el audio se inserta con duración 0 y cuando termina se le pone la real.
+  void patchItem(String id, void Function(Item it) f) {
+    for (final a in [..._undo, ..._redo]) {
+      for (final m in [a.itemBefore, a.itemAfter]) {
+        final it = m[id];
+        if (it != null) f(it);
+      }
+    }
+  }
+
   /// La acción que haría [undo] / [redo], sin hacerla.
   EditAction? peek({required bool undo}) => (undo ? _undo : _redo).lastOrNull;
 

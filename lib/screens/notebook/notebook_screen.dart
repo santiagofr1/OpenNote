@@ -13,10 +13,10 @@ import '../../data/storage.dart';
 import '../../domain/domain.dart';
 import '../../editor/history.dart';
 import '../../editor/page_editor.dart';
+import '../../editor/voice_recorder.dart';
 import '../../sync/sync_controller.dart';
 import '../../widgets/dialogs.dart';
 import '../../widgets/pdf_progress.dart';
-import '../../widgets/record_voice_dialog.dart';
 import '../library/sync_indicator.dart';
 import 'menus.dart';
 import 'pages_panel.dart';
@@ -48,6 +48,9 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
   NotebookDoc? doc; // null mientras se lee del disco
   Timer? _saveTimer, _prefsTimer;
   bool _dirty = false, _indexDirty = false, _deleted = false;
+
+  /// La grabación de voz en curso: vive acá (no en un diálogo), así se puede seguir escribiendo mientras graba.
+  late final recorder = VoiceRecorder(store);
 
   // vista
   bool panel = false; // panel de hojas
@@ -93,16 +96,26 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     searchCtrl.dispose();
     _searchTimer?.cancel();
     if (fullscreen) SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    if (recorder.recording) {
+      unawaited(_closeVoice()); // el cuaderno se cierra grabando: se para y se guarda lo grabado hasta ahí
+    } else {
+      recorder.dispose();
+    }
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) _flush(); // al salir de la app, guardar ya
+    // en segundo plano (paused) se sigue grabando, como cualquier grabador; si la app se cierra, se para y se guarda
+    if (state == AppLifecycleState.detached) unawaited(stopVoice());
   }
 
   // ================= guardado =================
   void _docChanged() {
+    // se borró (o se deshizo) el elemento que está grabando: se para y se tira lo grabado
+    final r = recorder, id = r.itemId;
+    if (id != null && r.inserted && doc != null && !doc!.items.containsKey(id)) unawaited(r.discard());
     _dirty = true;
     _liveVersion.value++;
     _saveTimer?.cancel();
@@ -143,6 +156,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
 
   /// salir del cuaderno: guarda todo y vuelve a la biblioteca
   Future<void> leave([Object? result]) async {
+    await stopVoice(); // si estaba grabando, se guarda lo grabado hasta ahora
     await _flush();
     _prefsTimer?.cancel();
     await store.savePrefs(widget.tools.toJson());
@@ -281,8 +295,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
           final it = await makeAudioFileItem(store);
           if (it != null) ed?.insertItem(it);
         case 'voice':
-          final it = await recordVoice(context, store);
-          if (it != null) ed?.insertItem(it);
+          await _startVoice();
         case 'sheet':
           _addSheetAfter(curSheet);
         case 'pdf':
@@ -290,6 +303,61 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
       }
     } catch (e) {
       if (mounted) snack(context, 'No se pudo insertar: $e');
+    }
+  }
+
+  /// "Grabación de voz": empieza a grabar y pone YA el audio en la hoja visible como etiqueta "Grabando" (un elemento común:
+  /// se mueve, se elige, se deshace). Se sigue escribiendo mientras graba; para con el botón de la etiqueta (ver [stopVoice]).
+  Future<void> _startVoice() async {
+    if (recorder.busy) {
+      if (mounted) snack(context, 'Ya hay una grabación en curso');
+      return;
+    }
+    final it = makeAudioItem('${newId('m')}.m4a', 0);
+    try {
+      await recorder.start(it.id, it.file!);
+    } on VoiceException catch (e) {
+      if (mounted) snack(context, e.message);
+      return;
+    }
+    final ed = editorKey.currentState;
+    if (!mounted || ed == null) {
+      await recorder.discard();
+      return;
+    }
+    ed.insertItem(it, onInserted: () => recorder.inserted = true);
+  }
+
+  /// Para la grabación: renombra el archivo, le pone la duración al elemento, marca la hoja sucia y guarda.
+  /// No hace nada si no había una grabación.
+  Future<void> stopVoice() async {
+    final res = await recorder.stop();
+    if (res == null) return;
+    final ed = editorKey.currentState;
+    if (ed != null && ed.setAudioDuration(res.itemId, res.ms)) return; // ya avisó que cambió (guarda en 600 ms)
+    final it = doc?.items[res.itemId];
+    if (it == null) {
+      unawaited(deleteQuietly(store.media(res.file))); // el elemento ya no está: el audio tampoco
+      return;
+    }
+    // sin editor (el cuaderno se está cerrando): se le pone la duración al elemento y se guarda ya
+    doc!.markDirtyElement(it);
+    it.dur = res.ms;
+    doc!.markDirtyElement(it);
+    _dirty = true;
+    await _flush();
+  }
+
+  /// El cuaderno se cierra (dispose) con una grabación en curso.
+  Future<void> _closeVoice() async {
+    try {
+      if (_deleted) {
+        await recorder.discard();
+      } else {
+        await stopVoice();
+      }
+    } finally {
+      recorder.dispose();
     }
   }
 
@@ -547,6 +615,8 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
                             onChanged: _docChanged,
                             onPrefsChanged: _prefsChanged,
                             onSheetsChanged: _sheetsChangedByEditor,
+                            recorder: recorder,
+                            onStopRecording: stopVoice,
                           ),
                   ),
                 ]),

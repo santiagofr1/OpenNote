@@ -14,7 +14,9 @@ import 'package:apuntes/data/media_import.dart';
 import 'package:apuntes/data/sheet_codec.dart';
 import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/domain/domain.dart';
+import 'package:apuntes/editor/fake_audio_source.dart';
 import 'package:apuntes/editor/page_editor.dart';
+import 'package:apuntes/editor/voice_recorder.dart';
 import 'package:apuntes/editor/selection_menu.dart';
 import 'package:apuntes/rendering/sheet_image_cache.dart';
 import 'package:apuntes/rendering/text_layout.dart';
@@ -1136,6 +1138,82 @@ void main() {
     await g2.up();
     await settle(t, 300);
     expect(ed.scroll.offset, greaterThan(y1 + 50), reason: 'sigue scrolleando');
+  });
+
+  testWidgets('grabar voz no bloquea: se puede escribir mientras graba y la etiqueta se mueve (issue #10)', (t) async {
+    // el micrófono de verdad no se puede usar en un test: se pone uno falso en el único punto de extensión
+    VoiceRecorder.sourceFactory = FakeAudioSource.new;
+    addTearDown(() => VoiceRecorder.sourceFactory = RecordAudioSource.new);
+    await start(t);
+    await createNotebook(t, 'Voz');
+    await t.tap(find.byKey(const Key('insert')));
+    await settle(t);
+    await t.tap(find.text('Grabación de voz'));
+    await settle(t, 800);
+    final ed = editor(t);
+    expect(find.byType(AlertDialog), findsNothing, reason: 'ya no hay un diálogo que bloquee el cuaderno');
+    final audio = ed.doc.items.values.single;
+    expect(audio.type, 'audio');
+    expect(audio.dur, 0);
+    expect(find.byKey(const ValueKey('recordingChip')), findsOneWidget);
+    expect(find.textContaining('Grabando'), findsOneWidget);
+    expect(find.byKey(const ValueKey('recordingDot')), findsOneWidget);
+
+    // escribir con el teclado mientras graba
+    await t.tap(find.byTooltip('Texto con teclado'));
+    await settle(t, 600);
+    final b = ed.doc.texts.values.single;
+    await t.enterText(find.byKey(Key('para-${b.id}-0')), 'escribo mientras grabo');
+    await settle(t, 400);
+    expect(b.text, 'escribo mientras grabo');
+    expect(find.byKey(const ValueKey('recordingChip')), findsOneWidget, reason: 'sigue grabando');
+
+    // una segunda grabación no arranca
+    await t.tap(find.byKey(const Key('insert')));
+    await settle(t);
+    await t.tap(find.text('Grabación de voz'));
+    await settle(t, 600);
+    expect(find.text('Ya hay una grabación en curso'), findsOneWidget);
+    expect(ed.doc.items.values.length, 1);
+
+    // la etiqueta se elige con el dedo y se mueve como cualquier elemento
+    await t.tap(find.byTooltip('Lápiz · tocá de nuevo para opciones'));
+    await settle(t);
+    final p = docToScreen(t);
+    final g0 = await t.startGesture(p(Offset(audio.x + 120, audio.y + 32)), kind: PointerDeviceKind.touch);
+    await t.pump(const Duration(milliseconds: 50));
+    await g0.up();
+    await settle(t, 300);
+    expect(ed.selI, {audio.id});
+    final y0 = audio.y;
+    final from = p(Offset(audio.x + 120, audio.y + 32));
+    final g = await t.startGesture(from, kind: PointerDeviceKind.touch);
+    for (var i = 1; i <= 10; i++) {
+      await g.moveTo(from + Offset(0, 10.0 * i));
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    await g.up();
+    await settle(t, 300);
+    expect(audio.y, greaterThan(y0 + 40), reason: 'la etiqueta de grabación se movió');
+    expect(find.byKey(const ValueKey('recordingChip')), findsOneWidget, reason: 'y sigue grabando');
+
+    // parar con el botón de la etiqueta: queda un audio común con duración y el archivo final
+    await t.tap(find.byKey(const ValueKey('recordingStop')));
+    await settle(t, 1500);
+    expect(find.byKey(const ValueKey('recordingChip')), findsNothing);
+    expect(audio.dur, greaterThan(0));
+    expect(File('${root.path}/media/${audio.file}').existsSync(), isTrue);
+    expect(File('${root.path}/media/${audio.file}.tmp').existsSync(), isFalse);
+
+    // volver y entrar: quedó guardado donde se lo movió
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1500);
+    final nb = await savedNotebook('Voz');
+    final st = Storage(root: root);
+    await st.init();
+    final saved = (await st.loadNotebook(nb)).items.values.single;
+    expect(saved.dur, audio.dur);
+    expect(saved.y, closeTo(audio.y, .01));
   });
 
   testWidgets('scroll rápido de punta a punta: sin errores; quieto usa imágenes; un trazo nuevo se ve y se guarda', (t) async {

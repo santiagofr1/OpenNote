@@ -30,6 +30,7 @@ import 'selection_menu.dart';
 import 'slop_drag.dart';
 import 'text_blocks.dart';
 import 'toolbar.dart';
+import 'voice_recorder.dart';
 import 'touch_gestures.dart';
 import 'viewport.dart';
 import 'zoom_indicator.dart';
@@ -60,8 +61,14 @@ class PageEditor extends StatefulWidget {
   /// Cambiaron las hojas desde el editor (deshacer / rehacer una operación de hojas, hoja agregada tirando o con el menú):
   /// el panel tiene que redibujarse. Recibe la hoja que conviene mostrar (null si no hay que moverse).
   final ValueChanged<int?>? onSheetsChanged;
+
+  /// La grabación de voz en curso (el audio que se graba se dibuja como etiqueta "Grabando") y qué hacer al tocar parar.
+  final VoiceRecorder? recorder;
+  final VoidCallback? onStopRecording;
   const PageEditor({
     this.onSheetsChanged,
+    this.recorder,
+    this.onStopRecording,
     super.key,
     required this.doc,
     required this.tools,
@@ -1229,7 +1236,15 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       if (!sel.isEmpty && !(r != null && r.inflate(12).contains(p))) _clearSel();
       return;
     }
-    if (hit.type == 'audio' && p.dx - hit.x < kAudioPlayZone) return; // es el botón de reproducir
+    if (hit.type == 'audio') {
+      final dx = p.dx - hit.x;
+      // el botón de reproducir (a la izquierda) o el de parar de la grabación (a la derecha) tienen su propio toque
+      if (widget.recorder?.isRecording(hit.id) ?? false) {
+        if (dx > hit.w - RecordingChip.stopZone) return;
+      } else if (dx < kAudioPlayZone) {
+        return;
+      }
+    }
     if (sel.items.length == 1 && sel.strokes.isEmpty && sel.texts.isEmpty && sel.items.contains(hit.id)) return;
     setState(() => sel.selectOne(hit!));
     liveTick.value++;
@@ -1450,12 +1465,13 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     widget.onSheetsChanged?.call(null);
   }
 
-  /// Agrega un elemento centrado en lo que se está viendo y lo deja seleccionado.
-  void insertItem(Item it) {
+  /// Agrega un elemento centrado en lo que se está viendo y lo deja seleccionado. [onInserted] avisa cuando ya está en la hoja
+  /// (puede tardar si hay que cargar la hoja de destino).
+  void insertItem(Item it, {VoidCallback? onInserted}) {
     final c = viewCenter;
     final y = max(0.0, c.dy - it.h / 2);
     if (!_loadedAt(y)) {
-      _whenLoaded([doc.sheets[doc.sheetOfY(y)].id], () => insertItem(it));
+      _whenLoaded([doc.sheets[doc.sheetOfY(y)].id], () => insertItem(it, onInserted: onInserted));
       return;
     }
     it.x = (c.dx - it.w / 2).clamp(10.0, max(10.0, kW - it.w - 10));
@@ -1466,9 +1482,24 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     _setTool(Tool.select);
     sel.replace(items: [it.id]);
     _growIfNeeded(it.y + it.h);
+    onInserted?.call();
     _changed();
     setState(() {});
     liveTick.value++;
+  }
+
+  /// Termina la grabación del audio [id]: le pone la duración [ms] (también en las copias del historial, así deshacer y
+  /// rehacer lo devuelven con su duración) y marca la hoja para guardar. false si el elemento ya no está.
+  bool setAudioDuration(String id, int ms) {
+    final it = doc.items[id];
+    if (it == null) return false;
+    doc.markDirtyElement(it);
+    it.dur = ms;
+    doc.markDirtyElement(it);
+    history.patchItem(id, (c) => c.dur = ms);
+    setState(() {});
+    _changed();
+    return true;
   }
 
   /// Lleva la vista a un texto o elemento y lo deja seleccionado (búsqueda).
@@ -1833,6 +1864,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
           _saveSoon(e.id, const Duration(milliseconds: 350));
         },
         onStickyFocus: (f) => f ? _stickyFocus.add(e.id) : _stickyFocus.remove(e.id),
+        recorder: widget.recorder,
+        onStopRecording: widget.onStopRecording,
       );
     }
     return _textBlock(e as TextBlock, textMode);

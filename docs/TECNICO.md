@@ -319,6 +319,32 @@ mover con él hay dos piezas en `page_editor.dart`:
   mientras se arrastra (si no, se perdería el gesto). Las manijas usan el mismo reconocedor con 4 px y todos los dispositivos.
   Un segundo dedo (`touch.length != 1`) lo retira: el pellizco sigue andando. Arrastrar el dedo fuera de lo elegido scrollea.
 
+### Grabación de voz (issue #10)
+
+Ya no es un diálogo modal (se borró `record_voice_dialog.dart`): grabar no bloquea el cuaderno.
+- `VoiceRecorder` (`lib/editor/voice_recorder.dart`, `ChangeNotifier`) vive en `NotebookScreenState.recorder`. Envuelve un
+  `AudioSource` (el micrófono: `RecordAudioSource` usa el paquete `record`, AAC en `.m4a`; los tests ponen `FakeAudioSource` en
+  `VoiceRecorder.sourceFactory`, el único punto de extensión), el cronómetro y el nivel. Una sola grabación a la vez.
+- Graba a `media/<id>.m4a.tmp` (la sync ignora los `.tmp`, ver `sync_paths.dart`) y al parar renombra a `.m4a`: nunca hay un
+  audio a medias con su nombre final.
+- "Grabación de voz" (`runInsert('voice')` → `_startVoice`) arranca el micrófono e inserta YA un `Item` de audio con `file` = el nombre
+  final y `dur` 0 en el centro de lo visible (`PageEditor.insertItem`, un paso de deshacer). Sin permiso o con otro error:
+  aviso con el mensaje y no se inserta nada. Con una grabación en curso: aviso "Ya hay una grabación en curso".
+- Mientras `recorder.isRecording(item.id)`, `ItemView` dibuja `RecordingChip` en vez de `AudioChip`: "Grabando", punto rojo que
+  late, tiempo y botón de parar (cuadrado; solo responde al dedo / mouse en esa zona, `RecordingChip.stopZone`). Es un elemento
+  común: se elige, se mueve y se escala, y se puede escribir, scrollear y cambiar de herramienta.
+- Parar (`stopVoice`, también al cerrar): renombra, `PageEditorState.setAudioDuration` pone `dur` (también en las copias del
+  historial: `History.patchItem`, así deshacer / rehacer lo devuelven con su duración), marca la hoja sucia y guarda.
+- Borrar o deshacer el elemento mientras graba: `_docChanged` ve que ya no está (`recorder.inserted` evita confundirlo antes de
+  que se inserte) y descarta (`discard`: para y borra el `.tmp`). Ojo: deshacer el BORRADO de una grabación descartada devuelve
+  una etiqueta de audio sin archivo.
+- Cerrar el cuaderno (`leave`, o `dispose` con la grabación en curso, o borrarlo) para y guarda lo grabado hasta ahí (borrarlo
+  descarta). Con la app en `paused` sigue grabando; en `detached` para y guarda. Límite: Android 11+ restringe el micrófono en
+  segundo plano a servicios en primer plano, y `record` no abre uno: en `paused` puede quedar en silencio; y si el sistema mata
+  el proceso queda un `.tmp` huérfano y el elemento con duración 0.
+- Tests: `test/editor/voice_recorder_test.dart` (grabador con micrófono falso), `test/screens/voice_notebook_test.dart` (cuaderno
+  abierto: etiqueta, escribir mientras graba, una sola, parar, deshacer, borrar, sin permiso, cerrar, `paused` / `detached`) y el caso de integración.
+
 ### Guardado
 
 - Guardar codifica en otro isolate solo las hojas sucias (`NotebookDoc.takeDirty`; los mapas de elementos avisan
