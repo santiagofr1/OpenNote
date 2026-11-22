@@ -52,7 +52,12 @@ class DriveRemoteStore implements RemoteStore, PurgingRemoteStore {
   final String rootName;
 
   final _nodes = <String, _Node>{};
+  /// Si el mapa de Drive ya se cargó (para no recargarlo en download/upload/delete).
   bool _loaded = false;
+
+  /// Si ya se le entregó al motor un listado COMPLETO. Es distinto de `_loaded`: un `download('crypto.json')` previo carga
+  /// el mapa sin que el motor se entere de lo que cambió en Drive antes, y su `SyncState.remote` quedaría desfasado.
+  bool _listed = false;
   String? _rootId;
 
   // ------------------------------------------------------------------ errores
@@ -153,11 +158,13 @@ class DriveRemoteStore implements RemoteStore, PurgingRemoteStore {
 
   @override
   Future<RemoteChanges> changes(String? token) => _g(() async {
-        // Sin token, o proceso nuevo (todavía no se leyó el mapa de Drive): listado COMPLETO. Con un delta no alcanza: lo
-        // borrado mientras la app no corría no figura en el mapa recién cargado y nunca saldría en `removed`.
-        if (token == null || !_loaded) {
+        // Sin token, o proceso nuevo (todavía no se le entregó un listado al motor): listado COMPLETO. Con un delta no
+        // alcanza: lo cambiado o borrado mientras la app no corría no figura en el mapa recién cargado y nunca saldría
+        // en el delta. Ojo: no vale mirar `_loaded`, el mapa ya puede estar cargado por un download previo (crypto.json).
+        if (token == null || !_listed) {
           final start = (await _api.changes.getStartPageToken()).startPageToken!;
           await _loadAll(); // el token se pide ANTES de listar: lo que cambie en el medio llega en el próximo delta
+          _listed = true;
           return RemoteChanges(files: [for (final e in _snapshot().entries) _rf(e.key, e.value)], nextToken: start, full: true);
         }
         final before = {for (final e in _snapshot().entries) e.key: e.value.md5};
