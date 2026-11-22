@@ -280,13 +280,6 @@ class NotebookDoc {
   /// Marca la hoja que contiene la altura [y].
   void markDirtyAt(double y) => _mark(sheetOfY(y));
 
-  /// Marca todas las hojas que toca el rectángulo [r].
-  void markDirtyRect(Rect r) {
-    for (var k = sheetOfY(r.top); k <= sheetOfY(r.bottom); k++) {
-      _mark(k);
-    }
-  }
-
   /// Marca la hoja donde está ahora [e]. Si lo cambiás en el lugar, llamalo ANTES y DESPUÉS del cambio.
   /// Para el guardado cuenta solo la hoja de su borde de arriba; para el render, un trazo avisa a todas
   /// las hojas que toca (se dibuja recortado en cada una).

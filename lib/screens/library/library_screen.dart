@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -28,6 +27,7 @@ import 'folder_card.dart';
 import 'library_drag.dart';
 import 'move_dialog.dart';
 import 'notebook_card.dart';
+import 'options_menu.dart';
 import 'sync_indicator.dart';
 import 'sync_sheet.dart';
 
@@ -74,7 +74,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
 
   @override
   void dispose() {
-    _menu?.remove();
+    _menu.close();
     WidgetsBinding.instance.removeObserver(this);
     store.onSaved = null;
     sync.dispose();
@@ -557,88 +557,14 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     }
   }
 
-  OverlayEntry? _menu;
-  Completer<String?>? _menuDone;
+  final _menu = OptionsMenu();
 
-  /// Cierra el menú de opciones (si hay uno) sin elegir nada.
-  void _closeMenu() => _closeMenuWith(null);
+  void _closeMenu() => _menu.close();
 
-  void _closeMenuWith(String? value) {
-    _menu?.remove();
-    _menu = null;
-    final c = _menuDone;
-    _menuDone = null;
-    if (c != null && !c.isCompleted) c.complete(value);
-  }
-
-  /// Menú de opciones anclado a la tarjeta [card]: (ícono, texto, valor, key); "Borrar" va al final y en rojo.
-  /// No es una ruta modal (esas cancelan los punteros y cortarían el arrastre del dedo que sigue apoyado): es un
-  /// OverlayEntry con una barrera que lo cierra al tocar afuera. Devuelve el valor elegido, o null si se cerró.
-  Future<String?> _optionsMenu(BuildContext card, String title, List<(IconData, String, String, String?)> items) {
-    _closeMenu();
-    final cs = Theme.of(context).colorScheme;
-    final box = card.findRenderObject() as RenderBox;
-    final rect = box.localToGlobal(Offset.zero) & box.size;
-    final done = _menuDone = Completer<String?>();
-    const width = 270.0;
-    final height = 60.0 + items.length * 52 + 12;
-    final entry = OverlayEntry(
-      builder: (ctx) {
-        final size = MediaQuery.sizeOf(ctx);
-        final pad = MediaQuery.paddingOf(ctx);
-        final left = (rect.center.dx - width / 2).clamp(8.0, max(8.0, size.width - width - 8)).toDouble();
-        // debajo de la tarjeta si entra; si no, arriba; si tampoco, pegado al borde de abajo
-        var top = rect.bottom + 6;
-        if (top + height > size.height - pad.bottom - 8) top = rect.top - height - 6;
-        top = top.clamp(pad.top + 8, max(pad.top + 8, size.height - pad.bottom - height - 8)).toDouble();
-        return Stack(children: [
-          Positioned.fill(
-            child: GestureDetector(
-              key: const Key('menuBarrier'),
-              behavior: HitTestBehavior.opaque,
-              onTap: _closeMenu,
-              child: const SizedBox.expand(),
-            ),
-          ),
-          Positioned(
-            left: left,
-            top: top,
-            width: width,
-            child: Material(
-              key: const Key('optionsMenu'),
-              elevation: 8,
-              color: cs.surfaceContainerHigh,
-              borderRadius: BorderRadius.circular(18),
-              clipBehavior: Clip.antiAlias,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(8, 12, 8, 6),
-                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                    child: Text(title, style: Theme.of(ctx).textTheme.titleMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
-                  ),
-                  for (final (icon, label, value, key) in items) ...[
-                    if (value == 'delete') const Divider(height: 8, indent: 12, endIndent: 12),
-                    ListTile(
-                      key: key == null ? null : Key(key),
-                      dense: true,
-                      leading: Icon(icon, weight: 300, color: value == 'delete' ? cs.error : cs.onSurfaceVariant),
-                      title: Text(label, style: TextStyle(color: value == 'delete' ? cs.error : cs.onSurface)),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      onTap: () => _closeMenuWith(value),
-                    ),
-                  ],
-                ]),
-              ),
-            ),
-          ),
-        ]);
-      },
-    );
-    _menu = entry;
-    Overlay.of(context).insert(entry);
+  Future<String?> _optionsMenu(BuildContext card, String title, List<MenuItem> items) {
+    final r = _menu.show(context, card, title, items);
     setState(() {}); // el PopScope se entera de que hay menú
-    return done.future;
+    return r;
   }
 
   /// mantener apretado un cuaderno: opciones
@@ -683,10 +609,10 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     final nbs = idx == null ? <Notebook>[] : _sorted(hits?.notebooks ?? idx.notebooksIn(current));
     return PopScope(
       // atrás: primero cierra la búsqueda, después sube una carpeta, y recién al final sale
-      canPop: current == null && !searching && _menu == null,
+      canPop: current == null && !searching && !_menu.isOpen,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        if (_menu != null) {
+        if (_menu.isOpen) {
           _closeMenu(); // atrás con el menú abierto: solo lo cierra
           setState(() {});
           return;
