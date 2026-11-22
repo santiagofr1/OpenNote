@@ -535,7 +535,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         _selDown(p);
       case PenAction.draw:
         final pr = ts.current;
-        live = Stroke(newId('s'), ts.tool == Tool.hl ? 'hl' : pr.tip, pr.color, pr.width, [], pr.opacity);
+        live = Stroke(newId('s'), ts.tool == Tool.hl ? 'hl' : pr.tip, pr.color, pr.width, [], pr.opacity,
+            ts.tool == Tool.paint ? ts.paintParams : null);
         appendInkPoint(live!, p, pressureOf(e));
         liveTick.value++;
     }

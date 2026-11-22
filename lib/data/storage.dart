@@ -277,7 +277,7 @@ class Storage {
     final par = Storage.useIsolates ? min(Storage.loadParallelism, (todo.length / 8).ceil()) : 1;
     final gens = [for (final s in todo) s.meshGen];
     // solo valores (no los Stroke, que arrastran a la UI): [k, c, w, o, copia de los puntos]
-    final specs = [for (final s in todo) (s.id, s.k, s.c, s.w, s.o, List<double>.of(s.pts))];
+    final specs = [for (final s in todo) (s.id, s.k, s.c, s.w, s.o, List<double>.of(s.pts), s.pp)];
     final groups = <List<int>>[for (var g = 0; g < max(1, par); g++) [for (var i = g; i < todo.length; i += max(1, par)) i]];
     try {
       final parts = await Future.wait([
@@ -632,8 +632,8 @@ Future<List<(SheetContent, String)?>> _decodeDigestInIsolate(List<Uint8List?> ra
 }
 
 // Desde una función suelta para que el isolate no arrastre la `Storage` (ni su estado) en el mensaje.
-Future<List<StrokeMesh?>> _meshSpecs(List<(String, String, String, double, double, List<double>)> specs) =>
-    _compute(() => [for (final s in specs) buildStrokeMesh(Stroke(s.$1, s.$2, s.$3, s.$4, s.$6, s.$5))]);
+Future<List<StrokeMesh?>> _meshSpecs(List<(String, String, String, double, double, List<double>, PaintParams?)> specs) =>
+    _compute(() => [for (final s in specs) buildStrokeMesh(Stroke(s.$1, s.$2, s.$3, s.$4, s.$6, s.$5, s.$7))]);
 
 Future<List<String>> _digestInIsolate(List<SheetContent> contents) => _compute(() => [for (final c in contents) sheetDigest(c)]);
 

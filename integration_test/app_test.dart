@@ -186,28 +186,51 @@ void main() {
     await settle(t, 1200);
   });
 
-  testWidgets('pinceles de diseño: el panel del lápiz tiene la sección Diseños y cada uno deja un trazo con su punta (issue #6)', (t) async {
+  testWidgets('pintura: su botón abre el panel, elige forma y fondo, y cada franja deja su trazo con su malla (issue #6)', (t) async {
     await start(t);
-    await createNotebook(t, 'Pinceles');
+    await createNotebook(t, 'Franjas');
     final c = sheetCenter(t);
-    var y = -120.0;
-    for (final (id, name) in designTips) {
-      await t.tap(find.byTooltip('Lápiz · tocá de nuevo para opciones'));
+    expect(find.byTooltip('Pintura · tocá de nuevo para opciones'), findsOneWidget);
+    await t.tap(find.byTooltip('Pintura · tocá de nuevo para opciones'));
+    await settle(t);
+    expect(editor(t).ts.tool, Tool.paint);
+    var y = -150.0;
+    final fondos = ['8fd8e0', 'e3cfa0', 'c9b3ec', 'f8c4a0', 'a8e2c4'];
+    var i = 0;
+    for (final id in ['paint-stars', 'paint-hearts', 'paint-moons', 'paint-clouds', 'paint-none']) {
+      await t.tap(find.byTooltip('Pintura · tocá de nuevo para opciones'));
       await settle(t);
-      expect(find.text('Diseños'), findsOneWidget);
-      await t.tap(find.text(name));
+      expect(find.byKey(const Key('paintPreview')), findsOneWidget);
+      await t.ensureVisible(find.byKey(Key(id)));
+      await t.tap(find.byKey(Key(id)));
       await settle(t);
-      expect(editor(t).ts.pen.tip, id);
-      expect(editor(t).ts.pen.width, greaterThanOrEqualTo(5), reason: 'al elegir un diseño el grosor queda útil');
-      await t.tapAt(const Offset(4, 4)); // cierra el panel (toca la cortina)
+      expect(editor(t).ts.paint.tip, id);
+      await t.ensureVisible(find.byKey(Key('paint-${fondos[i]}')));
+      await t.tap(find.byKey(Key('paint-${fondos[i]}')));
       await settle(t);
+      expect(editor(t).ts.paint.color, '#${fondos[i]}');
+      if (id == 'paint-none') {
+        await t.ensureVisible(find.byKey(const Key('glitterSwitch')));
+        await t.tap(find.byKey(const Key('glitterSwitch'))); // apaga el brillo
+        await settle(t);
+        expect(editor(t).ts.paintParams.glitter, 0);
+      }
+      // cierra el panel desde adentro (no a ciegas sobre la cortina)
+      Navigator.of(t.element(find.byKey(const Key('paintPreview')))).pop();
+      await settle(t);
+      expect(find.byKey(const Key('paintPreview')), findsNothing);
       final before = editor(t).doc.strokes.length;
       await stylusLine(t, c + Offset(-100, y), c + Offset(100, y));
-      y += 60;
-      expect(editor(t).doc.strokes.length, before + 1, reason: name);
-      expect(editor(t).doc.strokes.values.last.k, id);
-      expect(editor(t).doc.strokes.values.last.ensureMesh()!.vertexCount, greaterThan(0));
+      y += 70;
+      expect(editor(t).doc.strokes.length, before + 1, reason: id);
+      final s = editor(t).doc.strokes.values.last;
+      expect(s.k, id);
+      expect(s.c, '#${fondos[i]}');
+      expect(s.pp, isNotNull);
+      expect(s.ensureMesh()!.vertexCount, greaterThan(0));
+      i++;
     }
+    expect(editor(t).doc.strokes.values.last.pp!.glitter, 0);
     await t.tap(find.byKey(const Key('back')));
     await settle(t, 1200);
   });

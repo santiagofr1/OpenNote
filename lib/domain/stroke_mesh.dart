@@ -1,7 +1,9 @@
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'paint_shapes.dart';
 import 'stroke.dart';
+import 'values.dart';
 
 /// Algo con memoria nativa que hay que soltar (el `ui.Vertices` que arma el painter).
 abstract interface class NativeHandle {
@@ -56,9 +58,10 @@ StrokeMesh? buildStrokeMesh(Stroke s, {double? feather}) {
 }
 
 const _chunk = 6000; // puntos por parte (con 4 vértices por punto queda lejos del tope de 65k)
+const _paintChunk = 250; // la pintura lleva ~20 vértices por muestra y decoración: partes chicas
 
 void _buildRange(Stroke s, int a, int b, double feather, List<MeshPart> out) {
-  if (b - a > _chunk) {
+  if (b - a > (isPaint(s.k) ? _paintChunk : _chunk)) {
     // se parte con un punto compartido: los cortes quedan tapados por tapas/uniones redondas
     final mid = (a + b) ~/ 2;
     _buildRange(s, a, mid + 1, feather, out);
@@ -86,12 +89,8 @@ MeshPart _buildPart(Stroke s, int a, int b, double feather) {
   int alpha(double al) => ((al.clamp(0.0, 1.0)) * 255).round() << 24 | rgb;
 
   switch (s.k) {
-    case 'dots':
-    case 'stars':
-    case 'hearts':
-    case 'flowers':
-    case 'scallop':
-      return _designPart(s, a, b);
+    case final k when isPaint(k):
+      return _paintPart(s, a, b);
     case 'hl':
     case 'fine':
       final w = _W(feather > 0);
@@ -197,135 +196,53 @@ MeshPart _buildPart(Stroke s, int a, int b, double feather) {
   }
 }
 
-/// Pinceles de diseño: estampan una forma rellena repetida a lo largo del trazo (el tamaño sale del grosor).
-const designTipIds = {'dots', 'stars', 'hearts', 'flowers', 'scallop'};
-bool isDesignTip(String k) => designTipIds.contains(k);
-
-/// Radio de la forma = [kDesignRadius] x grosor (con el slider de 0,6 a 16: de chiquitas a ~40 de diámetro).
-/// Todas las formas entran en ese radio; [Stroke.bounds] (margen de 1,6 x grosor) las cubre enteras.
-const kDesignRadius = 1.25;
-
-/// Malla de un pincel de diseño para los puntos [a]..[b] del trazo. Se re-muestrea la línea central (ya suavizada)
-/// por largo de arco, con la primera estampa en el inicio (un solo punto deja una forma). Todo es determinístico:
-/// la rotación de las estrellas sale del índice global de la estampa, nunca de un Random.
-MeshPart _designPart(Stroke s, int a, int b) {
+/// Pintura decorativa (`paint-*`): franja ancha de pincel seco con brillo y formitas claras adentro. Todo con color por
+/// vértice (el alfa también) y determinístico: lo "azaroso" sale de [_rnd] (hash de índices), nunca de un Random.
+/// Orden (lo de después queda arriba): cerdas, brillo, formas. Las puntas desflecadas solo van en el inicio y el fin
+/// reales del trazo (no en los cortes entre partes).
+MeshPart _paintPart(Stroke s, int a, int b) {
   final p = s.pts;
-  final xs = <double>[], ys = <double>[];
+  var xs = <double>[], ys = <double>[];
   _smoothCenterline([for (var i = a; i < b; i++) ...[p[i * 3], p[i * 3 + 1]]], xs, ys);
-  final w = _W(false);
-  final r = max(s.w, .1) * kDesignRadius;
-  const maxV = StrokeMesh.maxVertices - 100; // tope duro: un trazo larguísimo con pocos puntos se corta acá
-  if (s.k == 'scallop') {
-    _scallop(w, xs, ys, r, s.w, maxV);
-    return w.done();
-  }
-  final step = r * (s.k == 'dots' ? 1.6 : 2.3);
-  var idx = 0;
-  void stamp(double x, double y) {
-    switch (s.k) {
-      case 'dots':
-        _circle(w, x, y, r * .6, 0, 12);
-      case 'stars':
-        // simétrica cada 72°: la rotación pseudoaleatoria estable va por el índice global de punto y de estampa
-        final rot = ((a * 31 + idx) * 7919 % 72) / 72 * 2 * pi / 5;
-        _star(w, x, y, r, rot);
-      case 'hearts':
-        _heart(w, x, y, r);
-      default:
-        _flower(w, x, y, r);
-    }
-    idx++;
-  }
-
-  stamp(xs[0], ys[0]);
-  var next = step, acc = 0.0;
-  for (var i = 1; i < xs.length && w.count < maxV; i++) {
-    final len = sqrt(pow(xs[i] - xs[i - 1], 2) + pow(ys[i] - ys[i - 1], 2));
-    while (len > 0 && acc + len >= next && w.count < maxV) {
-      final t = (next - acc) / len;
-      stamp(xs[i - 1] + (xs[i] - xs[i - 1]) * t, ys[i - 1] + (ys[i] - ys[i - 1]) * t);
-      next += step;
-    }
-    acc += len;
-  }
-  return w.done();
-}
-
-/// Abanico desde ([cx],[cy]) por el contorno [px],[py] (la forma tiene que ser estrellada respecto del centro).
-void _fan(_W w, double cx, double cy, List<double> px, List<double> py) {
-  final c = w.v(cx, cy);
-  final first = w.v(px[0], py[0]);
-  var prev = first;
-  for (var i = 1; i < px.length; i++) {
-    final cur = w.v(px[i], py[i]);
-    w.tri(c, prev, cur);
-    prev = cur;
-  }
-  w.tri(c, prev, first);
-}
-
-/// Estrella de 5 puntas de radio [r], rotada [rot].
-void _star(_W w, double cx, double cy, double r, double rot) {
-  final px = <double>[], py = <double>[];
-  for (var k = 0; k < 10; k++) {
-    final ang = rot - pi / 2 + k * pi / 5, rr = k.isEven ? r : r * .45;
-    px.add(cx + rr * cos(ang));
-    py.add(cy + rr * sin(ang));
-  }
-  _fan(w, cx, cy, px, py);
-}
-
-/// Corazón derecho que entra en el radio [r] (curva paramétrica clásica, 16 = semiancho en sus unidades).
-void _heart(_W w, double cx, double cy, double r) {
-  final sc = r / 16, px = <double>[], py = <double>[];
-  for (var k = 0; k < 24; k++) {
-    final t = 2 * pi * k / 24;
-    final hx = 16 * pow(sin(t), 3);
-    final hy = 13 * cos(t) - 5 * cos(2 * t) - 2 * cos(3 * t) - cos(4 * t);
-    px.add(cx + hx * sc);
-    py.add(cy - (hy + 2.5) * sc); // +2.5: centra el alto (de -17 a 12) en el punto
-  }
-  _fan(w, cx, cy - 2.5 * sc, px, py);
-}
-
-/// Flor de 5 pétalos (círculos solapados) con el centro del mismo color: se lee como flor aun chica.
-void _flower(_W w, double cx, double cy, double r) {
-  for (var k = 0; k < 5; k++) {
-    final ang = -pi / 2 + k * 2 * pi / 5;
-    _circle(w, cx + r * .58 * cos(ang), cy + r * .58 * sin(ang), r * .4, 0, 10);
-  }
-  _circle(w, cx, cy, r * .3, 0, 10);
-}
-
-/// Festón: guarda continua de semicírculos (arcos hacia arriba) sobre una cinta fina que sigue el trazo.
-void _scallop(_W w, List<double> xs0, List<double> ys0, double r, double sw, int maxV) {
-  var xs = xs0, ys = ys0;
-  final ar = r * .7, period = ar * 2, base = max(sw * .3, .2); // radio del arco, largo del arco, grosor de la cinta
+  final w = _W(true), sw = max(s.w, 1.0), hw = sw / 2;
   if (xs.length < 2) {
-    xs = [xs0[0] - period / 2, xs0[0] + period / 2];
-    ys = [ys0[0], ys0[0]];
+    // un toque: mancha corta horizontal
+    xs = [xs[0] - sw * .3, xs[0] + sw * .3];
+    ys = [ys[0], ys[0]];
   }
-  final ds = period / 16;
-  // muestras por largo de arco: (x, y, distancia desde el inicio) y tangente
+  const maxV = StrokeMesh.maxVertices - 100; // tope duro: un trazo larguísimo con pocos puntos no pasa de acá
+  final nb = (sw / 4).round().clamp(8, 14);
+  // línea central re-muestreada por largo de arco; el paso crece si el trazo es tan largo que no entraría
+  var len = 0.0;
+  for (var i = 1; i < xs.length; i++) {
+    len += sqrt(pow(xs[i] - xs[i - 1], 2) + pow(ys[i] - ys[i - 1], 2));
+  }
+  final ds = max(sw * .12 < 2 ? 2.0 : min(sw * .12, 6.0), len / (30000 / (2 * nb)));
   final sx = <double>[xs[0]], sy = <double>[ys[0]];
   var next = ds, acc = 0.0;
-  for (var i = 1; i < xs.length && sx.length * 2 < maxV; i++) {
-    final len = sqrt(pow(xs[i] - xs[i - 1], 2) + pow(ys[i] - ys[i - 1], 2));
-    while (len > 0 && acc + len >= next && sx.length * 2 < maxV) {
-      final t = (next - acc) / len;
+  for (var i = 1; i < xs.length; i++) {
+    final l = sqrt(pow(xs[i] - xs[i - 1], 2) + pow(ys[i] - ys[i - 1], 2));
+    while (l > 0 && acc + l >= next) {
+      final t = (next - acc) / l;
       sx.add(xs[i - 1] + (xs[i] - xs[i - 1]) * t);
       sy.add(ys[i - 1] + (ys[i] - ys[i - 1]) * t);
       next += ds;
     }
-    acc += len;
+    acc += l;
   }
-  if (sx.length < 2) {
+  if ((sx.last - xs.last).abs() + (sy.last - ys.last).abs() > .02) {
     sx.add(xs.last);
     sy.add(ys.last);
   }
-  int? prev;
-  for (var i = 0; i < sx.length; i++) {
-    final j0 = i == 0 ? 0 : i - 1, j1 = i == sx.length - 1 ? i : i + 1;
+  final m = sx.length;
+  if (m < 2) return w.done();
+  // arco acumulado y normales (diferencia central)
+  final arc = List<double>.filled(m, 0), nx = List<double>.filled(m, 0), ny = List<double>.filled(m, 0);
+  for (var i = 1; i < m; i++) {
+    arc[i] = arc[i - 1] + sqrt(pow(sx[i] - sx[i - 1], 2) + pow(sy[i] - sy[i - 1], 2));
+  }
+  for (var i = 0; i < m; i++) {
+    final j0 = i == 0 ? 0 : i - 1, j1 = i == m - 1 ? i : i + 1;
     var tx = sx[j1] - sx[j0], ty = sy[j1] - sy[j0];
     final tl = sqrt(tx * tx + ty * ty);
     if (tl < 1e-9) {
@@ -335,14 +252,111 @@ void _scallop(_W w, List<double> xs0, List<double> ys0, double r, double sw, int
       tx /= tl;
       ty /= tl;
     }
-    final local = (i * ds) % period - ar; // -ar..ar dentro de cada arco
-    final h = sqrt(max(0, ar * ar - local * local));
-    final nx = ty, ny = -tx; // hacia arriba cuando el trazo va de izquierda a derecha
-    final top = w.v(sx[i] + nx * h, sy[i] + ny * h);
-    w.v(sx[i] - nx * base, sy[i] - ny * base);
-    if (prev != null) w.quad(prev, prev + 1, top + 1, top);
-    prev = top;
+    nx[i] = -ty;
+    ny[i] = tx;
   }
+  final total = arc[m - 1];
+  final rgb = s.color.toARGB32() & 0x00FFFFFF;
+  int argb(double al, int c) => ((al.clamp(0.0, 1.0)) * 255).round() << 24 | c;
+  final salt = a * 131;
+  final pp = s.pp ?? const PaintParams();
+
+  // a) cerdas: tiras finas paralelas, cada una con desplazamiento, grosor, alfa y largo propios
+  final trimCap = total * .4; // entre las dos puntas nunca se come más del 80% de la tira
+  for (var j = 0; j < nb && w.count < maxV; j++) {
+    final edge = j == 0 || j == nb - 1 ? 1.3 : 1.0;
+    final off0 = ((j + .5) / nb * 2 - 1) * hw * .92 + (_rnd(j, 1) - .5) * hw * .1;
+    final hb = hw / nb * (.8 + .6 * _rnd(j, 2));
+    final al = s.o * (.55 + .45 * _rnd(j, 3));
+    final tint = (_rnd(j, 6) - .5) * .16; // varía el tono: + aclara, - oscurece
+    final c = tint >= 0 ? _mix(rgb, 0xFFFFFF, tint) : _mix(rgb, 0, -tint);
+    final trimS = a == 0 ? min(pow(_rnd(j, 4), 1.5) * sw * .55 * edge, trimCap) : 0.0;
+    final trimE = b == s.n ? min(pow(_rnd(j, 5), 1.5) * sw * .55 * edge, trimCap) : 0.0;
+    final px = <double>[], py = <double>[], ph = <double>[], pc = <int>[];
+    final phase = _rnd(j, 7) * 2 * pi;
+    for (var i = 0; i < m; i++) {
+      if (arc[i] < trimS || arc[i] > total - trimE) continue;
+      final off = off0 + sin(arc[i] / (sw * .8) + phase) * hw * .03;
+      px.add(sx[i] + nx[i] * off);
+      py.add(sy[i] + ny[i] * off);
+      ph.add(hb);
+      // la punta se desvanece en los últimos pasos: queda desflecada
+      final fadeS = a == 0 ? ((arc[i] - trimS) / (sw * .25)).clamp(0.0, 1.0) : 1.0;
+      final fadeE = b == s.n ? ((total - trimE - arc[i]) / (sw * .25)).clamp(0.0, 1.0) : 1.0;
+      pc.add(argb(al * (.35 + .65 * min(fadeS, fadeE)), c));
+    }
+    if (px.length >= 2) _stripDedupe(w, px, py, ph, pc, round: false, feather: 0);
+  }
+
+  // punto de la franja a [u] de arco y [v] de lado (v en -hw..hw)
+  (double, double) at(double u, double v) {
+    var i = 1;
+    while (i < m - 1 && arc[i] < u) {
+      i++;
+    }
+    final seg = arc[i] - arc[i - 1], t = seg <= 0 ? 0.0 : ((u - arc[i - 1]) / seg).clamp(0.0, 1.0);
+    final x = sx[i - 1] + (sx[i] - sx[i - 1]) * t, y = sy[i - 1] + (sy[i] - sy[i - 1]) * t;
+    final qx = nx[i - 1] + (nx[i] - nx[i - 1]) * t, qy = ny[i - 1] + (ny[i] - ny[i - 1]) * t;
+    return (x + qx * v, y + qy * v);
+  }
+
+  // b) brillo: puntitos aclarados (la mayoría) y algunos oscurecidos, ~1 cada 80 u² de franja con el brillo en .5
+  final dots = pp.glitter <= 0 ? 0 : min((total * sw / 80 * pp.glitter * 2).ceil().clamp(4, 2500), 2500);
+  for (var i = 0; i < dots && w.count < maxV - 8; i++) {
+    final (x, y) = at(_rnd(salt + i, 10) * total, (_rnd(salt + i, 11) * 2 - 1) * hw * .95);
+    final r = 1 + 1.5 * _rnd(salt + i, 12);
+    final dark = _rnd(salt + i, 13) < .3;
+    final col = dark
+        ? argb(s.o * (.3 + .3 * _rnd(salt + i, 14)), _mix(rgb, 0, .35))
+        : argb(s.o * (.5 + .4 * _rnd(salt + i, 14)), _mix(rgb, 0xFFFFFF, .65));
+    _circle(w, x, y, r, col, 6);
+  }
+
+  // c) formas repartidas dentro de la franja: color propio (o claro/oscuro del fondo), cantidad y tamaño ajustables
+  if (s.k != 'paint-none') {
+    final step = sw * (1.4 - 1.2 * pp.density);
+    var u = total < step ? total / 2 : step * .4;
+    final sc = pp.shapeColor;
+    for (var k = 0; u <= total && w.count < maxV - 40; k++, u += step * (.75 + .5 * _rnd(salt + k, 20))) {
+      final r = min(sw * (.1 + .3 * pp.size) * (.6 + .8 * _rnd(salt + k, 21)), hw * .95);
+      final v = (_rnd(salt + k, 22) * 2 - 1) * max(0.0, hw - r * 1.1);
+      final (x, y) = at(u, v);
+      final id = s.k.substring(6);
+      final col = argb(s.o * (_whiteShapes.contains(id) ? .75 : .85), _shapeRgb(sc, rgb, _defaultShapeRgb(id, rgb)));
+      paintShape(w, id, x, y, r, _rnd(salt + k, 23) * 2 * pi, col);
+    }
+  }
+  return w.done();
+}
+
+/// Número pseudoaleatorio estable en [0, 1) a partir de dos enteros (hash de bits, sin Random).
+double _rnd(int i, int salt) {
+  var x = (i * 374761393 + salt * 668265263) & 0xFFFFFFFF;
+  x = ((x ^ (x >> 16)) * 0x45d9f3b) & 0xFFFFFFFF;
+  x = ((x ^ (x >> 16)) * 0x45d9f3b) & 0xFFFFFFFF;
+  x ^= x >> 16;
+  return x / 4294967296.0;
+}
+
+/// Formas que por defecto van en blanco; las de [_goldShapes] en dorado oscuro y el resto en el fondo aclarado.
+const _whiteShapes = {'stars', 'sparkles', 'dots', 'circles', 'bangs', 'clouds', 'bubbles'};
+const _goldShapes = {'moons', 'bolts', 'ticks', 'crosses'};
+int _defaultShapeRgb(String id, int rgb) =>
+    _whiteShapes.contains(id) ? 0xFFFFFF : _mix(rgb, _goldShapes.contains(id) ? 0x8a6a2a : 0xFFFFFF, .55);
+
+/// Color de las formas: [sc] es null (el de la forma por defecto, [def]), 'light' / 'dark' (el fondo [rgb] aclarado u
+/// oscurecido) o un hex '#rrggbb'.
+int _shapeRgb(String? sc, int rgb, int def) => switch (sc) {
+      null => def,
+      'light' => _mix(rgb, 0xFFFFFF, .6),
+      'dark' => _mix(rgb, 0, .35),
+      _ => parseColor(sc).toARGB32() & 0x00FFFFFF,
+    };
+
+/// Mezcla el color [rgb] hacia [to] (ambos 0xRRGGBB) una fracción [t].
+int _mix(int rgb, int to, double t) {
+  int ch(int sh) => (((rgb >> sh) & 255) * (1 - t) + ((to >> sh) & 255) * t).round().clamp(0, 255);
+  return ch(16) << 16 | ch(8) << 8 | ch(0);
 }
 
 /// Variación de alfa del lápiz por vértice: pseudoaleatoria pero estable (depende solo del índice global del punto),
@@ -377,14 +391,16 @@ void _smoothCenterline(List<double> p, List<double> xs, List<double> ys) {
   ys.add(p[n * 2 - 1]);
 }
 
-class _W {
+class _W implements ShapeSink {
   final bool colored;
   final pos = <double>[];
   final idx = <int>[];
   final cols = <int>[];
   _W(this.colored);
 
+  @override
   int get count => pos.length >> 1;
+  @override
   int v(double x, double y, [int c = 0]) {
     pos
       ..add(x)
@@ -393,6 +409,7 @@ class _W {
     return count - 1;
   }
 
+  @override
   void tri(int a, int b, int c) => idx
     ..add(a)
     ..add(b)

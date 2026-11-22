@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:ui' show Vertices, VertexMode;
 
 import 'package:flutter/material.dart';
 
@@ -7,8 +8,16 @@ import '../rendering/stroke_painter.dart';
 import '../theme/colors.dart';
 
 /// Trazo de muestra (una ola con presión variable) para previsualizar una punta.
-Stroke _sampleStroke(String tip, String color, double w, double o, Size size) {
+Stroke _sampleStroke(String tip, String color, double w, double o, Size size, [PaintParams? pp]) {
   final pts = <double>[];
+  if (pp != null || isPaint(tip)) {
+    // la pintura se muestra en una franja recta (con las puntas a la vista)
+    final x0 = w * .4 + 6;
+    for (var i = 0; i < 40; i++) {
+      pts.addAll([x0 + (size.width - 2 * x0) * i / 39, size.height / 2, .5]);
+    }
+    return Stroke('preview', tip, color, w, pts, o, pp);
+  }
   const n = 60;
   for (var i = 0; i < n; i++) {
     final t = i / (n - 1);
@@ -22,14 +31,15 @@ Stroke _sampleStroke(String tip, String color, double w, double o, Size size) {
 class _SamplePainter extends CustomPainter {
   final String tip, color;
   final double w, o;
-  _SamplePainter(this.tip, this.color, this.w, this.o);
+  final PaintParams? pp;
+  _SamplePainter(this.tip, this.color, this.w, this.o, [this.pp]);
   @override
-  void paint(Canvas c, Size size) => paintStroke(c, _sampleStroke(tip, color, w, o, size));
+  void paint(Canvas c, Size size) => paintStroke(c, _sampleStroke(tip, color, w, o, size, pp));
   @override
-  bool shouldRepaint(_SamplePainter x) => x.tip != tip || x.color != color || x.w != w || x.o != o;
+  bool shouldRepaint(_SamplePainter x) => x.tip != tip || x.color != color || x.w != w || x.o != o || x.pp != pp;
 }
 
-/// Opciones del lápiz o del resaltador (según la herramienta actual): punta, grosor, opacidad,
+/// Opciones del lápiz, del resaltador o de la pintura (según la herramienta actual): punta, grosor, opacidad,
 /// color y goma. [align]: del lado de la barra. [onChange] se llama en cada cambio.
 /// Al cerrarse, el color elegido entra a "recientes" y se avisa con [onChange]. Va después del cierre y no en el `dispose`
 /// del panel: ahí el árbol está bloqueado y el `setState` del editor tira una excepción.
@@ -51,7 +61,7 @@ Future<void> showPenPanel(BuildContext context, ToolState ts, VoidCallback onCha
           borderRadius: BorderRadius.circular(18),
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: 460, maxHeight: MediaQuery.of(ctx).size.height - 90),
-            child: _PenPanel(ts: ts, onChange: onChange),
+            child: ts.tool == Tool.paint ? _PaintPanel(ts: ts, onChange: onChange) : _PenPanel(ts: ts, onChange: onChange),
           ),
         ),
       ),
@@ -62,6 +72,20 @@ Future<void> showPenPanel(BuildContext context, ToolState ts, VoidCallback onCha
   });
 }
 
+/// Rótulo y fila con slider que comparten los paneles.
+mixin _PanelParts<T extends StatefulWidget> on State<T> {
+  Widget _label(String t) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Text(t, style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+      );
+
+  Widget _sliderRow(String label, String value, Widget slider) => Row(children: [
+        SizedBox(width: 72, child: Text(label, style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600))),
+        Expanded(child: slider),
+        SizedBox(width: 44, child: Text(value, textAlign: TextAlign.right, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]))),
+      ]);
+}
+
 class _PenPanel extends StatefulWidget {
   final ToolState ts;
   final VoidCallback onChange;
@@ -70,7 +94,7 @@ class _PenPanel extends StatefulWidget {
   State<_PenPanel> createState() => _PenPanelState();
 }
 
-class _PenPanelState extends State<_PenPanel> {
+class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
   ToolState get ts => widget.ts;
   bool custom = false;
   late HSVColor hsv = HSVColor.fromColor(parseColor(ts.current.color));
@@ -98,8 +122,6 @@ class _PenPanelState extends State<_PenPanel> {
           _label('Punta'),
           Row(children: [for (final (id, name) in tips) _tipCell(p, id, name)]),
           const SizedBox(height: 10),
-          _label('Diseños'),
-          Row(children: [for (final (id, name) in designTips) _tipCell(p, id, name)]),
           const SizedBox(height: 14),
         ],
 
@@ -190,18 +212,12 @@ class _PenPanelState extends State<_PenPanel> {
     );
   }
 
-  /// Una punta de la lista (normal o de diseño) con su muestra. Al pasar a un diseño el grosor se sube a uno útil
-  /// (la forma mide ~2,5 x grosor) y al volver a una punta normal se baja, para no quedar con un grosor ridículo.
+  /// Una punta de la lista con su muestra.
   Widget _tipCell(PenPreset p, String id, String name) {
     final scheme = Theme.of(context).colorScheme;
     return Expanded(
       child: GestureDetector(
-        onTap: () => _set(() {
-          final toDesign = isDesignTip(id), wasDesign = isDesignTip(p.tip);
-          p.tip = id;
-          if (toDesign && p.width < 5) p.width = 8;
-          if (!toDesign && wasDesign && p.width > 6) p.width = 2.6;
-        }),
+        onTap: () => _set(() => p.tip = id),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
           margin: const EdgeInsets.symmetric(horizontal: 3),
@@ -215,7 +231,7 @@ class _PenPanelState extends State<_PenPanel> {
             SizedBox(
               height: 34,
               width: double.infinity,
-              child: CustomPaint(painter: _SamplePainter(id, p.color, isDesignTip(id) ? 4 : id == 'fine' ? 2.5 : 3.2, 1)),
+              child: CustomPaint(painter: _SamplePainter(id, p.color, id == 'fine' ? 2.5 : 3.2, 1)),
             ),
             const SizedBox(height: 4),
             Text(name, style: TextStyle(fontSize: 11.5, color: p.tip == id ? scheme.primary : scheme.onSurface), overflow: TextOverflow.ellipsis),
@@ -231,23 +247,215 @@ class _PenPanelState extends State<_PenPanel> {
     _set(() => ts.current.color = hex);
   }
 
-  Widget _label(String t) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Text(t, style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
-      );
-
-  Widget _sliderRow(String label, String value, Widget slider) => Row(children: [
-        SizedBox(width: 72, child: Text(label, style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600))),
-        Expanded(child: slider),
-        SizedBox(width: 44, child: Text(value, textAlign: TextAlign.right, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]))),
-      ]);
-
   Widget _swatch(String c, bool on) => GestureDetector(
         onTap: () => _set(() {
           ts.pickColor(c);
           hsv = HSVColor.fromColor(parseColor(c));
         }),
         child: Container(
+          width: 30,
+          height: 30,
+          decoration: BoxDecoration(
+            color: parseColor(c),
+            shape: BoxShape.circle,
+            border: Border.all(color: on ? Colors.white : const Color(0x22000000), width: on ? 3 : 1),
+            boxShadow: on ? const [BoxShadow(color: kAccent, spreadRadius: 2)] : null,
+          ),
+        ),
+      );
+}
+
+/// Vértices de una forma suelta (para la muestra de las celdas).
+class _VertSink implements ShapeSink {
+  final pos = <Offset>[], cols = <Color>[], idx = <int>[];
+  final Color color;
+  _VertSink(this.color);
+  @override
+  int get count => pos.length;
+  @override
+  int v(double x, double y, [int c = 0]) {
+    pos.add(Offset(x, y));
+    cols.add(color);
+    return pos.length - 1;
+  }
+
+  @override
+  void tri(int a, int b, int c) => idx..add(a)..add(b)..add(c);
+}
+
+/// Una forma de la pintura dibujada sola (en la celda del panel).
+class _ShapePainter extends CustomPainter {
+  final String shape;
+  final Color color;
+  _ShapePainter(this.shape, this.color);
+  @override
+  void paint(Canvas c, Size size) {
+    final sink = _VertSink(color);
+    paintShape(sink, shape, size.width / 2, size.height / 2, size.shortestSide / 2 - 1, 1.2, 0xFF000000);
+    if (sink.idx.isEmpty) return;
+    c.drawVertices(Vertices(VertexMode.triangles, sink.pos, colors: sink.cols, indices: sink.idx), BlendMode.dst, Paint());
+  }
+
+  @override
+  bool shouldRepaint(_ShapePainter x) => x.shape != shape || x.color != color;
+}
+
+/// Panel de la pintura: forma, fondo, ancho, opacidad, brillo y formitas, con vista previa de la franja.
+class _PaintPanel extends StatefulWidget {
+  final ToolState ts;
+  final VoidCallback onChange;
+  const _PaintPanel({required this.ts, required this.onChange});
+  @override
+  State<_PaintPanel> createState() => _PaintPanelState();
+}
+
+class _PaintPanelState extends State<_PaintPanel> with _PanelParts<_PaintPanel> {
+  ToolState get ts => widget.ts;
+  PenPreset get p => ts.paint;
+  PaintParams get pp => ts.paintParams;
+
+  void _set(VoidCallback f) {
+    setState(f);
+    widget.onChange();
+  }
+
+  void _pp({double? glitter, double? density, double? size, String? shapeColor, bool autoColor = false}) => _set(() {
+        ts.paintParams = PaintParams(
+          glitter: glitter ?? pp.glitter,
+          density: density ?? pp.density,
+          size: size ?? pp.size,
+          shapeColor: autoColor ? null : (shapeColor ?? pp.shapeColor),
+        );
+      });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final none = p.tip == 'paint-none';
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Pintura', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 12),
+        Container(
+          key: const Key('paintPreview'),
+          height: 96,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(color: const Color(0xFFFFFEFB), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFDCD9D0))),
+          child: CustomPaint(painter: _SamplePainter(p.tip, p.color, p.width, p.opacity, pp), size: Size.infinite),
+        ),
+        const SizedBox(height: 12),
+        _label('Formas'),
+        // grilla de formas (el panel entero hace scroll)
+        LayoutBuilder(builder: (context, box) {
+          final cell = (box.maxWidth - 6 * 4) / 5; // 5 por fila
+          return Wrap(spacing: 6, runSpacing: 6, children: [
+            for (final (id, name) in paintShapes)
+              GestureDetector(
+                key: Key(id),
+                onTap: () => _set(() => p.tip = id),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 120),
+                  width: cell,
+                  padding: const EdgeInsets.fromLTRB(2, 6, 2, 4),
+                  decoration: BoxDecoration(
+                    color: p.tip == id ? scheme.surfaceContainerHighest : scheme.onSurface.withValues(alpha: .04),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: p.tip == id ? scheme.primary : Colors.transparent, width: 1.5),
+                  ),
+                  child: Column(children: [
+                    SizedBox(height: 30, width: 30, child: CustomPaint(painter: _ShapePainter(id.substring(6), scheme.onSurface.withValues(alpha: .75)))),
+                    const SizedBox(height: 3),
+                    Text(name, style: TextStyle(fontSize: 10, color: p.tip == id ? scheme.primary : scheme.onSurface), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ]),
+                ),
+              ),
+          ]);
+        }),
+        const SizedBox(height: 14),
+        _label('Fondo'),
+        Wrap(spacing: 6, runSpacing: 6, children: [
+          for (final c in [...paintPalette, ...ts.paintRecent.where((c) => !paintPalette.contains(c))]) _dot(c, c == p.color, () => _set(() => ts.pickColor(c))),
+        ]),
+        const SizedBox(height: 10),
+        _sliderRow('Ancho', p.width.round().toString(), Slider(
+          value: p.width.clamp(16.0, 70.0),
+          min: 16,
+          max: 70,
+          onChanged: (v) => _set(() => p.width = v.roundToDouble()),
+        )),
+        _sliderRow('Opacidad', '${(p.opacity * 100).round()}%', Slider(
+          value: p.opacity.clamp(.2, 1.0),
+          min: .2,
+          max: 1,
+          onChanged: (v) => _set(() => p.opacity = (v * 100).round() / 100),
+        )),
+        const Divider(height: 20),
+        Row(children: [
+          Expanded(child: _label('Brillo')),
+          Switch(
+            key: const Key('glitterSwitch'),
+            value: pp.glitter > 0,
+            onChanged: (on) => _pp(glitter: on ? .5 : 0),
+          ),
+        ]),
+        _sliderRow('Cantidad', '${(pp.glitter * 100).round()}%', Slider(
+          value: pp.glitter,
+          onChanged: (v) => _pp(glitter: (v * 100).round() / 100),
+        )),
+        const Divider(height: 20),
+        _label('Formitas'),
+        Opacity(
+          opacity: none ? .4 : 1,
+          child: IgnorePointer(
+            ignoring: none,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Wrap(spacing: 6, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                // "Auto": el color de cada forma (blanco, fondo aclarado, dorado)
+                GestureDetector(
+                  onTap: () => _pp(autoColor: true),
+                  child: Container(
+                    key: const Key('shapeColor-auto'),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(color: pp.shapeColor == null ? kAccent : const Color(0x33000000), width: pp.shapeColor == null ? 2 : 1),
+                    ),
+                    child: const Text('Auto', style: TextStyle(fontSize: 12)),
+                  ),
+                ),
+                for (final c in paintShapeColors) _dot(_shapeSwatch(c), c == pp.shapeColor, () => _pp(shapeColor: c), key: Key('shapeColor-$c')),
+                for (final c in ts.penRecent.take(4).where((c) => !paintShapeColors.contains(c)))
+                  _dot(c, c == pp.shapeColor, () => _pp(shapeColor: c)),
+              ]),
+              const SizedBox(height: 6),
+              _sliderRow('Cantidad', '${(pp.density * 100).round()}%', Slider(
+                value: pp.density,
+                onChanged: (v) => _pp(density: (v * 100).round() / 100),
+              )),
+              _sliderRow('Tamaño', '${(pp.size * 100).round()}%', Slider(
+                value: pp.size,
+                onChanged: (v) => _pp(size: (v * 100).round() / 100),
+              )),
+            ]),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  /// Color para mostrar de una opción de forma ('light' / 'dark' salen del fondo).
+  String _shapeSwatch(String c) {
+    if (c != 'light' && c != 'dark') return c;
+    final bg = parseColor(p.color);
+    final t = c == 'light' ? Color.lerp(bg, Colors.white, .6)! : Color.lerp(bg, Colors.black, .35)!;
+    return '#${(t.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
+  }
+
+  Widget _dot(String c, bool on, VoidCallback onTap, {Key? key}) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          key: key ?? Key('paint-${c.substring(1)}'),
           width: 30,
           height: 30,
           decoration: BoxDecoration(
