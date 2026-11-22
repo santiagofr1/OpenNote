@@ -77,14 +77,14 @@ class DriveRemoteStore implements RemoteStore, PurgingRemoteStore {
       throw RemoteException('Error de Drive ($s): ${e.message}');
     } on AccessDeniedException {
       throw const RemoteAuthException();
-    } on SocketException {
-      throw const RemoteOfflineException();
-    } on http.ClientException {
-      throw const RemoteOfflineException();
-    } on TimeoutException {
-      throw const RemoteOfflineException();
-    } on HandshakeException {
-      throw const RemoteOfflineException();
+    } on SocketException catch (e) {
+      throw RemoteOfflineException('Sin conexión ($e)');
+    } on http.ClientException catch (e) {
+      throw RemoteOfflineException('Sin conexión ($e)');
+    } on TimeoutException catch (e) {
+      throw RemoteOfflineException('Sin conexión ($e)');
+    } on HandshakeException catch (e) {
+      throw RemoteOfflineException('Sin conexión ($e)');
     }
   }
 
