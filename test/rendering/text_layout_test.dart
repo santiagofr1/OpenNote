@@ -29,4 +29,35 @@ void main() {
     b.body = b.body.toggle(0, 4, Fmt.bold).toggle(0, 10, Fmt.italic);
     expect(textRect(b, 40).height, textRect(a, 40).height);
   });
+
+  group('tamaño en pt', () {
+    final line = textLine('lined', 8); // rayado de 8 mm
+    Para para(double? pt) => Para([Run('hola', RunStyle(size: pt))]);
+
+    test('el renglón del párrafo crece en renglones enteros', () {
+      expect(paraLines(para(24), line), 2);
+      expect(paraLines(para(8), line), 1);
+      expect(paraLines(para(null), line), 1);
+      expect(paraLines(para(12), line), 1);
+      expect(paraLines(para(48), line), 3);
+      expect(paraLines(Para([const Run('a'), Run('b', const RunStyle(size: 36))]), line), 2);
+    });
+
+    test('el título automático sigue en un renglón; paraLayout usa pt reales', () {
+      final t = Para(const [Run('x')], style: ParaStyle.title);
+      expect(paraLines(t, line), 1);
+      final pl = paraLayout(para(24), 0, line, scale: 2);
+      expect(pl.lines, 2);
+      expect(pl.strut.height! * pl.strut.fontSize!, closeTo(2 * line * 2, .001));
+      expect(runStyle(const RunStyle(size: 24), scale: 2).fontSize, closeTo(ptToUnits(24) * 2, .001));
+    });
+
+    test('textRect cuenta los renglones extra', () {
+      final t = TextBlock('t', 0, 0, 600, 'hola');
+      t.body = t.body.setSize(0, 4, 24);
+      expect(textRect(t, line).height, closeTo(2 * line, 1));
+      t.body = t.body.setSize(0, 4, 8);
+      expect(textRect(t, line).height, closeTo(line, 1));
+    });
+  });
 }

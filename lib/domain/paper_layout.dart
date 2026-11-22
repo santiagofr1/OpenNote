@@ -69,6 +69,15 @@ double textLine(String bg, double spacing) => mmToUnits(textLineMm(bg, spacing))
 /// Tamaño de letra para un renglón de [line] unidades (a 8 mm queda como antes).
 double fontForLine(double line) => line * kFont / kLine;
 
+/// Un punto tipográfico (1/72 de pulgada) en unidades lógicas: 25,4/72 mm por kMm.
+const kPtUnits = 25.4 / 72 * 1000 / 210;
+
+/// Puntos -> unidades lógicas (12 pt salen de 4,23 mm reales al imprimir).
+double ptToUnits(double pt) => pt * kPtUnits;
+
+/// Los puntos equivalentes a la letra automática de un renglón de [line] unidades, redondeados a 0,5.
+double autoPt(double line) => (fontForLine(line) / kPtUnits * 2).round() / 2;
+
 /// El texto va un poco por debajo del renglón: 4 de 40 unidades en las hojas viejas.
 double textInset(double line) => line * 4 / kLine;
 

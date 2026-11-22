@@ -13,6 +13,9 @@ import '../rendering/text_layout.dart';
 /// principio del párrafo) lo notamos aunque el teclado del celular no mande ninguna tecla.
 const kGuide = '​';
 
+/// Tamaños (pt) de la lista de la barra de formato.
+const kSizes = <double>[8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48];
+
 /// Controlador del campo de UN párrafo. Muestra el párrafo con su formato ([buildTextSpan]) y
 /// pasa lo que se escribe al modelo ([BlockEditor]) antes de aceptarlo.
 class RichController extends TextEditingController {
@@ -442,6 +445,52 @@ class BlockEditor {
     return (pending ?? body.styleAt(s == e ? s : s + 1)).highlight;
   }
 
+  /// Tamaño (pt) común de lo seleccionado o del cursor; null si es automático o mixto.
+  double? get currentSize {
+    final (s, e) = globalSel;
+    if (s != e) return body.commonSize(s, e);
+    return (pending ?? body.styleAt(s)).size;
+  }
+
+  /// Hay tamaños distintos en la selección (la barra no muestra ninguno).
+  bool get mixedSize {
+    final (s, e) = globalSel;
+    if (s == e) return false;
+    final c = body.commonSize(s, e);
+    if (c != null) return false;
+    final sizes = <double?>{};
+    var base = 0;
+    for (final p in body.paras) {
+      var pos = base;
+      for (final r in p.runs) {
+        final a = pos, b = pos + r.text.length;
+        pos = b;
+        if (r.text.isNotEmpty && a < e && b > s) sizes.add(r.style.size);
+      }
+      base += p.length + 1;
+    }
+    return sizes.length > 1;
+  }
+
+  void setSize(double? pt) {
+    final (s, e) = globalSel;
+    if (s == e) {
+      pending = (pending ?? body.styleAt(s)).withSize(pt);
+      onFocus();
+      return;
+    }
+    _apply(body.setSize(s, e, pt));
+    onStructure();
+  }
+
+  /// Salta al tamaño anterior / siguiente de [kSizes] (desde el automático de [autoPt]).
+  void stepSize(int dir, double autoSize) {
+    final cur = currentSize ?? autoSize;
+    final next = dir > 0 ? kSizes.where((x) => x > cur) : kSizes.where((x) => x < cur);
+    if (next.isEmpty) return;
+    setSize(dir > 0 ? next.first : next.last);
+  }
+
   void toggleFmt(Fmt f) {
     final (s, e) = globalSel;
     if (s == e) {
@@ -515,6 +564,13 @@ class BlockEditor {
                   ? Fmt.underline
                   : null;
       if (f == null) {
+        // Ctrl+] / Ctrl+[ (y Ctrl+Shift+> / <): agrandar y achicar la letra, como Word
+        final up = k == LogicalKeyboardKey.bracketRight || (hw.isShiftPressed && k == LogicalKeyboardKey.period);
+        final down = k == LogicalKeyboardKey.bracketLeft || (hw.isShiftPressed && k == LogicalKeyboardKey.comma);
+        if (up || down) {
+          stepSize(up ? 1 : -1, autoPt(line));
+          return true;
+        }
         if (across != null && k == LogicalKeyboardKey.keyC) {
           copyAcross();
           return true;

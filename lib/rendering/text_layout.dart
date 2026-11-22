@@ -8,8 +8,8 @@ import '../domain/domain.dart';
 const kInk = Color(0xFF22211E);
 
 /// Interlineado fijo = un renglón de [line] unidades, así el texto cae siempre sobre las líneas.
-StrutStyle textStrut(double line, {double scale = 1}) =>
-    StrutStyle(fontSize: fontForLine(line) * scale, height: line / fontForLine(line), forceStrutHeight: true);
+StrutStyle textStrut(double line, {double scale = 1, int lines = 1}) =>
+    StrutStyle(fontSize: fontForLine(line) * scale, height: lines * line / fontForLine(line), forceStrutHeight: true);
 
 /// Estilo de letra de un texto en un renglón de [line] unidades (a [scale] píxeles por unidad).
 TextStyle textStyle(double line, {double scale = 1, Color? color}) =>
@@ -37,8 +37,10 @@ TextAlign textAlignOf(ParaAlign a) => switch (a) {
       ParaAlign.justify => TextAlign.justify,
     };
 
-/// Estilo de un tramo, para sumar al del párrafo.
-TextStyle runStyle(RunStyle r) => TextStyle(
+/// Estilo de un tramo, para sumar al del párrafo. Un tramo con tamaño en pt usa ese tamaño real
+/// (absoluto, a [scale] píxeles por unidad); sin tamaño hereda el del párrafo.
+TextStyle runStyle(RunStyle r, {double scale = 1}) => TextStyle(
+      fontSize: r.size == null ? null : ptToUnits(r.size!) * scale,
       fontWeight: r.bold ? FontWeight.bold : null,
       fontStyle: r.italic ? FontStyle.italic : null,
       decoration: r.underline || r.strike
@@ -58,7 +60,10 @@ class ParaLayout {
   final StrutStyle strut;
   final double indent, markerWidth; // ya multiplicados por la escala
   final String? marker; // "•" o "1."; null en tareas y sin lista
-  const ParaLayout(this.para, this.base, this.strut, this.indent, this.markerWidth, this.marker);
+  final int lines; // renglones enteros que ocupa cada línea del párrafo (más de 1 si tiene letra grande)
+  final double scale;
+  const ParaLayout(this.para, this.base, this.strut, this.indent, this.markerWidth, this.marker,
+      {this.lines = 1, this.scale = 1});
 
   /// Dónde empieza el texto del párrafo (sangría + marcador).
   double get textLeft => indent + markerWidth;
@@ -73,7 +78,7 @@ class ParaLayout {
     for (final r in para.runs) {
       final a = pos, b = pos + r.text.length;
       pos = b;
-      final st = runStyle(r.style);
+      final st = runStyle(r.style, scale: scale);
       final from = sel == null ? b : max(sel.$1, a), to = sel == null ? b : min(sel.$2, b);
       if (from >= to) {
         kids.add(TextSpan(text: r.text, style: st));
@@ -96,11 +101,12 @@ ParaLayout paraLayout(Para p, int number, double line, {double scale = 1, Color 
     ParaStyle.subtitle => FontWeight.w600,
     ParaStyle.normal => null,
   };
-  final base = TextStyle(fontSize: font, height: line * scale / font, color: color, fontWeight: weight);
+  final k = paraLines(p, line);
+  final base = TextStyle(fontSize: font, height: k * line * scale / font, color: color, fontWeight: weight);
   return ParaLayout(
     p,
     base,
-    textStrut(line, scale: scale),
+    textStrut(line, scale: scale, lines: k),
     p.indent * kIndentLines * line * scale,
     p.list == ListKind.none ? 0 : kMarkerLines * line * scale,
     switch (p.list) {
@@ -108,7 +114,21 @@ ParaLayout paraLayout(Para p, int number, double line, {double scale = 1, Color 
       ListKind.numbered => '$number.',
       _ => null,
     },
+    lines: k,
+    scale: scale,
   );
+}
+
+/// Renglones enteros que ocupa cada línea del párrafo [p] en un renglón de [line] unidades: uno, o más
+/// si tiene letra con tamaño en pt que no entra (la letra más grande por 1,2 de interlineado, redondeado
+/// para arriba), así el texto sigue cayendo sobre las líneas del rayado. La letra automática (también la
+/// del título) sigue en un renglón.
+int paraLines(Para p, double line) {
+  var big = 0.0;
+  for (final r in p.runs) {
+    if (r.style.size != null) big = max(big, ptToUnits(r.style.size!));
+  }
+  return max(1, (big * 1.2 / line - 1e-6).ceil());
 }
 
 /// Casilla de una lista de tareas, dibujada con trazos (no depende de ninguna fuente).

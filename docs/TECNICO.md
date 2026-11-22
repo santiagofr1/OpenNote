@@ -68,6 +68,15 @@ El texto con teclado se apoya en el renglón de su propia hoja.
 - Dibujo: `lib/rendering/text_layout.dart` (`paraLayout`, `layoutBlock`) lo comparten el editor y las miniaturas /
   PNG / PDF. Los títulos usan letra más grande pero el interlineado queda en un renglón (caen sobre el rayado);
   la casilla de tareas se dibuja con trazos.
+- Tamaño de letra: `RunStyle.size` en pt (null = automático, el del interlineado de la hoja; JSON `"size"` solo si
+  no es null, los archivos viejos cargan null). Conversión en `paper_layout.dart`: `kPtUnits` = 25,4/72 mm por
+  `kMm`, `ptToUnits`, `autoPt(line)` (la letra automática en pt, para mostrarla en la barra). Un tramo con size usa
+  `ptToUnits(size) * scale` absoluto (no le afecta el factor del título) y sale impreso de ese tamaño real
+  (12 pt = 4,23 mm). `paraLines` da los renglones enteros por línea del párrafo, `ceil(letraMayor * 1,2 / line)`
+  con mínimo 1, y `paraLayout` lo aplica al strut y al `height`, así editor, miniatura, PNG, PDF y `textRect`
+  coinciden y el texto sigue cayendo sobre el rayado. Solo cuentan los tramos con size: el título automático sigue
+  en un renglón. En el editor, `BlockEditor.setSize` / `currentSize` / `stepSize` (selección, `across` o tipeo
+  pendiente), lista `kSizes`; en la barra, A−, chip y A+ (`fmt-size*`); Ctrl+] / Ctrl+[ (o Ctrl+Shift+> / <).
 - Edición (`lib/editor/rich_editing.dart`): un `TextField` por párrafo, no uno solo. Se eligió así porque la
   alineación, la sangría y el marcador son por párrafo y un campo único solo tiene una alineación; además
   Enter / retroceso al principio parten y unen campos sin tocar el caret nativo. A cambio la selección nativa

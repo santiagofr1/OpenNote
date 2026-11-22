@@ -4,6 +4,7 @@ import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/editor/page_editor.dart';
 import 'package:apuntes/editor/rich_editing.dart';
+import 'package:apuntes/rendering/text_layout.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -110,6 +111,58 @@ void main() {
     expect(span.toPlainText(), '​hola mundo');
     final bold = (span.children!.whereType<TextSpan>()).where((s) => s.style?.fontWeight == FontWeight.bold);
     expect(bold.single.text, 'hola');
+  });
+
+  testWidgets('tamaño: la lista aplica pt a la selección, el renglón crece y A+ / A- saltan', (t) async {
+    final ed = await open(t);
+    await tapKeyboardTool(t);
+    final b = only(ed), be = ed.texts.editor(b.id)!;
+    await t.enterText(find.byKey(Key('para-${b.id}-0')), 'hola mundo');
+    await t.pump();
+    final line = ed.doc.lineAt(b.y);
+    final h0 = t.getRect(find.byKey(Key('para-${b.id}-0'))).height;
+    be.fields[0].ctl.selection = const TextSelection(baseOffset: 1, extentOffset: 5);
+    await t.pump();
+    await t.tap(find.byKey(const Key('fmt-size')));
+    await t.pump();
+    await t.tap(find.byKey(const Key('fmt-size-24')));
+    await t.pump(const Duration(milliseconds: 100));
+    expect(b.body.paras[0].runs.map((r) => (r.text, r.style.size)), [('hola', 24.0), (' mundo', null)]);
+    expect(be.hasFocus, isTrue, reason: 'la lista no roba el foco');
+    expect(textRect(b, line).height, closeTo(2 * line, 1), reason: 'el bloque ocupa 2 renglones');
+    expect(t.getRect(find.byKey(Key('para-${b.id}-0'))).height, greaterThan(h0 * 1.6));
+
+    // A+ salta al siguiente de la lista; A- al anterior (la selección sigue sobre "hola")
+    be.fields[0].ctl.selection = const TextSelection(baseOffset: 1, extentOffset: 5);
+    await t.pump();
+    await t.tap(find.byKey(const Key('fmt-size-up')));
+    await t.pump();
+    expect(b.body.paras[0].runs.first.style.size, 28);
+    await t.tap(find.byKey(const Key('fmt-size-down')));
+    await t.tap(find.byKey(const Key('fmt-size-down')));
+    await t.pump();
+    expect(b.body.paras[0].runs.first.style.size, 20);
+
+    // Automático la devuelve a null
+    await t.tap(find.byKey(const Key('fmt-size')));
+    await t.pump();
+    await t.tap(find.byKey(const Key('fmt-size-auto')));
+    await t.pump();
+    expect(b.body.paras[0].runs.length, 1);
+    expect(b.body.paras[0].runs.single.style.size, isNull);
+  });
+
+  testWidgets('tamaño pendiente sin selección vale para lo que se escribe', (t) async {
+    final ed = await open(t);
+    await tapKeyboardTool(t);
+    final b = only(ed);
+    await t.tap(find.byKey(const Key('fmt-size')));
+    await t.pump();
+    await t.tap(find.byKey(const Key('fmt-size-16')));
+    await t.pump();
+    await t.enterText(find.byKey(Key('para-${b.id}-0')), 'x');
+    await t.pump();
+    expect(b.body.paras[0].runs.single.style.size, 16);
   });
 
   testWidgets('negrita pendiente sin selección vale para lo que se escribe', (t) async {

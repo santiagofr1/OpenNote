@@ -22,7 +22,7 @@ class FormatBar extends StatefulWidget {
 }
 
 class _FormatBarState extends State<FormatBar> {
-  String? _open; // 'color' | 'hl': paleta desplegada
+  String? _open; // 'color' | 'hl' | 'size': paleta o lista desplegada
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +38,10 @@ class _FormatBarState extends State<FormatBar> {
             if (ed == null) return const SizedBox(height: 0);
             return Column(mainAxisSize: MainAxisSize.min, children: [
               if (ed.across != null) _acrossBar(ed),
-              if (_open != null) _palette(ed, cs),
+              if (_open == 'size')
+                _sizeList(ed, cs)
+              else if (_open != null)
+                _palette(ed, cs),
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -67,6 +70,7 @@ class _FormatBarState extends State<FormatBar> {
           dot: c == null ? null : Color(c)),
       _btn(cs, 'fmt-hl', Symbols.format_ink_highlighter, 'Resaltado', _open == 'hl', () => _toggle('hl'),
           dot: h == null ? null : Color(h)),
+      _sizeControl(ed, cs),
       _sep(cs),
       st('fmt-normal', 'Normal', ParaStyle.normal),
       st('fmt-title', 'Título', ParaStyle.title),
@@ -137,6 +141,67 @@ class _FormatBarState extends State<FormatBar> {
         for (final c in colors)
           swatch(Key('${isText ? 'color' : 'hl'}-${c.toRadixString(16)}'), Color(c),
               () => isText ? ed.setColor(c) : ed.setHighlight(c)),
+      ]),
+    );
+  }
+
+  /// A− / tamaño actual / A+. Sin tamaño propio muestra el que da la hoja; vacío si la selección mezcla.
+  Widget _sizeControl(BlockEditor ed, ColorScheme cs) {
+    final auto = autoPt(ed.line), cur = ed.currentSize;
+    final label = cur != null ? _ptText(cur) : (ed.mixedSize ? '' : _ptText(auto));
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      _btn(cs, 'fmt-size-down', Symbols.text_decrease, 'Achicar letra (Ctrl+[)', false, () => ed.stepSize(-1, auto)),
+      InkWell(
+        key: const Key('fmt-size'),
+        canRequestFocus: false,
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => _toggle('size'),
+        child: Container(
+          width: 46,
+          height: 42,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+              color: _open == 'size' ? cs.secondaryContainer : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: cs.outlineVariant)),
+          child: Text(label,
+              style: TextStyle(
+                  fontSize: 14,
+                  fontStyle: cur == null ? FontStyle.italic : null,
+                  color: _open == 'size' ? cs.onSecondaryContainer : cs.onSurfaceVariant)),
+        ),
+      ),
+      _btn(cs, 'fmt-size-up', Symbols.text_increase, 'Agrandar letra (Ctrl+])', false, () => ed.stepSize(1, auto)),
+    ]);
+  }
+
+  String _ptText(double pt) => pt == pt.roundToDouble() ? '${pt.round()}' : pt.toStringAsFixed(1);
+
+  Widget _sizeList(BlockEditor ed, ColorScheme cs) {
+    final cur = ed.currentSize;
+    Widget item(Key k, String label, bool on, double? pt) => InkWell(
+          key: k,
+          canRequestFocus: false,
+          borderRadius: BorderRadius.circular(10),
+          onTap: () {
+            ed.setSize(pt);
+            setState(() => _open = null);
+          },
+          child: Container(
+            height: 38,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+                color: on ? cs.secondaryContainer : Colors.transparent, borderRadius: BorderRadius.circular(10)),
+            child: Text(label, style: TextStyle(fontSize: 14, color: on ? cs.onSecondaryContainer : cs.onSurfaceVariant)),
+          ),
+        );
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(children: [
+        item(const Key('fmt-size-auto'), 'Automático', cur == null, null),
+        for (final n in kSizes) item(Key('fmt-size-${_ptText(n)}'), _ptText(n), cur == n, n),
       ]),
     );
   }
