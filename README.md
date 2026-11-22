@@ -154,7 +154,7 @@ docs/              # documentación técnica (TECNICO.md), releases, capturas e 
 Cada capa usa solo las de arriba: `domain` no sabe nada de Flutter, y el resto se apoya en él. El detalle del
 formato de archivos, la carga perezosa y el guardado está en [docs/TECNICO.md](docs/TECNICO.md).
 
-## Es tuyo también: forkealo, rompelo, mejoralo
+## Contribuir
 
 OpenNote es **software libre** bajo licencia MIT. Lo podés usar, copiar, modificar y redistribuir como quieras.
 
