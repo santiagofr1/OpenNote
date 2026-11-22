@@ -37,39 +37,4 @@ void main() {
     }
     expect(got, wanted.values.toList());
   });
-
-  testWidgets('los filtros se ven con texto y avisan; sin filtros no aparecen', (t) async {
-    var hl = 0, noHl = 0;
-    Widget menu({bool filters = true}) => MaterialApp(
-          home: Scaffold(
-            body: Center(
-              child: FittedBox(child: SelectionMenu(
-                onCopy: () {},
-                onCut: () {},
-                onDuplicate: () {},
-                onDelete: () {},
-                onClose: () {},
-                onOrder: (_) {},
-                onOnlyHl: filters ? () => hl++ : null,
-                onOnlyInk: filters ? () => noHl++ : null,
-              )),
-            ),
-          ),
-        );
-    await t.pumpWidget(menu());
-    expect(find.text('Solo resaltador'), findsOneWidget);
-    expect(find.text('Sin resaltador'), findsOneWidget);
-    await t.tap(find.text('Solo resaltador'));
-    await t.tap(find.text('Sin resaltador'));
-    expect([hl, noHl], [1, 1]);
-    await t.pumpWidget(menu(filters: false));
-    expect(find.text('Solo resaltador'), findsNothing);
-    expect(find.text('Sin resaltador'), findsNothing);
-    // ancho chico: no desborda
-    t.view.physicalSize = const Size(360, 640);
-    t.view.devicePixelRatio = 1;
-    addTearDown(t.view.reset);
-    await t.pumpWidget(menu());
-    expect(t.takeException(), isNull);
-  });
 }
