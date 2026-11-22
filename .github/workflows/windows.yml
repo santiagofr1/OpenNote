@@ -1,0 +1,52 @@
+name: Windows (prueba)
+
+# Compila la app de Windows y el instalador sin publicar release: sirve para ver que el job de release.yml anda
+# antes de mergear dev a main. El .exe queda como artefacto del run (Actions → este run → Artifacts).
+on:
+  push:
+    branches:
+      - dev
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/ISSUE_TEMPLATE/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Compilar app de Windows
+        run: flutter build windows --release --build-name="0.0.${{ github.run_number }}" --build-number="${{ github.run_number }}"
+
+      - name: Armar instalador (Inno Setup)
+        run: |
+          if ! command -v iscc >/dev/null 2>&1; then
+            choco install innosetup -y --no-progress
+            export PATH="$PATH:/c/Program Files (x86)/Inno Setup 6"
+          fi
+          iscc "//DAppVersion=0.0.${{ github.run_number }}" windows/installer/opennote.iss
+
+      - name: Guardar el instalador
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenNote-windows-setup
+          path: dist/*.exe
