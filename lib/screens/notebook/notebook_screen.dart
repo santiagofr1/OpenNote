@@ -392,7 +392,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     }
     final n = nb.sheetCountOf(id);
     if (!await confirmDelete(context, 'Borrar la sección "${s.name}"',
-        'Se ${n == 1 ? 'borra 1 hoja' : 'borran $n hojas'} con todo lo que tienen. No se puede deshacer.')) {
+        'Se ${n == 1 ? 'borra 1 hoja con todo lo que tiene' : 'borran $n hojas con todo lo que tienen'}. No se puede deshacer.')) {
       return;
     }
     if (!mounted) return;
