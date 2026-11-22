@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -31,7 +30,6 @@ class TextFields {
 
   late NotebookDoc doc;
   final _eds = <String, BlockEditor>{};
-  final _saveTimers = <String, Timer>{};
 
   /// Arma los campos de todos los textos de [p] (y suelta los de la página anterior).
   void attach(NotebookDoc p) {
@@ -107,7 +105,6 @@ class TextFields {
   }
 
   void _unbind(String id) {
-    _saveTimers.remove(id)?.cancel();
     final e = _eds.remove(id);
     if (e == null) return;
     // los campos todavía están en pantalla este frame: se liberan después
@@ -138,16 +135,7 @@ class TextFields {
     showKeyboard();
   }
 
-  /// Guarda [onSave] después de una pausa al escribir, para no grabar en cada tecla.
-  void debounceSave(String id, VoidCallback onSave) {
-    _saveTimers[id]?.cancel();
-    _saveTimers[id] = Timer(const Duration(milliseconds: 300), onSave);
-  }
-
   void dispose() {
-    for (final t in _saveTimers.values) {
-      t.cancel();
-    }
     for (final e in _eds.values) {
       e.dispose();
     }

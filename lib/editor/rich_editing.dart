@@ -264,14 +264,6 @@ class BlockEditor {
     onFocus();
   }
 
-  /// Deja de haber selección entre párrafos.
-  void clearAcross() {
-    if (across == null) return;
-    across = null;
-    _syncAll();
-    onFocus();
-  }
-
   Future<void> copyAcross() async {
     final t = acrossText;
     if (t != null) await Clipboard.setData(ClipboardData(text: t));
@@ -481,7 +473,6 @@ class BlockEditor {
   }
 
   // ---- formato de párrafo ----
-  ParaStyle get paraStyle => body.paras[active].style;
   Para get activePara => body.paras[active];
 
   void setParaStyle(ParaStyle st) => _applyPara((s, e) => body.setParaStyle(s, e, st));
