@@ -31,8 +31,10 @@ class _SamplePainter extends CustomPainter {
 
 /// Opciones del lápiz o del resaltador (según la herramienta actual): punta, grosor, opacidad,
 /// color y goma. [align]: del lado de la barra. [onChange] se llama en cada cambio.
+/// Al cerrarse, el color elegido entra a "recientes" y se avisa con [onChange]. Va después del cierre y no en el `dispose`
+/// del panel: ahí el árbol está bloqueado y el `setState` del editor tira una excepción.
 Future<void> showPenPanel(BuildContext context, ToolState ts, VoidCallback onChange, [Alignment align = Alignment.topCenter]) {
-  return showDialog(
+  return showDialog<void>(
     context: context,
     barrierColor: Colors.black12,
     builder: (ctx) => Align(
@@ -54,7 +56,10 @@ Future<void> showPenPanel(BuildContext context, ToolState ts, VoidCallback onCha
         ),
       ),
     ),
-  );
+  ).then((_) {
+    ts.pickColor(ts.current.color);
+    onChange();
+  });
 }
 
 class _PenPanel extends StatefulWidget {
@@ -224,14 +229,6 @@ class _PenPanelState extends State<_PenPanel> {
     setState(() => hsv = c);
     final hex = _hex(c.toColor());
     _set(() => ts.current.color = hex);
-  }
-
-  @override
-  void dispose() {
-    // el color personalizado entra a "recientes" al cerrar
-    ts.pickColor(ts.current.color);
-    widget.onChange();
-    super.dispose();
   }
 
   Widget _label(String t) => Padding(
