@@ -31,8 +31,7 @@ Future<String?> showMoreMenu(BuildContext context, Offset at, Notebook nb) => sh
         const PopupMenuItem(value: 'search', child: MenuRow(Symbols.search, 'Buscar')),
         const PopupMenuItem(value: 'style', child: MenuRow(Symbols.palette, 'Estilo de hoja')),
         const PopupMenuDivider(),
-        const PopupMenuItem(value: 'saveas', child: MenuRow(Symbols.save_as, 'Guardar como')),
-        const PopupMenuItem(value: 'opennote', child: MenuRow(Symbols.archive, 'Exportar cuaderno (.opennote)')),
+        const PopupMenuItem(value: 'export', child: MenuRow(Symbols.ios_share, 'Exportar')),
         const PopupMenuDivider(),
         _IconRow([
           (Symbols.star, nb.favorite ? 'Quitar de favoritos' : 'Favorito', 'fav', nb.favorite),
@@ -79,10 +78,12 @@ class _IconRowState extends State<_IconRow> {
   }
 }
 
-/// "Guardar como": PDF del cuaderno ('nb'), PDF de la hoja que se ve ('sheet') o PNG de esa hoja ('png').
-Future<String?> showSaveAsSheet(BuildContext context, {required String sheetName}) {
+/// "Exportar": una sola hoja con todo. Devuelve 'pdf' (cuaderno entero), 'sheet' (PDF de la hoja que se ve, solo si
+/// hay [sheetName]), 'png' (imagen de una hoja) o 'opennote'. Cada opción tiene key `export-<valor>`.
+Future<String?> showExportSheet(BuildContext context, {String? sheetName, String? pngSubtitle}) {
   final cs = Theme.of(context).colorScheme;
   Widget tile(IconData i, String t, String sub, String v) => ListTile(
+        key: Key('export-$v'),
         leading: Icon(i, weight: 300, color: cs.onSurfaceVariant),
         title: Text(t),
         subtitle: Text(sub),
@@ -97,10 +98,12 @@ Future<String?> showSaveAsSheet(BuildContext context, {required String sheetName
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-              child: Text('Guardar como', style: Theme.of(ctx).textTheme.titleLarge)),
-          tile(Symbols.picture_as_pdf, 'PDF del cuaderno', 'Todas las hojas', 'nb'),
-          tile(Symbols.description, 'PDF de esta hoja', sheetName, 'sheet'),
-          tile(Symbols.image, 'Imagen (PNG)', 'La hoja que estás viendo', 'png'),
+              child: Text('Exportar', style: Theme.of(ctx).textTheme.titleLarge)),
+          tile(Symbols.picture_as_pdf, 'PDF', 'Todo el cuaderno', 'pdf'),
+          if (sheetName != null) tile(Symbols.description, 'PDF de esta hoja', sheetName, 'sheet'),
+          tile(Symbols.image, 'Imagen (PNG)', pngSubtitle ?? 'La hoja que estás viendo', 'png'),
+          tile(Symbols.archive, 'Cuaderno de OpenNote (.opennote)', 'Para pasarlo a otro dispositivo o hacer copia',
+              'opennote'),
         ]),
       ),
     ),

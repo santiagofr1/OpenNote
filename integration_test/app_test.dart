@@ -363,7 +363,9 @@ void main() {
       saveOpennote = savedSave;
       Pickers.opennote = savedPick;
     });
-    await openMore(t, 'Exportar cuaderno (.opennote)');
+    await openMore(t, 'Exportar');
+    await t.tap(find.byKey(const Key('export-opennote')));
+    await settle(t, 600);
     expect(saved, isNotNull);
     await t.tap(find.byKey(const Key('back')));
     await settle(t, 1200);
@@ -1285,6 +1287,42 @@ void main() {
     await t.tap(find.byTooltip('Rehacer'));
     await settle(t, 600);
     expect(ed.doc.items.containsKey('nota'), isTrue);
+  });
+
+  testWidgets('Exportar: una sola opción con PDF, PNG y .opennote', (t) async {
+    await start(t);
+    await createNotebook(t, 'Exporta');
+    // dentro del cuaderno: el menú ⋮ tiene una sola entrada "Exportar" (sin "Guardar como" ni el .opennote suelto)
+    await t.tap(find.byKey(const Key('more')));
+    await settle(t);
+    expect(find.text('Exportar'), findsOneWidget);
+    expect(find.text('Guardar como'), findsNothing);
+    expect(find.text('Exportar cuaderno (.opennote)'), findsNothing);
+    await t.tap(find.text('Exportar'));
+    await settle(t, 600);
+    for (final k in ['pdf', 'sheet', 'png', 'opennote']) {
+      expect(find.byKey(Key('export-$k')), findsOneWidget, reason: 'opción $k');
+    }
+    await t.tapAt(const Offset(10, 10)); // cierra la hoja sin guardar nada
+    await settle(t, 600);
+    expect(find.byKey(const Key('export-pdf')), findsNothing);
+
+    // desde la biblioteca: mismas opciones menos "PDF de esta hoja"
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+    await t.longPress(find.byKey(const Key('nb-Exporta')));
+    await settle(t, 600);
+    expect(find.text('Exportar a PDF'), findsNothing);
+    await t.tap(find.byKey(const Key('exportNotebook')));
+    await settle(t, 600);
+    for (final k in ['pdf', 'png', 'opennote']) {
+      expect(find.byKey(Key('export-$k')), findsOneWidget, reason: 'opción $k');
+    }
+    expect(find.byKey(const Key('export-sheet')), findsNothing);
+    expect(find.text('La última hoja que viste'), findsOneWidget);
+    await t.tapAt(const Offset(10, 10));
+    await settle(t, 600);
+    expect(t.takeException(), isNull);
   });
 
   testWidgets('sincronización: "Sincronizar ahora" sube un cuaderno y otro dispositivo lo baja (remoto falso)', (t) async {

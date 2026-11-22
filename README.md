@@ -36,7 +36,7 @@ sin cuentas ni servidores.
 - **Biblioteca ordenada**: carpetas anidadas, favoritos, búsqueda por nombre sin importar mayúsculas ni tildes,
   y cuadernos protegidos con PIN.
 - **Modo lectura**: para leer sin tocar nada por error.
-- **Exportar e importar**: exportá cuadernos a PDF o PNG, o enteros como archivo `.opennote` para respaldarlos o
+- **Exportar e importar**: con una sola opción "Exportar" sacás cuadernos a PDF o PNG, o enteros como archivo `.opennote` para respaldarlos o
   pasarlos a otra tablet; importá `.opennote`, PDF, imágenes y audios.
 - **Aspecto Material You**: sigue el tema de tu tablet.
 - **Rápida con cuadernos grandes**: ver [Rendimiento](#rendimiento-medido).

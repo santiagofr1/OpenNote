@@ -334,10 +334,8 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         });
       case 'style':
         await _styleDialog();
-      case 'saveas':
-        await _saveAs();
-      case 'opennote':
-        await _exportOpennote();
+      case 'export':
+        await _export();
       case 'fav':
         setState(() => nb.favorite = !nb.favorite);
         await _saveIndex();
@@ -410,21 +408,23 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     }
   }
 
-  Future<void> _saveAs() async {
+  Future<void> _export() async {
     final d = doc;
     if (d == null) return;
     final k = curSheet, meta = d.sheets[k];
     final sheetName = 'Hoja ${k + 1}${meta.title.isEmpty ? '' : ' · ${meta.title}'}';
-    final v = await showSaveAsSheet(context, sheetName: sheetName);
+    final v = await showExportSheet(context, sheetName: sheetName);
     if (v == null || !mounted) return;
     switch (v) {
-      case 'nb':
+      case 'pdf':
         await exportPdfFlow(context, store, d);
       case 'sheet':
         await exportPdfFlow(context, store, d, only: [k], name: '${nb.name} - hoja ${k + 1}');
       case 'png':
         final ok = await saveSheetPng(store, d, k, '${nb.name} - hoja ${k + 1}');
         if (ok && mounted) snack(context, 'Imagen guardada');
+      case 'opennote':
+        await _exportOpennote();
     }
   }
 

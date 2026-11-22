@@ -332,8 +332,9 @@ ZIP creado por `lib/data/opennote_file.dart`: `manifest.json` (app, versión de 
 espaciado, cantidad de hojas), `notebook.json`, `sheets/<hoja>.sheet` (copiados de disco tal cual, sin cargar las hojas)
 y `media/<archivo>` (solo lo que usan las hojas). Al importar se valida el manifest (versión, nombres de archivo
 seguros, hojas que coinciden) antes de escribir; un archivo roto lanza `OpennoteException` y no deja nada en disco.
-El cuaderno nuevo recibe un id nuevo y "X (importado)" si el nombre ya existe. Exportar: menú ⋮ del cuaderno y menú
-de mantener apretado en la biblioteca (`saveOpennote` en `export.dart`); importar: "+" de la biblioteca
+El cuaderno nuevo recibe un id nuevo y "X (importado)" si el nombre ya existe. Exportar: una sola entrada "Exportar" en el menú ⋮ del cuaderno y en el menú de mantener apretado de la biblioteca;
+abre `showExportSheet` (`menus.dart`) con PDF, PDF de esta hoja (solo dentro del cuaderno), PNG (en la biblioteca, la
+última hoja vista, `nb.last`) y `.opennote` (`saveOpennote` en `export.dart`); importar: "+" de la biblioteca
 (`Pickers.opennote`). Ambos son sustituibles en los tests.
 
 ### Migración
