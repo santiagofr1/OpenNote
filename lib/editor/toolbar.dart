@@ -57,7 +57,7 @@ class EditorToolbar extends StatelessWidget {
         if (vertical) const SizedBox(height: 4),
         _toolBtn(cs, Tool.pen, Symbols.stylus, 'Lápiz · tocá de nuevo para opciones', ts.pen),
         _toolBtn(cs, Tool.hl, Symbols.ink_highlighter, 'Resaltador · tocá de nuevo para opciones', ts.hl),
-        _toolBtn(cs, Tool.paint, Symbols.brush, 'Pintura · tocá de nuevo para opciones', ts.paint),
+        _toolBtn(cs, Tool.paint, Symbols.brush, 'Decorador · tocá de nuevo para opciones', ts.paint),
         _toolBtn(cs, Tool.text, Symbols.keyboard, 'Texto con teclado', null),
         _toolBtn(cs, Tool.select, Symbols.highlight_alt, 'Seleccionar', null),
         _divider(cs),

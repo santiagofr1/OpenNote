@@ -12,6 +12,9 @@ const tips = [
   ('calli', 'Caligrafía'),
 ];
 
+/// Tipos de trazo de la pintura (id guardado en `pp.st`, nombre en pantalla).
+const paintStyles = [('brush', 'Pincel'), ('hl', 'Resaltador'), ('marker', 'Fibra')];
+
 /// Formas de la pintura decorativa (id guardado en el trazo, nombre en pantalla).
 const paintShapes = [
   ('paint-stars', 'Estrellas'),
@@ -33,7 +36,6 @@ const paintShapes = [
   ('paint-diamonds', 'Rombos'),
   ('paint-flowers', 'Flores'),
   ('paint-notes', 'Notas'),
-  ('paint-none', 'Ninguna'),
 ];
 
 /// Radio de la goma: chica, mediana, grande.
@@ -106,9 +108,18 @@ class ToolState {
   /// Elige un color y lo pone primero en "recientes" (hasta 7).
   void pickColor(String c) {
     current.color = c;
-    final r = recent..remove(c);
-    r.insert(0, c);
+    _remember(recent, c);
+  }
+
+  static void _remember(List<String> r, String c) {
+    r..remove(c)..insert(0, c);
     if (r.length > 7) r.removeLast();
+  }
+
+  /// Al cerrar el panel del Decorador: el color de las formas (si es un hex propio) entra a "recientes".
+  void rememberShapeColor() {
+    final c = paintParams.shapeColor;
+    if (c != null && c.startsWith('#')) _remember(paintRecent, c);
   }
 
   Map<String, dynamic> toJson() => {
@@ -132,8 +143,13 @@ class ToolState {
     pen.load(j['pen'] as Map?);
     hl.load(j['hl'] as Map?);
     paint.load(j['paint'] as Map?);
-    if (!isPaint(paint.tip)) paint.tip = 'paint-stars'; // una forma que ya no existe
     paintParams = j['paintParams'] is Map ? PaintParams.fromJson(j['paintParams'] as Map) : const PaintParams();
+    if (paint.tip == 'paint-none') {
+      // la vieja opción "Ninguna" ahora es tener las formas apagadas
+      paint.tip = 'paint-stars';
+      paintParams = paintParams.copyWith(shapes: false);
+    }
+    if (!isPaint(paint.tip)) paint.tip = 'paint-stars'; // una forma que ya no existe
     if (j['penRecent'] is List) penRecent = List<String>.from(j['penRecent'] as List);
     if (j['hlRecent'] is List) hlRecent = List<String>.from(j['hlRecent'] as List);
     if (j['paintRecent'] is List) paintRecent = List<String>.from(j['paintRecent'] as List);

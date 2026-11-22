@@ -186,34 +186,39 @@ void main() {
     await settle(t, 1200);
   });
 
-  testWidgets('pintura: su botón abre el panel, elige forma y fondo, y cada franja deja su trazo con su malla (issue #6)', (t) async {
+  testWidgets('decorador: su botón abre el panel, elige forma, tipo de trazo y fondo (y lo apaga una vez), y cada franja deja su trazo con su malla (issue #6)', (t) async {
     await start(t);
     await createNotebook(t, 'Franjas');
     final c = sheetCenter(t);
-    expect(find.byTooltip('Pintura · tocá de nuevo para opciones'), findsOneWidget);
-    await t.tap(find.byTooltip('Pintura · tocá de nuevo para opciones'));
+    expect(find.byTooltip('Decorador · tocá de nuevo para opciones'), findsOneWidget);
+    await t.tap(find.byTooltip('Decorador · tocá de nuevo para opciones'));
     await settle(t);
     expect(editor(t).ts.tool, Tool.paint);
     var y = -150.0;
     final fondos = ['8fd8e0', 'e3cfa0', 'c9b3ec', 'f8c4a0', 'a8e2c4'];
+    final estilos = ['brush', 'hl', 'marker', 'brush'];
     var i = 0;
-    for (final id in ['paint-stars', 'paint-hearts', 'paint-moons', 'paint-clouds', 'paint-none']) {
-      await t.tap(find.byTooltip('Pintura · tocá de nuevo para opciones'));
+    for (final id in ['paint-stars', 'paint-hearts', 'paint-moons', 'paint-clouds']) {
+      await t.tap(find.byTooltip('Decorador · tocá de nuevo para opciones'));
       await settle(t);
       expect(find.byKey(const Key('paintPreview')), findsOneWidget);
-      await t.ensureVisible(find.byKey(Key(id)));
-      await t.tap(find.byKey(Key(id)));
+      await t.ensureVisible(find.byKey(Key('paintShape-$id')));
+      await t.tap(find.byKey(Key('paintShape-$id')));
       await settle(t);
       expect(editor(t).ts.paint.tip, id);
+      await t.ensureVisible(find.byKey(Key('paintSt-${estilos[i]}')));
+      await t.tap(find.byKey(Key('paintSt-${estilos[i]}')));
+      await settle(t);
+      expect(editor(t).ts.paintParams.style, estilos[i]);
       await t.ensureVisible(find.byKey(Key('paint-${fondos[i]}')));
       await t.tap(find.byKey(Key('paint-${fondos[i]}')));
       await settle(t);
       expect(editor(t).ts.paint.color, '#${fondos[i]}');
-      if (id == 'paint-none') {
-        await t.ensureVisible(find.byKey(const Key('glitterSwitch')));
-        await t.tap(find.byKey(const Key('glitterSwitch'))); // apaga el brillo
+      if (i == 3) {
+        await t.ensureVisible(find.byKey(const Key('paintBgSwitch')));
+        await t.tap(find.byKey(const Key('paintBgSwitch'))); // apaga el fondo: quedan formas y brillo
         await settle(t);
-        expect(editor(t).ts.paintParams.glitter, 0);
+        expect(editor(t).ts.paintParams.bg, false);
       }
       // cierra el panel desde adentro (no a ciegas sobre la cortina)
       Navigator.of(t.element(find.byKey(const Key('paintPreview')))).pop();
@@ -227,10 +232,11 @@ void main() {
       expect(s.k, id);
       expect(s.c, '#${fondos[i]}');
       expect(s.pp, isNotNull);
+      expect(s.pp!.style, estilos[i]);
       expect(s.ensureMesh()!.vertexCount, greaterThan(0));
       i++;
     }
-    expect(editor(t).doc.strokes.values.last.pp!.glitter, 0);
+    expect(editor(t).doc.strokes.values.last.pp!.bg, false);
     await t.tap(find.byKey(const Key('back')));
     await settle(t, 1200);
   });

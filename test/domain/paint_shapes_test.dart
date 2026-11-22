@@ -76,4 +76,30 @@ void main() {
     expect((first('stars', 0) - first('stars', pi)).distance, greaterThan(5));
     expect(first('dots', 0), first('dots', 3));
   });
+
+  test('triángulo y cuadrado son polígonos regulares: contorno de 3 y 4 vértices (más el centro del abanico)', () {
+    for (final (id, n) in [('triangles', 3), ('squares', 4)]) {
+      final s = build(id, 10, 0);
+      expect(s.count, n + 1, reason: id);
+      expect(s.idx.length, n * 3);
+      final contour = s.pos.skip(1).toList();
+      final radii = [for (final p in contour) (p - const Offset(100, 50)).distance];
+      for (final r in radii) {
+        expect(r, closeTo(radii.first, 1e-9)); // todos los vértices a igual distancia del centro: regular
+      }
+      final sides = [for (var k = 0; k < n; k++) (contour[k] - contour[(k + 1) % n]).distance];
+      for (final l in sides) {
+        expect(l, closeTo(sides.first, 1e-9));
+      }
+    }
+    // el triángulo equilátero inscripto en el radio 10 tiene lado 10*sqrt(3)
+    final t = build('triangles', 10, 0).pos.skip(1).toList();
+    expect((t[0] - t[1]).distance, closeTo(10 * sqrt(3), 1e-9));
+  });
+
+  test('rombo: 4 vértices más angostos que altos; estrella de 5 puntas: 10 vértices de contorno', () {
+    expect(build('diamonds', 10, 0).count, 4);
+    expect(build('stars', 10, 0).count, 11);
+    expect(build('sparkles', 10, 0).count, 9);
+  });
 }

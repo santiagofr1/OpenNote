@@ -13,7 +13,7 @@ abstract interface class ShapeSink {
 /// Formas de la pintura, en el orden del panel (el trazo guarda `paint-<id>`).
 const paintShapeIds = [
   'stars', 'hearts', 'sparkles', 'moons', 'dots', 'circles', 'bangs', 'bolts', 'ticks', 'crosses',
-  'clouds', 'bubbles', 'leaves', 'paws', 'triangles', 'squares', 'diamonds', 'flowers', 'notes', 'none',
+  'clouds', 'bubbles', 'leaves', 'paws', 'triangles', 'squares', 'diamonds', 'flowers', 'notes', 'none', // 'none': trazos viejos (= formas apagadas)
 ];
 
 /// Cómo se rota cada forma según el número [rot] (0..2π, pseudoaleatorio estable): 0 = derecha, 1 = unos ±15°,
@@ -69,9 +69,9 @@ void paintShape(ShapeSink w, String id, double cx, double cy, double r, double r
         c.disc(x, y, .21, 8);
       }
     case 'triangles':
-      c.starShape(3, 1, -pi / 2);
+      c.regular(3, -pi / 2);
     case 'squares':
-      c.starShape(4, 1, pi / 4, .85);
+      c.regular(4, pi / 4, .95);
     case 'diamonds':
       c.poly([0, -1, .6, 0, 0, 1, -.6, 0]);
     case 'flowers':
@@ -184,7 +184,14 @@ class _Ctx {
     w.tri(a, c, d);
   }
 
-  /// Estrella (o polígono regular si [inner] es 1) de [points] puntas de radio [scale].
+  /// Polígono regular de [n] vértices en el radio [scale], el primero en el ángulo [rot0] (abanico desde el centro).
+  void regular(int n, double rot0, [double scale = 1]) {
+    fan(0, 0, [
+      for (var k = 0; k < n; k++) ...[scale * cos(rot0 + k * 2 * pi / n), scale * sin(rot0 + k * 2 * pi / n)]
+    ]);
+  }
+
+  /// Estrella de [points] puntas de radio [scale] (las puntas interiores a [inner] del radio).
   void starShape(int points, double inner, double start, [double scale = 1]) {
     fan(0, 0, [
       for (var k = 0; k < points * 2; k++) ...[

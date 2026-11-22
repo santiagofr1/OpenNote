@@ -13,17 +13,54 @@ bool isPaint(String k) => k.startsWith('paint-') && paintShapeIds.contains(k.sub
 /// Lo que se dibuja debajo de la tinta de su tanda: resaltador y pintura.
 bool isUnderInk(String k) => k == 'hl' || isPaint(k);
 
+/// Tipos de trazo de la pintura: pincel seco, resaltador (franja plana translúcida) y fibra (franja sólida pareja).
+const paintStyleIds = ['brush', 'hl', 'marker'];
+
 /// Ajustes de una franja de pintura (van en `pp` del trazo; valores 0..1, faltantes = valor por defecto).
 class PaintParams {
   final double glitter, density, size; // brillo, cantidad de formas, tamaño de formas
   final String? shapeColor; // null: según la forma; 'light' / 'dark': el fondo aclarado / oscurecido; '#rrggbb'
-  const PaintParams({this.glitter = .5, this.density = .5, this.size = .5, this.shapeColor});
+  final String style; // 'brush' | 'hl' | 'marker' (ver [paintStyleIds])
+  final bool bg, shapes; // franja de fondo prendida / formas prendidas (al menos una de fondo, formas o brillo)
+  const PaintParams({
+    this.glitter = .5,
+    this.density = .5,
+    this.size = .5,
+    this.shapeColor,
+    this.style = 'brush',
+    this.bg = true,
+    this.shapes = true,
+  });
 
   factory PaintParams.fromJson(Map j) => PaintParams(
         glitter: jsonDouble(j['g'], .5).clamp(0.0, 1.0),
         density: jsonDouble(j['sd'], .5).clamp(0.0, 1.0),
         size: jsonDouble(j['ss'], .5).clamp(0.0, 1.0),
         shapeColor: j['sc'] is String ? j['sc'] as String : null,
+        style: j['st'] is String && paintStyleIds.contains(j['st']) ? j['st'] as String : 'brush',
+        bg: j['bg'] is bool ? j['bg'] as bool : true,
+        shapes: j['sh'] is bool ? j['sh'] as bool : true,
+      );
+
+  /// Copia con cambios; [autoColor] borra el color de las formas (null no alcanza para eso).
+  PaintParams copyWith({
+    double? glitter,
+    double? density,
+    double? size,
+    String? shapeColor,
+    bool autoColor = false,
+    String? style,
+    bool? bg,
+    bool? shapes,
+  }) =>
+      PaintParams(
+        glitter: glitter ?? this.glitter,
+        density: density ?? this.density,
+        size: size ?? this.size,
+        shapeColor: autoColor ? null : (shapeColor ?? this.shapeColor),
+        style: style ?? this.style,
+        bg: bg ?? this.bg,
+        shapes: shapes ?? this.shapes,
       );
 
   Map<String, dynamic> toJson() => {
@@ -31,6 +68,9 @@ class PaintParams {
         'sd': round2(density),
         'ss': round2(size),
         if (shapeColor != null) 'sc': shapeColor,
+        if (style != 'brush') 'st': style,
+        if (!bg) 'bg': false,
+        if (!shapes) 'sh': false,
       };
 
   @override
@@ -39,9 +79,12 @@ class PaintParams {
       other.glitter == glitter &&
       other.density == density &&
       other.size == size &&
-      other.shapeColor == shapeColor;
+      other.shapeColor == shapeColor &&
+      other.style == style &&
+      other.bg == bg &&
+      other.shapes == shapes;
   @override
-  int get hashCode => Object.hash(glitter, density, size, shapeColor);
+  int get hashCode => Object.hash(glitter, density, size, shapeColor, style, bg, shapes);
 }
 
 /// Trazo: puntos guardados planos como [x, y, presión, x, y, presión, ...]
