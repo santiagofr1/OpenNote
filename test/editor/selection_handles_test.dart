@@ -84,7 +84,9 @@ void main() {
 
   testWidgets('las manijas aparecen sobre el recuadro: 4 esquinas y la de rotar (solo con trazos)', (t) async {
     final doc = armado();
-    await seleccionarTodo(t, doc, () => open(t, doc));
+    final h = await open(t, doc);
+    await stylus(t, h.at(100, 200), h.at(800, 520));
+    expect(h.ed.sel.strokes, {'a', 'h'});
     for (final n in ['tl', 'tr', 'br', 'bl', 'rotate']) {
       expect(find.byKey(ValueKey('selHandle-$n')), findsOneWidget, reason: n);
     }
@@ -92,10 +94,12 @@ void main() {
     expect(z.width, greaterThanOrEqualTo(24), reason: 'zona de toque cómoda');
 
     // sin trazos (solo un elemento): esquinas sí, rotar no
-    final ed = t.state<PageEditorState>(find.byType(PageEditor));
-    ed.sel.replace(items: ['i']);
-    ed.setState(() {});
+    await t.tap(find.byTooltip('Deseleccionar'));
     await t.pump();
+    final g = await t.startGesture(h.at(550, 320), kind: PointerDeviceKind.stylus); // toque sobre la nota
+    await g.up();
+    await t.pump();
+    expect(h.ed.sel.items, {'i'});
     expect(find.byKey(const ValueKey('selHandle-br')), findsOneWidget);
     expect(find.byKey(const ValueKey('selHandle-rotate')), findsNothing);
   });
