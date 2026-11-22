@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../domain/domain.dart';
+import 'voice_recorder.dart';
 
 const _stickyInk = Color(0xFF2B2A27);
 
@@ -17,6 +18,10 @@ class ItemView extends StatelessWidget {
   final bool textMode, selected;
   final ValueChanged<String> onStickyChanged;
   final ValueChanged<bool>? onStickyFocus; // la nota ganó o perdió el foco (el editor la deja armada mientras lo tenga)
+
+  /// La grabación de voz en curso (un audio que se está grabando se dibuja como etiqueta "Grabando") y qué hacer al tocar parar.
+  final VoiceRecorder? recorder;
+  final VoidCallback? onStopRecording;
   const ItemView({
     super.key,
     required this.item,
@@ -26,6 +31,8 @@ class ItemView extends StatelessWidget {
     required this.selected,
     required this.onStickyChanged,
     this.onStickyFocus,
+    this.recorder,
+    this.onStopRecording,
   });
 
   @override
@@ -58,7 +65,14 @@ class ItemView extends StatelessWidget {
                 onFocus: onStickyFocus),
           ),
         ),
-      _ => AudioChip(file: file, dur: it.dur, scale: s),
+      _ => recorder == null
+          ? AudioChip(file: file, dur: it.dur, scale: s)
+          : ListenableBuilder(
+              listenable: recorder!,
+              builder: (_, _) => recorder!.isRecording(it.id)
+                  ? RecordingChip(recorder: recorder!, scale: s, onStop: onStopRecording)
+                  : AudioChip(file: file, dur: it.dur, scale: s),
+            ),
     };
     return Positioned(
       left: it.x * s,
@@ -155,17 +169,27 @@ class _AudioChipState extends State<AudioChip> {
   @override
   Widget build(BuildContext context) {
     final s = widget.scale;
-    return GestureDetector(
-      // solo el dedo o el mouse reproducen; el lápiz sigue escribiendo encima
-      supportedDevices: const {PointerDeviceKind.touch, PointerDeviceKind.mouse},
-      onTap: _toggle,
-      child: Container(
-        decoration: BoxDecoration(color: const Color(0xFFE9E6F5), borderRadius: BorderRadius.circular(999)),
-        padding: EdgeInsets.symmetric(horizontal: 10 * s),
-        child: Row(children: [
-          Icon(playing ? Symbols.pause_circle : Symbols.play_circle, size: 34 * s, fill: 1, color: const Color(0xFF5B4FC4)),
-          SizedBox(width: 8 * s),
-          Expanded(
+    // Solo el botón de reproducir (los primeros ~54 unidades, ver PageEditor.kAudioPlayZone) reproduce: el resto del audio
+    // es para elegirlo y moverlo con el dedo. Con el lápiz no reproduce: sigue escribiendo / eligiendo encima.
+    return Container(
+      decoration: BoxDecoration(color: const Color(0xFFE9E6F5), borderRadius: BorderRadius.circular(999)),
+      padding: EdgeInsets.only(right: 10 * s),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          supportedDevices: const {PointerDeviceKind.touch, PointerDeviceKind.mouse},
+          onTap: _toggle,
+          child: Padding(
+            padding: EdgeInsets.only(left: 10 * s, right: 8 * s),
+            child: Center(
+              child: Icon(playing ? Symbols.pause_circle : Symbols.play_circle,
+                  size: 34 * s, fill: 1, color: const Color(0xFF5B4FC4)),
+            ),
+          ),
+        ),
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerLeft,
             child: Text(
               playing || pos > Duration.zero
                   ? '${fmtDuration(pos.inMilliseconds)} / ${fmtDuration(widget.dur)}'
@@ -175,9 +199,75 @@ class _AudioChipState extends State<AudioChip> {
               style: TextStyle(fontSize: 19 * s, color: _stickyInk, fontFeatures: const [FontFeature.tabularFigures()]),
             ),
           ),
-          SizedBox(width: 24 * s), // equilibra el ícono de la izquierda
-        ]),
+        ),
+        SizedBox(width: 24 * s), // equilibra el ícono de la izquierda
+      ]),
+    );
+  }
+}
+
+/// Audio que se está grabando: "Grabando" con un punto rojo que late, el tiempo transcurrido y el botón de parar (cuadrado).
+/// Es un elemento común: se elige, se mueve y se escala. Solo el botón de parar (los últimos [stopZone] de ancho) responde
+/// al toque del dedo o el mouse; el resto es para elegirlo y moverlo.
+class RecordingChip extends StatefulWidget {
+  /// Ancho (unidades de la hoja, desde el borde derecho) de la zona del botón de parar; ver `PageEditor._fingerTap`.
+  static const stopZone = 64.0;
+  final VoiceRecorder recorder;
+  final double scale;
+  final VoidCallback? onStop;
+  const RecordingChip({super.key, required this.recorder, required this.scale, this.onStop});
+  @override
+  State<RecordingChip> createState() => _RecordingChipState();
+}
+
+class _RecordingChipState extends State<RecordingChip> with SingleTickerProviderStateMixin {
+  late final pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.scale, red = Theme.of(context).colorScheme.error;
+    return Container(
+      key: const ValueKey('recordingChip'),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF6E7E5),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: red.withValues(alpha: .35), width: 1.5),
       ),
+      padding: EdgeInsets.only(left: 18 * s, right: 10 * s),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+        FadeTransition(
+          opacity: Tween(begin: .3, end: 1.0).animate(pulse),
+          child: Container(key: const ValueKey('recordingDot'), width: 16 * s, height: 16 * s, decoration: BoxDecoration(color: red, shape: BoxShape.circle)),
+        ),
+        SizedBox(width: 12 * s),
+        Expanded(
+          child: Text(
+            'Grabando  ${fmtDuration(widget.recorder.elapsedMs)}',
+            key: const ValueKey('recordingTime'),
+            maxLines: 1,
+            overflow: TextOverflow.fade,
+            style: TextStyle(fontSize: 19 * s, color: _stickyInk, fontFeatures: const [FontFeature.tabularFigures()]),
+          ),
+        ),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          supportedDevices: const {PointerDeviceKind.touch, PointerDeviceKind.mouse},
+          onTap: widget.onStop,
+          child: Container(
+            key: const ValueKey('recordingStop'),
+            width: 44 * s,
+            height: 44 * s,
+            decoration: BoxDecoration(color: red, shape: BoxShape.circle),
+            child: Icon(Symbols.stop, size: 26 * s, fill: 1, color: Colors.white),
+          ),
+        ),
+      ]),
     );
   }
 }

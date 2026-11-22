@@ -303,6 +303,65 @@ se reemplazan por `Stroke.transformed` (todos los puntos; el grosor por la escal
 objeto), los elementos escalan su rectángulo y al rotar solo mueven su centro (no rotan), y los textos solo cambian de
 lugar. Todo es UN `EditAction`; deshacer devuelve los objetos originales, exactos.
 
+**Texto con teclado como entidad** (issue #12). `TextBlock` suma `scale` (1) y `angle` (radianes, 0). JSON: `s` y `a` solo si
+no son el valor por defecto (los archivos viejos cargan igual; la huella `sheetDigest`, el `.sheet` y el `.opennote` los llevan
+porque pasan por `toJson`). La escala sale desde la esquina de arriba a la izquierda (`x`, `y`) y multiplica letra y ancho; el
+giro es alrededor del centro del rectángulo ya escalado. `text_layout.dart`: `textRect` (escalado, sin giro), `textCorners`,
+`textBounds` (bounding box del girado: recuadro de la selección, "ventana" por su centro y "captura" por superposición),
+`textHit` (el punto se lleva al marco sin girar: el toque es contra el polígono girado) y `paintTextBlock` (miniaturas, PNG y
+PDF: `canvas.translate/rotate/scale` sobre el mismo `layoutBlock`). Un texto con `scale != 1` o `angle != 0` (`transformed`) ya no
+se acomoda al renglón (`snapTextY` se saltea al soltar, al mover con la agarradera y al arrastrar la selección); con 1 y 0 se
+comporta como siempre. Selección (`selection.dart`): las manijas de esquina multiplican `scale` y escalan la posición desde el
+pivote igual que los elementos (mínimo 1/4 de tamaño); la de rotar aparece con trazos y/o textos, suma al `angle` y gira el centro
+del texto alrededor del pivote (imán a 0/90/180/270); imágenes, audios y notas siguen solo moviendo su posición al rotar.
+`MoveDrag.textState` guarda escala y giro de antes para el "antes" del deshacer (un `EditAction` por transformación).
+Editar un texto transformado: `TextBlockView._transformed` envuelve el bloque en un `Transform` (T(centro)·R·T(-centro)·S): los campos
+se editan con la misma transformación y Flutter lleva foco, cursor y toques por la matriz; se eligió eso en vez de enderezarlo
+al editar porque no hay saltos y el modelo y el dibujo comparten matriz. "Enderezar" (barrita de selección, solo con un texto
+transformado) vuelve a 1 y 0 y lo acomoda al renglón desde su esquina de arriba; se deshace.
+
+**Elementos con el dedo** (issue #11a). El dedo scrollea (la hoja es un `SingleChildScrollView`), así que para elegir y
+mover con él hay dos piezas en `page_editor.dart`:
+- *Toque*: `_touchDown/_touchMove/_touchUp` (el `Listener` del visor, el mismo del pellizco y del menú de la hoja) siguen un
+  `_tapCand`: un solo dedo, sin moverse más de 10 px, sin que la hoja se haya movido, sin que `StillPressTimer` haya disparado
+  (el menú de la hoja cancela el candidato) y que no apoyó sobre la barrita ni las manijas (`_selUiPointers`). Al levantar,
+  `_fingerTap` elige la imagen / nota / audio de más arriba bajo el dedo (`hitStack`, solo `Item`), SIN cambiar de herramienta;
+  tocar vacío con algo elegido deselecciona (un hueco del recuadro no). En modo texto no elige (tocar es para escribir y
+  las notas se editan; un PDF importado es una imagen que cubre la hoja entera). En un audio, el botón de reproducir (los
+  primeros `kAudioPlayZone` = 54 unidades, y SOLO ahí tiene su `GestureDetector`) reproduce y no elige.
+- *Arrastre*: `SlopDragRecognizer` / `SlopDrag` (`slop_drag.dart`) es un reconocedor de un puntero que gana la arena a los
+  6 px (el scroll necesita 18 y un `PanGestureRecognizer` 36: por eso las manijas con `onPan` nunca andaban con el dedo) y es
+  traslúcido (no tapa el toque del botón de reproducir). Con algo elegido, `_sheet()` monta `selBody` (recuadro de la
+  selección + 12 px, solo dedo) que mueve con `Selection.startDrag/dragTo` y `_selDrop`, igual que el lápiz; se queda montado
+  mientras se arrastra (si no, se perdería el gesto). Las manijas usan el mismo reconocedor con 4 px y todos los dispositivos.
+  Un segundo dedo (`touch.length != 1`) lo retira: el pellizco sigue andando. Arrastrar el dedo fuera de lo elegido scrollea.
+
+### Grabación de voz (issue #10)
+
+Ya no es un diálogo modal (se borró `record_voice_dialog.dart`): grabar no bloquea el cuaderno.
+- `VoiceRecorder` (`lib/editor/voice_recorder.dart`, `ChangeNotifier`) vive en `NotebookScreenState.recorder`. Envuelve un
+  `AudioSource` (el micrófono: `RecordAudioSource` usa el paquete `record`, AAC en `.m4a`; los tests ponen `FakeAudioSource` en
+  `VoiceRecorder.sourceFactory`, el único punto de extensión), el cronómetro y el nivel. Una sola grabación a la vez.
+- Graba a `media/<id>.m4a.tmp` (la sync ignora los `.tmp`, ver `sync_paths.dart`) y al parar renombra a `.m4a`: nunca hay un
+  audio a medias con su nombre final.
+- "Grabación de voz" (`runInsert('voice')` → `_startVoice`) arranca el micrófono e inserta YA un `Item` de audio con `file` = el nombre
+  final y `dur` 0 en el centro de lo visible (`PageEditor.insertItem`, un paso de deshacer). Sin permiso o con otro error:
+  aviso con el mensaje y no se inserta nada. Con una grabación en curso: aviso "Ya hay una grabación en curso".
+- Mientras `recorder.isRecording(item.id)`, `ItemView` dibuja `RecordingChip` en vez de `AudioChip`: "Grabando", punto rojo que
+  late, tiempo y botón de parar (cuadrado; solo responde al dedo / mouse en esa zona, `RecordingChip.stopZone`). Es un elemento
+  común: se elige, se mueve y se escala, y se puede escribir, scrollear y cambiar de herramienta.
+- Parar (`stopVoice`, también al cerrar): renombra, `PageEditorState.setAudioDuration` pone `dur` (también en las copias del
+  historial: `History.patchItem`, así deshacer / rehacer lo devuelven con su duración), marca la hoja sucia y guarda.
+- Borrar o deshacer el elemento mientras graba: `_docChanged` ve que ya no está (`recorder.inserted` evita confundirlo antes de
+  que se inserte) y descarta (`discard`: para y borra el `.tmp`). Ojo: deshacer el BORRADO de una grabación descartada devuelve
+  una etiqueta de audio sin archivo.
+- Cerrar el cuaderno (`leave`, o `dispose` con la grabación en curso, o borrarlo) para y guarda lo grabado hasta ahí (borrarlo
+  descarta). Con la app en `paused` sigue grabando; en `detached` para y guarda. Límite: Android 11+ restringe el micrófono en
+  segundo plano a servicios en primer plano, y `record` no abre uno: en `paused` puede quedar en silencio; y si el sistema mata
+  el proceso queda un `.tmp` huérfano y el elemento con duración 0.
+- Tests: `test/editor/voice_recorder_test.dart` (grabador con micrófono falso), `test/screens/voice_notebook_test.dart` (cuaderno
+  abierto: etiqueta, escribir mientras graba, una sola, parar, deshacer, borrar, sin permiso, cerrar, `paused` / `detached`) y el caso de integración.
+
 ### Guardado
 
 - Guardar codifica en otro isolate solo las hojas sucias (`NotebookDoc.takeDirty`; los mapas de elementos avisan
@@ -429,6 +488,27 @@ Detalle y decisiones en `docs/SINCRONIZACION.md` (sección "Decisión: Google Dr
 - Tests: `test/sync/sync_engine_test.dart` (motor, con dos dispositivos y cuaderno abierto), `test/sync/sync_controller_test.dart`
   (planificador con reloj falso), `test/screens/sync_ui_test.dart` (indicador y aviso), y en `integration_test/app_test.dart`
   el caso de sincronización automática (tarda ~15 s en la tablet: usa tiempos acortados `syncPoll` / `syncDebounce`).
+
+### Imágenes y audios en la sync (issue #11b)
+
+"Puse una imagen y un audio y falla la sincronización": no se pudo probar contra Drive real, así que la causa se buscó
+leyendo el camino de `media/` y se reprodujo con el remoto falso y un `http.Client` falso (`test/sync/sync_media_test.dart`).
+Causas encontradas, todas arregladas:
+
+1. **Nombre del archivo.** `makeAudioFileItem` sacaba la extensión de lo que viniera después del último punto de la RUTA
+   entera. Un audio sin extensión dentro de una carpeta con punto (el paquete de Android es `com.apuntes.apuntes`), o con
+   espacios / fechas con puntos en el nombre, daba un nombre en `media/` que no encaja en la regex de `sync_paths.dart`
+   (el motor lo ignora en silencio: el audio nunca llega al otro dispositivo) o que ni siquiera se podía copiar. Ahora
+   `mediaExt` toma solo la extensión del NOMBRE y solo si son 1 a 8 letras / números; si no, usa `m4a` (audio) o `jpg`.
+2. **Subida de archivos grandes.** `DriveRemoteStore.upload` mandaba todo en un solo pedido multipart, que Google recomienda
+   solo hasta 5 MB. Un audio importado o una foto grande se cortaba con facilidad. Desde `kResumableFrom` (5 MB) se usa la
+   subida reanudable (partes de 4 MiB, con reintento de la parte que falla). Ojo: probado solo contra un Drive falso.
+3. **Archivos a medio escribir y hash viejo.** `Storage.addMedia` / `addMediaFile` escribían directo al nombre final, así
+   que la sync podía subir un archivo a medias; y el motor anotaba en la base el hash de una lectura anterior a la subida:
+   un archivo que seguía creciendo dejaba un hash equivocado, la próxima subida mandaba `ifRemoteMd5` viejo y Drive
+   devolvía "El archivo cambió en la nube". Ahora los medios se escriben a `<nombre>.tmp` y se renombran (la sync ignora
+   `.tmp`), y `SyncEngine._readStable` lee los bytes una vez, calcula el hash de ESOS bytes y, si el archivo cambió
+   mientras se leía, lo deja para la próxima pasada.
 
 ## Compilar e instalar en la tablet
 

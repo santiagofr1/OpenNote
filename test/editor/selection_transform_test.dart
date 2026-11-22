@@ -149,7 +149,7 @@ void main() {
       expect(it.h, 160);
     });
 
-    test('textos: al escalar solo se mueve la posición (el ancho no cambia) y la identidad los deja exactos', () {
+    test('textos: al escalar multiplican su escala (el ancho w no cambia) y la identidad los deja exactos', () {
       final d = page(), sel = Selection()..replace(texts: ['t']);
       final t = d.texts['t']!;
       final r0 = sel.contentRect(d)!;
@@ -159,11 +159,13 @@ void main() {
       expect(t.w, 300);
       expect(t.body.plainText, 'hola');
       expect(Offset(t.x, t.y), isNot(Offset(r0.left, r0.top)));
-      final c = Offset(t.x, t.y) + (r0.center - r0.topLeft); // su centro fue a donde lleva la transformación
+      expect(t.scale, closeTo(2, 1e-9));
+      final c = Offset(t.x, t.y) + (r0.center - r0.topLeft) * 2; // su centro fue a donde lleva la transformación
       expect(c, near(sel.drag!.xf.apply(r0.center)));
       sel.drag!.xf = const Xform();
       sel.applyToBlocks(d);
       expect(Offset(t.x, t.y), r0.topLeft);
+      expect(t.scale, 1);
     });
 
     test('contentRect y bounds se calculan sobre lo original mientras se arrastra', () {

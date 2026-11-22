@@ -10,7 +10,7 @@ Rect? contentBounds(Iterable<Stroke> strokes, Iterable<TextBlock> texts, Iterabl
         {double Function(TextBlock)? lineOf}) =>
     unionRects([
       ...strokes.map((s) => s.bounds),
-      ...texts.map((t) => textRect(t, lineOf?.call(t) ?? kLine)),
+      ...texts.map((t) => textBounds(t, lineOf?.call(t) ?? kLine)),
       ...items.map((i) => i.rect)
     ]);
 
@@ -32,8 +32,11 @@ class MoveDrag {
   final double minScale;
   Xform xf = const Xform();
   final Map<String, Rect> textOrig, itemOrig;
+
+  /// Escala y giro que tenía cada texto al empezar (los textos escalan y giran con la selección).
+  final Map<String, (double, double)> textState;
   MoveDrag(this.from, this.textOrig, this.itemOrig,
-      {this.handle = Handle.move, this.pivot = Offset.zero, this.corner = Offset.zero, this.minScale = .1});
+      {this.textState = const {}, this.handle = Handle.move, this.pivot = Offset.zero, this.corner = Offset.zero, this.minScale = .1});
 
   /// Cuánto se corrió (el arrastre de mover).
   Offset get delta => xf.shift;
@@ -99,7 +102,12 @@ class Selection {
     final d = drag;
     return contentBounds(
       strokesOf(p),
-      [for (final t in textsOf(p)) t.copy(d: (d?.textOrig[t.id]?.topLeft ?? Offset(t.x, t.y)) - Offset(t.x, t.y))],
+      [
+        for (final t in textsOf(p))
+          t.copy(d: (d?.textOrig[t.id]?.topLeft ?? Offset(t.x, t.y)) - Offset(t.x, t.y))
+            ..scale = d?.textState[t.id]?.$1 ?? t.scale
+            ..angle = d?.textState[t.id]?.$2 ?? t.angle
+      ],
       [for (final it in itemsOf(p)) if (d?.itemOrig[it.id] case final r?) it.copy()..x = r.left..y = r.top..w = r.width..h = r.height else it],
       lineOf: (t) => p.lineAt(t.y),
     );
@@ -121,18 +129,23 @@ class Selection {
   MoveDrag _newDrag(NotebookDoc doc, Offset p, Handle h, [Rect? r]) {
     final texts = {for (final t in textsOf(doc)) t.id: textRect(t, doc.lineAt(t.y))};
     final items = {for (final it in itemsOf(doc)) it.id: it.rect};
+    final state = {for (final t in textsOf(doc)) t.id: (t.scale, t.angle)};
     var pivot = Offset.zero, corner = Offset.zero, minScale = .1;
     if (r != null && h == Handle.rotate) pivot = r.center;
     if (r != null && h != Handle.move && h != Handle.rotate) {
       corner = switch (h) { Handle.tl => r.topLeft, Handle.tr => r.topRight, Handle.br => r.bottomRight, _ => r.bottomLeft };
       pivot = switch (h) { Handle.tl => r.bottomRight, Handle.tr => r.bottomLeft, Handle.br => r.topLeft, _ => r.topRight };
       // un elemento no baja de 60 de ancho (ni de alto, salvo el audio, que es de 56)
+      // un texto no baja de 1/4 de su tamaño normal
+      for (final t in textsOf(doc)) {
+        minScale = max(minScale, min(.25 / t.scale, 1.0));
+      }
       for (final it in itemsOf(doc)) {
         final need = max(60 / it.w, it.type == 'image' ? 0.0 : (it.type == 'audio' ? 56 : 60) / it.h);
         minScale = max(minScale, min(need, 1.0));
       }
     }
-    return MoveDrag(p, texts, items, handle: h, pivot: pivot, corner: corner, minScale: minScale);
+    return MoveDrag(p, texts, items, textState: state, handle: h, pivot: pivot, corner: corner, minScale: minScale);
   }
 
   /// El lápiz (o el dedo) está en [p]: calcula la transformación del arrastre en curso.
@@ -156,7 +169,7 @@ class Selection {
 
   /// Deja textos y elementos como corresponde a la transformación del arrastre (en vivo, y al volver a la identidad
   /// quedan donde estaban). Marca sucias las hojas de antes y de después. Los textos solo cambian de lugar; los
-  /// elementos, de tamaño y de lugar (el centro; no rotan).
+  /// elementos, de tamaño y de lugar (el centro; no rotan). Los textos escalan ([TextBlock.scale]) y giran ([TextBlock.angle]).
   void applyToBlocks(NotebookDoc doc) {
     final d = drag;
     if (d == null) return;
@@ -165,9 +178,21 @@ class Selection {
       final t = doc.texts[id];
       if (t == null) return;
       doc.markDirtyElement(t);
-      final m = xf.displacement(r.center);
-      t.x = r.left + m.dx;
-      t.y = r.top + m.dy;
+      final st = d.textState[id] ?? (t.scale, t.angle);
+      if (xf.isMove) {
+        final m = xf.shift;
+        t.scale = st.$1;
+        t.angle = st.$2;
+        t.x = r.left + m.dx;
+        t.y = r.top + m.dy;
+      } else {
+        // escala (desde el pivote, como los elementos) y giro: el centro va donde lo lleva la transformación
+        final c = xf.apply(r.center), size = r.size * xf.scale;
+        t.scale = st.$1 * xf.scale;
+        t.angle = st.$2 + xf.angle;
+        t.x = c.dx - size.width / 2;
+        t.y = c.dy - size.height / 2;
+      }
       doc.markDirtyElement(t);
     });
     d.itemOrig.forEach((id, r) {
@@ -199,7 +224,7 @@ class Selection {
     }
     bool hit(Layered e) => switch (e) {
           Stroke s => s.hitBy(pt, tol),
-          TextBlock t => textRect(t, doc.lineAt(t.y)).inflate(tol).contains(pt),
+          TextBlock t => textHit(t, pt, tol, doc.lineAt(t.y)),
           Item it => it.rect.inflate(tol).contains(pt),
           _ => false,
         };
@@ -222,7 +247,7 @@ class Selection {
         if (s.touchesRect(r)) strokes.add(s.id);
       }
       for (final t in doc.texts.values) {
-        if (r.overlaps(textRect(t, doc.lineAt(t.y)))) texts.add(t.id);
+        if (r.overlaps(textBounds(t, doc.lineAt(t.y)))) texts.add(t.id);
       }
       for (final it in doc.items.values) {
         if (r.overlaps(it.rect)) items.add(it.id);
@@ -238,7 +263,7 @@ class Selection {
       if (inside * 2 >= s.n) strokes.add(s.id);
     }
     for (final t in doc.texts.values) {
-      if (r.contains(textRect(t, doc.lineAt(t.y)).center)) texts.add(t.id);
+      if (r.contains(textBounds(t, doc.lineAt(t.y)).center)) texts.add(t.id);
     }
     for (final it in doc.items.values) {
       if (r.contains(it.rect.center)) items.add(it.id);
