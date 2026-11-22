@@ -476,10 +476,13 @@ class _PaintPanelState extends State<_PaintPanel> with _PanelParts<_PaintPanel> 
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: p.tip == id ? scheme.primary : Colors.transparent, width: 1.5),
               ),
-              child: Column(children: [
-                SizedBox(height: 32, width: 32, child: CustomPaint(painter: _ShapePainter(id.substring(6), scheme.onSurface.withValues(alpha: .75)))),
-                const SizedBox(height: 3),
-                Text(name, style: TextStyle(fontSize: 10.5, color: p.tip == id ? scheme.primary : scheme.onSurface), maxLines: 1, overflow: TextOverflow.ellipsis),
+              // el nombre toma lo que sobre (con la letra del sistema agrandada no desborda la celda)
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                SizedBox(height: 28, width: 28, child: CustomPaint(painter: _ShapePainter(id.substring(6), scheme.onSurface.withValues(alpha: .75)))),
+                const SizedBox(height: 2),
+                Flexible(
+                  child: Text(name, style: TextStyle(fontSize: 10.5, color: p.tip == id ? scheme.primary : scheme.onSurface), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ),
               ]),
             ),
           ),
