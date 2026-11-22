@@ -19,7 +19,7 @@
   en el panel (dedo o lápiz; el menú "Mover antes / después" sigue); agregar, duplicar, mover y borrar hojas se deshacen
   y rehacen en el mismo historial (la hoja borrada vuelve con contenido, estilo, título y marcador); exportar el cuaderno
   entero como `.opennote` (ZIP con manifest) desde su menú e importarlo desde el "+" de la biblioteca. Detalle en docs/TECNICO.md.
-- **20. Borrar releases viejos** (rama `feat/releases-viejos`): el workflow deja solo los últimos 5 `v1.0.<n>` (`tool/podar_releases.sh`, nunca borra el Latest ni el nuevo, tolera fallos). Ver docs/RELEASES.md.
+- **20. Borrar releases viejos** (rama `feat/releases-viejos`): el workflow deja solo los últimos 2 `v1.0.<n>` (antes 5) (`tool/podar_releases.sh`, nunca borra el Latest ni el nuevo, tolera fallos). Ver docs/RELEASES.md.
 
 - **1. Carga perezosa de hojas** (rama `feat/rendimiento-3`, 2026-11-20): el cuaderno se abre leyendo solo las hojas
   cercanas a la última vista (±2); `NotebookDoc` distingue hojas cargadas y no cargadas, el editor carga las del rango

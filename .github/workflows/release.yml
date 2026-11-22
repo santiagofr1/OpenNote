@@ -151,7 +151,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          KEEP: 5
+          KEEP: 2
           CURRENT_TAG: v${{ env.VERSION_NAME }}
         run: |
           gh release list --json tagName,createdAt,isLatest,isDraft,isPrerelease --limit 200 \

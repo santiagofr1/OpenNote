@@ -33,7 +33,7 @@ la clave de debug.
 ## Limpieza de releases viejos
 
 Al final del job, el paso "Podar releases viejos" corre `tool/podar_releases.sh`, que deja solo los
-últimos 5 releases (`KEEP=5` en el paso) y borra el resto con `gh release delete <tag> --cleanup-tag --yes`
+últimos 2 releases (`KEEP=2` en el paso) y borra el resto con `gh release delete <tag> --cleanup-tag --yes`
 (borra también el tag). Reglas:
 
 - Solo toca tags `^v1\.0\.[0-9]+$`; ignora drafts, prereleases y cualquier otro tag.

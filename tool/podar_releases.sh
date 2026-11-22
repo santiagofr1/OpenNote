@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Deja solo los últimos KEEP releases `v1.0.<n>` y borra el resto con gh.
 # Uso: gh release list --json tagName,createdAt,isLatest,isDraft,isPrerelease --limit 200 | tool/podar_releases.sh
-# Variables: KEEP (default 5), CURRENT_TAG (release recién creado, nunca se borra),
+# Variables: KEEP (default 2), CURRENT_TAG (release recién creado, nunca se borra),
 #            DRY_RUN=1 (solo imprime qué borraría). Nunca falla por un borrado que no salió.
 set -u
-KEEP="${KEEP:-5}"
+KEEP="${KEEP:-2}"
 CURRENT_TAG="${CURRENT_TAG:-}"
 
 JSON="$(cat)"
