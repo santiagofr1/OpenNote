@@ -66,12 +66,12 @@ class ItemView extends StatelessWidget {
           ),
         ),
       _ => recorder == null
-          ? AudioChip(file: file, dur: it.dur, scale: s)
+          ? AudioChip(file: file, dur: it.dur, scale: s, name: it.text)
           : ListenableBuilder(
               listenable: recorder!,
               builder: (_, _) => recorder!.isRecording(it.id)
-                  ? RecordingChip(recorder: recorder!, scale: s, onStop: onStopRecording)
-                  : AudioChip(file: file, dur: it.dur, scale: s),
+                  ? RecordingChip(recorder: recorder!, scale: s, name: it.text, onStop: onStopRecording)
+                  : AudioChip(file: file, dur: it.dur, scale: s, name: it.text),
             ),
     };
     return Positioned(
@@ -131,7 +131,10 @@ class AudioChip extends StatefulWidget {
   final File file;
   final int dur;
   final double scale;
-  const AudioChip({super.key, required this.file, required this.dur, required this.scale});
+
+  /// Nombre del audio ("Audio 3"); vacío en los audios viejos, que se ven como "Audio".
+  final String name;
+  const AudioChip({super.key, required this.file, required this.dur, required this.scale, this.name = ''});
   @override
   State<AudioChip> createState() => _AudioChipState();
 }
@@ -193,7 +196,7 @@ class _AudioChipState extends State<AudioChip> {
             child: Text(
               playing || pos > Duration.zero
                   ? '${fmtDuration(pos.inMilliseconds)} / ${fmtDuration(widget.dur)}'
-                  : 'Audio · ${fmtDuration(widget.dur)}',
+                  : '${widget.name.isEmpty ? 'Audio' : widget.name} · ${fmtDuration(widget.dur)}',
               maxLines: 1,
               overflow: TextOverflow.fade,
               style: TextStyle(fontSize: 19 * s, color: _stickyInk, fontFeatures: const [FontFeature.tabularFigures()]),
@@ -215,7 +218,10 @@ class RecordingChip extends StatefulWidget {
   final VoiceRecorder recorder;
   final double scale;
   final VoidCallback? onStop;
-  const RecordingChip({super.key, required this.recorder, required this.scale, this.onStop});
+
+  /// Nombre del audio que se graba; se muestra después de "Grabando".
+  final String name;
+  const RecordingChip({super.key, required this.recorder, required this.scale, this.name = '', this.onStop});
   @override
   State<RecordingChip> createState() => _RecordingChipState();
 }
@@ -248,7 +254,7 @@ class _RecordingChipState extends State<RecordingChip> with SingleTickerProvider
         SizedBox(width: 12 * s),
         Expanded(
           child: Text(
-            'Grabando  ${fmtDuration(widget.recorder.elapsedMs)}',
+            'Grabando${widget.name.isEmpty ? '' : ' · ${widget.name}'}  ${fmtDuration(widget.recorder.elapsedMs)}',
             key: const ValueKey('recordingTime'),
             maxLines: 1,
             overflow: TextOverflow.fade,

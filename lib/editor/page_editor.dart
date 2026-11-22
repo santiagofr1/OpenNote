@@ -1531,6 +1531,50 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     return true;
   }
 
+  /// Cancela una grabación: saca el audio [id] de la hoja SIN dejar entrada en el historial y lo borra también de las
+  /// entradas que ya lo mencionaban (la inserción, un movimiento): así deshacer nunca lo resucita sin archivo.
+  void removeItemForgetting(String id) {
+    final it = doc.items[id];
+    if (it == null) return;
+    doc.items.remove(id);
+    history.forgetItem(id);
+    sel.items.remove(id);
+    _changed();
+    setState(() {});
+    liveTick.value++;
+  }
+
+  /// Le cambia el nombre al audio [id] (deshacible). Vacío o igual al de ahora: no hace nada.
+  void renameItem(String id, String name) {
+    final it = doc.items[id];
+    name = name.trim();
+    if (it == null || it.type != 'audio' || name == it.text) return;
+    final before = it.copy();
+    it.text = name;
+    doc.markDirtyElement(it);
+    _pushUndo(EditAction(itemBefore: {id: before}, itemAfter: {id: it.copy()}));
+    _changed();
+    setState(() {});
+  }
+
+  /// Pide el nombre del audio elegido (barrita de la selección).
+  Future<void> _renameSel() async {
+    final it = sel.itemsOf(doc).singleOrNull;
+    if (it == null || it.type != 'audio') return;
+    // askText: el diálogo de siempre (no libera el controlador mientras se anima al cerrarse)
+    final name = await askText(context, 'Renombrar audio', initial: it.text, hint: 'Audio', ok: 'Guardar');
+    if (!mounted) return;
+    if (name != null) renameItem(it.id, name);
+  }
+
+  /// Lleva la vista al elemento [id] sin elegirlo ni cambiar de herramienta (el indicador de grabación).
+  void scrollToItem(String id) {
+    final it = doc.items[id];
+    if (it == null || !scroll.hasClients) return;
+    scroll.animateTo((it.y * scale + kTopPad - 120).clamp(0.0, scroll.position.maxScrollExtent),
+        duration: const Duration(milliseconds: 380), curve: Curves.easeOutQuart);
+  }
+
   /// Lleva la vista a un texto o elemento y lo deja seleccionado (búsqueda).
   void reveal(String id) {
     final t = doc.texts[id], it = doc.items[id];
@@ -1720,6 +1764,12 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             },
             onDuplicate: _duplicateSel,
             onDelete: _deleteSel,
+            onRename: sel.strokes.isEmpty &&
+                    sel.texts.isEmpty &&
+                    sel.items.length == 1 &&
+                    sel.itemsOf(doc).any((i) => i.type == 'audio')
+                ? _renameSel
+                : null,
             onStraighten: sel.textsOf(doc).any((t) => t.transformed) ? _straightenSel : null,
             onClose: _clearSel,
             onOrder: _reorderSel,

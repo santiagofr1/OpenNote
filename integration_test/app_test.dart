@@ -1167,7 +1167,7 @@ void main() {
     expect(audio.type, 'audio');
     expect(audio.dur, 0);
     expect(find.byKey(const ValueKey('recordingChip')), findsOneWidget);
-    expect(find.textContaining('Grabando'), findsOneWidget);
+    expect(find.byKey(const ValueKey('recordingTime')), findsOneWidget);
     expect(find.byKey(const ValueKey('recordingDot')), findsOneWidget);
 
     // escribir con el teclado mientras graba
@@ -1225,6 +1225,54 @@ void main() {
     final saved = (await st.loadNotebook(nb)).items.values.single;
     expect(saved.dur, audio.dur);
     expect(saved.y, closeTo(audio.y, .01));
+  });
+
+  testWidgets('indicador de grabación: parar, cancelar y renombrar audios (issue #14)', (t) async {
+    VoiceRecorder.sourceFactory = FakeAudioSource.new;
+    addTearDown(() => VoiceRecorder.sourceFactory = RecordAudioSource.new);
+    await start(t);
+    await createNotebook(t, 'Indicador');
+    final ed = editor(t);
+    Future<void> record() async {
+      await t.tap(find.byKey(const Key('insert')));
+      await settle(t);
+      await t.tap(find.text('Grabación de voz'));
+      await settle(t, 800);
+    }
+
+    // grabar: aparece el indicador con el nombre; parar desde él guarda "Audio 1"
+    expect(find.byKey(const ValueKey('recIndicator')), findsNothing);
+    await record();
+    expect(find.byKey(const ValueKey('recIndicator')), findsOneWidget);
+    expect(find.textContaining('Grabando · Audio 1'), findsWidgets);
+    await t.tap(find.byKey(const ValueKey('recIndicatorStop')));
+    await settle(t, 1500);
+    expect(find.byKey(const ValueKey('recIndicator')), findsNothing);
+    final first = ed.doc.items.values.single;
+    expect(first.text, 'Audio 1');
+    expect(first.dur, greaterThan(0));
+    expect(find.textContaining('Audio 1 ·'), findsOneWidget);
+
+    // grabar otro (Audio 2) y cancelarlo desde el indicador: no queda elemento ni archivo
+    await record();
+    expect(find.textContaining('Grabando · Audio 2'), findsWidgets);
+    await t.tap(find.byKey(const ValueKey('recIndicatorCancel')));
+    await settle(t, 1500);
+    expect(find.byKey(const ValueKey('recIndicator')), findsNothing);
+    expect(ed.doc.items.values.single.id, first.id);
+    expect(Directory('${root.path}/media').listSync().length, 1);
+
+    // renombrar el primero desde la barrita de la selección
+    ed.sel.replace(items: [first.id]);
+    ed.refresh();
+    await settle(t);
+    await t.tap(find.text('Renombrar'));
+    await settle(t);
+    await t.enterText(find.byKey(const Key('askText')), 'Clase 3');
+    await t.tap(find.byKey(const Key('askOk')));
+    await settle(t);
+    expect(first.text, 'Clase 3');
+    expect(find.textContaining('Clase 3 ·'), findsOneWidget);
   });
 
   testWidgets('texto con teclado: seleccionar, escalar y rotar como una entidad, deshacer (issue #12)', (t) async {
