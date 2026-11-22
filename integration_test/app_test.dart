@@ -1322,6 +1322,14 @@ void main() {
     await settle(t);
     expect(first.text, 'Clase 3');
     expect(find.textContaining('Clase 3 ·'), findsOneWidget);
+
+    // volver: se guarda (sin esto el guardado pendiente escribe cuando el test siguiente ya borró la carpeta)
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1500);
+    final st = Storage(root: root);
+    await st.init();
+    final saved = (await st.loadNotebook(await savedNotebook('Indicador'))).items;
+    expect(saved[first.id]?.text, 'Clase 3', reason: 'el nombre quedó guardado');
   });
 
   testWidgets('texto con teclado: seleccionar, escalar y rotar como una entidad, deshacer (issue #12)', (t) async {
