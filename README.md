@@ -9,8 +9,7 @@
 [![Plataforma: Android](https://img.shields.io/badge/plataforma-Android-3DDC84.svg?logo=android&logoColor=white)](https://github.com/santiagofr1/OpenNote/releases/latest)
 [![Hecho con Flutter](https://img.shields.io/badge/hecho%20con-Flutter-02569B.svg?logo=flutter&logoColor=white)](https://flutter.dev)
 
-OpenNote es una app de apuntes a mano con S Pen (y también con teclado) para tablets Android. Nació como
-alternativa a Samsung Notes, que solo funciona en Samsung y no te deja usar tus apuntes en otro lado.
+OpenNote es una app de apuntes a mano con S Pen (y también con teclado) para tablets Android.
 Es gratis, es de código abierto, funciona sin conexión y tus apuntes son tuyos: se guardan en tu tablet,
 sin cuentas ni servidores.
 
@@ -39,7 +38,6 @@ sin cuentas ni servidores.
 - **Exportar e importar**: con una sola opción "Exportar" sacás cuadernos a PDF o PNG, o enteros como archivo `.opennote` para respaldarlos o
   pasarlos a otra tablet; importá `.opennote`, PDF, imágenes y audios.
 - **Aspecto Material You**: sigue el tema de tu tablet.
-- **Rápida con cuadernos grandes**: ver [Rendimiento](#rendimiento-medido).
 
 ## Capturas
 
@@ -128,21 +126,6 @@ OpenNote fue probado en una **Samsung Galaxy Tab S6 Lite (SM-P620) con Android 1
 Debería funcionar en otras tablets Android con lápiz activo, como la gama Galaxy Tab S o tablets con lápiz USI,
 pero todavía no las probamos. Si tenés una y la probás, contanos en un issue: sirve mucho saber qué anda y qué no.
 
-## Rendimiento medido
-
-Medimos OpenNote contra Samsung Notes en la misma Galaxy Tab S6 Lite, con una nota de 34 hojas abierta:
-
-| Métrica | OpenNote | Samsung Notes |
-|---|---|---|
-| RAM con la nota abierta | **234 MB** | 673 MB |
-| Tamaño en disco | **3,8 MB** | 24 MB |
-| Frames lentos al desplazar | 1,1 % | **0,4 %** |
-| Frame más lento del 1 % peor (p99) | **8 ms** | 19 ms |
-| Abrir un cuaderno de 400 hojas | ~0,4 s | — |
-| Guardar tras un trazo | ~0,1 s | — |
-
-Son mediciones propias, hechas con `tool/perf.sh` y `tool/comparar.sh`. Podés correrlas en tu tablet para comprobarlas.
-
 ## Cómo está armado
 
 ```
@@ -154,8 +137,8 @@ lib/
 ├── screens/     # biblioteca, cuaderno abierto, panel de hojas, búsqueda y menús
 ├── widgets/     # diálogos y piezas compartidas
 └── theme/       # tema y colores
-integration_test/  # suite completa en tablet (app_test.dart) y medición de rendimiento (perf_test.dart)
-tool/              # scripts: perf, comparación con Samsung Notes, capturas, ícono, trazas
+integration_test/  # suite completa en tablet (app_test.dart)
+tool/              # scripts: capturas, ícono, trazas
 docs/              # documentación técnica (TECNICO.md), releases, capturas e ícono
 ```
 
