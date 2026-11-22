@@ -130,8 +130,11 @@ apuntes/prefs.json                                  herramientas
 
 - `index.json` (`"format": 3`): cuadernos (id, nombre, favorito, PIN, fondo, papel y espaciado por
   defecto, última hoja, carpeta) y carpetas (id, nombre, padre).
-- `notebook.json`: por cada hoja, id, título, marcador, fondo, papel, espaciado (`spacing`, en mm;
-  opcional), `rev` y `updated`.
+- `notebook.json`: las secciones (`sections`: `{id, name, updated, last}`, en orden; `last` es el índice de la última
+  hoja vista dentro de esa sección), la abierta (`active`, id de sección) y, por cada hoja, id, `section` (id de su
+  sección), título, marcador, fondo, papel, espaciado (`spacing`, en mm; opcional), `rev` y `updated`. La lista `sheets`
+  trae TODAS las hojas, agrupadas en el orden de las secciones. Sigue siendo el formato 3: lo nuevo es opcional al leer
+  (ver "Secciones").
 
 ### Modelo en memoria
 
@@ -140,6 +143,39 @@ la tira. La hoja `k` ocupa `y` de `k * kSheetStep` a `k * kSheetStep + kSheetH`.
 pertenece a la hoja que contiene su borde de arriba.
 
 Al guardar se parte por hoja (coordenadas locales), y al leer se rearma la tira.
+
+#### Secciones
+
+Un cuaderno puede tener varias secciones, como las hojas de Excel (ej. "Teoría" y "Práctica"), cada una con sus propias
+hojas; se ve UNA a la vez. Escribir en una no toca la otra. Código: `Section` y `Notebook` en `lib/domain/notebook.dart`;
+abrir y cambiar, `Storage.openSection`; interfaz, `lib/screens/notebook/sections_menu.dart` y el botón del panel de hojas.
+
+- **Archivo viejo** (sin `sections`): una sola sección implícita con id FIJO `general` ("General", `kGeneralSection`). El id
+  es fijo para que dos equipos que sincronizan un cuaderno viejo no se inventen dos "General" distintas. Una hoja sin
+  `section`, o con el id de una sección que no existe, es de la PRIMERA sección.
+- **Al leer** (`Notebook.loadSheetsJson`) las hojas se reagrupan por el orden de las secciones, de forma estable (la
+  fusión de la sync las puede intercalar); al escribir (`sheetsJson`) salen agrupadas.
+- **Versión vieja de la app** con un archivo nuevo: ve todas las hojas en una sola tira y, si guarda, pierde la
+  agrupación en secciones (no los datos: ningún archivo de hoja se toca).
+- **En memoria**: `Notebook.sheets` sigue siendo la lista que usan `NotebookDoc` y todo el editor, pero tiene SOLO las
+  hojas de la sección activa; así los índices y las coordenadas globales (`k * kSheetStep`) no cambian de significado.
+  Las hojas de las demás secciones están en `Notebook.otherSheets` (agrupadas en el orden de las secciones) y no se tocan
+  mientras se edita. `allSheets` las junta en orden y `totalSheets` las cuenta (la tarjeta de la biblioteca y el aviso al
+  borrar un cuaderno muestran el total). `Notebook.last` es el índice de la hoja vista DENTRO de la sección activa.
+- **Cambiar de sección** (`NotebookScreenState._switchSection`): guarda lo pendiente y espera el guardado, suelta el
+  documento (el historial de deshacer se vacía: es otro documento), `Notebook.activate` deja en `sheets` las hojas de la
+  nueva y recuerda en la que se deja su última hoja vista, y `Storage.openSection` reabre con `openNotebook(around: last)`
+  y escribe `notebook.json` (la activa se recuerda). Una sección sin hojas (la dejó así una fusión) recibe una en blanco.
+- **Operaciones**: nueva sección (nombre "Sección N", una hoja en blanco con el estilo del cuaderno, al final, se abre),
+  renombrar, subir / bajar y borrar (con confirmación que dice cuántas hojas se borran; no se puede borrar la última; si
+  era la activa se abre la de al lado antes). Los archivos de una sección borrada los borra el guardado de siempre (ya no
+  figuran entre las hojas vivas). Fuera de alcance por ahora: mover una hoja de una sección a otra y buscar en todas las
+  secciones (la búsqueda es de la sección abierta).
+- **Interfaz**: en el panel de hojas, arriba, un botón (`sectionsButton`) con el nombre de la sección activa y una
+  flechita; despliega la lista (`section-<id>` con su cantidad de hojas, ⋮ con Renombrar / Subir / Bajar / Borrar, y
+  `newSection` al final). Está siempre, aunque haya una sola sección; las secciones no ocupan lugar fijo en la hoja.
+- Tests: `test/data/sections_test.dart` (modelo, ida y vuelta, regla de oro, duplicar, `.opennote`, PNG, fusión de la
+  sync), `test/screens/sections_ui_test.dart` (la UI) y un caso en `integration_test/app_test.dart`.
 
 #### Carga perezosa de hojas
 
@@ -175,7 +211,10 @@ cercanas (hasta ~11) quedan dentro de lo medido en la tablet (PSS 240 a 409 MB c
 por hoja (habría que medir mallas y lotes) porque el conteo ya acota el caso grave, el historial largo en cuadernos enormes.
 Las operaciones de hojas viejas (borrar, mover) también se descartan: la hoja borrada que guardaban en memoria se libera.
 
-**Regla de oro: nunca perder datos.** Una hoja no cargada NUNCA se escribe. `Storage._saveNow` solo toma hojas
+**Regla de oro: nunca perder datos.** NUNCA se borra ni se pisa un archivo de hoja de otra sección: el conjunto de hojas vivas
+(`alive` de `Storage._saveNow`), el de `onDisk` en `openNotebook` y el de `_sweep` incluyen los ids de TODAS las secciones
+(`Notebook.allSheets`), no solo los de `nb.sheets`; tampoco copian ni exportan solo la sección abierta (`copyNotebookFiles`,
+`.opennote`). Una hoja no cargada NUNCA se escribe. `Storage._saveNow` solo toma hojas
 cargadas (`splitSheets` ni siquiera devuelve las otras; hay un `assert` y una guarda que no escribe y loguea), también
 en el primer guardado y con todo sucio: las coordenadas en cada archivo son locales, así que mover, insertar o
 borrar hojas no cambia el contenido de las no cargadas (solo `notebook.json`). Al borrar una hoja sin cargar se
@@ -197,8 +236,10 @@ Qué pasa con el resto de la app cuando no está todo en memoria:
 - **Búsqueda** (`searchNotebookAll`): memoria para las cargadas y, para las demás, `Storage.readSheetTexts` (otro isolate,
   una hoja por vez, solo se devuelven los textos). Tocar un resultado carga esa hoja y va ahí.
 - **PDF / PNG** (`sheetSource`): hoja por hoja; las no cargadas se leen de disco (con la de arriba, por si un trazo se
-  pasa) y se sueltan. Lo cargado y sin guardar se exporta desde memoria.
-- **Duplicar cuaderno**: se copian los archivos (`Storage.copyNotebookFiles`), sin decodificar nada.
+  pasa) y se sueltan. Lo cargado y sin guardar se exporta desde memoria. Las hojas de las secciones no abiertas siempre
+  se leen de disco (`exportSource`).
+- **Duplicar cuaderno**: se copian los archivos de las hojas de todas las secciones (`Storage.copyNotebookFiles`), sin
+  decodificar nada; `Notebook.copySectionsFrom` copia las secciones.
 - **Duplicar una hoja** sin cargar: se carga primero (una sola hoja) y se duplica en memoria.
 - Los z (`Layered.z`) de una hoja que se carga van arriba de los de memoria: el orden *dentro* de cada hoja es el del
   archivo, pero lo que se arrastra de una hoja a otra conserva su z, así que su capa respecto a lo que ya había en la
@@ -388,13 +429,17 @@ Mover en el panel: asa `drag_handle` por miniatura (`thumbHandle-N`, destino `th
 ### Formato `.opennote`
 
 ZIP creado por `lib/data/opennote_file.dart`: `manifest.json` (app, versión de formato, nombre, fondo, papel,
-espaciado, cantidad de hojas), `notebook.json`, `sheets/<hoja>.sheet` (copiados de disco tal cual, sin cargar las hojas)
+espaciado, cantidad de hojas), `notebook.json` (con las secciones), `sheets/<hoja>.sheet` (de todas las secciones, copiados de disco tal cual, sin cargar las hojas)
 y `media/<archivo>` (solo lo que usan las hojas). Al importar se valida el manifest (versión, nombres de archivo
 seguros, hojas que coinciden) antes de escribir; un archivo roto lanza `OpennoteException` y no deja nada en disco.
 El cuaderno nuevo recibe un id nuevo y "X (importado)" si el nombre ya existe. Exportar: una sola entrada "Exportar" en el menú ⋮ del cuaderno y en el menú de mantener apretado de la biblioteca;
-abre `showExportSheet` (`menus.dart`) y todo exporta el cuaderno entero: PDF, "Imágenes (PNG)" (`buildNotebookPngs`: un PNG
+abre `showExportSheet` (`menus.dart`) y exporta el cuaderno entero: PDF, "Imágenes (PNG)" (`buildNotebookPngs`: un PNG
 por hoja, de a una con `sheetSource`, en un ZIP con nombres "<cuaderno> - hoja 01.png", o el PNG directo si hay una sola
-hoja; progreso cancelable en `exportPngFlow`; guardado sustituible `saveImages`) y `.opennote` (`saveOpennote` en `export.dart`); dentro del cuaderno se suman "PDF de esta hoja" e "Imagen de esta hoja (PNG)"; importar: "+" de la biblioteca
+hoja; con más de una sección el nombre lleva la sección, "<cuaderno> - <sección> - hoja 01.png", y el número es el de la
+hoja dentro de su sección). Con más de una sección, PDF y PNG preguntan antes qué secciones exportar
+(`askExportSections`, en `sections_menu.dart`: "Todas" o marcar a mano, en el orden de las secciones; las no abiertas se
+leen de disco, así que anda igual desde la biblioteca); `exportSheets` arma la lista de hojas. El `.opennote` exporta el
+cuaderno entero con sus secciones y al importar se conservan; progreso cancelable en `exportPngFlow`; guardado sustituible `saveImages`) y `.opennote` (`saveOpennote` en `export.dart`); dentro del cuaderno se suman "PDF de esta hoja" e "Imagen de esta hoja (PNG)"; importar: "+" de la biblioteca
 (`Pickers.opennote`). Ambos son sustituibles en los tests.
 
 ### Migración
@@ -495,6 +540,10 @@ Detalle y decisiones en `docs/SINCRONIZACION.md` (sección "Decisión: Google Dr
   llega en el medio se junta en una más) y retroceso 30 s → 10 min ante errores. Expone `status` (`SyncStatus`) para el
   indicador (`screens/library/sync_indicator.dart`) y `remoteWaiting` (cuadernos abiertos con cambios de la nube sin aplicar).
   Los tiempos son parámetros del constructor; los tests lo corren con `fakeAsync` y una pasada falsa (`passOverride`).
+- `notebook.json`: `mergeNotebookJson` fusiona por id las hojas y también las secciones (`sections`); el resto (`active`)
+  es el local. El `section` de cada hoja viaja dentro de su objeto. Si un lado borra una sección y el otro le agregó
+  una hoja, la hoja se queda (editar le gana a borrar) y, al no existir su sección, pasa a la primera. Cambiar de sección o
+  de hoja vista cambia `active` / `last` en `notebook.json`, y eso se sube como cualquier otro cambio del archivo.
 - Cuaderno abierto: el motor solo SUBE lo ya guardado y nunca escribe local ahí; los cambios remotos se avisan en el
   editor ("Hay cambios de otro dispositivo" / Actualizar). Ver la regla de oro en `SINCRONIZACION.md`.
 - Cableado: `Library` crea el controlador, hace `store.onSaved = (_) => sync.notifySaved()` y es `WidgetsBindingObserver`

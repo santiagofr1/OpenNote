@@ -26,6 +26,7 @@ class PagesPanel extends StatefulWidget {
   final ValueChanged<int> onOpen, onToggleBookmark;
   final void Function(int sheet, SheetAction action) onAction;
   final void Function(int from, int to) onMove; // arrastrar una miniatura: lleva la hoja [from] a la posición [to]
+  final void Function(Rect anchor) onSections; // el botón de secciones: despliega la lista debajo de [anchor] (global)
 
   const PagesPanel({
     super.key,
@@ -42,6 +43,7 @@ class PagesPanel extends StatefulWidget {
     required this.onToggleBookmark,
     required this.onAction,
     required this.onMove,
+    required this.onSections,
   });
 
   @override
@@ -112,8 +114,9 @@ class _PagesPanelState extends State<PagesPanel> {
               if (!onlyBookmarks || doc.sheets[k].bookmark) k
           ];
           return Column(children: [
+            _sectionsButton(context, cs),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 6, 6),
+              padding: const EdgeInsets.fromLTRB(16, 4, 6, 6),
               child: Row(children: [
                 Text.rich(
                   TextSpan(children: [
@@ -162,6 +165,43 @@ class _PagesPanelState extends State<PagesPanel> {
             ),
           ]);
         },
+      ),
+    );
+  }
+
+  /// La sección abierta con una flechita: al tocarla se despliega la lista de secciones (siempre visible, aunque haya una).
+  Widget _sectionsButton(BuildContext context, ColorScheme cs) {
+    final nb = doc.nb;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+      child: Builder(
+        builder: (c) => Material(
+          color: cs.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
+            key: const Key('sectionsButton'),
+            borderRadius: BorderRadius.circular(12),
+            onTap: () {
+              final b = c.findRenderObject() as RenderBox;
+              widget.onSections(b.localToGlobal(Offset.zero) & b.size);
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              child: Row(children: [
+                Icon(Symbols.folder_open, size: 20, weight: 300, color: cs.onSurfaceVariant),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(nb.activeSection.name,
+                      key: const Key('sectionName'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: cs.onSurface)),
+                ),
+                Icon(Symbols.keyboard_arrow_down, size: 22, weight: 300, color: cs.onSurfaceVariant),
+              ]),
+            ),
+          ),
+        ),
       ),
     );
   }

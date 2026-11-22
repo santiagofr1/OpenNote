@@ -165,6 +165,8 @@ void main() {
     final before = sheetFiles()['$id.sheet']!;
     // el panel es una grilla: se baja hasta la miniatura 21
     await t.scrollUntilVisible(find.byKey(const Key('thumb-21')), 300, scrollable: find.descendant(of: find.byKey(const Key('pagesPanel')), matching: find.byType(Scrollable)));
+    await t.ensureVisible(find.byKey(const Key('thumb-21'))); // (con el botón de secciones arriba, la grilla es más baja)
+    await settle(t, 200);
     await t.longPress(find.byKey(const Key('thumb-21')));
     await settle(t, 600);
     await t.tap(find.byKey(const Key('sheetAction-delete')));

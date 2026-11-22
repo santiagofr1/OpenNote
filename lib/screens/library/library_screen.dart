@@ -24,6 +24,7 @@ import '../../widgets/pdf_progress.dart';
 import '../../widgets/update_dialog.dart';
 import '../notebook/menus.dart';
 import '../notebook/notebook_screen.dart';
+import '../notebook/sections_menu.dart';
 import 'folder_card.dart';
 import 'library_drag.dart';
 import 'move_dialog.dart';
@@ -385,7 +386,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
   Future<void> _duplicate(Notebook nb) async {
     // se copian los archivos de las hojas: no se carga ni se decodifica nada del cuaderno
     final copy = Notebook(newId('n'), '${nb.name} (copia)', bg: nb.bg, paper: nb.paper, spacing: nb.spacing, folder: nb.folder)
-      ..sheets.addAll(nb.sheets.map((s) => s.copy()))
+      ..copySectionsFrom(nb) // las secciones y las hojas de TODAS (los archivos se copian todos)
       ..touch();
     await store.copyNotebookFiles(nb, copy);
     final t = await store.loadSheetDoc(copy, 0);
@@ -404,18 +405,22 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
       case 'pdf':
         await _exportPdf(nb);
       case 'png':
-        // solo la primera hoja queda cargada; las demás se leen de disco de a una
+        final secs = await askExportSections(context, nb); // con varias secciones, cuáles
+        if (secs == null || !mounted) return;
+        // solo una hoja queda cargada; las demás (y las de las otras secciones) se leen de disco de a una
         final doc = await store.openNotebook(nb, radius: 0);
-        if (mounted) await exportPngFlow(context, store, doc);
+        if (mounted) await exportPngFlow(context, store, doc, sections: secs);
       case 'opennote':
         await _exportOpennote(nb);
     }
   }
 
   Future<void> _exportPdf(Notebook nb) async {
-    // solo la primera hoja queda cargada; el PDF lee las demás de disco de a una
+    final secs = await askExportSections(context, nb); // con varias secciones, cuáles
+    if (secs == null || !mounted) return;
+    // solo una hoja queda cargada; el PDF lee las demás (y las de las otras secciones) de disco de a una
     final doc = await store.openNotebook(nb, radius: 0);
-    if (mounted) await exportPdfFlow(context, store, doc);
+    if (mounted) await exportPdfFlow(context, store, doc, sections: secs);
   }
 
   Future<void> _delete(Notebook nb) async {

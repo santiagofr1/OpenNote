@@ -21,6 +21,7 @@ import '../library/sync_indicator.dart';
 import 'menus.dart';
 import 'pages_panel.dart';
 import 'search.dart';
+import 'sections_menu.dart';
 import 'thumb_cache.dart';
 import 'style_dialog.dart';
 
@@ -280,6 +281,133 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     }
   }
 
+  // ================= secciones =================
+  /// Despliega la lista de secciones debajo del botón del panel ([anchor], global) y ejecuta lo que se elija.
+  Future<void> _sectionsList(Rect anchor) async {
+    if (doc == null || _switching) return;
+    final r = await showSectionsList(context, anchor, nb);
+    if (r == null || !mounted) return;
+    final id = r.id;
+    switch (r.action) {
+      case SectionAction.open:
+        if (id != null) await _switchSection(id);
+      case SectionAction.create:
+        await _newSection();
+      case SectionAction.rename:
+        if (id != null) await _renameSection(id);
+      case SectionAction.moveUp:
+        if (id != null) await _moveSection(id, -1);
+      case SectionAction.moveDown:
+        if (id != null) await _moveSection(id, 1);
+      case SectionAction.delete:
+        if (id != null) await _deleteSection(id);
+    }
+  }
+
+  bool _switching = false; // se está cambiando de sección (el documento no existe un momento)
+
+  /// Cambia a la sección [id]: guarda lo pendiente y espera el guardado, suelta el documento (es otro: el historial
+  /// de deshacer se vacía), activa la sección y reabre en su última hoja vista.
+  Future<void> _switchSection(String id) async {
+    if (_switching || doc == null || id == nb.activeSection.id) return;
+    _switching = true;
+    try {
+      await stopVoice(); // una grabación en curso es de la sección que se deja: se guarda antes
+      await _flush();
+      await store.settle(nb.id);
+      if (!mounted) return;
+      // el documento viejo ya no vale: las hojas de [nb] van a ser otras
+      searching = false;
+      hits = [];
+      searchCtrl.clear();
+      setState(() => doc = null);
+      NotebookDoc d;
+      try {
+        d = await store.openSection(nb, id);
+      } catch (e) {
+        if (mounted) snack(context, 'No se pudo abrir la sección: $e');
+        d = await store.openNotebook(nb, around: nb.last); // se vuelve a la que estaba
+      }
+      if (!mounted) return;
+      _indexDirty = true;
+      sheetNotifier.value = nb.last.clamp(0, d.sheetCount - 1);
+      _structure.value++;
+      _liveVersion.value++;
+      setState(() => doc = d);
+      await _saveIndex();
+    } finally {
+      _switching = false;
+    }
+  }
+
+  String _newSectionName() {
+    var n = nb.sections.length + 1;
+    while (nb.sections.any((s) => s.name == 'Sección $n')) {
+      n++;
+    }
+    return 'Sección $n';
+  }
+
+  /// Nueva sección al final, con una hoja en blanco del estilo del cuaderno; se abre.
+  Future<void> _newSection() async {
+    final n = (await askText(context, 'Nueva sección', initial: _newSectionName(), hint: 'Ej: Práctica', ok: 'Crear'))?.trim();
+    if (n == null || n.isEmpty || !mounted) return;
+    final s = nb.addSection(n); // todavía solo en memoria: la hoja en blanco se escribe al abrirla
+    await _switchSection(s.id);
+  }
+
+  Future<void> _renameSection(String id) async {
+    final s = nb.sectionById(id);
+    if (s == null) return;
+    final n = (await askText(context, 'Renombrar sección', initial: s.name))?.trim();
+    if (n == null || n.isEmpty || !mounted) return;
+    nb.renameSection(id, n);
+    await _saveSections();
+  }
+
+  Future<void> _moveSection(String id, int delta) async {
+    if (!nb.moveSection(id, delta)) return;
+    await _saveSections();
+  }
+
+  /// Guarda `notebook.json` con los cambios de las secciones (nombre, orden) y refresca lo que las muestra.
+  Future<void> _saveSections() async {
+    final d = doc;
+    if (d == null) return;
+    nb.touch();
+    _indexDirty = true;
+    _structure.value++;
+    if (mounted) setState(() {});
+    await store.saveNotebook(d);
+    await _saveIndex();
+  }
+
+  /// Borra la sección [id] con todas sus hojas (pide confirmación y dice cuántas son). Si es la abierta, se pasa antes a otra.
+  Future<void> _deleteSection(String id) async {
+    final s = nb.sectionById(id);
+    if (s == null) return;
+    if (nb.sections.length < 2) {
+      snack(context, 'No se puede borrar la única sección del cuaderno');
+      return;
+    }
+    final n = nb.sheetCountOf(id);
+    if (!await confirmDelete(context, 'Borrar la sección "${s.name}"',
+        'Se ${n == 1 ? 'borra 1 hoja' : 'borran $n hojas'} con todo lo que tienen. No se puede deshacer.')) {
+      return;
+    }
+    if (!mounted) return;
+    if (id == nb.activeSection.id) {
+      // se pasa a la sección de al lado (la de abajo, o la de arriba si era la última)
+      final i = nb.sections.indexWhere((x) => x.id == id);
+      final next = nb.sections[i + 1 < nb.sections.length ? i + 1 : i - 1].id;
+      await _switchSection(next);
+      if (!mounted || doc == null) return;
+    }
+    // los archivos de sus hojas los borra el guardado: ya no figuran entre las hojas vivas del cuaderno
+    if (nb.removeSection(id) == null) return;
+    await _saveSections();
+  }
+
   // ================= insertar (+) =================
   /// También lo usan los tests.
   Future<void> runInsert(String v) async {
@@ -494,11 +622,13 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     if (v == null || !mounted) return;
     switch (v) {
       case 'pdf':
-        await exportPdfFlow(context, store, d);
+        final secs = await askExportSections(context, nb); // con varias secciones, cuáles
+        if (secs != null && mounted) await exportPdfFlow(context, store, d, sections: secs);
       case 'sheet':
         await exportPdfFlow(context, store, d, only: [k], name: '${nb.name} - hoja ${k + 1}');
       case 'png':
-        await exportPngFlow(context, store, d);
+        final secs = await askExportSections(context, nb);
+        if (secs != null && mounted) await exportPngFlow(context, store, d, sections: secs);
       case 'sheetpng':
         final ok = await saveSheetPng(store, d, k, '${nb.name} - hoja ${k + 1}');
         if (ok && mounted) snack(context, 'Imagen guardada');
@@ -714,7 +844,8 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         },
       );
 
-  Widget _pagesPanel() => PagesPanel(
+  // (mientras se cambia de sección no hay documento: el panel deja su lugar vacío)
+  Widget _pagesPanel() => doc == null ? const SizedBox(width: 300) : PagesPanel(
         doc: doc!,
         thumbs: thumbs,
         current: sheetNotifier,
@@ -728,6 +859,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         onToggleBookmark: _toggleBookmark,
         onAction: _sheetAction,
         onMove: _moveSheet,
+        onSections: _sectionsList,
       );
 
   Widget _topBar(ColorScheme cs) {

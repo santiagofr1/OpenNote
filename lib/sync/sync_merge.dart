@@ -55,7 +55,10 @@ List<Map> _list(Map j, String k) => [for (final e in (j[k] as List? ?? const [])
 String mergeNotebookJson(String base, String local, String remote) {
   final b = _parse(base), l = _parse(local), r = _parse(remote);
   final sheets = mergeById(_list(b, 'sheets'), _list(l, 'sheets'), _list(r, 'sheets'));
-  return jsonEncode({...l, 'sheets': sheets});
+  // las secciones se fusionan igual que las hojas; `active` (y el resto) queda el local. El `section` de cada hoja ya
+  // viaja dentro de su objeto.
+  final sections = mergeById(_list(b, 'sections'), _list(l, 'sections'), _list(r, 'sections'));
+  return jsonEncode({...l, if (sections.isNotEmpty) 'sections': sections, 'sheets': sheets});
 }
 
 /// [keep]: ids de cuadernos que no se pueden borrar en esta pasada (se editaron en un lado y se borraron en el otro).
