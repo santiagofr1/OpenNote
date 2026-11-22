@@ -44,7 +44,10 @@ class _Node {
 /// NOTA: escrito contra la documentación de Drive v3 y `googleapis` 19; todavía NO se probó contra Drive real (hacen falta
 /// credenciales, ver docs/SINCRONIZACION.md).
 class DriveRemoteStore implements RemoteStore, PurgingRemoteStore {
-  DriveRemoteStore(http.Client client, {this.rootName = 'OpenNote'}) : _api = drive.DriveApi(client);
+  DriveRemoteStore(http.Client client, {this.rootName = kDefaultRoot}) : _api = drive.DriveApi(client);
+
+  /// La carpeta de Drive. Los builds de desarrollo (debug, como "OpenNote Test") usan otra para no tocar los cuadernos reales.
+  static const kDefaultRoot = bool.fromEnvironment('dart.vm.product') ? 'OpenNote' : 'OpenNote Test';
   final drive.DriveApi _api;
   final String rootName;
 
