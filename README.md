@@ -87,6 +87,14 @@ sudo apt install ./opennote_<versión>_amd64.deb
 
 Después lo abrís desde el menú de aplicaciones o con `opennote`. Para armar el `.deb` vos mismo: `tool/build_deb.sh <versión>`.
 
+### En Windows
+
+Bajá `OpenNote-v<versión>-windows-setup.exe` de la [última release](https://github.com/santiagofr1/OpenNote/releases/latest)
+y ejecutalo (Windows 10 u 11, 64 bits). Instala en `Program Files\OpenNote`, crea el acceso directo en el menú inicio
+(y en el escritorio si lo elegís) y se desinstala desde "Aplicaciones instaladas". El instalador sale unos minutos
+después del APK y no está firmado: Windows SmartScreen puede avisar, "Más información" y "Ejecutar de todas formas".
+Sin sincronización en segundo plano (como en Linux); el login de Google abre el navegador.
+
 ### Desde el código
 
 Necesitás [Flutter](https://flutter.dev) en canal *stable*:
@@ -175,7 +183,7 @@ Algunas buenas primeras contribuciones:
 - [ ] Nuevos fondos o plantillas de hoja (`lib/domain/paper_layout.dart`, `lib/widgets/backgrounds.dart`)
 - [ ] Nuevas puntas para el lápiz (`lib/domain/tools.dart`, dibujo en `lib/domain/stroke_mesh.dart`)
 - [ ] Empaquetado para F-Droid
-- [ ] App de PC: Flutter compila para Linux, Windows y macOS; falta resolver entrada con mouse y tableta, atajos y empaquetado (ver PENDIENTES.md)
+- [ ] App de PC: ya hay Linux (.deb) y Windows (.exe); falta macOS, y resolver entrada con mouse y tableta, atajos y empaquetado (ver PENDIENTES.md)
 - [ ] Más tests de lógica pura en `test/`
 
 La guía para arrancar está en [CONTRIBUTING.md](CONTRIBUTING.md).

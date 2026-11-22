@@ -119,6 +119,8 @@ jobs:
             echo "**APK:** OpenNote-v${VERSION_NAME}.apk"
             echo "**Código de versión:** ${VERSION_CODE}"
             echo ""
+            echo "**Windows:** OpenNote-v${VERSION_NAME}-windows-setup.exe (lo sube el job windows unos minutos después)."
+            echo ""
             echo "**Linux (Debian/Ubuntu):** opennote_${VERSION_NAME}_amd64.deb (lo sube el job linux unos minutos después)."
             echo ""
             echo "Desde el repo apt:"
@@ -215,3 +217,66 @@ jobs:
         run: |
           [ -n "$TOKEN" ] || { echo "sin APT_DISPATCH_TOKEN, lo levanta el cron"; exit 0; }
           GH_TOKEN="$TOKEN" gh api repos/santiagofr1/apt/dispatches -f event_type=publish
+
+  # App de Windows: corre cuando la release ya está publicada y le suma el instalador .exe como asset. Si falla,
+  # el APK, el .deb y el aviso de actualización de Android no se ven afectados.
+  windows:
+    needs: release
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Set version
+        run: |
+          echo "VERSION_NAME=1.0.${{ github.run_number }}" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$(( ${{ github.run_number }} + 100 ))" >> "$GITHUB_ENV"
+
+      - name: Datos de Google (opcional)
+        env:
+          GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+          GOOGLE_WEB_CLIENT_SECRET: ${{ secrets.GOOGLE_WEB_CLIENT_SECRET }}
+          GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.GOOGLE_DESKTOP_CLIENT_ID }}
+          GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
+        run: |
+          if [ -n "$GOOGLE_WEB_CLIENT_ID" ]; then
+            jq -n --arg web "$GOOGLE_WEB_CLIENT_ID" --arg wsec "$GOOGLE_WEB_CLIENT_SECRET" --arg did "$GOOGLE_DESKTOP_CLIENT_ID" --arg dsec "$GOOGLE_DESKTOP_CLIENT_SECRET" \
+              '{GOOGLE_WEB_CLIENT_ID: $web, GOOGLE_WEB_CLIENT_SECRET: $wsec, GOOGLE_DESKTOP_CLIENT_ID: $did, GOOGLE_DESKTOP_CLIENT_SECRET: $dsec}' > google_config.json
+            echo "DART_DEFINES=--dart-define-from-file=google_config.json" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Falta el secreto GOOGLE_WEB_CLIENT_ID: el instalador de Windows sale sin sincronización con Google."
+          fi
+
+      - name: Compilar app de Windows
+        run: |
+          flutter build windows --release \
+            --build-name="$VERSION_NAME" \
+            --build-number="$VERSION_CODE" \
+            $DART_DEFINES
+          rm -f google_config.json
+
+      - name: Armar instalador (Inno Setup)
+        run: |
+          if ! command -v iscc >/dev/null 2>&1; then
+            choco install innosetup -y --no-progress
+            export PATH="$PATH:/c/Program Files (x86)/Inno Setup 6"
+          fi
+          iscc "//DAppVersion=${VERSION_NAME}" windows/installer/opennote.iss
+
+      - name: Subir el instalador a la release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION_NAME }}
+          files: dist/OpenNote-v${{ env.VERSION_NAME }}-windows-setup.exe

@@ -20,7 +20,7 @@ import 'sync_backend.dart';
 const kDriveScope = 'https://www.googleapis.com/auth/drive.file';
 
 /// Dónde se guardan los tokens. La implementación real usa el almacenamiento seguro del sistema (Keystore en Android,
-/// libsecret en Linux).
+/// libsecret en Linux, Credential Manager en Windows).
 abstract class TokenStore {
   Future<String?> read(String key);
   Future<void> write(String key, String value);
@@ -49,7 +49,7 @@ class SecureTokenStore implements TokenStore {
 /// Login con Google, con dos caminos:
 ///  - Android: `google_sign_in` (selector de cuentas del sistema), permiso `drive.file`. El token de acceso lo maneja
 ///    Google Play services; la app no guarda ninguno.
-///  - Linux / escritorio: `googleapis_auth`, flujo de app instalada (navegador + servidor local en 127.0.0.1 + PKCE).
+///  - Linux / Windows / escritorio: `googleapis_auth`, flujo de app instalada (navegador + servidor local en 127.0.0.1 + PKCE).
 ///    El refresh token se guarda en el almacenamiento seguro y el token de acceso se renueva solo.
 /// En otras plataformas [configured] es false.
 class GoogleBackend implements SyncBackend {
