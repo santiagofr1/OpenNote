@@ -62,7 +62,9 @@ void main() {
     };
     await t.longPress(find.byKey(const Key('nb-Hojas')));
     await settle(t, 600);
-    await t.tap(find.byKey(const Key('exportOpennote')));
+    await t.tap(find.byKey(const Key('exportNotebook')));
+    await settle(t, 600);
+    await t.tap(find.byKey(const Key('export-opennote')));
     for (var i = 0; i < 30 && saved == null; i++) {
       await settle(t, 100);
     }

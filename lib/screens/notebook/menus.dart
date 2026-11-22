@@ -31,8 +31,7 @@ Future<String?> showMoreMenu(BuildContext context, Offset at, Notebook nb) => sh
         const PopupMenuItem(value: 'search', child: MenuRow(Symbols.search, 'Buscar')),
         const PopupMenuItem(value: 'style', child: MenuRow(Symbols.palette, 'Estilo de hoja')),
         const PopupMenuDivider(),
-        const PopupMenuItem(value: 'saveas', child: MenuRow(Symbols.save_as, 'Guardar como')),
-        const PopupMenuItem(value: 'opennote', child: MenuRow(Symbols.archive, 'Exportar cuaderno (.opennote)')),
+        const PopupMenuItem(value: 'export', child: MenuRow(Symbols.ios_share, 'Exportar')),
         const PopupMenuDivider(),
         _IconRow([
           (Symbols.star, nb.favorite ? 'Quitar de favoritos' : 'Favorito', 'fav', nb.favorite),
@@ -79,28 +78,38 @@ class _IconRowState extends State<_IconRow> {
   }
 }
 
-/// "Guardar como": PDF del cuaderno ('nb'), PDF de la hoja que se ve ('sheet') o PNG de esa hoja ('png').
-Future<String?> showSaveAsSheet(BuildContext context, {required String sheetName}) {
+/// "Exportar": una sola hoja con todo. Devuelve 'pdf' y 'png' (cuaderno entero), 'opennote', y solo si hay [sheetName]
+/// (dentro del cuaderno) 'sheet' (PDF de la hoja que se ve) y 'sheetpng' (su imagen). Keys `export-<valor>`.
+Future<String?> showExportSheet(BuildContext context, {String? sheetName}) {
   final cs = Theme.of(context).colorScheme;
   Widget tile(IconData i, String t, String sub, String v) => ListTile(
+        key: Key('export-$v'),
         leading: Icon(i, weight: 300, color: cs.onSurfaceVariant),
         title: Text(t),
         subtitle: Text(sub),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         onTap: () => Navigator.pop(context, v),
       );
+  // Con la tablet en horizontal no entran todas: la hoja puede ocupar toda la altura y se scrollea.
   return showModalBottomSheet<String>(
     context: context,
+    isScrollControlled: true,
     builder: (ctx) => SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-              child: Text('Guardar como', style: Theme.of(ctx).textTheme.titleLarge)),
-          tile(Symbols.picture_as_pdf, 'PDF del cuaderno', 'Todas las hojas', 'nb'),
-          tile(Symbols.description, 'PDF de esta hoja', sheetName, 'sheet'),
-          tile(Symbols.image, 'Imagen (PNG)', 'La hoja que estás viendo', 'png'),
+              child: Text('Exportar', style: Theme.of(ctx).textTheme.titleLarge)),
+          tile(Symbols.picture_as_pdf, 'PDF', 'Todo el cuaderno', 'pdf'),
+          tile(Symbols.photo_library, 'Imágenes (PNG)', 'Todas las hojas, en un .zip', 'png'),
+          tile(Symbols.archive, 'Cuaderno de OpenNote (.opennote)', 'Para pasarlo a otro dispositivo o hacer copia',
+              'opennote'),
+          if (sheetName != null) ...[
+            const Divider(indent: 16, endIndent: 16),
+            tile(Symbols.description, 'PDF de esta hoja', sheetName, 'sheet'),
+            tile(Symbols.image, 'Imagen de esta hoja (PNG)', sheetName, 'sheetpng'),
+          ],
         ]),
       ),
     ),

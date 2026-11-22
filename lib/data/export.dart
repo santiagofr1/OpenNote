@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -116,6 +117,51 @@ Future<bool> saveSheetPng(Storage store, NotebookDoc doc, int sheet, String name
   );
   return uri != null;
 }
+
+/// Un PNG por hoja, de a una (no carga todo en memoria). Con varias hojas arma un ZIP con los nombres
+/// "`cuaderno` - hoja 01.png" (ceros según la cantidad); con una sola devuelve el PNG directo (`zip` falso).
+/// [onProgress] recibe (hechas, total). Si [cancelled] da true entre hoja y hoja, devuelve null.
+Future<({Uint8List bytes, bool zip})?> buildNotebookPngs(Storage store, NotebookDoc doc,
+    {void Function(int, int)? onProgress, bool Function()? cancelled}) async {
+  final n = doc.sheetCount;
+  final safe = safeFileName(doc.nb.name).trim();
+  final name = safe.isEmpty ? 'Cuaderno' : safe;
+  final width = '$n'.length < 2 ? 2 : '$n'.length;
+  final zip = Archive();
+  Uint8List? single;
+  for (var k = 0; k < n; k++) {
+    if (cancelled?.call() ?? false) return null;
+    onProgress?.call(k, n);
+    final (src, i) = await sheetSource(store, doc, k);
+    final images = await loadImages(store, src, sheet: i);
+    final Uint8List png;
+    try {
+      png = await renderSheetPng(src, i, images: images);
+    } finally {
+      for (final img in images.values) {
+        img.dispose();
+      }
+    }
+    if (n == 1) single = png;
+    zip.add(ArchiveFile.bytes('$name - hoja ${'${k + 1}'.padLeft(width, '0')}.png', png));
+  }
+  onProgress?.call(n, n);
+  if (single != null) return (bytes: single, zip: false);
+  return (bytes: Uint8List.fromList(ZipEncoder().encode(zip)), zip: true);
+}
+
+/// Guarda lo de [buildNotebookPngs] (un `.zip`, o un `.png` si [zip] es falso), preguntando dónde.
+/// Es una variable para que los tests la reemplacen. Falso si el usuario canceló.
+Future<bool> Function(Uint8List bytes, String name, bool zip) saveImages = (bytes, name, zip) async {
+  final safe = safeFileName(name).trim();
+  final uri = await FilePicker.saveFile(
+    dialogTitle: 'Guardar imágenes',
+    fileName: '${safe.isEmpty ? 'Cuaderno' : safe}.${zip ? 'zip' : 'png'}',
+    bytes: bytes,
+    mimeType: zip ? 'application/zip' : 'image/png',
+  );
+  return uri != null;
+};
 
 /// Abre el selector del sistema para elegir carpeta y nombre, y guarda el `.opennote`. Falso si el usuario canceló.
 /// Es una variable para que los tests la reemplacen (no pueden manejar el diálogo del sistema).

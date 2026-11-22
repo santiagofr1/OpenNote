@@ -21,6 +21,7 @@ import 'package:apuntes/rendering/text_layout.dart';
 import 'package:apuntes/sync/fake_backend.dart';
 import 'package:apuntes/sync/fake_remote_store.dart';
 import 'package:apuntes/sync/sync_engine.dart';
+import 'package:archive/archive.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -363,7 +364,9 @@ void main() {
       saveOpennote = savedSave;
       Pickers.opennote = savedPick;
     });
-    await openMore(t, 'Exportar cuaderno (.opennote)');
+    await openMore(t, 'Exportar');
+    await t.tap(find.byKey(const Key('export-opennote')));
+    await settle(t, 600);
     expect(saved, isNotNull);
     await t.tap(find.byKey(const Key('back')));
     await settle(t, 1200);
@@ -1285,6 +1288,74 @@ void main() {
     await t.tap(find.byTooltip('Rehacer'));
     await settle(t, 600);
     expect(ed.doc.items.containsKey('nota'), isTrue);
+  });
+
+  testWidgets('Exportar: una sola opción con PDF, PNG y .opennote', (t) async {
+    await start(t);
+    await createNotebook(t, 'Exporta');
+    for (var i = 0; i < 2; i++) {
+      await t.tap(find.byKey(const Key('insert')));
+      await settle(t);
+      await t.tap(find.text('Hoja nueva'));
+      await settle(t, 800);
+    }
+    // dentro del cuaderno: el menú ⋮ tiene una sola entrada "Exportar" (sin "Guardar como" ni el .opennote suelto)
+    await t.tap(find.byKey(const Key('more')));
+    await settle(t);
+    expect(find.text('Exportar'), findsOneWidget);
+    expect(find.text('Guardar como'), findsNothing);
+    expect(find.text('Exportar cuaderno (.opennote)'), findsNothing);
+    await t.tap(find.text('Exportar'));
+    await settle(t, 600);
+    for (final k in ['pdf', 'sheet', 'sheetpng', 'png', 'opennote']) {
+      expect(find.byKey(Key('export-$k')), findsOneWidget, reason: 'opción $k');
+    }
+    // "Imágenes (PNG)" exporta todo el cuaderno: un .zip con un PNG por hoja (el diálogo del sistema se reemplaza)
+    Uint8List? zipBytes;
+    bool? wasZip;
+    final savedImages = saveImages;
+    saveImages = (bytes, name, zip) async {
+      zipBytes = bytes;
+      wasZip = zip;
+      return true;
+    };
+    addTearDown(() => saveImages = savedImages);
+    await t.tap(find.byKey(const Key('export-png')));
+    for (var i = 0; i < 100 && zipBytes == null; i++) {
+      await settle(t, 100);
+    }
+    expect(zipBytes, isNotNull);
+    expect(wasZip, isTrue);
+    final entries = ZipDecoder().decodeBytes(zipBytes!).where((f) => f.isFile).toList();
+    expect(entries.map((f) => f.name), ['Exporta - hoja 01.png', 'Exporta - hoja 02.png', 'Exporta - hoja 03.png']);
+    for (final f in entries) {
+      expect(f.content.take(4).toList(), [0x89, 0x50, 0x4E, 0x47], reason: '${f.name} es un PNG');
+    }
+    await settle(t, 600);
+    await t.tap(find.byKey(const Key('more')));
+    await settle(t);
+    await t.tap(find.text('Exportar'));
+    await settle(t, 600);
+    await t.tapAt(const Offset(10, 10)); // cierra la hoja sin guardar nada
+    await settle(t, 600);
+    expect(find.byKey(const Key('export-pdf')), findsNothing);
+
+    // desde la biblioteca: mismas opciones menos "PDF de esta hoja"
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+    await t.longPress(find.byKey(const Key('nb-Exporta')));
+    await settle(t, 600);
+    expect(find.text('Exportar a PDF'), findsNothing);
+    await t.tap(find.byKey(const Key('exportNotebook')));
+    await settle(t, 600);
+    for (final k in ['pdf', 'png', 'opennote']) {
+      expect(find.byKey(Key('export-$k')), findsOneWidget, reason: 'opción $k');
+    }
+    expect(find.byKey(const Key('export-sheet')), findsNothing);
+    expect(find.byKey(const Key('export-sheetpng')), findsNothing);
+    await t.tapAt(const Offset(10, 10));
+    await settle(t, 600);
+    expect(t.takeException(), isNull);
   });
 
   testWidgets('sincronización: "Sincronizar ahora" sube un cuaderno y otro dispositivo lo baja (remoto falso)', (t) async {
