@@ -5,6 +5,7 @@
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -1220,6 +1221,61 @@ void main() {
     final saved = (await st.loadNotebook(nb)).items.values.single;
     expect(saved.dur, audio.dur);
     expect(saved.y, closeTo(audio.y, .01));
+  });
+
+  testWidgets('texto con teclado: seleccionar, escalar y rotar como una entidad, deshacer (issue #12)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Texto libre');
+    await t.tap(find.byTooltip('Texto con teclado'));
+    await settle(t, 600);
+    final ed = editor(t);
+    final b0 = ed.doc.texts.values.single;
+    await t.enterText(find.byKey(Key('para-${b0.id}-0')), 'texto libre');
+    await settle(t, 400);
+    await t.tap(find.byTooltip('Seleccionar'));
+    await settle(t);
+    final p = docToScreen(t);
+    final r = textRect(b0, ed.doc.lineAt(b0.y));
+    // ventana alrededor del texto
+    await stylusDrag(t, p(r.topLeft - const Offset(25, 25)), p(r.bottomRight + const Offset(25, 25)));
+    expect(ed.sel.texts, {b0.id});
+    expect(find.byKey(const Key('selHandle-rotate')), findsOneWidget, reason: 'la manija de rotar también con solo texto');
+    final x0 = b0.x, y0 = b0.y;
+
+    // escalar con la esquina de abajo a la derecha
+    final tl = t.getCenter(find.byKey(const Key('selHandle-tl'))), br = t.getCenter(find.byKey(const Key('selHandle-br')));
+    await stylusDrag(t, br, tl + (br - tl) * 1.5);
+    var tx = ed.doc.texts.values.single;
+    expect(tx.scale, closeTo(1.5, .15));
+    expect(tx.transformed, isTrue);
+
+    // rotar ~90° con la manija de arriba
+    final rot = t.getCenter(find.byKey(const Key('selHandle-rotate')));
+    final c = (t.getCenter(find.byKey(const Key('selHandle-tl'))) + t.getCenter(find.byKey(const Key('selHandle-br')))) / 2;
+    await stylusDrag(t, rot, c + Offset((rot - c).distance, 0));
+    tx = ed.doc.texts.values.single;
+    expect(tx.angle, closeTo(pi / 2, .2));
+    expect(find.text('Enderezar'), findsOneWidget);
+
+    // se guarda con su escala y giro
+    await settle(t, 1200);
+    final nb = await savedNotebook('Texto libre');
+    final st = Storage(root: root);
+    await st.init();
+    final saved = (await st.loadNotebook(nb)).texts.values.single;
+    expect(saved.scale, closeTo(tx.scale, 1e-9));
+    expect(saved.angle, closeTo(tx.angle, 1e-9));
+
+    // deshacer: el giro y después la escala; vuelve a su lugar
+    await t.tap(find.byTooltip('Deshacer'));
+    await settle(t);
+    expect(ed.doc.texts.values.single.angle, 0);
+    await t.tap(find.byTooltip('Deshacer'));
+    await settle(t);
+    tx = ed.doc.texts.values.single;
+    expect(tx.scale, 1);
+    expect(tx.x, closeTo(x0, .01));
+    expect(tx.y, closeTo(y0, .01));
   });
 
   testWidgets('scroll rápido de punta a punta: sin errores; quieto usa imágenes; un trazo nuevo se ve y se guarda', (t) async {

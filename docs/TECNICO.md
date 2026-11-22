@@ -303,6 +303,23 @@ se reemplazan por `Stroke.transformed` (todos los puntos; el grosor por la escal
 objeto), los elementos escalan su rectángulo y al rotar solo mueven su centro (no rotan), y los textos solo cambian de
 lugar. Todo es UN `EditAction`; deshacer devuelve los objetos originales, exactos.
 
+**Texto con teclado como entidad** (issue #12). `TextBlock` suma `scale` (1) y `angle` (radianes, 0). JSON: `s` y `a` solo si
+no son el valor por defecto (los archivos viejos cargan igual; la huella `sheetDigest`, el `.sheet` y el `.opennote` los llevan
+porque pasan por `toJson`). La escala sale desde la esquina de arriba a la izquierda (`x`, `y`) y multiplica letra y ancho; el
+giro es alrededor del centro del rectángulo ya escalado. `text_layout.dart`: `textRect` (escalado, sin giro), `textCorners`,
+`textBounds` (bounding box del girado: recuadro de la selección, "ventana" por su centro y "captura" por superposición),
+`textHit` (el punto se lleva al marco sin girar: el toque es contra el polígono girado) y `paintTextBlock` (miniaturas, PNG y
+PDF: `canvas.translate/rotate/scale` sobre el mismo `layoutBlock`). Un texto con `scale != 1` o `angle != 0` (`transformed`) ya no
+se acomoda al renglón (`snapTextY` se saltea al soltar, al mover con la agarradera y al arrastrar la selección); con 1 y 0 se
+comporta como siempre. Selección (`selection.dart`): las manijas de esquina multiplican `scale` y escalan la posición desde el
+pivote igual que los elementos (mínimo 1/4 de tamaño); la de rotar aparece con trazos y/o textos, suma al `angle` y gira el centro
+del texto alrededor del pivote (imán a 0/90/180/270); imágenes, audios y notas siguen solo moviendo su posición al rotar.
+`MoveDrag.textState` guarda escala y giro de antes para el "antes" del deshacer (un `EditAction` por transformación).
+Editar un texto transformado: `TextBlockView._transformed` envuelve el bloque en un `Transform` (T(centro)·R·T(-centro)·S): los campos
+se editan con la misma transformación y Flutter lleva foco, cursor y toques por la matriz; se eligió eso en vez de enderezarlo
+al editar porque no hay saltos y el modelo y el dibujo comparten matriz. "Enderezar" (barrita de selección, solo con un texto
+transformado) vuelve a 1 y 0 y lo acomoda al renglón desde su esquina de arriba; se deshace.
+
 **Elementos con el dedo** (issue #11a). El dedo scrollea (la hoja es un `SingleChildScrollView`), así que para elegir y
 mover con él hay dos piezas en `page_editor.dart`:
 - *Toque*: `_touchDown/_touchMove/_touchUp` (el `Listener` del visor, el mismo del pellizco y del menú de la hoja) siguen un

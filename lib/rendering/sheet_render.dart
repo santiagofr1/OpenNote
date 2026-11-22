@@ -30,8 +30,8 @@ void paintSheet(Canvas c, NotebookDoc doc, int sheet, double pxPerUnit, {Map<Str
     } else if (e is TextBlock) {
       final t = e;
       // kLine * 40: tope generoso del alto de un texto, para no medirlos todos
-      if (t.text.trim().isEmpty || t.y > top + kSheetH || t.y + kLine * 40 < top) continue;
-      layoutBlock(t, doc.lineAt(t.y)).paint(c, Offset(t.x, t.y));
+      if (t.text.trim().isEmpty || t.y > top + kSheetH || t.y + kLine * 40 * t.scale + (t.angle == 0 ? 0 : kLine * 40 * t.scale) < top) continue;
+      paintTextBlock(c, t, doc.lineAt(t.y));
     }
   }
   c.restore();

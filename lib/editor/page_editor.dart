@@ -801,10 +801,17 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       final t = doc.texts[id];
       if (t == null) return;
       doc.markDirtyElement(t);
-      t.y = max(0.0, doc.snapTextY(t.y)); // que caiga sobre el renglón de su hoja
-      t.x = t.x.clamp(0.0, kW - 60);
+      if (t.transformed) {
+        t.y = max(0.0, t.y); // con escala o giro queda libre donde se lo dejó
+      } else {
+        t.y = max(0.0, doc.snapTextY(t.y)); // que caiga sobre el renglón de su hoja
+        t.x = t.x.clamp(0.0, kW - 60);
+      }
       doc.markDirtyElement(t);
-      textBefore[id] = t.copy(d: o.topLeft - Offset(t.x, t.y));
+      final st = drag.textState[id] ?? (t.scale, t.angle);
+      textBefore[id] = t.copy(d: o.topLeft - Offset(t.x, t.y))
+        ..scale = st.$1
+        ..angle = st.$2;
       textAfter[id] = t.copy();
     });
     final itemBefore = <String, Item?>{}, itemAfter = <String, Item?>{};
@@ -833,6 +840,28 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     c.texts = [for (final t in sel.textsOf(doc)) t.copy()];
     c.items = [for (final it in sel.itemsOf(doc)) it.copy()];
     setState(() {});
+  }
+
+  /// "Enderezar": los textos elegidos vuelven a escala 1 y giro 0 y se acomodan al renglón (desde su esquina de arriba).
+  /// Un solo paso de deshacer.
+  void _straightenSel() {
+    final before = <String, TextBlock?>{}, after = <String, TextBlock?>{};
+    for (final t in sel.textsOf(doc)) {
+      if (!t.transformed) continue;
+      before[t.id] = t.copy();
+      doc.markDirtyElement(t);
+      t.scale = 1;
+      t.angle = 0;
+      t.y = max(0.0, doc.snapTextY(t.y));
+      t.x = t.x.clamp(0.0, kW - 60);
+      doc.markDirtyElement(t);
+      after[t.id] = t.copy();
+    }
+    if (before.isEmpty) return;
+    _pushUndo(EditAction(textBefore: before, textAfter: after));
+    _changed();
+    setState(() {});
+    liveTick.value++;
   }
 
   void _deleteSel() {
@@ -1650,7 +1679,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final drag = sel.drag;
     final handled = !sel.isEmpty && (idle || (drag != null && drag.handle != Handle.move));
     final box = handled ? sel.bounds(doc) : null;
-    final canRotate = sel.strokes.isNotEmpty;
+    final canRotate = sel.strokes.isNotEmpty || sel.texts.isNotEmpty;
     final xf = drag?.xf ?? const Xform();
     Offset px(Offset p) => xf.apply(p) * scale;
     final up = Offset(sin(xf.angle), -cos(xf.angle)); // "arriba" del recuadro, ya rotado
@@ -1691,6 +1720,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             },
             onDuplicate: _duplicateSel,
             onDelete: _deleteSel,
+            onStraighten: sel.textsOf(doc).any((t) => t.transformed) ? _straightenSel : null,
             onClose: _clearSel,
             onOrder: _reorderSel,
           ))),
@@ -1889,12 +1919,12 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         doc.markDirtyElement(t);
         t.x = (t.x + delta.dx / scale).clamp(0.0, kW - 60);
         t.y = max(0.0, t.y + delta.dy / scale);
-        t.w = min(t.w, kW - t.x - 10).clamp(120.0, kW);
+        if (!t.transformed) t.w = min(t.w, kW - t.x - 10).clamp(120.0, kW);
         doc.markDirtyElement(t);
       }),
       onHandleDragEnd: () => setState(() {
         doc.markDirtyElement(t);
-        t.y = doc.snapTextY(t.y);
+        if (!t.transformed) t.y = doc.snapTextY(t.y);
         doc.markDirtyElement(t);
         _changed();
       }),
