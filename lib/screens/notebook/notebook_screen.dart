@@ -292,7 +292,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         case 'sticky':
           ed?.insertItem(makeSticky());
         case 'audio':
-          final it = await makeAudioFileItem(store);
+          final it = await makeAudioFileItem(store, name: nextAudioName(doc!.items.values));
           if (it != null) ed?.insertItem(it);
         case 'voice':
           await _startVoice();
@@ -313,7 +313,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
       if (mounted) snack(context, 'Ya hay una grabación en curso');
       return;
     }
-    final it = makeAudioItem('${newId('m')}.m4a', 0);
+    final it = makeAudioItem('${newId('m')}.m4a', 0, name: nextAudioName(doc!.items.values));
     try {
       await recorder.start(it.id, it.file!);
     } on VoiceException catch (e) {
@@ -326,6 +326,15 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
       return;
     }
     ed.insertItem(it, onInserted: () => recorder.inserted = true);
+  }
+
+  /// Cancela la grabación (X del indicador): tira lo grabado y saca el audio de la hoja sin dejar rastro en el historial
+  /// (ver [PageEditor.removeItemForgetting]).
+  Future<void> cancelVoice() async {
+    final id = recorder.itemId;
+    if (id == null) return;
+    await recorder.discard();
+    editorKey.currentState?.removeItemForgetting(id);
   }
 
   /// Para la grabación: renombra el archivo, le pone la duración al elemento, marca la hoja sucia y guarda.
@@ -631,6 +640,12 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
                 width: 420,
                 child: SearchResults(query: searchCtrl.text, hits: hits, onTap: _goHit),
               ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 16,
+              child: Center(child: _recordingIndicator(cs)),
+            ),
             if (fullscreen)
               Positioned(
                 top: 12,
@@ -650,6 +665,54 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
       ),
     );
   }
+
+  /// Indicador flotante mientras se graba: nombre, tiempo, parar y cancelar; tocar el cuerpo lleva a donde está el audio.
+  Widget _recordingIndicator(ColorScheme cs) => ListenableBuilder(
+        listenable: recorder,
+        builder: (_, _) {
+          final id = recorder.itemId;
+          if (id == null) return const SizedBox.shrink();
+          final name = doc?.items[id]?.text ?? '';
+          final red = cs.error;
+          return Material(
+            key: const ValueKey('recIndicator'),
+            color: cs.surfaceContainerHigh,
+            elevation: 6,
+            shape: StadiumBorder(side: BorderSide(color: red.withValues(alpha: .35), width: 1.5)),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              InkWell(
+                customBorder: const StadiumBorder(),
+                onTap: () => editorKey.currentState?.scrollToItem(id),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    _PulsingDot(color: red),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Grabando${name.isEmpty ? '' : ' · $name'}  ${fmtDuration(recorder.elapsedMs)}',
+                      style: TextStyle(fontSize: 15, color: cs.onSurface, fontFeatures: const [FontFeature.tabularFigures()]),
+                    ),
+                  ]),
+                ),
+              ),
+              IconButton(
+                key: const ValueKey('recIndicatorStop'),
+                tooltip: 'Parar y guardar',
+                onPressed: stopVoice,
+                style: IconButton.styleFrom(backgroundColor: red, foregroundColor: Colors.white),
+                icon: const Icon(Symbols.stop, size: 20, fill: 1),
+              ),
+              IconButton(
+                key: const ValueKey('recIndicatorCancel'),
+                tooltip: 'Cancelar y descartar',
+                onPressed: cancelVoice,
+                icon: Icon(Symbols.close, size: 20, weight: 300, color: cs.onSurfaceVariant),
+              ),
+              const SizedBox(width: 4),
+            ]),
+          );
+        },
+      );
 
   Widget _pagesPanel() => PagesPanel(
         doc: doc!,
@@ -791,4 +854,28 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
             },
           ),
       ]);
+}
+
+/// Punto que late (el de "grabando").
+class _PulsingDot extends StatefulWidget {
+  final Color color;
+  const _PulsingDot({required this.color});
+  @override
+  State<_PulsingDot> createState() => _PulsingDotState();
+}
+
+class _PulsingDotState extends State<_PulsingDot> with SingleTickerProviderStateMixin {
+  late final pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => FadeTransition(
+        opacity: Tween(begin: .3, end: 1.0).animate(pulse),
+        child: Container(width: 12, height: 12, decoration: BoxDecoration(color: widget.color, shape: BoxShape.circle)),
+      );
 }

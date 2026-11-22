@@ -88,7 +88,7 @@ void paintItem(Canvas c, Item it, ui.Image? img) {
       c.drawRRect(rr, Paint()..color = const Color(0xFFE9E6F5));
       c.drawCircle(Offset(r.left + r.height / 2, r.center.dy), r.height * .3, Paint()..color = const Color(0xFF5B4FC4));
       final tp = TextPainter(
-        text: TextSpan(text: 'Audio ${fmtDuration(it.dur)}', style: const TextStyle(fontSize: 20, color: _stickyText)),
+        text: TextSpan(text: '${it.text.isEmpty ? 'Audio' : it.text} ${fmtDuration(it.dur)}', style: const TextStyle(fontSize: 20, color: _stickyText)),
         textDirection: TextDirection.ltr,
       )..layout();
       tp.paint(c, Offset(r.left + r.height + 6, r.center.dy - tp.height / 2));

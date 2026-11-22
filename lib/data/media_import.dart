@@ -60,8 +60,21 @@ Future<Item?> makeImageItem(Storage store, {required bool camera}) async {
 
 Item makeSticky() => Item(newId('i'), 'sticky', 0, 0, 320, 240, color: '#fde68a');
 
-/// Audio ya guardado en media/ ([file]) de [dur] ms.
-Item makeAudioItem(String file, int dur) => Item(newId('i'), 'audio', 0, 0, 360, 64, file: file, dur: dur);
+/// Audio ya guardado en media/ ([file]) de [dur] ms, con el nombre [name] (en `Item.text`; vacío = sin nombre).
+Item makeAudioItem(String file, int dur, {String name = ''}) =>
+    Item(newId('i'), 'audio', 0, 0, 360, 64, file: file, dur: dur, text: name);
+
+/// Nombre por defecto de un audio nuevo: "Audio N", con N = el mayor número de "Audio N" que ya hay en [items] + 1.
+/// Ve solo los elementos de las hojas cargadas (las otras no están en memoria).
+String nextAudioName(Iterable<Item> items) {
+  var top = 0;
+  for (final it in items) {
+    if (it.type != 'audio') continue;
+    final n = int.tryParse(RegExp(r'^Audio (\d+)$').firstMatch(it.text.trim())?.group(1) ?? '');
+    if (n != null && n > top) top = n;
+  }
+  return 'Audio ${top + 1}';
+}
 
 /// Duración en ms (0 si no se puede leer).
 Future<int> audioDuration(File f) async {
@@ -87,12 +100,12 @@ String mediaExt(String path, String fallback) {
   return RegExp(r'^[a-z0-9]{1,8}$').hasMatch(ext) ? ext : fallback;
 }
 
-Future<Item?> makeAudioFileItem(Storage store) async {
+Future<Item?> makeAudioFileItem(Storage store, {String name = ''}) async {
   final f = await Pickers.audio();
   if (f == null) return null;
   final ext = mediaExt(f.path, 'm4a');
-  final name = await store.addMediaFile(f, ext);
-  return makeAudioItem(name, await Pickers.audioLength(store.media(name)));
+  final file = await store.addMediaFile(f, ext);
+  return makeAudioItem(file, await Pickers.audioLength(store.media(file)), name: name);
 }
 
 /// PDF → una hoja nueva por cada página del PDF, con la página como imagen. Cada hoja viene con su

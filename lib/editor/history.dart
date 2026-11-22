@@ -77,6 +77,37 @@ class EditAction {
   }
 }
 
+/// Copia de la acción sin lo que toca al elemento [id]; null si no queda nada por hacer.
+extension EditActionForget on EditAction {
+  EditAction? withoutItem(String id) {
+    Map<String, T> drop<T>(Map<String, T> m) => {
+          for (final e in m.entries)
+            if (e.key != id) e.key: e.value,
+        };
+    final a = EditAction(
+      sheetOps: sheetOps,
+      removed: removed,
+      added: added,
+      textBefore: textBefore,
+      textAfter: textAfter,
+      itemBefore: drop(itemBefore),
+      itemAfter: drop(itemAfter),
+      zBefore: drop(zBefore),
+      zAfter: drop(zAfter),
+    );
+    final empty = a.sheetOps.isEmpty &&
+        a.removed.isEmpty &&
+        a.added.isEmpty &&
+        a.textBefore.isEmpty &&
+        a.textAfter.isEmpty &&
+        a.itemBefore.isEmpty &&
+        a.itemAfter.isEmpty &&
+        a.zBefore.isEmpty &&
+        a.zAfter.isEmpty;
+    return empty ? null : a;
+  }
+}
+
 /// Hoja a mostrar después de aplicar la acción (la de la última operación de hojas); null si no toca hojas.
 extension EditActionSheets on EditAction {
   int? sheetFocus(NotebookDoc doc, {required bool undo}) =>
@@ -204,6 +235,21 @@ class History {
         if (it != null) f(it);
       }
     }
+  }
+
+  /// Saca el elemento [id] de todo el historial, como si nunca hubiera existido (cancelar una grabación: el audio no
+  /// tiene archivo, y deshacer no lo tiene que resucitar). Las acciones que quedan vacías se descartan.
+  void forgetItem(String id) {
+    List<EditAction> clean(List<EditAction> l) => [
+          for (final a in l) ?a.withoutItem(id),
+        ];
+    final u = clean(_undo), r = clean(_redo);
+    _undo
+      ..clear()
+      ..addAll(u);
+    _redo
+      ..clear()
+      ..addAll(r);
   }
 
   /// La acción que haría [undo] / [redo], sin hacerla.

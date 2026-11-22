@@ -88,7 +88,7 @@ void main() {
     expect(it.dur, 0);
     expect(it.file, endsWith('.m4a'));
     expect(find.byKey(const ValueKey('recordingChip')), findsOneWidget);
-    expect(find.textContaining('Grabando'), findsOneWidget);
+    expect(find.byKey(const ValueKey('recordingTime')), findsOneWidget);
     expect(find.byKey(const ValueKey('recordingDot')), findsOneWidget);
     expect(find.byKey(const ValueKey('recordingStop')), findsOneWidget);
     expect(s.recorder.recording, isTrue);
@@ -135,7 +135,7 @@ void main() {
     await settle(t, 2500);
     expect(s.recorder.recording, isFalse);
     expect(find.byKey(const ValueKey('recordingChip')), findsNothing);
-    expect(find.textContaining('Audio ·'), findsOneWidget, reason: 'vuelve a ser un audio común');
+    expect(find.textContaining('Audio 1 ·'), findsOneWidget, reason: 'vuelve a ser un audio común');
     expect(media(), [it.file], reason: 'el .tmp pasó a .m4a');
     expect(it.dur, greaterThan(400));
     expect(it.x, x0 + 50);
@@ -219,5 +219,66 @@ void main() {
     expect(s.recorder.recording, isFalse);
     expect(media(), [it.file]);
     expect(it.dur, greaterThan(100));
+  });
+
+  testWidgets('indicador flotante: nombre "Audio N", parar desde el indicador guarda y lo oculta', (t) async {
+    VoiceRecorder.sourceFactory = FakeAudioSource.new;
+    final s = await open(t);
+    expect(find.byKey(const ValueKey('recIndicator')), findsNothing);
+    await startVoice(t, s);
+    final it = audio(t)!;
+    expect(it.text, 'Audio 1');
+    expect(find.byKey(const ValueKey('recIndicator')), findsOneWidget);
+    expect(find.textContaining('Grabando · Audio 1'), findsWidgets, reason: 'en la etiqueta y en el indicador');
+    await settle(t, 500);
+    await t.tap(find.byKey(const ValueKey('recIndicatorStop')));
+    await settle(t, 2500);
+    expect(s.recorder.recording, isFalse);
+    expect(find.byKey(const ValueKey('recIndicator')), findsNothing);
+    expect(media(), [it.file]);
+    expect(it.dur, greaterThan(400));
+    // el siguiente se llama Audio 2
+    await startVoice(t, s);
+    expect(editor(t).doc.items.values.map((i) => i.text).toSet(), {'Audio 1', 'Audio 2'});
+  });
+
+  testWidgets('cancelar desde el indicador: sin archivo, sin elemento y deshacer no lo resucita', (t) async {
+    VoiceRecorder.sourceFactory = FakeAudioSource.new;
+    final s = await open(t);
+    await startVoice(t, s);
+    final it = audio(t)!;
+    editor(t).sel.replace(items: [it.id]);
+    expect(editor(t).history.canUndo, isTrue);
+    await t.tap(find.byKey(const ValueKey('recIndicatorCancel')));
+    await settle(t, 1500);
+    expect(s.recorder.recording, isFalse);
+    expect(audio(t), isNull);
+    expect(media(), isEmpty);
+    expect(find.byKey(const ValueKey('recIndicator')), findsNothing);
+    expect(editor(t).history.canUndo, isFalse, reason: 'la inserción salió del historial');
+    expect(editor(t).history.canRedo, isFalse);
+  });
+
+  testWidgets('renombrar un audio es deshacible', (t) async {
+    VoiceRecorder.sourceFactory = FakeAudioSource.new;
+    final s = await open(t);
+    await startVoice(t, s);
+    await t.tap(find.byKey(const ValueKey('recIndicatorStop')));
+    await settle(t, 2500);
+    final it = audio(t)!;
+    editor(t).sel.replace(items: [it.id]);
+    editor(t).refresh();
+    await t.pump(const Duration(milliseconds: 200));
+    await t.tap(find.text('Renombrar'));
+    await t.pump(const Duration(milliseconds: 300));
+    await t.enterText(find.byKey(const ValueKey('renameField')), 'Clase de hoy');
+    await t.tap(find.byKey(const ValueKey('renameOk')));
+    await t.pump(const Duration(milliseconds: 300));
+    expect(audio(t)!.text, 'Clase de hoy');
+    expect(find.textContaining('Clase de hoy ·'), findsOneWidget);
+    await t.tap(find.byTooltip('Deshacer'));
+    await t.pump(const Duration(milliseconds: 300));
+    expect(audio(t)!.text, 'Audio 1');
+    await settle(t, 1000); // deja correr el guardado diferido
   });
 }

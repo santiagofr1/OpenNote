@@ -11,6 +11,9 @@ class SelectionMenu extends StatelessWidget {
   /// "Enderezar": solo aparece si hay un texto con escala o giro.
   final VoidCallback? onStraighten;
 
+  /// "Renombrar": solo aparece con un único audio elegido.
+  final VoidCallback? onRename;
+
   const SelectionMenu({
     super.key,
     required this.onCopy,
@@ -20,6 +23,7 @@ class SelectionMenu extends StatelessWidget {
     required this.onClose,
     required this.onOrder,
     this.onStraighten,
+    this.onRename,
   });
 
   @override
@@ -77,6 +81,7 @@ class SelectionMenu extends StatelessWidget {
             b(Symbols.content_cut, 'Cortar', onCut),
             b(Symbols.control_point_duplicate, 'Duplicar', onDuplicate),
             order(),
+            if (onRename != null) b(Symbols.edit, 'Renombrar', onRename!),
             if (onStraighten != null) b(Symbols.format_align_left, 'Enderezar', onStraighten!),
             b(Symbols.delete, 'Eliminar', onDelete),
             IconButton(
