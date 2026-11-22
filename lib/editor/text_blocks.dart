@@ -244,7 +244,7 @@ class TextBlockView extends StatelessWidget {
     }
     return Row(key: ValueKey(f.ctl), crossAxisAlignment: CrossAxisAlignment.start, children: [
       SizedBox(width: pl.indent),
-      SizedBox(width: pl.markerWidth, height: h, child: marker),
+      SizedBox(width: pl.markerWidth, height: pl.marker != null ? h * pl.lines : h, child: marker),
       Expanded(
         child: Focus(
           canRequestFocus: false,
