@@ -1561,26 +1561,9 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   Future<void> _renameSel() async {
     final it = sel.itemsOf(doc).singleOrNull;
     if (it == null || it.type != 'audio') return;
-    final c = TextEditingController(text: it.text);
-    final name = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Renombrar audio'),
-        content: TextField(
-          key: const ValueKey('renameField'),
-          controller: c,
-          autofocus: true,
-          decoration: const InputDecoration(hintText: 'Audio'),
-          onSubmitted: (v) => Navigator.pop(ctx, v),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-          FilledButton(
-              key: const ValueKey('renameOk'), onPressed: () => Navigator.pop(ctx, c.text), child: const Text('Guardar')),
-        ],
-      ),
-    );
-    c.dispose();
+    // askText: el diálogo de siempre (no libera el controlador mientras se anima al cerrarse)
+    final name = await askText(context, 'Renombrar audio', initial: it.text, hint: 'Audio', ok: 'Guardar');
+    if (!mounted) return;
     if (name != null) renameItem(it.id, name);
   }
 

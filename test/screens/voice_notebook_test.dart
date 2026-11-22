@@ -271,8 +271,8 @@ void main() {
     await t.pump(const Duration(milliseconds: 200));
     await t.tap(find.text('Renombrar'));
     await t.pump(const Duration(milliseconds: 300));
-    await t.enterText(find.byKey(const ValueKey('renameField')), 'Clase de hoy');
-    await t.tap(find.byKey(const ValueKey('renameOk')));
+    await t.enterText(find.byKey(const Key('askText')), 'Clase de hoy');
+    await t.tap(find.byKey(const Key('askOk')));
     await t.pump(const Duration(milliseconds: 300));
     expect(audio(t)!.text, 'Clase de hoy');
     expect(find.textContaining('Clase de hoy ·'), findsOneWidget);

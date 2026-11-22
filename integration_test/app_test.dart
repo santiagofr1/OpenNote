@@ -1268,8 +1268,8 @@ void main() {
     await settle(t);
     await t.tap(find.text('Renombrar'));
     await settle(t);
-    await t.enterText(find.byKey(const ValueKey('renameField')), 'Clase 3');
-    await t.tap(find.byKey(const ValueKey('renameOk')));
+    await t.enterText(find.byKey(const Key('askText')), 'Clase 3');
+    await t.tap(find.byKey(const Key('askOk')));
     await settle(t);
     expect(first.text, 'Clase 3');
     expect(find.textContaining('Clase 3 ·'), findsOneWidget);
