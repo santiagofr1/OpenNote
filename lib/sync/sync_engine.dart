@@ -144,6 +144,7 @@ class SyncEngine {
           rethrow;
         } catch (e) {
           _rep.errors.add('$p: $e');
+          if (e is RemoteConflictException) _st.token = null; // lo que sabemos de la nube está desfasado: listado completo
         }
         await _st.save(store);
       }
@@ -470,6 +471,10 @@ class SyncEngine {
         rethrow;
       } catch (e) {
         _rep.errors.add('$p: $e');
+        if (e is RemoteConflictException) {
+          _st.token = null; // lo que sabemos de la nube está desfasado: la próxima pasada lista todo
+          await _st.save(store);
+        }
       }
     }
     for (final nb in touched) {
