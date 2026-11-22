@@ -269,6 +269,64 @@ void main() {
     expect((await savedNotebook('Panel')).sheets[1].bookmark, isTrue);
   });
 
+  testWidgets('secciones: crear una, escribir en ella, volver a la otra (no se ve), cerrar y reabrir el cuaderno', (t) async {
+    await start(t);
+    await createNotebook(t, 'Secciones');
+    await t.tap(find.byKey(const Key('pagesBtn')));
+    await settle(t, 600);
+
+    // el botón siempre está y muestra la sección activa
+    expect((t.widget(find.byKey(const Key('sectionName'))) as Text).data, 'General');
+    final c = sheetCenter(t);
+    await stylusLine(t, c, c + const Offset(200, 40));
+    expect(editor(t).doc.strokes.length, 1);
+
+    // nueva sección "Práctica": se abre con una hoja en blanco (no se ve lo de General)
+    await t.tap(find.byKey(const Key('sectionsButton')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('newSection')));
+    await settle(t);
+    await t.enterText(find.byKey(const Key('askText')), 'Práctica');
+    await t.tap(find.byKey(const Key('askOk')));
+    await settle(t, 2000);
+    expect((t.widget(find.byKey(const Key('sectionName'))) as Text).data, 'Práctica');
+    expect(editor(t).doc.sheetCount, 1);
+    expect(editor(t).doc.strokes, isEmpty);
+
+    // se escribe en ella
+    await stylusLine(t, sheetCenter(t), sheetCenter(t) + const Offset(0, 120));
+    expect(editor(t).doc.strokes.length, 1);
+    final practicaStroke = editor(t).doc.strokes.keys.single;
+
+    // volver a General: está su trazo y no el de Práctica
+    await t.tap(find.byKey(const Key('sectionsButton')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('section-$kGeneralSection')));
+    await settle(t, 2000);
+    expect((t.widget(find.byKey(const Key('sectionName'))) as Text).data, 'General');
+    expect(editor(t).doc.strokes.length, 1);
+    expect(editor(t).doc.strokes.containsKey(practicaStroke), isFalse);
+
+    // cerrar y reabrir el cuaderno: todo persiste
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+    final nb = await savedNotebook('Secciones');
+    expect(nb.sections.map((s) => s.name), ['General', 'Práctica']);
+    expect(nb.totalSheets, 2);
+    await t.tap(find.byKey(const Key('nb-Secciones')));
+    await settle(t, 1500);
+    await t.tap(find.byKey(const Key('pagesBtn')));
+    await settle(t, 600);
+    expect((t.widget(find.byKey(const Key('sectionName'))) as Text).data, 'General');
+    expect(editor(t).doc.strokes.length, 1);
+    await t.tap(find.byKey(const Key('sectionsButton')));
+    await settle(t);
+    await t.tap(find.byKey(Key('section-${nb.sections.last.id}')));
+    await settle(t, 2000);
+    expect((t.widget(find.byKey(const Key('sectionName'))) as Text).data, 'Práctica');
+    expect(editor(t).doc.strokes.keys.single, practicaStroke, reason: 'lo escrito en Práctica sigue ahí');
+  });
+
   testWidgets('el contador del título sigue al scroll', (t) async {
     await start(t);
     await createNotebook(t, 'Scroll');

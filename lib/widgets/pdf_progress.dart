@@ -8,9 +8,11 @@ import '../data/storage.dart';
 import '../domain/domain.dart';
 
 /// Exporta con un diálogo de progreso; después el sistema pregunta carpeta y nombre.
-Future<void> exportPdfFlow(BuildContext context, Storage store, NotebookDoc doc, {List<int>? only, String? name}) async {
+/// [sections]: ids de las secciones a incluir (todas si es null).
+Future<void> exportPdfFlow(BuildContext context, Storage store, NotebookDoc doc,
+    {List<int>? only, String? name, Set<String>? sections}) async {
   final nb = doc.nb;
-  final bytes = await buildPdfWithProgress(context, store, doc, only: only);
+  final bytes = await buildPdfWithProgress(context, store, doc, only: only, sections: sections);
   if (bytes == null || !context.mounted) return;
   final messenger = ScaffoldMessenger.of(context);
   final ok = await savePdf(bytes, name ?? nb.name);
@@ -18,7 +20,8 @@ Future<void> exportPdfFlow(BuildContext context, Storage store, NotebookDoc doc,
 }
 
 /// Genera el PDF mostrando "Hoja n de total". Null si falló (ya se avisó).
-Future<Uint8List?> buildPdfWithProgress(BuildContext context, Storage store, NotebookDoc doc, {List<int>? only}) async {
+Future<Uint8List?> buildPdfWithProgress(BuildContext context, Storage store, NotebookDoc doc,
+    {List<int>? only, Set<String>? sections}) async {
   final progress = ValueNotifier<(int, int)>((0, 1));
   final nav = Navigator.of(context);
   final messenger = ScaffoldMessenger.of(context);
@@ -38,7 +41,7 @@ Future<Uint8List?> buildPdfWithProgress(BuildContext context, Storage store, Not
     ),
   ));
   try {
-    final bytes = await buildNotebookPdf(store, doc, only: only, onProgress: (a, b) => progress.value = (a, b));
+    final bytes = await buildNotebookPdf(store, doc, only: only, sections: sections, onProgress: (a, b) => progress.value = (a, b));
     nav.pop();
     return bytes;
   } catch (e) {
@@ -48,9 +51,9 @@ Future<Uint8List?> buildPdfWithProgress(BuildContext context, Storage store, Not
   }
 }
 
-/// Exporta todas las hojas como PNG (un .zip, o un .png si hay una sola) con progreso cancelable; después el sistema
-/// pregunta dónde guardar.
-Future<void> exportPngFlow(BuildContext context, Storage store, NotebookDoc doc) async {
+/// Exporta las hojas como PNG (un .zip, o un .png si hay una sola) con progreso cancelable; después el sistema
+/// pregunta dónde guardar. [sections]: ids de las secciones a incluir (todas si es null).
+Future<void> exportPngFlow(BuildContext context, Storage store, NotebookDoc doc, {Set<String>? sections}) async {
   final progress = ValueNotifier<(int, int)>((0, 1));
   final nav = Navigator.of(context);
   final messenger = ScaffoldMessenger.of(context);
@@ -73,7 +76,7 @@ Future<void> exportPngFlow(BuildContext context, Storage store, NotebookDoc doc)
   ));
   ({Uint8List bytes, bool zip})? r;
   try {
-    r = await buildNotebookPngs(store, doc, onProgress: (a, b) => progress.value = (a, b), cancelled: () => cancel);
+    r = await buildNotebookPngs(store, doc, sections: sections, onProgress: (a, b) => progress.value = (a, b), cancelled: () => cancel);
   } catch (e) {
     nav.pop();
     messenger.showSnackBar(SnackBar(content: Text('No se pudieron generar las imágenes: $e')));

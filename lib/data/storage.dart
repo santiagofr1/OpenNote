@@ -159,18 +159,20 @@ class Storage {
     return changed ? w.then((_) => onSaved?.call(null)) : w;
   }
 
-  /// Completa [nb].sheets con lo que dice su notebook.json (vacío si falta o está roto).
+  /// Completa [nb] (secciones y hojas) con lo que dice su notebook.json (vacío si falta o está roto). [nb].sheets queda con
+  /// las hojas de la sección activa y [nb].otherSheets con las demás.
   Future<void> _readSheetList(Notebook nb) async {
-    nb.sheets.clear();
+    nb.clearSheets();
     try {
-      final j = jsonDecode(await _nbFile(nb.id).readAsString()) as Map;
-      nb.sheets.addAll([for (final s in (j['sheets'] as List)) SheetMeta.fromJson(s as Map)]);
-    } catch (_) {}
+      nb.loadSheetsJson(jsonDecode(await _nbFile(nb.id).readAsString()) as Map);
+    } catch (_) {
+      nb.clearSheets();
+    }
   }
 
   // ================= cuadernos =================
-  /// Lee todas las hojas del cuaderno (decodificadas en otro isolate): todo queda cargado.
-  /// Para duplicar, exportar y los tests; la app abre con [openNotebook].
+  /// Lee todas las hojas de la sección activa del cuaderno (decodificadas en otro isolate): todas quedan cargadas.
+  /// Las de las otras secciones no se leen. Para los tests; la app abre con [openNotebook].
   /// Una hoja que falta o está rota queda vacía; la rota se aparta como `.roto` para no pisarla.
   Future<NotebookDoc> loadNotebook(Notebook nb) async {
     if (nb.sheets.isEmpty) await _readSheetList(nb);
@@ -181,9 +183,12 @@ class Storage {
   /// (con [radius] negativo no carga ninguna). Las demás quedan sin cargar: se piden con [loadSheets]. La hoja [around] llega
   /// con las mallas de sus trazos armadas; las de las vecinas se arman enseguida en segundo plano ([meshesIdle]), salvo
   /// con [meshAll] (todas antes de devolver).
+  ///
+  /// Abre la sección activa de [nb]; las hojas de las otras secciones solo figuran en `onDisk` (para que ni el guardado
+  /// ni la limpieza las tomen por sobrantes): sus archivos no se tocan.
   Future<NotebookDoc> openNotebook(Notebook nb, {int around = 0, int radius = 2, bool meshAll = false}) async {
     if (nb.sheets.isEmpty) await _readSheetList(nb);
-    final onDisk = {for (final s in nb.sheets) s.id};
+    final onDisk = {for (final s in nb.allSheets) s.id};
     final doc = NotebookDoc.lazy(nb);
     // los hashes de las hojas sin cargar son desconocidos: no se tocan hasta leerlas
     _disk[nb.id] = _DiskState({}, jsonEncode(nb.sheetsJson()), onDisk);
@@ -195,6 +200,25 @@ class Storage {
     }
     await _sweep(nb);
     return doc;
+  }
+
+  /// Pasa el cuaderno a la sección [id]: espera el guardado en curso, la activa y reabre (con la última hoja vista de
+  /// esa sección). Quien llama tiene que haber guardado lo pendiente y soltado el documento viejo (que ya no vale).
+  /// Escribe enseguida `notebook.json` (la sección activa se recuerda) y las hojas nuevas que hagan falta (una sección
+  /// recién creada). Si falla, vuelve a la sección anterior y relanza el error.
+  Future<NotebookDoc> openSection(Notebook nb, String id) async {
+    await _idle(nb.id);
+    final prev = nb.active;
+    try {
+      nb.activate(id);
+      final doc = await openNotebook(nb, around: nb.last);
+      _disk[nb.id]!.meta = ''; // lo que se recuerda de disco ya no es el notebook.json: se vuelve a escribir
+      await saveNotebook(doc);
+      return doc;
+    } catch (_) {
+      nb.activate(prev);
+      rethrow;
+    }
   }
 
   /// Carga de disco las hojas [ids] que no estén cargadas (leyendo y decodificando en otro isolate) y las pone en [doc].
@@ -230,7 +254,7 @@ class Storage {
     } finally {
       tDec.finish();
     }
-    final state = _disk.putIfAbsent(nb.id, () => _DiskState({}, '', {for (final s in nb.sheets) s.id}));
+    final state = _disk.putIfAbsent(nb.id, () => _DiskState({}, '', {for (final s in nb.allSheets) s.id}));
     final done = <String>[];
     final later = <Stroke>[];
     for (var i = 0; i < want.length; i++) {
@@ -347,7 +371,7 @@ class Storage {
   Future<void> copyNotebookFiles(Notebook src, Notebook copy) async {
     await _idle(src.id);
     if (src.sheets.isEmpty) await _readSheetList(src);
-    for (final m in src.sheets) {
+    for (final m in src.allSheets) {
       final from = sheetFile(src.id, m.id);
       if (!await from.exists()) continue;
       final to = sheetFile(copy.id, m.id);
@@ -490,7 +514,8 @@ class Storage {
       }
       // las hojas borradas, al final: si se corta antes, solo sobran archivos
       // (también las que no estaban cargadas: su archivo se conoce por notebook.json)
-      final alive = {for (final m in sheets) m.id};
+      // OJO: las hojas de TODAS las secciones (las de las otras secciones no están en `sheets` y no se pueden borrar)
+      final alive = {for (final m in nb.allSheets) m.id};
       for (final gone in {...state.onDisk, ...state.hashes.keys}.where((id) => !alive.contains(id)).toList()) {
         final f = sheetFile(nb.id, gone);
         if (await f.exists()) await f.delete();
@@ -511,7 +536,7 @@ class Storage {
     if (nb.sheets.isEmpty) return;
     final d = _sheetsDir(nb.id);
     if (!await d.exists()) return;
-    final ids = {for (final s in nb.sheets) '${s.id}.sheet'};
+    final ids = {for (final s in nb.allSheets) '${s.id}.sheet'}; // de todas las secciones
     await for (final e in d.list()) {
       if (e is! File) continue;
       final name = e.uri.pathSegments.last;
