@@ -1,34 +1,10 @@
 # Pendientes
 
-17. **App de PC + sincronización** (rama `feat/drive-sync`). **DECIDIDO (2026-11-21): sincronización por Google Drive**
-    (permiso `drive.file`, carpeta `OpenNote`; tablet y Linux se conectan una vez con Google). Diseño en
-    docs/SINCRONIZACION.md, "Decisión: Google Drive". **Avance:** motor testeable sin Google (`lib/sync/`, remoto
-    falso, tests en `test/sync/`), remoto de Drive (`googleapis` v3), login (Android `google_sign_in`, Linux
-    `googleapis_auth` con PKCE), pantalla en el menú ⋮ de la biblioteca, workflow de release con los IDs desde secretos.
-    **Hecho también:** proyecto de Google Cloud `opennote-515407` (en producción, permiso no sensible), clientes OAuth y secretos cargados; probado de verdad entre la tablet y Linux (subir, bajar, borrar). **Hecho también:** cliente OAuth Android de la app real (`com.apuntes.apuntes` + SHA-1 del keystore de release) creado en Google Cloud. **Falta:** cargar el secreto `GOOGLE_WEB_CLIENT_SECRET` en GitHub y probar el segundo plano en la tablet (ver docs/SINCRONIZACION.md, "Segundo plano" y Riesgos). **Hecho:** app de Linux empaquetada como `.deb` (`tool/build_deb.sh`, job `linux` del release, repo apt `santiagofr1/apt`); publicado en el repo apt desde v1.0.13 (`sudo apt install opennote`); probado en un Ubuntu 24.04 limpio (con y sin llavero de contraseñas). Lo que sigue es la investigación original:
-    - PC: Flutter desktop compila el mismo código para Linux, Windows y macOS. Investigar qué cambia: entrada
-      (mouse/teclado y tabletas Wacom en PC), atajos de teclado, rutas de datos, empaquetado (AppImage/Flatpak/.deb,
-      instalador .msi/MSIX en Windows).
-    - Sincronizar en la LAN sin que otros en la misma red vean nada: emparejar una sola vez escaneando un QR
-      (como KDE Connect / Syncthing). Cada dispositivo tiene su propia clave; el QR lleva la huella de la clave del otro,
-      y después todo va por TLS mutuo con certificados fijados. Un dispositivo no emparejado no puede ni conectarse.
-      No hace falta Google Authenticator ni cuentas. Descubrimiento con mDNS. Revocar dispositivos desde ajustes.
-    - Fuera de casa: opción por nube (Google Drive / WebDAV / Syncthing) con cifrado de extremo a extremo (la nube
-      solo ve archivos cifrados).
-    - Conflictos: el formato por hojas (una hoja = un archivo con rev/updated) ya ayuda; definir qué pasa si se
-      edita la misma hoja en los dos lados (guardar las dos versiones, o fusionar trazos por id).
-    Entregable: un documento comparando opciones (seguridad, comodidad, esfuerzo) y una recomendación.
-    Investigación hecha: docs/SINCRONIZACION.md (rama `docs/sincronizacion`).
-    **Idea que le interesa al usuario (2026-11-20): Google Drive como en Colab.** Conectar con Google una vez,
-    la app crea una carpeta `OpenNote` en "Mi unidad" (permiso drive.file: solo ve lo que crea ella) y sube ahí
-    solo las hojas que cambiaron (ya hay seguimiento de hojas sucias); la otra punta baja lo cambiado con la API de
-    cambios de Drive. Conflicto en la misma hoja: guardar las dos versiones. La app de PC habla directo con Drive
-    (en Linux no hay cliente oficial). Hace falta un proyecto de Google Cloud para el login; confirmar si drive.file
-    exige verificación de Google. Orden: 1) Drive en la tablet, 2) app Linux, 3) en segundo plano, 4) cifrado opcional.
 15. **LaTeX**: lo hace el usuario; no tocar.
 
 ## Hecho
 
+- **17. App de PC + sincronización por Google Drive** (2026-11-21): terminado. Drive con `drive.file` (carpeta `OpenNote`; los builds debug usan `OpenNote Test`), tablet y Linux (`.deb` en el repo apt), segundo plano en Android y cifrado opcional. Secreto `GOOGLE_WEB_CLIENT_SECRET` cargado en GitHub; segundo plano probado en la tablet (la tarea de WorkManager corre sola cada 15 min, retoma la sesión con el refresh token y sincroniza; deja el resultado en el log como "OpenNote sync de fondo: ..."). Diseño e investigación en docs/SINCRONIZACION.md.
 - **Issue #9, borrar no llegaba a la nube** (rama `fix/sync-borrar`, 2026-11-21): borrar un cuaderno y sincronizar daba para siempre "index.json: El archivo cambió en la nube mientras se subía". Causa: `crypto.wrap` baja `crypto.json` antes del primer `changes(token)`, eso carga el mapa de Drive (`_loaded`) y el store usaba el delta, así que lo cambiado antes de cargar el mapa nunca se informaba y `SyncState.remote['index.json']` quedaba con un md5 viejo. Arreglo: `DriveRemoteStore._listed` (el listado completo se decide por "ya se le entregó uno al motor", no por "mapa cargado") y el motor borra el token si un archivo da `RemoteConflictException`, para que la próxima pasada liste todo. Tests en `test/sync/` y caso de integración "borrar un cuaderno sincronizado lo borra de la nube".
 - **Seleccionar solo el resaltador** (rama `fix/solo-resaltador`, 2026-11-21): los filtros de la barrita de selección ahora son botones con texto, "Solo resaltador" y "Sin resaltador", en una fila aparte; aparecen siempre que la selección tenga resaltador y algo más (tinta, textos, imágenes, notas), no solo trazos; "Sin resaltador" conserva textos y elementos. Mover / borrar una selección de solo resaltador no arrastra lo de abajo. Ver docs/TECNICO.md. Falta probarlo en la tablet.
 - **Mover arrastrando en la biblioteca** (rama `feat/detalles`, 2026-11-21): `LongPressDraggable` con umbral: mantener apretado ~500 ms abre el menú YA, mientras sigue apretando (OverlayEntry anclado a la tarjeta, no ruta modal); si suelta sin mover queda abierto, y si mueve más de 10 px el menú se cierra y arrastra la tarjeta. Soltar sobre una carpeta (se resalta) o sobre las migas de pan, incluida "Inicio", mueve; no deja soltar una carpeta en sí misma ni en una descendiente; scroll automático cerca de los bordes; aviso "Movido a X" con "Deshacer". Ver docs/TECNICO.md.
