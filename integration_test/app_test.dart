@@ -17,6 +17,7 @@ import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/editor/page_editor.dart';
 import 'package:apuntes/editor/selection_menu.dart';
 import 'package:apuntes/rendering/sheet_image_cache.dart';
+import 'package:apuntes/rendering/text_layout.dart';
 import 'package:apuntes/sync/fake_backend.dart';
 import 'package:apuntes/sync/fake_remote_store.dart';
 import 'package:apuntes/sync/sync_engine.dart';
@@ -444,6 +445,53 @@ void main() {
     final saved = (await s.loadNotebook(nb)).texts.values.single;
     expect(saved.text, 'hola mundo');
     expect(saved.body.paras[0].runs.first.style.bold, isTrue);
+  });
+
+  testWidgets('texto: tamaño en puntos desde la barra, A+ / A- y queda guardado', (t) async {
+    await start(t);
+    await createNotebook(t, 'Tamaño');
+    await t.tap(find.byTooltip('Texto con teclado'));
+    await settle(t, 600);
+    final ed = editor(t);
+    final b = ed.doc.texts.values.single;
+    final be = ed.texts.editor(b.id)!;
+    final line = ed.doc.lineAt(b.y);
+    await t.enterText(find.byKey(Key('para-${b.id}-0')), 'hola mundo');
+    await settle(t, 300);
+    expect(textRect(b, line).height, closeTo(line, 1), reason: 'letra automática: un renglón');
+
+    // seleccionar "hola", elegir 24 pt en la lista
+    be.fields[0].ctl.selection = const TextSelection(baseOffset: 1, extentOffset: 5);
+    await t.pump();
+    await t.tap(find.byKey(const Key('fmt-size')));
+    await t.pump();
+    await t.tap(find.byKey(const Key('fmt-size-24')));
+    await settle(t, 300);
+    expect(b.body.paras[0].runs.first.text, 'hola');
+    expect(b.body.paras[0].runs.first.style.size, 24);
+    expect(b.body.paras[0].runs.last.style.size, isNull);
+    expect(textRect(b, line).height, closeTo(2 * line, 1), reason: 'con 24 pt el bloque ocupa 2 renglones');
+
+    // A+ sube al siguiente de la lista y A- baja
+    be.fields[0].ctl.selection = const TextSelection(baseOffset: 1, extentOffset: 5);
+    await t.pump();
+    await t.tap(find.byKey(const Key('fmt-size-up')));
+    await settle(t, 300);
+    expect(b.body.paras[0].runs.first.style.size, 28);
+    await t.tap(find.byKey(const Key('fmt-size-down')));
+    await settle(t, 300);
+    expect(b.body.paras[0].runs.first.style.size, 24);
+    expect(textRect(b, line).height, closeTo(2 * line, 1));
+
+    // volver y entrar: el tamaño quedó guardado
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1500);
+    final nb = await savedNotebook('Tamaño');
+    final s = Storage(root: root);
+    await s.init();
+    final saved = (await s.loadNotebook(nb)).texts.values.single;
+    expect(saved.body.paras[0].runs.first.style.size, 24);
+    expect(saved.body.paras[0].runs.last.style.size, isNull);
   });
 
   testWidgets('texto: selección que cruza párrafos (arrastrar), negrita y borrar', (t) async {
