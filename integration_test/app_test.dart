@@ -1001,10 +1001,16 @@ void main() {
     await createNotebook(t, 'Manijas');
     final p = docToScreen(t);
     final ed = editor(t);
+    // En la tablet real la parte visible de la hoja es mucho más baja que 800 unidades (escala ~1,6 en horizontal): todo
+    // se acomoda dentro de lo que se ve (comprimiendo solo la altura) para no dibujar ni arrastrar fuera de la pantalla.
+    final view = t.getRect(find.byType(PageEditor)), origin = p(Offset.zero);
+    final visH = view.height / ed.scale;
+    final top = (view.top - origin.dy) / ed.scale + visH * .22, ky = (visH * .5 / 600).clamp(0.2, 1.0);
+    Offset q(double x, double y) => p(Offset(x, top + (y - 100) * ky));
     // dos trazos que se estiran juntos y uno lejos que no entra al recuadro
-    await stylusLine(t, p(const Offset(200, 200)), p(const Offset(400, 200)));
-    await stylusLine(t, p(const Offset(200, 260)), p(const Offset(400, 320)));
-    await stylusLine(t, p(const Offset(600, 700)), p(const Offset(800, 700)));
+    await stylusLine(t, q(200, 200), q(400, 200));
+    await stylusLine(t, q(200, 260), q(400, 320));
+    await stylusLine(t, q(600, 700), q(800, 700));
     expect(ed.doc.strokes.length, 3);
     final ids = ed.doc.strokes.keys.toList();
     final far = ids.last;
@@ -1014,7 +1020,7 @@ void main() {
 
     await t.tap(find.byTooltip('Seleccionar'));
     await settle(t);
-    await stylusDrag(t, p(const Offset(150, 150)), p(const Offset(450, 360))); // ventana sobre los dos primeros
+    await stylusDrag(t, q(150, 150), q(450, 360)); // ventana sobre los dos primeros
     expect(ed.sel.strokes, {ids[0], ids[1]});
     for (final n in ['tl', 'tr', 'br', 'bl', 'rotate']) {
       expect(find.byKey(Key('selHandle-$n')), findsOneWidget, reason: 'manija $n');
@@ -1056,10 +1062,10 @@ void main() {
     // tocar afuera, sobre el trazo lejano: solo cancela (no elige nada); otro toque sí elige
     await t.tap(find.byTooltip('Rehacer'));
     await settle(t);
-    await stylusDrag(t, p(const Offset(100, 100)), p(const Offset(600, 450))); // vuelve a seleccionar los dos
+    await stylusDrag(t, q(100, 100), q(600, 450)); // vuelve a seleccionar los dos
     expect(ed.sel.strokes.length, 2);
     Future<void> tapAt(Offset d) async {
-      final g = await t.startGesture(p(d), kind: PointerDeviceKind.stylus);
+      final g = await t.startGesture(q(d.dx, d.dy), kind: PointerDeviceKind.stylus);
       await g.up();
       await settle(t);
     }
