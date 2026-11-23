@@ -105,6 +105,40 @@ void main() {
     });
   });
 
+  group('tamaño de hoja', () {
+    test('con a4 todo da lo mismo que sin pasar el tamaño', () {
+      for (final s in [7.0, 8.0, 10.0]) {
+        expect(ruleYs(s, size: 'a4'), ruleYs(s));
+      }
+      for (final s in [5.0, 7.0]) {
+        expect(gridYs(s, size: 'a4'), gridYs(s));
+        expect(gridXs(s, size: 'a4'), gridXs(s));
+      }
+      for (final bg in ['lined', 'grid', 'dots', 'blank']) {
+        expect(textLine(bg, 7, size: 'a4'), textLine(bg, 7));
+        for (final y in [0.0, 100.0, 777.0]) {
+          expect(snapTextY(y, bg, 7, size: 'a4'), snapTextY(y, bg, 7));
+        }
+      }
+      expect(unitsPerMm('a4'), kMm);
+    });
+
+    test('A3 tiene más renglones y más juntos; A5 menos y más separados', () {
+      final a4 = ruleYs(8), a3 = ruleYs(8, size: 'a3'), a5 = ruleYs(8, size: 'a5');
+      expect(a3.length, greaterThan(a4.length));
+      expect(a5.length, lessThan(a4.length));
+      expect(a3[1] - a3[0], closeTo(8 * kW / 297, 1e-9));
+      expect(a5[1] - a5[0], closeTo(8 * kW / 148, 1e-9));
+      expect(textLine('lined', 8, size: 'a3'), closeTo(8 * kW / 297, 1e-9));
+      expect(marginUnits('a3'), closeTo(25 * kW / 297, 1e-9));
+      expect(topMarginUnits('a5'), closeTo(25 * kW / 148, 1e-9));
+    });
+
+    test('tamaños válidos', () {
+      expect([validPaperSize('a3'), validPaperSize('a5'), validPaperSize('b5'), validPaperSize(null)], ['a3', 'a5', 'a4', 'a4']);
+    });
+  });
+
   group('guardado', () {
     test('el espaciado va en el JSON y los archivos viejos cargan con el por defecto', () {
       final m = SheetMeta('h', bg: 'lined', spacing: 10);
@@ -115,6 +149,23 @@ void main() {
       final nb = Notebook('n', 'x', spacing: 7)..bg = 'lined';
       expect(nb.newSheet().spacing, 7);
       expect(Notebook.fromJson(jsonDecode(jsonEncode(nb.toJson())) as Map).spacing, 7);
+    });
+
+    test('el tamaño de la hoja y del cuaderno: A4 no se escribe, A3 ida y vuelta, inválido cae en A4', () {
+      expect(SheetMeta('h').toJson().containsKey('size'), isFalse);
+      expect(Notebook('n', 'x').toJson().containsKey('size'), isFalse);
+      final m = SheetMeta('h', size: 'a3');
+      expect(SheetMeta.fromJson(jsonDecode(jsonEncode(m.toJson())) as Map).size, 'a3');
+      expect(m.copy().size, 'a3');
+      expect(SheetMeta.fromJson({'id': 'h', 'size': 'b5'}).size, 'a4');
+      expect(SheetMeta.fromJson({'id': 'h'}).size, 'a4');
+      final nb = Notebook('n', 'x', size: 'a5');
+      expect(Notebook.fromJson(jsonDecode(jsonEncode(nb.toJson())) as Map).size, 'a5');
+      expect(Notebook.fromJson({'id': 'n', 'name': 'x', 'size': 'b5'}).size, 'a4');
+      expect(nb.newSheet().size, 'a5');
+      final d = NotebookDoc(Notebook('n', 'x', sheets: [SheetMeta('h', size: 'a3')]));
+      expect(d.lineAt(5), closeTo(8 * kW / 297, 1e-9));
+      expect(d.sizeAt(5), 'a3');
     });
 
     test('setBg corrige el espaciado que no existe en el fondo nuevo', () {

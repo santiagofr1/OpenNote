@@ -321,3 +321,12 @@ class Selection {
     }
   }
 }
+
+/// Grados enteros de un giro en radianes, de -179 a 180 (el signo: positivo = horario, como se ve en pantalla).
+int angleDegrees(double rad) {
+  var d = (rad * 180 / pi).round() % 360;
+  if (d > 180) d -= 360;
+  return d;
+}
+
+String angleLabel(double rad) => '${angleDegrees(rad)}°';

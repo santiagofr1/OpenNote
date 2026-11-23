@@ -193,6 +193,26 @@ void main() {
     await settle(t, 1200);
   });
 
+  testWidgets('barra: 4 colores favoritos fijos; tocar elige sin reordenar y mantener apretado guarda el color actual (issue #23)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Favoritos');
+    final ts = editor(t).ts;
+    final antes = List<String>.from(ts.favorites);
+    await t.tap(find.byKey(const ValueKey('fav-2')));
+    await settle(t);
+    expect(ts.pen.color, antes[2]);
+    expect(ts.favorites, antes, reason: 'elegir un favorito no los reordena');
+    await t.longPress(find.byKey(const ValueKey('fav-0')));
+    await settle(t);
+    expect(ts.favorites, [antes[2], antes[1], antes[2], antes[3]]);
+    // dejar los favoritos como estaban
+    ts.setFavorite(0, antes[0]);
+    editor(t).widget.onPrefsChanged();
+    expect(ts.favorites, antes);
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+  });
+
   testWidgets('decorador: su botón abre el panel, elige forma, tipo de trazo y fondo (y lo apaga una vez), y cada franja deja su trazo con su malla (issue #6)', (t) async {
     await start(t);
     await createNotebook(t, 'Franjas');
@@ -725,6 +745,7 @@ void main() {
     // solo la hoja que se ve (la 2, que acaba de agregarse)
     await openMore(t, 'Estilo de hoja');
     await t.tap(find.byKey(const Key('applySheet')));
+    await t.tap(find.byKey(const Key('size-a3')));
     await t.tap(find.text('Cuadriculado'));
     await settle(t, 300);
     await t.tap(find.byKey(const Key('spacing-7')));
@@ -739,12 +760,15 @@ void main() {
     expect([nb.sheets[0].bg, nb.sheets[0].spacing], ['lined', 8.0], reason: 'la otra hoja no cambia');
     expect([nb.sheets[1].bg, nb.sheets[1].paper, nb.sheets[1].spacing], ['grid', '#fbf3e0', 7.0]);
     expect([nb.bg, nb.spacing], ['lined', 8.0], reason: 'las hojas nuevas siguen igual');
+    expect([nb.sheets[0].size, nb.sheets[1].size, nb.size], ['a4', 'a3', 'a4'], reason: 'el tamaño es por hoja');
+    expect(textLine('grid', 7, size: 'a3'), lessThan(textLine('grid', 7)), reason: 'en A3 el renglón es más chico en unidades');
 
     // todo el cuaderno (es lo que viene marcado), y también las hojas nuevas
     await t.tap(find.byKey(const Key('nb-Estilo')));
     await settle(t, 1200);
     await openMore(t, 'Estilo de hoja');
     await t.tap(find.byKey(const Key('applyAll')));
+    await t.tap(find.byKey(const Key('size-a4'))); // se vuelve a A4 para todo el cuaderno
     await t.tap(find.text('Rayado'));
     await settle(t, 300);
     await t.tap(find.byKey(const Key('spacing-10')));
@@ -759,7 +783,7 @@ void main() {
     expect(nb.sheets.length, 2);
     expect([nb.bg, nb.paper, nb.spacing], ['lined', '#eaf3fb', 10.0], reason: 'también el estilo de las hojas nuevas');
     for (final sheet in nb.sheets) {
-      expect([sheet.bg, sheet.paper, sheet.spacing], ['lined', '#eaf3fb', 10.0]);
+      expect([sheet.bg, sheet.paper, sheet.spacing, sheet.size], ['lined', '#eaf3fb', 10.0, 'a4']);
     }
   });
 
@@ -1503,7 +1527,11 @@ void main() {
     final c = (t.getCenter(find.byKey(const Key('selHandle-tl'))) + t.getCenter(find.byKey(const Key('selHandle-br')))) / 2;
     final r = (rot - c).distance;
     final lenBefore = ed.doc.strokes[ids.first]!.bounds;
-    await stylusDrag(t, rot, c + Offset(r, 0));
+    await stylusDrag(t, rot, c + Offset(r, 0), during: () {
+      expect(find.byKey(const Key('rotateAngleText')), findsOneWidget, reason: 'mientras se rota se ven los grados');
+      expect((t.widget(find.byKey(const Key('rotateAngleText'))) as Text).data, endsWith('°'));
+    });
+    expect(find.byKey(const Key('rotateAngleText')), findsNothing, reason: 'al soltar desaparece la etiqueta');
     final after = ed.doc.strokes[ids.first]!.bounds;
     expect(after.height, greaterThan(lenBefore.height), reason: 'giró: lo que era ancho ahora es más alto');
     expect(ed.doc.strokes[ids.first]!.w, closeTo(w0 * k, 1e-6), reason: 'rotar no cambia el grosor');

@@ -37,6 +37,7 @@ void main() {
                 onToolTap: (_) {},
                 onToolLongPress: (_) {},
                 onPickColor: (_) {},
+                onSetFavorite: (_) {},
                 onBg: (_) {},
                 onOpenPanel: () {},
                 onUndo: () {},

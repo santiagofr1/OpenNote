@@ -17,6 +17,7 @@ class EditorToolbar extends StatelessWidget {
   final String bg; // fondo de la hoja que se está viendo
   final ValueChanged<Tool> onToolTap, onToolLongPress;
   final ValueChanged<String> onPickColor, onBg;
+  final ValueChanged<int> onSetFavorite;
   final VoidCallback onOpenPanel, onUndo, onRedo, onToggleZoomLock, onPaste;
 
   const EditorToolbar({
@@ -30,6 +31,7 @@ class EditorToolbar extends StatelessWidget {
     required this.onToolTap,
     required this.onToolLongPress,
     required this.onPickColor,
+    required this.onSetFavorite,
     required this.onBg,
     required this.onOpenPanel,
     required this.onUndo,
@@ -47,8 +49,8 @@ class EditorToolbar extends StatelessWidget {
     final hasClip = !ts.clipboard.isEmpty;
     return LayoutBuilder(builder: (context, box) {
       final room = vertical ? box.maxHeight : box.maxWidth;
-      // Arriba se muestran tantos colores rápidos como entren (hasta 6); al costado, 4 o 6 según el alto.
-      final nColors = vertical ? (room < 700 ? 4 : 6) : ((room - _fixedWidth) / _slot.width).floor().clamp(0, 6);
+      // Los 4 favoritos fijos: arriba se muestran tantos como entren; al costado, siempre los 4.
+      final nColors = vertical ? 4 : ((room - _fixedWidth) / _slot.width).floor().clamp(0, 4);
       // Muy angosto: 'Pegar' sin portapapeles (invisible) no ocupa lugar.
       final narrow = !vertical && room < _fixedWidth + 2 * _slot.width;
       final side = BorderSide(color: cs.outlineVariant.withValues(alpha: .6));
@@ -66,8 +68,8 @@ class EditorToolbar extends StatelessWidget {
           opacity: drawing ? 1 : .38,
           duration: const Duration(milliseconds: 160),
           child: Flex(direction: axis, mainAxisSize: MainAxisSize.min, children: [
-            for (final c in _quickColors(nColors)) _swatch(cs, c, drawing && cur.color == c),
-            _moreColors(),
+            for (final (i, c) in ts.favorites.take(nColors).indexed) _swatch(cs, c, drawing && cur.color == c, slot: i),
+            _moreColors(cs, drawing && !ts.favorites.contains(cur.color), cur.color),
             _widthBtn(cs, cur),
           ]),
         ),
@@ -113,18 +115,8 @@ class EditorToolbar extends StatelessWidget {
     });
   }
 
-  /// Ancho (dp) de la barra horizontal sin los colores rápidos. Medido: 656 de contenido + 12 de padding + margen.
+  /// Ancho (dp) de la barra horizontal sin los colores favoritos. Medido: 656 de contenido + 12 de padding + margen.
   static const _fixedWidth = 676.0;
-
-  /// Los recientes primero; si faltan, se completa con la paleta.
-  List<String> _quickColors(int n) {
-    final colors = <String>[...ts.recent];
-    for (final c in switch (ts.tool) { Tool.hl => hlPalette, Tool.paint => paintPalette, _ => palette }) {
-      if (colors.length >= n) break;
-      if (!colors.contains(c)) colors.add(c);
-    }
-    return colors.take(n).toList();
-  }
 
   Widget _lockBtn(ColorScheme cs) {
     final on = ts.zoomLocked;
@@ -209,9 +201,11 @@ class EditorToolbar extends StatelessWidget {
 
   Size get _slot => vertical ? const Size(48, 34) : const Size(32, 44);
 
-  Widget _swatch(ColorScheme cs, String c, bool on) => InkWell(
+  Widget _swatch(ColorScheme cs, String c, bool on, {int? slot}) => InkWell(
+        key: slot == null ? null : ValueKey('fav-$slot'),
         customBorder: const CircleBorder(),
         onTap: () => onPickColor(c),
+        onLongPress: slot == null ? null : () => onSetFavorite(slot),
         child: SizedBox.fromSize(
           size: _slot,
           child: Center(
@@ -236,28 +230,37 @@ class EditorToolbar extends StatelessWidget {
         ),
       );
 
-  Widget _moreColors() => Tooltip(
+  Widget _moreColors(ColorScheme cs, bool on, String color) => Tooltip(
         message: 'Más colores',
         child: InkWell(
+          key: const ValueKey('moreColors'),
           customBorder: const CircleBorder(),
           onTap: onOpenPanel,
           child: SizedBox.fromSize(
             size: _slot,
             child: Center(
-              child: Container(
-                width: 16,
-                height: 16,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: SweepGradient(colors: [
-                    Color(0xFFD9625B), Color(0xFFDDB24A), Color(0xFF5FAE78), Color(0xFF5B8FD9), Color(0xFF9B78D0), Color(0xFFD9625B),
-                  ]),
-                ),
-              ),
+              // Con un color que no es favorito: anillo de selección y el color actual adentro, rodeado por la ruleta.
+              child: on
+                  ? Container(
+                      width: 21,
+                      height: 21,
+                      padding: const EdgeInsets.all(2.5),
+                      decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: cs.primary, width: 1.5)),
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: const BoxDecoration(shape: BoxShape.circle, gradient: _wheel),
+                        child: DecoratedBox(decoration: BoxDecoration(color: parseColor(color), shape: BoxShape.circle)),
+                      ),
+                    )
+                  : Container(width: 16, height: 16, decoration: const BoxDecoration(shape: BoxShape.circle, gradient: _wheel)),
             ),
           ),
         ),
       );
+
+  static const _wheel = SweepGradient(colors: [
+    Color(0xFFD9625B), Color(0xFFDDB24A), Color(0xFF5FAE78), Color(0xFF5B8FD9), Color(0xFF9B78D0), Color(0xFFD9625B),
+  ]);
 
   /// Muestra el grosor actual: punto para el lápiz, barrita para el resaltador.
   Widget _widthBtn(ColorScheme cs, PenPreset p) {

@@ -94,6 +94,11 @@ class ToolState {
   List<String> penRecent = ['#22211e', '#1d4ed8', '#b91c1c', '#15803d', '#c2410c', '#7e22ce'];
   List<String> hlRecent = ['#f7d22c', '#5ee08a', '#ff86c8', '#5bc8ff'];
   List<String> paintRecent = ['#f4a7c3', '#8fd8e0', '#e3cfa0', '#c9b3ec'];
+  // Los 4 colores favoritos de la barra: fijos (elegirlos no los reordena), se cambian a mano.
+  List<String> penFav = ['#22211e', '#1d4ed8', '#b91c1c', '#15803d'];
+  List<String> hlFav = ['#f7d22c', '#5ee08a', '#ff86c8', '#5bc8ff'];
+  List<String> paintFav = ['#f4a7c3', '#8fd8e0', '#e3cfa0', '#c9b3ec'];
+  static const kFavCount = 4;
   int eraserSize = 1;
   String dock = 'top'; // top | left | right
   double zoom = 1; // 1 = la hoja entra justa a lo ancho
@@ -104,12 +109,25 @@ class ToolState {
   bool get drawing => tool == Tool.pen || tool == Tool.hl || tool == Tool.paint;
   PenPreset get current => switch (tool) { Tool.hl => hl, Tool.paint => paint, _ => pen };
   List<String> get recent => switch (tool) { Tool.hl => hlRecent, Tool.paint => paintRecent, _ => penRecent };
+  List<String> get favorites => switch (tool) { Tool.hl => hlFav, Tool.paint => paintFav, _ => penFav };
   double get eraserRadius => eraserSizes[eraserSize];
 
   /// Elige un color y lo pone primero en "recientes" (hasta 7).
   void pickColor(String c) {
     current.color = c;
     _remember(recent, c);
+  }
+
+  /// Guarda un color en un lugar de los favoritos de la herramienta actual (puede repetirse).
+  void setFavorite(int slot, String c) {
+    if (slot >= 0 && slot < kFavCount) favorites[slot] = c;
+  }
+
+  static List<String> _favs(Object? v, List<String> def) {
+    if (v is List && v.length == kFavCount && v.every((e) => e is String && e.startsWith('#'))) {
+      return List<String>.from(v);
+    }
+    return List<String>.from(def);
   }
 
   static void _remember(List<String> r, String c) {
@@ -132,6 +150,9 @@ class ToolState {
         'penRecent': penRecent,
         'hlRecent': hlRecent,
         'paintRecent': paintRecent,
+        'penFav': penFav,
+        'hlFav': hlFav,
+        'paintFav': paintFav,
         'eraserSize': eraserSize,
         'dock': dock,
         'zoom': zoom,
@@ -155,6 +176,9 @@ class ToolState {
     if (j['penRecent'] is List) penRecent = List<String>.from(j['penRecent'] as List);
     if (j['hlRecent'] is List) hlRecent = List<String>.from(j['hlRecent'] as List);
     if (j['paintRecent'] is List) paintRecent = List<String>.from(j['paintRecent'] as List);
+    penFav = _favs(j['penFav'], penFav);
+    hlFav = _favs(j['hlFav'], hlFav);
+    paintFav = _favs(j['paintFav'], paintFav);
     eraserSize = ((j['eraserSize'] ?? 1) as int).clamp(0, 2);
     if (const ['top', 'left', 'right'].contains(j['dock'])) dock = j['dock'] as String;
     zoom = ((j['zoom'] ?? 1) as num).toDouble().clamp(.5, 4.0);
