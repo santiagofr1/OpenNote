@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/editor/page_editor.dart';
+import 'package:apuntes/editor/context_menu.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -179,14 +180,31 @@ void main() {
     expect(doc.items['img']!.x, 200);
   });
 
-  testWidgets('mantener el dedo quieto sobre la hoja sigue abriendo el menú (y no elige)', (t) async {
-    final h = await open(t, armado());
-    final g = await t.startGesture(h.at(350, 400), kind: PointerDeviceKind.touch);
+  Future<void> mantener(WidgetTester t, Offset p) async {
+    final g = await t.startGesture(p, kind: PointerDeviceKind.touch);
     await t.pump(const Duration(milliseconds: 700));
     await g.up();
     await t.pump(const Duration(milliseconds: 300));
+  }
+
+  testWidgets('mantener el dedo quieto sobre la hoja con algo copiado abre el menú (y no elige)', (t) async {
+    final h = await open(t, armado());
+    h.tools.clipboard.strokes = [Stroke('c', 'pen', '#000000', 1, [0, 0, .5, 1, 1, .5])];
+    await mantener(t, h.at(350, 400));
     expect(find.text('Pegar acá'), findsWidgets, reason: 'se abrió el menú de la hoja');
+    for (final x in ['Escribir acá', 'Seleccionar todo', 'Seleccionar todo el cuaderno', 'Agregar hoja al final', 'Zoom al ancho de la hoja']) {
+      expect(find.text(x), findsNothing, reason: '"$x" ya no está en el menú');
+    }
     while (t.takeException() != null) {} // (con la fuente de los tests el menú desborda unos píxeles)
+    expect(h.ed.sel.isEmpty, isTrue, reason: 'mantener apretado no elige');
+  });
+
+  testWidgets('mantener el dedo quieto sobre la hoja con el portapapeles vacío no abre ningún menú ni elige', (t) async {
+    final h = await open(t, armado());
+    expect(h.tools.clipboard.isEmpty, isTrue);
+    await mantener(t, h.at(350, 400));
+    expect(find.text('Pegar acá'), findsNothing);
+    expect(find.byType(PopupMenuItem<SheetMenuAction>), findsNothing);
     expect(h.ed.sel.isEmpty, isTrue, reason: 'mantener apretado no elige');
   });
 
