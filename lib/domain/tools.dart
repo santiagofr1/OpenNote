@@ -1,7 +1,7 @@
 import 'elements.dart';
 import 'stroke.dart';
 
-enum Tool { pen, hl, paint, text, select }
+enum Tool { pen, hl, paint, text, select, title }
 
 /// Puntas del lápiz (id guardado en el trazo, nombre en pantalla).
 const tips = [

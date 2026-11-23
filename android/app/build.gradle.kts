@@ -61,6 +61,7 @@ android {
         }
         release {
             resValue("string", "app_name", "OpenNote")
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // Sin key.properties se firma con debug para que el desarrollo local siga funcionando.
             // CI siempre escribe key.properties y falla si falta el keystore.
             signingConfig = if (hasReleaseSigning) {

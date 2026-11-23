@@ -30,6 +30,18 @@ AAPT=$(ls -d "$ANDROID_HOME"/build-tools/*/ | tail -1)aapt2
 ID=$("$AAPT" dump badging build/app/outputs/flutter-apk/app-debug.apk | sed -n "s/^package: name='\([^']*\)'.*/\1/p")
 [ "$ID" = "$PKG.test" ] || { echo "ERROR: el APK de test es '$ID', no $PKG.test; no corro nada."; exit 1; }
 
+# Los tests están pensados con la tablet en horizontal: se fija mientras corren y al final se deja la rotación como estaba.
+ROT_AUTO=$(adb -s "$DEV" shell settings get system accelerometer_rotation | tr -d '\r')
+ROT_USER=$(adb -s "$DEV" shell settings get system user_rotation | tr -d '\r')
+restaurar_rotacion() {
+  adb -s "$DEV" shell settings put system user_rotation "$ROT_USER" >/dev/null 2>&1 || true
+  adb -s "$DEV" shell settings put system accelerometer_rotation "$ROT_AUTO" >/dev/null 2>&1 || true
+}
+trap restaurar_rotacion EXIT
+adb -s "$DEV" shell settings put system accelerometer_rotation 0
+adb -s "$DEV" shell settings put system user_rotation 1
+sleep 2
+
 ANTES=$(snapshot)
 N_ANTES=$(echo "$ANTES" | grep -c '^-' || true)
 echo "Datos reales antes: $N_ANTES archivos"

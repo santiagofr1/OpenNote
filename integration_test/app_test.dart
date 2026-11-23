@@ -16,8 +16,10 @@ import 'package:apuntes/data/sheet_codec.dart';
 import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/editor/fake_audio_source.dart';
+import 'package:apuntes/editor/handwriting.dart';
 import 'package:apuntes/editor/page_editor.dart';
 import 'package:apuntes/editor/voice_recorder.dart';
+import 'package:apuntes/editor/selection.dart';
 import 'package:apuntes/editor/selection_menu.dart';
 import 'package:apuntes/rendering/sheet_image_cache.dart';
 import 'package:apuntes/rendering/text_layout.dart';
@@ -1228,12 +1230,15 @@ void main() {
     expect(r1.width, greaterThanOrEqualTo(r0.width * 1.3), reason: 'se estiró a lo ancho');
     expect((r1.height - r0.height).abs(), lessThan(2), reason: 'el alto no cambia');
 
-    // deshacer vuelve
+    // deshacer vuelve (y suelta la selección, como siempre): se mide la L directamente y se vuelve a seleccionar
+    final lIds = Set.of(ed.sel.strokes);
     await t.tap(find.byTooltip('Deshacer'));
     await settle(t);
-    final r2 = ed.sel.contentRect(ed.doc)!;
+    final r2 = contentBounds([for (final id in lIds) ed.doc.strokes[id]!], const [], const [])!;
     expect(r2.width, closeTo(r0.width, 1e-6));
     expect(r2.height, closeTo(r0.height, 1e-6));
+    await stylusDrag(t, q(150, 150), q(500, 500));
+    expect(ed.sel.strokes, lIds);
 
     // hacia abajo: crece el alto, el ancho no
     final bottom = t.getCenter(find.byKey(const Key('selHandle-bottom')));
@@ -2071,4 +2076,109 @@ void main() {
     // a mano quedan los ~42 puntos del gesto; la figura limpia tiene uno cada 2 unidades (más de 100 con este radio)
     expect(s.n, inInclusiveRange(30, 60), reason: 'sigue siendo el trazo a mano');
   });
+
+  testWidgets('índice: la herramienta Título marca tinta (letra reconocida) y texto, el panel numera por niveles y lleva a la hoja (issue #13)', (t) async {
+    final saved = handwriting;
+    handwriting = _FakeHandwriting('Introducción');
+    addTearDown(() => handwriting = saved);
+    await start(t);
+    await createNotebook(t, 'Indice');
+    final ed = editor(t);
+    // Todo se acomoda en lo que se ve (como en 'selección: escalar con la esquina...'); se recalcula en cada paso
+    // porque el scroll y el ancho del editor (con los paneles abiertos) cambian.
+    Offset Function(double, double) mk() {
+      final p = docToScreen(t);
+      final view = t.getRect(find.byType(PageEditor)), origin = p(Offset.zero);
+      final visH = view.height / ed.scale;
+      // bien adentro de la hoja que se ve (no en el borde de abajo de la anterior ni en el hueco entre hojas)
+      final top = max((view.top - origin.dy) / ed.scale + visH * .22, ed.visibleSheet * kSheetStep + 60.0),
+          ky = (visH * .5 / 600).clamp(0.2, 1.0);
+      return (x, y) => p(Offset(x, top + (y - 100) * ky));
+    }
+
+    String fieldText() => t.widget<TextField>(find.byKey(const Key('headingName'))).controller!.text;
+    List<String?> entry(String id) => [
+          for (final w in t.widgetList<Text>(find.descendant(of: find.byKey(Key('indexEntry-$id')), matching: find.byType(Text)))) w.data
+        ];
+
+    // hoja 1: un trazo marcado con la letra reconocida
+    var q = mk();
+    await stylusLine(t, q(200, 200), q(400, 200));
+    expect(ed.doc.strokes.length, 1);
+    final id1 = ed.doc.strokes.keys.single;
+    await t.tap(find.byTooltip('Título para el índice'));
+    await settle(t);
+    await stylusDrag(t, q(150, 150), q(450, 260));
+    await settle(t, 600);
+    expect(find.byKey(const Key('headingName')), findsOneWidget);
+    expect(fieldText(), 'Introducción');
+    await t.tap(find.byKey(const Key('headingOk')));
+    await settle(t, 600);
+    final h1 = ed.doc.sheets[0].heads.single;
+    expect(h1.ids, [id1]);
+
+    // hoja 2: otro trazo, con nombre escrito y un nivel más
+    await t.tap(find.byKey(const Key('pagesBtn')));
+    await settle(t, 600);
+    await t.tap(find.byKey(const Key('addPage')));
+    await settle(t, 800);
+    await t.tap(find.byKey(const Key('pagesBtn'))); // cierra el panel
+    await settle(t, 600);
+    expect(ed.visibleSheet, 1);
+    await t.tap(find.byTooltip('Lápiz · tocá de nuevo para opciones'));
+    await settle(t);
+    q = mk();
+    await stylusLine(t, q(200, 200), q(400, 200));
+    expect(ed.doc.strokes.length, 2);
+    await t.tap(find.byTooltip('Título para el índice'));
+    await settle(t);
+    await stylusDrag(t, q(150, 150), q(450, 260));
+    await settle(t, 600);
+    await t.enterText(find.byKey(const Key('headingName')), 'Objetivos');
+    await t.tap(find.byKey(const Key('headingLevelUp')));
+    await t.pump();
+    await t.tap(find.text('Agregar'));
+    await settle(t, 600);
+    final h2 = ed.doc.sheets[1].heads.single;
+
+    // el panel: numerado por niveles, con la hoja a la derecha
+    await t.tap(find.byKey(const Key('indexBtn')));
+    await settle(t, 600);
+    expect(entry(h1.id), ['1', 'Introducción', '1']);
+    expect(entry(h2.id), ['1.1', 'Objetivos', '2']);
+
+    // tocar una entrada lleva a su hoja
+    expect(ed.visibleSheet, 1);
+    await t.tap(find.byKey(Key('indexEntry-${h1.id}')));
+    await settle(t, 1000);
+    expect(ed.visibleSheet, 0);
+    expect(t.widget<Text>(find.byKey(const Key('sheetCounter'))).data, '1 / 2');
+
+    // borrar el primer trazo: su entrada desaparece (y Objetivos pasa a ser el 1)
+    await t.tap(find.byTooltip('Seleccionar'));
+    await settle(t);
+    final p = docToScreen(t), r = ed.doc.strokes[id1]!.bounds;
+    await stylusDrag(t, p(r.topLeft - const Offset(25, 25)), p(r.bottomRight + const Offset(25, 25)));
+    expect(ed.sel.strokes, {id1});
+    await t.tap(find.descendant(of: find.byType(SelectionMenu), matching: find.text('Eliminar')));
+    await settle(t, 600);
+    expect(ed.doc.strokes.length, 1);
+    expect(find.byKey(Key('indexEntry-${h1.id}')), findsNothing);
+    expect(entry(h2.id), ['1', 'Objetivos', '2']);
+
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+  });
+}
+
+/// Reconocimiento de letra de mentira: siempre lee [text].
+class _FakeHandwriting implements HandwritingRecognizer {
+  final String text;
+  _FakeHandwriting(this.text);
+  @override
+  Future<bool> isModelReady() async => true;
+  @override
+  Future<bool> ensureModel() async => true;
+  @override
+  Future<String?> recognize(List<Stroke> strokes) async => text;
 }

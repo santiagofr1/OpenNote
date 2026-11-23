@@ -60,6 +60,7 @@ class EditorToolbar extends StatelessWidget {
         _toolBtn(cs, Tool.paint, Symbols.brush, 'Decorador · tocá de nuevo para opciones', ts.paint),
         _toolBtn(cs, Tool.text, Symbols.keyboard, 'Texto con teclado', null),
         _toolBtn(cs, Tool.select, Symbols.highlight_alt, 'Seleccionar', null),
+        _toolBtn(cs, Tool.title, Symbols.format_list_numbered, 'Título para el índice', null),
         _divider(cs),
         AnimatedOpacity(
           opacity: drawing ? 1 : .38,
@@ -112,8 +113,8 @@ class EditorToolbar extends StatelessWidget {
     });
   }
 
-  /// Ancho (dp) de la barra horizontal sin los colores rápidos. Medido: 608 de contenido + 12 de padding + margen.
-  static const _fixedWidth = 628.0;
+  /// Ancho (dp) de la barra horizontal sin los colores rápidos. Medido: 656 de contenido + 12 de padding + margen.
+  static const _fixedWidth = 676.0;
 
   /// Los recientes primero; si faltan, se completa con la paleta.
   List<String> _quickColors(int n) {
