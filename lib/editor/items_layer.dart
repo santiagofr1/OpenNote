@@ -6,11 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../domain/domain.dart';
+import 'pdf_page_image.dart';
 import 'voice_recorder.dart';
 
 const _stickyInk = Color(0xFF2B2A27);
 
-/// Elemento insertado en la hoja (imagen, nota adhesiva o audio), en su lugar y tamaño.
+/// Elemento insertado en la hoja (imagen, página de PDF, nota adhesiva o audio), en su lugar y tamaño.
 class ItemView extends StatelessWidget {
   final Item item;
   final File file; // imagen o audio en media/ (puede no existir)
@@ -46,6 +47,10 @@ class ItemView extends StatelessWidget {
               fit: BoxFit.fill,
               gaplessPlayback: true,
               errorBuilder: (_, _, _) => Container(color: const Color(0xFFE6E3DA))),
+        ),
+      'pdf' => ClipRRect(
+          borderRadius: BorderRadius.circular(4 * s),
+          child: PdfPageImage(file: file, page: it.page, logicalWidth: it.w * s),
         ),
       'sticky' => Container(
           decoration: BoxDecoration(

@@ -38,18 +38,18 @@ void main() {
   testWidgets('nivel: sube y baja con límites 1 y 9', (t) async {
     await open(t, level: 2);
     String lvl() => t.widget<Text>(find.byKey(const Key('headingLevel'))).data!;
-    expect(lvl(), '2');
+    expect(lvl(), 'Título 2');
     await t.tap(find.byKey(const Key('headingLevelDown')));
     await t.pump();
-    expect(lvl(), '1');
+    expect(lvl(), 'Título 1');
     await t.tap(find.byKey(const Key('headingLevelDown')));
     await t.pump();
-    expect(lvl(), '1');
+    expect(lvl(), 'Título 1');
     for (var i = 0; i < 12; i++) {
       await t.tap(find.byKey(const Key('headingLevelUp')), warnIfMissed: false);
       await t.pump();
     }
-    expect(lvl(), '9');
+    expect(lvl(), 'Título 9');
   });
 
   testWidgets('Agregar está deshabilitado con el nombre vacío y devuelve nombre y nivel', (t) async {

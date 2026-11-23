@@ -5,9 +5,8 @@ import 'dart:typed_data';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:printing/printing.dart';
-
 import '../domain/domain.dart';
+import '../rendering/pdf_pages.dart';
 import 'export.dart';
 import 'storage.dart';
 
@@ -108,27 +107,33 @@ Future<Item?> makeAudioFileItem(Storage store, {String name = ''}) async {
   return makeAudioItem(file, await Pickers.audioLength(store.media(file)), name: name);
 }
 
-/// PDF → una hoja nueva por cada página del PDF, con la página como imagen. Cada hoja viene con su
-/// contenido (coordenadas locales) y se titula "archivo · n"; quien llama la pone en el cuaderno.
+/// PDF → una hoja nueva por cada página del PDF. El PDF se guarda UNA vez en media/ y cada hoja trae un elemento
+/// `pdf` con su página (se dibuja a demanda, ver pdf_pages.dart): no se rasteriza nada al importar. Cada hoja viene
+/// con su contenido (coordenadas locales) y se titula "archivo · n"; quien llama la pone en el cuaderno.
 Future<List<(SheetMeta, SheetContent)>> importPdf(Storage store, {void Function(int)? onPage}) async {
   final picked = await Pickers.pdf();
   if (picked == null) return [];
   final (bytes, name) = picked;
+  final file = await store.addMedia(bytes, 'pdf');
+  final sizes = await pdfPages.pageSizes(store.media(file));
+  if (sizes.isEmpty) {
+    try {
+      await store.media(file).delete(); // roto o sin páginas: no queda el archivo huérfano
+    } catch (_) {}
+    return [];
+  }
   final out = <(SheetMeta, SheetContent)>[];
-  var n = 0;
-  await for (final raster in Printing.raster(bytes, dpi: 150)) {
-    final png = await raster.toPng();
-    final file = await store.addMedia(png, 'png');
+  for (var i = 0; i < sizes.length; i++) {
+    final s = sizes[i];
     // que entre en la hoja respetando la proporción
-    var w = kW, h = kW * raster.height / raster.width;
+    var w = kW, h = kW * s.height / s.width;
     if (h > kSheetH) {
       h = kSheetH;
-      w = kSheetH * raster.width / raster.height;
+      w = kSheetH * s.width / s.height;
     }
-    final it = Item(newId('i'), 'image', (kW - w) / 2, (kSheetH - h) / 2, w, h, file: file);
-    n++;
-    out.add((SheetMeta(newId('h'), title: '$name · $n', bg: 'blank'), SheetContent(items: [it])));
-    onPage?.call(n);
+    final it = Item(newId('i'), 'pdf', (kW - w) / 2, (kSheetH - h) / 2, w, h, file: file, page: i);
+    out.add((SheetMeta(newId('h'), title: '$name · ${i + 1}', bg: 'blank'), SheetContent(items: [it])));
+    onPage?.call(i + 1);
   }
   return out;
 }

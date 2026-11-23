@@ -7,6 +7,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../domain/domain.dart';
+import '../rendering/pdf_pages.dart';
 import '../rendering/sheet_render.dart';
 import 'storage.dart';
 
@@ -82,12 +83,19 @@ Future<(NotebookDoc, int)> exportSource(Storage store, NotebookDoc doc, ExportSh
 }
 
 /// Imágenes insertadas en [doc] (solo las de la hoja [sheet] si se da), decodificadas, por nombre de archivo
-/// (las que faltan se saltean).
+/// (las que faltan se saltean). Las páginas de PDF van por [pdfImageKey], dibujadas al ancho de la salida.
 Future<Map<String, ui.Image>> loadImages(Storage store, NotebookDoc doc, {int? sheet}) async {
   final images = <String, ui.Image>{};
   for (final it in doc.items.values) {
     if (sheet != null && !it.rect.overlaps(ui.Rect.fromLTWH(0, sheet * kSheetStep, kW, kSheetH))) continue;
-    if (it.type == 'image' && it.file != null && !images.containsKey(it.file)) {
+    if (it.type == 'pdf' && it.file != null) {
+      final key = pdfImageKey(it);
+      final f = store.media(it.file!);
+      if (!images.containsKey(key) && await f.exists()) {
+        final img = await pdfPages.page(f, it.page, pdfPixelWidth(it.w * _pxWidth / kW));
+        if (img != null) images[key] = img;
+      }
+    } else if (it.type == 'image' && it.file != null && !images.containsKey(it.file)) {
       final f = store.media(it.file!);
       if (await f.exists()) images[it.file!] = await decodeImage(await f.readAsBytes());
     }

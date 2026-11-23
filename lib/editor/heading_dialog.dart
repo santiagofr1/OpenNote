@@ -107,22 +107,20 @@ class _HeadingDialogState extends State<_HeadingDialog> {
               ]),
             ),
           const SizedBox(height: 14),
-          Row(children: [
-            const Text('Nivel', style: TextStyle(fontSize: 15)),
-            const Spacer(),
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             IconButton(
                 key: const Key('headingLevelDown'),
-                tooltip: 'Nivel menor',
+                tooltip: 'Más importante',
                 onPressed: _level > 1 ? () => setState(() => _level--) : null,
                 icon: const Icon(Symbols.remove, weight: 300)),
             SizedBox(
-              width: 28,
-              child: Text('$_level',
-                  key: const Key('headingLevel'), textAlign: TextAlign.center, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+              width: 84,
+              child: Text('Título $_level',
+                  key: const Key('headingLevel'), textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
             ),
             IconButton(
                 key: const Key('headingLevelUp'),
-                tooltip: 'Nivel mayor',
+                tooltip: 'Menos importante',
                 onPressed: _level < _kMaxLevel ? () => setState(() => _level++) : null,
                 icon: const Icon(Symbols.add, weight: 300)),
           ]),

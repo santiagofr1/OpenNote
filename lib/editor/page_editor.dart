@@ -316,6 +316,13 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     return (first: first, last: last);
   }
 
+  /// La hoja con más área visible en la vista (en un empate, la de arriba): donde entra lo que se importa.
+  int get mostVisibleSheet {
+    final off = scroll.hasClients && scroll.position.hasPixels ? scroll.offset : widget.initialSheet * kSheetStep * scale;
+    final top = (off - kTopPad) / scale;
+    return mostVisibleSheetFor(top, top + _viewH / scale, doc.sheetCount);
+  }
+
   /// Hojas que se ven ahora (índices, de la primera a la última).
   ({int first, int last}) _visibleSheets() {
     final off = scroll.hasClients && scroll.position.hasPixels ? scroll.offset : widget.initialSheet * kSheetStep * scale;
@@ -2151,7 +2158,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       eraserAt: eraserAt,
       eraserRadius: ts.eraserRadius,
       visible: _visiblePage(),
-      outline: ts.tool == Tool.title ? (_outline ??= buildOutline(doc.nb)) : null);
+      outline: _outline ??= buildOutline(doc.nb));
 
   Widget _textBlock(TextBlock t, bool textMode) {
     final ed = texts.editor(t.id);

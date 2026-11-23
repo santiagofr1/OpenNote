@@ -21,7 +21,7 @@ void paintLiveLayer(
   Offset? eraserAt,
   double eraserRadius = 0,
   Rect? visible, // zona que se ve (más margen): los trazos arrastrados de afuera no se dibujan
-  List<OutlineEntry>? outline, // con la herramienta Título: el índice, para marcar cada título con su número
+  List<OutlineEntry>? outline, // el índice, para marcar cada título con su número (con cualquier herramienta)
 }) {
   if (live != null) paintStroke(c, live);
   if (eraserAt != null) {
@@ -130,6 +130,27 @@ List<Rect> layoutHeadingPills(List<({Rect r, Size pill, double sheetTop, double 
 }
 
 /// Marca cada título de las hojas cargadas que se ven: fondo suave, barra lateral y pastilla con su número del índice.
+final _pillTexts = <(String, int, int), TextPainter>{};
+
+/// TextPainter del número de la pastilla, cacheado: la capa en vivo se repinta en cada movimiento del lápiz.
+TextPainter _pillText(String number, int level, double fontSize) {
+  final key = (number, level, (fontSize * 100).round());
+  final hit = _pillTexts[key];
+  if (hit != null) return hit;
+  if (_pillTexts.length >= 64) _pillTexts.clear();
+  return _pillTexts[key] = TextPainter(
+    text: TextSpan(
+        text: number,
+        style: TextStyle(
+            fontSize: fontSize,
+            fontWeight: FontWeight.w700,
+            color: const Color(0xFFFFFFFF),
+            fontFeatures: const [FontFeature.tabularFigures()],
+            height: 1)),
+    textDirection: TextDirection.ltr,
+  )..layout();
+}
+
 void _paintHeadingMarks(Canvas c, NotebookDoc doc, double scale, List<OutlineEntry> outline, Rect? visible) {
   final act = doc.nb.activeSection.id;
   final marks = <({OutlineEntry e, Rect r, Size pill, TextPainter tp, double sheetTop, double sheetBottom})>[];
@@ -144,17 +165,7 @@ void _paintHeadingMarks(Canvas c, NotebookDoc doc, double scale, List<OutlineEnt
     if (r.isEmpty) continue;
     final reach = Rect.fromLTRB(r.left - 80 / scale, r.top - 30 / scale, r.right, r.bottom);
     if (visible != null && !reach.overlaps(visible)) continue;
-    final tp = TextPainter(
-      text: TextSpan(
-          text: e.number,
-          style: TextStyle(
-              fontSize: 11 / scale,
-              fontWeight: FontWeight.w700,
-              color: const Color(0xFFFFFFFF),
-              fontFeatures: const [FontFeature.tabularFigures()],
-              height: 1)),
-      textDirection: TextDirection.ltr,
-    )..layout();
+    final tp = _pillText(e.number, e.level, 11 / scale);
     marks.add((e: e, r: r, pill: Size(tp.width + 12 / scale, tp.height + 6 / scale), tp: tp, sheetTop: sheetTop, sheetBottom: sheetBottom));
   }
   final pills = layoutHeadingPills([for (final m in marks) (r: m.r, pill: m.pill, sheetTop: m.sheetTop, sheetBottom: m.sheetBottom)], scale);

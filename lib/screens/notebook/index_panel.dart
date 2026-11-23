@@ -115,8 +115,8 @@ class IndexPanel extends StatelessWidget {
       position: RelativeRect.fromRect(rect, Offset.zero & overlay.size),
       items: [
         const PopupMenuItem(value: IndexAction.rename, child: MenuRow(Symbols.edit, 'Renombrar')),
-        PopupMenuItem(value: IndexAction.levelUp, enabled: e.level > 1, child: const MenuRow(Symbols.format_indent_decrease, 'Subir nivel')),
-        PopupMenuItem(value: IndexAction.levelDown, enabled: e.level < 9, child: const MenuRow(Symbols.format_indent_increase, 'Bajar nivel')),
+        PopupMenuItem(value: IndexAction.levelUp, enabled: e.level > 1, child: MenuRow(Symbols.format_indent_decrease, 'Pasar a Título ${e.level - 1}')),
+        PopupMenuItem(value: IndexAction.levelDown, enabled: e.level < 9, child: MenuRow(Symbols.format_indent_increase, 'Pasar a Título ${e.level + 1}')),
         const PopupMenuDivider(),
         const PopupMenuItem(value: IndexAction.remove, child: MenuRow(Symbols.delete, 'Quitar del índice', danger: true)),
       ],
