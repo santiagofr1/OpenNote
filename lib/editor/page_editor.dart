@@ -1629,86 +1629,15 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   }
 
   Future<void> _sheetMenu(Offset global, Offset p) async {
+    if (ts.clipboard.isEmpty) return; // sin nada copiado no hay menú (ni vibra)
     HapticFeedback.mediumImpact();
-    final v = await showSheetMenu(
-      context,
-      global,
-      canPaste: !ts.clipboard.isEmpty,
-      canSelectAll: !doc.isEmpty,
-      canResetZoom: !ts.zoomLocked && (ts.zoom - 1).abs() > .01,
-    );
+    final v = await showSheetMenu(context, global);
     if (!mounted) return;
-    switch (v) {
-      case SheetMenuAction.paste:
-        _pasteAt(p);
-      case SheetMenuAction.text:
-        _setTool(Tool.text);
-        _createTextAt(p);
-      case SheetMenuAction.selectAll:
-        _setTool(Tool.select);
-        setState(() => sel.selectAll(doc, sheet: visibleSheet)); // la hoja que se ve
-        liveTick.value++;
-      case SheetMenuAction.selectAllNotebook:
-        await _selectAllNotebookAsk();
-      case SheetMenuAction.addSheet:
-        setState(doc.addSheet);
-        _sheetAddedAtEnd();
-        _changed();
-      case SheetMenuAction.zoomToWidth:
-        _setZoom(1);
-        widget.onPrefsChanged();
-      case null:
-        break;
-    }
+    if (v == SheetMenuAction.paste) _pasteAt(p);
   }
-
-  /// Cuadernos con más hojas que esto avisan antes de cargarlas todas para "Seleccionar todo el cuaderno".
-  static const kSelectAllWarn = 60;
 
   /// Hojas que se piden juntas al cargar para "Seleccionar todo el cuaderno" (entre tanda y tanda se puede cancelar).
   static const kSelectAllBatch = 4;
-
-  /// "Seleccionar todo el cuaderno" desde el menú: avisa si es enorme, muestra progreso si tarda más de ~300 ms
-  /// y deja cancelar.
-  Future<void> _selectAllNotebookAsk() async {
-    final missing = doc.sheetCount - doc.loadedSheets.length;
-    if (missing > 0 && doc.sheetCount > kSelectAllWarn) {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Seleccionar todo el cuaderno'),
-          content: Text('Hay que cargar $missing hojas más en memoria (el cuaderno tiene ${doc.sheetCount}). Puede tardar y gastar bastante memoria.'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-            FilledButton(key: const Key('selectAllGo'), onPressed: () => Navigator.pop(ctx, true), child: const Text('Cargar y seleccionar')),
-          ],
-        ),
-      );
-      if (ok != true || !mounted) return;
-    }
-    final cancel = CancelFlag(), progress = ValueNotifier<double>(0);
-    var shown = false;
-    final timer = Timer(const Duration(milliseconds: 300), () {
-      if (!mounted) return;
-      shown = true;
-      showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Cargando el cuaderno'),
-          content: ValueListenableBuilder<double>(
-            valueListenable: progress,
-            builder: (_, v, _) => LinearProgressIndicator(key: const Key('selectAllProgress'), value: v),
-          ),
-          actions: [TextButton(key: const Key('selectAllCancel'), onPressed: cancel.cancel, child: const Text('Cancelar'))],
-        ),
-      );
-    });
-    await selectAllNotebook(cancel: cancel, progress: progress);
-    timer.cancel();
-    if (shown && mounted) Navigator.of(context).pop();
-    progress.dispose();
-  }
 
   /// Carga las hojas que faltan (de a [kSelectAllBatch], mirando [cancel] entre tandas) y selecciona todo el cuaderno.
   /// Mientras carga ninguna hoja se suelta; después las protege la propia selección. Devuelve false si se canceló

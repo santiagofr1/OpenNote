@@ -2060,28 +2060,19 @@ void main() {
     expect(t.takeException(), isNull);
   });
 
-  testWidgets('menú de la hoja: "Seleccionar todo" toma solo la hoja visible y "Seleccionar todo el cuaderno" todas; deshacer y rehacer andan', (t) async {
+  testWidgets('menú de la hoja: solo "Pegar acá", y solo si hay algo copiado (issue #25)', (t) async {
     await start(t);
     await createNotebook(t, 'Todo');
     final ed = editor(t);
-    // 8 hojas con un trazo en cada una
-    while (ed.doc.sheetCount < 8) {
-      ed.doc.addSheet();
-    }
-    for (var k = 0; k < 8; k++) {
-      final st = Stroke('st$k', 'pen', '#22211e', 2.6, [100, k * kSheetStep + 200, .5, 500, k * kSheetStep + 200, .5]);
-      ed.doc.strokes[st.id] = st;
-      ed.doc.markDirtyElement(st);
-    }
+    final st = Stroke('st0', 'pen', '#22211e', 2.6, [100, 200, .5, 500, 200, .5]);
+    ed.doc.strokes[st.id] = st;
+    ed.doc.markDirtyElement(st);
     // ignore: invalid_use_of_protected_member
     ed.setState(() {});
     await settle(t, 800);
-    expect(ed.visibleSheet, 0);
-    ed.insertItem(Item('nota', 'sticky', 0, 0, 300, 200, text: 'apunte')); // algo para deshacer, en la hoja visible
-    await settle(t, 600);
 
-    Future<void> menu(String item) async {
-      final g = await t.startGesture(sheetCenter(t) + const Offset(0, 250)); // debajo de la nota
+    Future<void> mantener() async {
+      final g = await t.startGesture(sheetCenter(t) + const Offset(0, 250)); // lugar vacío, debajo del trazo
       final end = DateTime.now().add(const Duration(milliseconds: 750));
       while (DateTime.now().isBefore(end)) {
         await Future<void>.delayed(const Duration(milliseconds: 50));
@@ -2089,26 +2080,22 @@ void main() {
       }
       await g.up();
       await settle(t, 500);
-      await t.tap(find.text(item));
-      await settle(t, 1500);
     }
 
-    await menu('Seleccionar todo');
-    expect(ed.sel.strokes, {'st0'}, reason: 'solo lo de la hoja visible');
-    expect(ed.sel.items, {'nota'});
-    expect(ed.sel.texts, isEmpty);
+    // portapapeles vacío: no hay menú
+    await mantener();
+    expect(find.text('Pegar acá'), findsNothing);
 
-    await menu('Seleccionar todo el cuaderno');
-    expect(ed.sel.strokes, {for (var k = 0; k < 8; k++) 'st$k'}, reason: 'todas las hojas');
-    expect(ed.sel.items, {'nota'});
-
-    await t.tap(find.byTooltip('Deshacer'));
-    await settle(t, 600);
-    expect(ed.doc.items.containsKey('nota'), isFalse);
-    expect(ed.doc.strokes.length, 8, reason: 'deshacer la nota no toca los trazos');
-    await t.tap(find.byTooltip('Rehacer'));
-    await settle(t, 600);
-    expect(ed.doc.items.containsKey('nota'), isTrue);
+    // con algo copiado: solo "Pegar acá"
+    ed.ts.clipboard.strokes = [st];
+    await mantener();
+    expect(find.text('Pegar acá'), findsOneWidget);
+    for (final x in ['Escribir acá', 'Seleccionar todo', 'Seleccionar todo el cuaderno', 'Agregar hoja al final', 'Zoom al ancho de la hoja']) {
+      expect(find.text(x), findsNothing, reason: '"$x" ya no está en el menú');
+    }
+    await t.tap(find.text('Pegar acá'));
+    await settle(t, 1000);
+    expect(ed.doc.strokes.length, 2, reason: 'pegó una copia del trazo');
   });
 
   testWidgets('Exportar: una sola opción con PDF, PNG y .opennote', (t) async {
