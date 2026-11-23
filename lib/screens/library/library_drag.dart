@@ -1,5 +1,3 @@
-import 'dart:async';
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -142,47 +140,4 @@ class DropZone extends StatelessWidget {
         onAcceptWithDetails: (d) => onDrop(d.data),
         builder: (ctx, candidates, _) => builder(ctx, candidates.isNotEmpty),
       );
-}
-
-/// Scroll automático mientras se arrastra cerca del borde de arriba o de abajo de la lista.
-class AutoScroller {
-  AutoScroller(this.controller, this.viewport);
-  final ScrollController controller;
-
-  /// Caja de la lista que se desplaza (para saber dónde están sus bordes).
-  final GlobalKey viewport;
-
-  /// Franja (px) de cada borde donde empieza a moverse, y velocidad máxima (px por cuadro de 16 ms).
-  static const edge = 90.0, maxSpeed = 18.0;
-
-  Timer? _timer;
-  Offset? _pos;
-
-  /// Velocidad con signo para un dedo a [y] px del tope de una lista de alto [h]: negativa sube, positiva baja.
-  static double speedFor(double y, double h) {
-    if (y < edge) return -maxSpeed * min(1.0, (edge - y) / edge);
-    if (y > h - edge) return maxSpeed * min(1.0, (y - (h - edge)) / edge);
-    return 0;
-  }
-
-  void moved(Offset global) {
-    _pos = global;
-    _timer ??= Timer.periodic(const Duration(milliseconds: 16), (_) => _tick());
-  }
-
-  void stop() {
-    _timer?.cancel();
-    _timer = null;
-    _pos = null;
-  }
-
-  void _tick() {
-    final p = _pos;
-    final box = viewport.currentContext?.findRenderObject();
-    if (p == null || box is! RenderBox || !box.attached || !controller.hasClients) return;
-    final v = speedFor(box.globalToLocal(p).dy, box.size.height);
-    if (v == 0) return;
-    final pos = controller.position;
-    controller.jumpTo((pos.pixels + v).clamp(pos.minScrollExtent, pos.maxScrollExtent));
-  }
 }

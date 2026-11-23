@@ -15,6 +15,7 @@ import '../rendering/paper.dart';
 import '../rendering/pdf_cover.dart';
 import '../rendering/sheet_image_cache.dart';
 import '../rendering/text_layout.dart';
+import '../widgets/auto_scroller.dart';
 import '../widgets/dialogs.dart';
 import 'context_menu.dart';
 import 'dock_layout.dart';
@@ -157,6 +158,11 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   final _saveTimers = <String, Timer>{}; // textos y notas: se guarda al dejar de escribir
   final _viewportKey = GlobalKey(), _sheetKey = GlobalKey();
 
+  // scroll solo al llevar lo seleccionado hasta el borde del visor (solo al mover, no con las manijas)
+  late final _edgeY = AutoScroller(scroll, _viewportKey, onScrolled: _edgeScrolled);
+  late final _edgeX = AutoScroller(hscroll, _viewportKey, axis: Axis.horizontal, onScrolled: _edgeScrolled);
+  Offset? _edgeGlobal; // última posición global del puntero mientras se mueve la selección
+
   // hojas armadas: las que se ven más un margen (ver [_calcRange]); las demás no tienen widgets
   ({int first, int last}) _range = (first: 0, last: 0);
   double _viewH = 800; // alto del visor
@@ -202,6 +208,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       _syncedRange = null;
       texts.attach(doc);
       history.clear();
+      _edgeStop();
       sel.clear();
       _outline = null;
       pointer = null;
@@ -222,6 +229,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     }
     if (pending) widget.onChanged(); // lo último que se escribió también se guarda
     texts.dispose();
+    _edgeStop();
     scroll.dispose();
     hscroll.dispose();
     pull.dispose();
@@ -657,6 +665,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final p = _toPage(e.localPosition);
     if (sel.moving) {
       _selDrag(p);
+      if (sel.drag?.handle == Handle.move) _edgeMoved(e.position);
       return;
     }
     if (sel.bandA != null) {
@@ -897,6 +906,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   // ---------------- selección ----------------
   void _clearSel() {
     if (sel.isEmpty && sel.bandA == null) return;
+    _edgeStop();
     sel.clear();
     if (mounted) setState(() {});
     liveTick.value++;
@@ -953,6 +963,25 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     liveTick.value++;
   }
 
+  // ---- scroll solo al arrastrar lo seleccionado hasta el borde ----
+  void _edgeMoved(Offset g) {
+    _edgeGlobal = g;
+    _edgeY.moved(g);
+    _edgeX.moved(g);
+  }
+
+  /// La hoja se corrió bajo el puntero quieto: lo seleccionado sigue al puntero.
+  void _edgeScrolled() {
+    final g = _edgeGlobal;
+    if (g != null && sel.moving && sel.drag?.handle == Handle.move) _selDrag(_pageOfGlobal(g));
+  }
+
+  void _edgeStop() {
+    _edgeGlobal = null;
+    _edgeY.stop();
+    _edgeX.stop();
+  }
+
   // ---- manijas (escalar con las esquinas, rotar con la de arriba) ----
   Offset _pageOfGlobal(Offset g) => _toPage((_sheetKey.currentContext!.findRenderObject() as RenderBox).globalToLocal(g));
 
@@ -972,6 +1001,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   }
 
   void _selDrop() {
+    _edgeStop();
     final drag = sel.drag!, xf = drag.xf;
     final move = drag.handle == Handle.move;
     if (move ? xf.shift.distance < .5 : xf.isIdentity) {
@@ -1628,10 +1658,13 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   }
 
   void _fingerMoveUpdate(Offset global) {
-    if (sel.moving) _selDrag(_pageOfGlobal(global));
+    if (!sel.moving) return;
+    _selDrag(_pageOfGlobal(global));
+    if (sel.drag?.handle == Handle.move) _edgeMoved(global);
   }
 
   void _fingerMoveEnd() {
+    _edgeStop();
     if (sel.moving) _selDrop();
   }
 
@@ -1736,6 +1769,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   void _afterSheetOps() {
     texts.attach(doc);
+    _edgeStop();
     sel.clear();
     pointer = null;
     live = null;
