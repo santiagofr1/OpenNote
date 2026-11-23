@@ -879,7 +879,7 @@ void main() {
     expect(ed.scroll.offset, y0, reason: 'un dedo no mueve la hoja con el candado');
     await drag(2);
     expect(ed.scroll.offset, greaterThan(y0 + 50), reason: 'dos dedos sí');
-    await t.tap(find.byTooltip('Soltar el zoom'));
+    await t.tap(find.byWidgetPredicate((w) => w is Tooltip && (w.message ?? '').startsWith('Zoom fijo')));
     await settle(t);
     expect(ed.widget.tools.zoomLocked, isFalse);
   });
@@ -994,7 +994,6 @@ void main() {
     final pdfBytes = (await t.runAsync(() async {
       final d = pw.Document();
       d.addPage(pw.Page(
-        margin: const pw.EdgeInsets.all(40),
         pageTheme: pw.PageTheme(
           margin: const pw.EdgeInsets.all(40),
           buildBackground: (_) => pw.FullPage(ignoreMargins: true, child: pw.Container(color: const PdfColor.fromInt(0xFFFFF0C0))),
@@ -1018,8 +1017,9 @@ void main() {
 
     // goma (punta de goma del lápiz) por el medio de la página, lejos del texto
     final toScreen = docToScreen(t);
-    final y = pdf.y + pdf.h * .6;
-    final a = toScreen(Offset(pdf.x + pdf.w * .2, y)), b = toScreen(Offset(pdf.x + pdf.w * .8, y));
+    // a la altura del centro de lo que se ve (en horizontal la hoja A4 no entra entera en la pantalla)
+    final cy = sheetCenter(t).dy;
+    final a = Offset(toScreen(Offset(pdf.x + pdf.w * .2, 0)).dx, cy), b = Offset(toScreen(Offset(pdf.x + pdf.w * .8, 0)).dx, cy);
     final g = await t.startGesture(a, kind: PointerDeviceKind.invertedStylus);
     for (var i = 1; i <= 10; i++) {
       await g.moveTo(Offset.lerp(a, b, i / 10)!);

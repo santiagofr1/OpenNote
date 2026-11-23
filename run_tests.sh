@@ -13,7 +13,8 @@ DATA=/sdcard/Android/data/$PKG/files/apuntes
 
 snapshot() { # lista de archivos (tamaño, fecha, ruta) de los cuadernos reales
   # Sin los archivos de estado de la sync: la tarea de fondo de la app real los toca cada 15 min aunque no se use.
-  adb -s "$DEV" shell "ls -lAR $DATA 2>&1" | grep -v -E ' (sync_state\.json|sync_crypto_cache\.json|sync\.(lock|fg|busy|bgchanged))\r?$' || true
+  # Sin las líneas "total" (cuentan los bloques de la carpeta, incluidos los archivos de la sync que se ignoran).
+  adb -s "$DEV" shell "ls -lAR $DATA 2>&1" | grep -v -E '^total [0-9]+\r?$' | grep -v -E ' (sync_state\.json|sync_crypto_cache\.json|sync\.(lock|fg|busy|bgchanged))\r?$' || true
 }
 instalada() { adb -s "$DEV" shell pm list packages "$PKG" | tr -d '\r' | grep -qx "package:$PKG"; }
 
