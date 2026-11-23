@@ -1407,6 +1407,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   // ---------------- dedos: zoom y menú de la hoja ----------------
   Offset get _scrollOffset => Offset(hscroll.hasClients ? hscroll.offset : 0, scroll.hasClients ? scroll.offset : 0);
 
+  Offset? _zoomScrollTo; // scroll que deja el foco del pellizco en su lugar, se aplica en el próximo layout
+
   void _flashZoom() {
     _zoomPillTimer?.cancel();
     stillPress.cancel();
@@ -1426,11 +1428,27 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final anchor = layout.toPage(f, _scrollOffset);
     setState(() => ts.zoom = z);
     _flashZoom();
+    // el scroll se corrige en el layout de este mismo cuadro (ver _applyZoomScroll); si no, se pinta un cuadro con el
+    // zoom nuevo y el scroll viejo y la hoja tiembla
+    _zoomScrollTo = SheetLayout(_viewW, z).scrollFor(anchor, f);
+  }
+
+  /// Aplica el scroll pendiente del zoom antes de que el visor arme su layout (mismo cuadro, sin notificar).
+  void _applyZoomScroll() {
+    final to = _zoomScrollTo;
+    if (to == null) return;
+    _zoomScrollTo = null;
+    if (hscroll.hasClients && hscroll.position.hasPixels) hscroll.position.correctPixels(max(0.0, to.dx));
+    if (scroll.hasClients && scroll.position.hasPixels) scroll.position.correctPixels(max(0.0, to.dy));
+    // el máximo real recién se conoce después del layout: si quedó afuera, se recorta
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final to = layout.scrollFor(anchor, f); // con la escala nueva
-      if (hscroll.hasClients) hscroll.jumpTo(to.dx.clamp(0.0, hscroll.position.maxScrollExtent));
-      if (scroll.hasClients) scroll.jumpTo(to.dy.clamp(0.0, scroll.position.maxScrollExtent));
+      if (hscroll.hasClients && hscroll.offset > hscroll.position.maxScrollExtent) {
+        hscroll.jumpTo(hscroll.position.maxScrollExtent);
+      }
+      if (scroll.hasClients && scroll.offset > scroll.position.maxScrollExtent) {
+        scroll.jumpTo(scroll.position.maxScrollExtent);
+      }
     });
   }
 
@@ -1947,6 +1965,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         layout = SheetLayout(box.maxWidth, ts.zoom);
         _viewH = box.maxHeight;
         _viewW = box.maxWidth;
+        _applyZoomScroll();
         _dpr = View.of(context).devicePixelRatio;
         _syncMeshFeather();
         developer.Timeline.timeSync('ON canvas range+sync', () {

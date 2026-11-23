@@ -909,6 +909,51 @@ void main() {
     expect(ed.widget.tools.zoomLocked, isFalse);
   });
 
+  testWidgets('pellizco después de poner y sacar el candado: el zoom crece parejo y la hoja no tiembla (#27)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Pellizco');
+    final ed = editor(t);
+    ed.widget.tools.zoom = 1;
+    ed.widget.tools.zoomLocked = false;
+    await t.tap(find.byTooltip('Fijar el zoom'));
+    await settle(t);
+    await t.tap(find.byWidgetPredicate((w) => w is Tooltip && (w.message ?? '').startsWith('Zoom fijo')));
+    await settle(t);
+    expect(ed.widget.tools.zoomLocked, isFalse);
+
+    final c = sheetCenter(t);
+    final vp = find
+        .descendant(of: find.byType(PageEditor), matching: find.byType(Listener))
+        .evaluate()
+        .map((e) => e.renderObject as RenderBox)
+        .firstWhere((b) => b.hasSize && (b.size.height - ed.scroll.position.viewportDimension).abs() < .5);
+    final f = c - vp.localToGlobal(Offset.zero);
+    Offset off() => Offset(ed.hscroll.hasClients ? ed.hscroll.offset : 0, ed.scroll.offset);
+    final p0 = ed.layout.toPage(f, off());
+    final a = await t.createGesture(kind: PointerDeviceKind.touch);
+    final b = await t.createGesture(kind: PointerDeviceKind.touch);
+    await a.down(c - const Offset(100, 0));
+    await b.down(c + const Offset(100, 0));
+    await t.pump(const Duration(milliseconds: 16));
+    var last = ed.widget.tools.zoom;
+    for (var i = 1; i <= 20; i++) {
+      // se mide al terminar de pintar el cuadro, antes de cualquier corrección posterior
+      double? err;
+      WidgetsBinding.instance.addPostFrameCallback((_) => err = (ed.layout.scrollFor(p0, f) - off()).distance);
+      await a.moveTo(c - Offset(100 + 10.0 * i, 0));
+      await b.moveTo(c + Offset(100 + 10.0 * i, 0));
+      await t.pump(const Duration(milliseconds: 16));
+      expect(ed.widget.tools.zoom, greaterThanOrEqualTo(last - 1e-9), reason: 'zoom monótono (cuadro $i)');
+      last = ed.widget.tools.zoom;
+      expect(err, isNotNull);
+      expect(err!, lessThan(3), reason: 'la hoja no se corre del foco (cuadro $i)');
+    }
+    await a.up();
+    await b.up();
+    await settle(t, 300);
+    expect(ed.widget.tools.zoom, greaterThan(2));
+  });
+
   testWidgets('PDF: una hoja A4 por cada hoja del cuaderno, cada una con su papel', (t) async {
     final s = Storage(root: root);
     await s.init();
