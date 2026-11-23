@@ -5,10 +5,12 @@
 // al azar; sale de un Random con semilla fija, así las capturas salen siempre iguales.
 
 import 'dart:math';
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/domain/domain.dart';
+import 'package:pdf/widgets.dart' as pw;
 
 import 'hershey_script.dart';
 
@@ -314,4 +316,146 @@ Future<void> seedLibrary(Storage s) async {
     await s.saveNotebook(NotebookDoc.fromSheets(nb, contents));
   }
   await s.saveIndex(NotesIndex(notebooks: [for (final b in books) b.$1], folders: folders));
+}
+
+// ---------- cuadernos extra (capturas 04, 05 y 06; se siembran DESPUÉS de las tres primeras) ----------
+
+/// Trazos corridos [dx], [dy].
+List<Stroke> _shift(List<Stroke> ss, double dx, double dy) => [
+      for (final s in ss)
+        Stroke(s.id, s.k, s.c, s.w, [for (var i = 0; i < s.pts.length; i += 3) ...[s.pts[i] + dx, s.pts[i + 1] + dy, s.pts[i + 2]]], s.o)
+    ];
+
+/// Texto a mano centrado en [c] (apoyado en la línea [base]).
+List<Stroke> _centered(Random r, String text, double cx, double base, {double size = 1.12, String color = _ink}) {
+  final raw = write(r, base, text, x0: 0, color: color, size: size, maxWidth: 2000);
+  final b = span(raw);
+  return _shift(raw, cx - b.center.dx, 0);
+}
+
+/// Título escrito a mano (más grande) que queda marcado en el índice de [m] con el [level] dado.
+void _headed(Random r, SheetMeta m, SheetContent c, int level, double base, String text) {
+  final ss = write(r, base, text, size: 1.65, maxWidth: 700);
+  c.strokes.addAll(ss);
+  m.heads.add(Heading(newId('h'), level: level, title: text, y: span(ss).top, ids: [for (final s in ss) s.id]));
+}
+
+Stroke _shape(ShapeFit f, {String color = _ink, double w = 2.8}) => _stroke('pen', color, w, f.toPoints(.62));
+ShapeFit _rect(double l, double t, double rr, double b) =>
+    ShapeFit(ShapeKind.rect, [Offset(l, t), Offset(rr, t), Offset(rr, b), Offset(l, b)], Offset((l + rr) / 2, (t + b) / 2));
+List<Stroke> _arrow(Offset a, Offset b) {
+  final d = (b - a).direction;
+  return [_shape(ShapeFit(ShapeKind.line, [a, b], (a + b) / 2), color: _blue, w: 2.4), arrowHead(b, d)];
+}
+
+/// Agrega a la biblioteca ya sembrada: el cuaderno con índice (04), el del esquema (05) y uno vacío para importar el PDF (06).
+Future<void> seedExtras(Storage s) async {
+  final r = Random(21);
+  final idx = await s.loadIndex();
+  final now = DateTime.now().millisecondsSinceEpoch;
+
+  // --- Análisis Matemático II: 4 hojas con títulos a mano marcados en el índice ---
+  final am = Notebook(newId('n'), 'Análisis Matemático II', favorite: true, updated: now);
+  for (final t in ['Límites', 'Continuidad', 'Derivadas', 'Aplicaciones']) {
+    am.sheets.add(SheetMeta(newId('h'), title: t));
+  }
+  final c1 = SheetContent(), c2 = SheetContent(), c3 = SheetContent(), c4 = SheetContent();
+  void lines(SheetContent c, int first, List<String> ls, {Set<int> blue = const {}}) {
+    for (var i = 0; i < ls.length; i++) {
+      c.strokes.addAll(write(r, _rule(first + i), ls[i], color: blue.contains(i) ? _blue : _ink));
+    }
+  }
+
+  _headed(r, am.sheets[0], c1, 1, _rule(3), 'Límites');
+  _headed(r, am.sheets[0], c1, 2, _rule(5), 'Definición');
+  lines(c1, 6, ['lim f(x) = L (x -> a) si para todo e > 0', 'existe d > 0 con |x - a| < d => |f(x) - L| < e.', 'Ejemplo: lim (2x + 1) = 5 cuando x -> 2'], blue: {0});
+  _headed(r, am.sheets[0], c1, 2, _rule(11), 'Propiedades');
+  lines(c1, 12, ['lim (f + g) = lim f + lim g', 'lim (f . g) = lim f . lim g', 'lim (f / g) = lim f / lim g  si lim g no es 0']);
+  _headed(r, am.sheets[1], c2, 2, _rule(3), 'Continuidad');
+  lines(c2, 4, ['f es continua en a si lim f(x) = f(a).', 'Discontinuidades: evitable, de salto y esencial.'], blue: {0});
+  _headed(r, am.sheets[1], c2, 2, _rule(8), 'Valor intermedio');
+  lines(c2, 9, ['Si f es continua en [a, b] y k está entre f(a) y f(b),', 'existe c en [a, b] tal que f(c) = k.', 'Bolzano es el caso k = 0.']);
+  _headed(r, am.sheets[2], c3, 1, _rule(3), 'Derivadas');
+  lines(c3, 4, ["f'(a) = lim (f(a + h) - f(a)) / h  cuando h -> 0", 'Es la pendiente de la recta tangente en a.']);
+  _headed(r, am.sheets[2], c3, 2, _rule(8), 'Regla de la cadena');
+  lines(c3, 9, ["(f o g)'(x) = f'(g(x)) . g'(x)", 'Ejemplo: h(x) = sen(x^2)  =>  h\'(x) = 2x cos(x^2)'], blue: {0});
+  _headed(r, am.sheets[2], c3, 2, _rule(13), 'Regla del producto');
+  lines(c3, 14, ["(f . g)' = f' . g + f . g'"]);
+  _headed(r, am.sheets[3], c4, 1, _rule(3), 'Aplicaciones');
+  lines(c4, 4, ['Optimizar: buscar los puntos donde f\'(x) = 0.']);
+  _headed(r, am.sheets[3], c4, 2, _rule(7), 'Máximos y mínimos');
+  lines(c4, 8, ["Si f'(c) = 0 y f''(c) < 0, c es un máximo local.", "Si f'(c) = 0 y f''(c) > 0, c es un mínimo local."], blue: {0});
+  final nbAm = NotebookDoc.fromSheets(am, [c1, c2, c3, c4]);
+
+  // --- Sistema de control: diagrama de bloques con figuras limpias ---
+  final sc = Notebook(newId('n'), 'Sistemas de control', updated: now - 60000);
+  sc.sheets.add(SheetMeta(newId('h'), title: 'Lazo cerrado', bg: 'grid'));
+  final d = SheetContent();
+  d.strokes
+    ..addAll(write(r, 170, 'Control de temperatura', x0: 130, size: 1.65, maxWidth: 740))
+    ..addAll(_centered(r, 'Ref.', 190, 300, color: _blue))
+    ..add(_shape(ShapeFit(ShapeKind.circle, const [], const Offset(190, 285), rx: 55, ry: 55)))
+    ..addAll(_arrow(const Offset(190, 341), const Offset(190, 447)))
+    ..add(_shape(_rect(80, 450, 300, 590)))
+    ..addAll(_centered(r, 'Sensor', 190, 532))
+    ..add(_shape(_rect(400, 450, 700, 590)))
+    ..addAll(_centered(r, 'Microcontrolador', 550, 532))
+    ..add(_shape(_rect(780, 450, 960, 590)))
+    ..addAll(_centered(r, 'Actuador', 870, 532))
+    ..addAll(_arrow(const Offset(300, 520), const Offset(398, 520)))
+    ..addAll(_arrow(const Offset(700, 520), const Offset(778, 520)))
+    ..add(_shape(ShapeFit(ShapeKind.ellipse, const [], const Offset(520, 800), rx: 260, ry: 80)))
+    ..addAll(_centered(r, 'Entorno (horno)', 520, 812))
+    ..addAll(_arrow(const Offset(860, 592), const Offset(762, 770)))
+    ..addAll(_arrow(const Offset(282, 770), const Offset(190, 592)))
+    ..addAll(write(r, 1000, 'El sensor mide y se compara con la referencia.', x0: 130, maxWidth: 760))
+    ..addAll(write(r, 1040, 'Si falta calor, el actuador enciende la resistencia.', x0: 130, maxWidth: 760));
+  final nbSc = NotebookDoc.fromSheets(sc, [d]);
+
+  // --- Práctica 3: una hoja vacía (el PDF se importa en la captura 06) ---
+  final pr = Notebook(newId('n'), 'Práctica 3', updated: now - 120000);
+  pr.sheets.add(SheetMeta(newId('h')));
+  final nbPr = NotebookDoc.fromSheets(pr, [SheetContent()]);
+
+  for (final doc in [nbAm, nbSc, nbPr]) {
+    await s.saveNotebook(doc);
+  }
+  await s.saveIndex(NotesIndex(notebooks: [...idx.notebooks, am, sc, pr], folders: idx.folders));
+}
+
+/// Posiciones (en puntos del PDF A4 de 595 x 842) de cada enunciado de [buildPracticePdf], para anotar encima.
+const practiceTop = {1: 150.0, 2: 270.0, 3: 390.0, 4: 510.0};
+
+/// PDF de 2 hojas que parece una práctica impresa: título y enunciados numerados en posiciones fijas.
+Future<Uint8List> buildPracticePdf() async {
+  final d = pw.Document();
+  pw.Widget at(double top, String text, {double size = 12, bool bold = false, double left = 50, double width = 495}) => pw.Positioned(
+      left: left,
+      top: top,
+      child: pw.SizedBox(width: width, child: pw.Text(text, style: pw.TextStyle(fontSize: size, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal))));
+  pw.Widget page(List<pw.Widget> ch) => pw.Stack(children: ch);
+  final ex = [
+    '1) Calcular el límite lim (3x + 1) cuando x tiende a 2.',
+    '2) Calcular lim sen(x) / x cuando x tiende a 0.',
+    '3) Hallar el valor de a para que f sea continua en x = 1.',
+    '4) Probar con la definición que lim (2x - 1) = 3 cuando x -> 2.',
+  ];
+  d.addPage(pw.Page(
+    margin: pw.EdgeInsets.zero,
+    build: (_) => page([
+      at(40, 'Análisis Matemático II  ·  Facultad de Ingeniería', size: 10),
+      at(62, 'Práctica 3: Límites y continuidad', size: 22, bold: true),
+      at(100, 'Resolver los ejercicios. Justificar cada paso.', size: 11),
+      for (var i = 0; i < 4; i++) at(practiceTop[i + 1]!, ex[i]),
+    ]),
+  ));
+  d.addPage(pw.Page(
+    margin: pw.EdgeInsets.zero,
+    build: (_) => page([
+      at(40, 'Análisis Matemático II  ·  Práctica 3', size: 10),
+      at(80, '5) Estudiar la continuidad de f(x) = (x^2 - 1) / (x - 1).'),
+      at(200, '6) Calcular lim (x^2 - 4) / (x - 2) cuando x tiende a 2.'),
+    ]),
+  ));
+  return Uint8List.fromList(await d.save());
 }
