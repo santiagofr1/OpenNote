@@ -1105,18 +1105,48 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     _createTextAt(_toPage(d.localPosition));
   }
 
+  /// Un toque en modo texto en el punto [p] de la hoja (para los tests).
+  @visibleForTesting
+  void tapTextAt(Offset p) => _createTextAt(p);
+
   void _createTextAt(Offset p) {
     if (!_loadedAt(p.dy)) {
       _requestSync();
       return;
     }
-    final x = p.dx.clamp(16.0, kW - 120);
-    var y = max(0.0, doc.snapTextY(p.dy, floor: true)); // el renglón de esa hoja
-    // en el espacio entre hojas (o sin lugar para un renglón): a la siguiente
-    if (y % kSheetStep > kSheetH - doc.lineAt(y) && y ~/ kSheetStep < doc.sheetCount - 1) {
+    final x = p.dx.clamp(4.0, kW - 40);
+    var y = doc.snapTextY(p.dy, floor: true); // el renglón de esa hoja (puede ser uno virtual, arriba del primero)
+    // pasa a la hoja siguiente solo si el renglón no entra en esta (o cae en el espacio entre hojas)
+    if (y % kSheetStep + doc.lineAt(y) > kSheetH && y ~/ kSheetStep < doc.sheetCount - 1) {
       y = doc.snapTextY((y ~/ kSheetStep + 1) * kSheetStep, floor: true);
     }
-    _placeText(x, y);
+    if (_followBlockAbove(p)) return;
+    _placeText(x.toDouble(), y);
+  }
+
+  /// Tocar debajo del último renglón de un bloque (a lo sumo 3 renglones) y en su ancho sigue ese bloque:
+  /// agrega los párrafos que faltan y deja el cursor en el último. false si no hay bloque así.
+  bool _followBlockAbove(Offset p) {
+    final k = p.dy ~/ kSheetStep;
+    TextBlock? best;
+    var bestRows = 0, bestGap = double.infinity;
+    for (final t in doc.texts.values) {
+      if (t.y ~/ kSheetStep != k || t.transformed) continue;
+      final line = doc.lineAt(t.y), r = textRect(t, line), gap = p.dy - r.bottom;
+      if (gap < 0 || p.dx < t.x - 2 * line || p.dx > t.x + t.w) continue;
+      final rows = (gap / line).floor() + 1;
+      if (rows > 3 || gap >= bestGap) continue;
+      best = t;
+      bestRows = rows;
+      bestGap = gap;
+    }
+    final ed = best == null ? null : texts.editor(best.id);
+    if (best == null || ed == null) return false;
+    ed.appendParagraphs(bestRows);
+    showKeyboard();
+    _textEdited(best);
+    _changed();
+    return true;
   }
 
   /// Un bloque nuevo y vacío en ([x], [y]) (y ya sobre el renglón), con el foco y el teclado.
@@ -1195,6 +1225,20 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     if (t != Tool.text) FocusScope.of(context).unfocus();
     // por si al abrir la app no había internet: reintenta la bajada del modelo de la letra, en silencio
     if (t == Tool.title) unawaited(handwriting?.ensureModel());
+  }
+
+  // ---- atajos de teclado de la pantalla del cuaderno (fuera de los textos) ----
+  /// Algún campo de texto del editor tiene el foco.
+  bool get textFocused => texts.anyFocused;
+
+  void undo() => _undoRedo(undo: true);
+  void redo() => _undoRedo(undo: false);
+
+  /// Elegir una herramienta con una tecla suelta (P, H, T, S). Texto abre un bloque, como el botón.
+  void pickTool(Tool t) {
+    if (widget.readOnly) return;
+    if (t != Tool.text && ts.tool == t) return;
+    _toolTap(t);
   }
 
   void _toolTap(Tool t) {

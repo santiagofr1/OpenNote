@@ -17,6 +17,7 @@ import '../../editor/voice_recorder.dart';
 import '../../sync/sync_controller.dart';
 import '../../widgets/dialogs.dart';
 import '../../widgets/pdf_progress.dart';
+import '../../widgets/shortcuts_dialog.dart';
 import '../library/sync_indicator.dart';
 import 'index_panel.dart';
 import 'menus.dart';
@@ -79,6 +80,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    HardwareKeyboard.instance.addHandler(_shortcut);
     sheetNotifier.addListener(() {
       nb.last = sheetNotifier.value;
       _indexDirty = true;
@@ -97,6 +99,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    HardwareKeyboard.instance.removeHandler(_shortcut);
     searchCtrl.dispose();
     _searchTimer?.cancel();
     if (fullscreen) SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -556,6 +559,8 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         await _styleDialog();
       case 'export':
         await _export();
+      case 'shortcuts':
+        await showShortcutsDialog(context);
       case 'fav':
         setState(() => nb.favorite = !nb.favorite);
         await _saveIndex();
@@ -723,6 +728,47 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
   Future<void> _toggleFullscreen() async {
     setState(() => fullscreen = !fullscreen);
     await SystemChrome.setEnabledSystemUIMode(fullscreen ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge);
+  }
+
+  /// Atajos de teclado sobre la hoja. Solo cuando esta pantalla está arriba (sin diálogos ni menús) y
+  /// ningún campo de texto tiene el foco (ahí las teclas son para escribir).
+  bool _shortcut(KeyEvent e) {
+    if (e is! KeyDownEvent || !mounted || ModalRoute.of(context)?.isCurrent != true) return false;
+    final primary = FocusManager.instance.primaryFocus;
+    if (primary?.context?.findAncestorWidgetOfExactType<EditableText>() != null) return false;
+    final ed = editorKey.currentState;
+    if (ed == null || ed.textFocused) return false;
+    final hw = HardwareKeyboard.instance, k = e.logicalKey;
+    final ctrl = hw.isControlPressed || hw.isMetaPressed;
+    if (ctrl && !hw.isAltPressed) {
+      if (k == LogicalKeyboardKey.slash) {
+        unawaited(showShortcutsDialog(context));
+        return true;
+      }
+      if (reading) return false;
+      if (k == LogicalKeyboardKey.keyZ) {
+        hw.isShiftPressed ? ed.redo() : ed.undo();
+        return true;
+      }
+      if (k == LogicalKeyboardKey.keyY && !hw.isShiftPressed) {
+        ed.redo();
+        return true;
+      }
+      return false;
+    }
+    if (reading || hw.isAltPressed || hw.isShiftPressed) return false;
+    final t = k == LogicalKeyboardKey.keyP
+        ? Tool.pen
+        : k == LogicalKeyboardKey.keyH
+            ? Tool.hl
+            : k == LogicalKeyboardKey.keyT
+                ? Tool.text
+                : k == LogicalKeyboardKey.keyS
+                    ? Tool.select
+                    : null;
+    if (t == null) return false;
+    ed.pickTool(t);
+    return true;
   }
 
   @override
