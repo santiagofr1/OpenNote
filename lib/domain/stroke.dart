@@ -112,7 +112,13 @@ class Stroke extends Layered {
   int meshGen = 0;
 
   /// La malla, calculándola si hace falta (null si no hay puntos).
-  StrokeMesh? ensureMesh() => mesh ??= buildStrokeMesh(this);
+  /// Si el borde difuminado vigente ([meshFeather]) cambió desde que se armó, se rehace (y se suelta el lote).
+  StrokeMesh? ensureMesh() {
+    final m = mesh;
+    if (m != null && (m.feather == meshFeather)) return m;
+    if (m != null) releaseMesh();
+    return mesh = buildStrokeMesh(this);
+  }
 
   /// Suelta la malla y lo que se armó con ella (al descargar la hoja o al cambiar el trazo).
   void releaseMesh() {
