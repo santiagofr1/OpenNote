@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import '../../data/export_folder.dart';
 import '../../domain/domain.dart';
 import '../../widgets/menu_row.dart';
 
@@ -76,6 +77,38 @@ class _IconRowState extends State<_IconRow> {
       ]),
     );
   }
+}
+
+/// Hoja "Exportar carpeta": en qué formato va cada cuaderno dentro del .zip. Null si se cierra sin elegir.
+Future<FolderExportFormat?> showFolderExportSheet(BuildContext context) {
+  final cs = Theme.of(context).colorScheme;
+  Widget tile(IconData i, String t, String sub, FolderExportFormat v) => ListTile(
+        key: Key('folderExport-${v.name}'),
+        leading: Icon(i, weight: 300, color: cs.onSurfaceVariant),
+        title: Text(t),
+        subtitle: Text(sub),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        onTap: () => Navigator.pop(context, v),
+      );
+  return showModalBottomSheet<FolderExportFormat>(
+    context: context,
+    isScrollControlled: true,
+    builder: (ctx) => SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              child: Text('Exportar carpeta', style: Theme.of(ctx).textTheme.titleLarge)),
+          tile(Symbols.picture_as_pdf, 'PDF', 'Un PDF por cuaderno', FolderExportFormat.pdf),
+          tile(Symbols.photo_library, 'Imágenes (PNG)', 'Una carpeta por cuaderno con una imagen por hoja',
+              FolderExportFormat.png),
+          tile(Symbols.archive, 'OpenNote', 'Un .opennote por cuaderno, para pasarlo a otro dispositivo',
+              FolderExportFormat.opennote),
+        ]),
+      ),
+    ),
+  );
 }
 
 /// "Exportar": una sola hoja con todo. Devuelve 'pdf' y 'png' (cuaderno entero), 'opennote', y solo si hay [sheetName]

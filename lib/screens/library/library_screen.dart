@@ -423,6 +423,18 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     if (mounted) await exportPdfFlow(context, store, doc, sections: secs);
   }
 
+  /// "Exportar" de una carpeta: todos sus cuadernos (y los de las subcarpetas) en un .zip.
+  Future<void> _exportFolder(Folder f) async {
+    final idx = index!;
+    if (idx.notebookCount(f.id) == 0) {
+      snack(context, 'La carpeta está vacía');
+      return;
+    }
+    final fmt = await showFolderExportSheet(context);
+    if (fmt == null || !mounted) return;
+    await exportFolderFlow(context, store, idx, f, fmt);
+  }
+
   Future<void> _delete(Notebook nb) async {
     if (!await confirmDeleteNotebook(context, nb)) return;
     await store.deleteNotebook(index!, nb);
@@ -565,11 +577,14 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     final v = await _optionsMenu(card, f.name, [
       (Symbols.edit, 'Renombrar', 'rename', null),
       (Symbols.drive_file_move, 'Mover a…', 'move', 'moveTo'),
+      (Symbols.ios_share, 'Exportar', 'export', 'exportFolder'),
       (Symbols.delete, 'Borrar', 'delete', null),
     ]);
     if (!mounted) return;
     setState(() => pressed = null);
     switch (v) {
+      case 'export':
+        _exportFolder(f);
       case 'rename':
         _renameFolder(f);
       case 'move':

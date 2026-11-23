@@ -11,6 +11,7 @@ import 'dart:ui' as ui;
 
 import 'package:apuntes/app.dart';
 import 'package:apuntes/data/export.dart';
+import 'package:apuntes/data/export_folder.dart';
 import 'package:apuntes/data/media_import.dart';
 import 'package:apuntes/data/sheet_codec.dart';
 import 'package:apuntes/data/storage.dart';
@@ -917,6 +918,47 @@ void main() {
     await t.tap(find.byKey(const Key('askOk')));
     await settle(t, 800);
   }
+
+  testWidgets('exportar carpeta: un .zip con una carpeta por cuaderno y sus PNG', (t) async {
+    await start(t);
+    await createNotebook(t, 'Apuntes'); // se abre solo: dibujar un trazo y volver
+    await stylusLine(t, sheetCenter(t) + const Offset(-100, 0), sheetCenter(t) + const Offset(100, 40));
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+    await createFolder(t, 'Facultad');
+    await holdOn(t, find.byKey(const Key('nb-Apuntes')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('moveTo')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('moveTarget-Facultad')));
+    await settle(t, 800);
+
+    Uint8List? zipBytes;
+    String? zipName;
+    final savedZip = saveFolderZip;
+    saveFolderZip = (zip, name) async {
+      zipBytes = await zip.readAsBytes();
+      zipName = name;
+      return true;
+    };
+    addTearDown(() => saveFolderZip = savedZip);
+    await holdOn(t, find.byKey(const Key('folder-Facultad')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('exportFolder')));
+    await settle(t, 600);
+    await t.tap(find.byKey(const Key('folderExport-png')));
+    for (var i = 0; i < 200 && zipBytes == null; i++) {
+      await settle(t, 100);
+    }
+    expect(zipBytes, isNotNull);
+    expect(zipName, 'Facultad');
+    final entries = ZipDecoder().decodeBytes(zipBytes!).where((f) => f.isFile).toList();
+    expect(entries.map((f) => f.name), ['Facultad/Apuntes/Apuntes - hoja 01.png']);
+    expect(entries.single.content.take(4).toList(), [0x89, 0x50, 0x4E, 0x47]);
+    await settle(t, 600);
+    expect(find.text('Carpeta exportada'), findsOneWidget);
+    expect(t.takeException(), isNull);
+  });
 
   testWidgets('carpetas: crear, meter un cuaderno, renombrar y sacar', (t) async {
     await start(t);
