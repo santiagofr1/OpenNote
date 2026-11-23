@@ -1503,7 +1503,11 @@ void main() {
     final c = (t.getCenter(find.byKey(const Key('selHandle-tl'))) + t.getCenter(find.byKey(const Key('selHandle-br')))) / 2;
     final r = (rot - c).distance;
     final lenBefore = ed.doc.strokes[ids.first]!.bounds;
-    await stylusDrag(t, rot, c + Offset(r, 0));
+    await stylusDrag(t, rot, c + Offset(r, 0), during: () {
+      expect(find.byKey(const Key('rotateAngleText')), findsOneWidget, reason: 'mientras se rota se ven los grados');
+      expect((t.widget(find.byKey(const Key('rotateAngleText'))) as Text).data, endsWith('°'));
+    });
+    expect(find.byKey(const Key('rotateAngleText')), findsNothing, reason: 'al soltar desaparece la etiqueta');
     final after = ed.doc.strokes[ids.first]!.bounds;
     expect(after.height, greaterThan(lenBefore.height), reason: 'giró: lo que era ancho ahora es más alto');
     expect(ed.doc.strokes[ids.first]!.w, closeTo(w0 * k, 1e-6), reason: 'rotar no cambia el grosor');

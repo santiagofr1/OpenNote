@@ -251,4 +251,15 @@ void main() {
       expect(sel.contentRect(d), r, reason: 'el original se reconstruye con su ancho');
     });
   });
+
+  test('grados del giro: enteros de -179 a 180', () {
+    expect(angleDegrees(0), 0);
+    expect(angleDegrees(pi / 2), 90);
+    expect(angleDegrees(-pi / 2), -90);
+    expect(angleDegrees(pi), 180);
+    expect(angleDegrees(-pi), 180);
+    expect(angleDegrees(pi / 4 + 0.004), 45);
+    expect(angleDegrees(-0.001), 0);
+    expect(angleLabel(pi / 2), '90°');
+  });
 }

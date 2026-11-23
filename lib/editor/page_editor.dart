@@ -2186,6 +2186,34 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
           onUpdate: (_, g) => _handleUpdate(g),
           onEnd: _handleEnd,
         ),
+      // los grados del giro, solo mientras se rota (sobre la manija, siguiendo el giro)
+      if (drag != null && drag.handle == Handle.rotate && canRotate && box != null)
+        Builder(builder: (context) {
+          final cs = Theme.of(context).colorScheme;
+          final at = topMid! + up * 64;
+          return Positioned(
+            key: const ValueKey('rotateAngle'),
+            left: at.dx - 40,
+            top: at.dy - 14,
+            width: 80,
+            height: 28,
+            child: IgnorePointer(
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(color: cs.inverseSurface, borderRadius: BorderRadius.circular(14)),
+                  child: Text(angleLabel(xf.angle),
+                      key: const Key('rotateAngleText'),
+                      style: TextStyle(
+                          color: cs.onInverseSurface,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          fontFeatures: const [FontFeature.tabularFigures()])),
+                ),
+              ),
+            ),
+          );
+        }),
     ]);
   }
 
