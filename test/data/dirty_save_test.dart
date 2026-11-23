@@ -382,6 +382,7 @@ void main() {
         Tool.paint => 'Decorador · tocá de nuevo para opciones',
         Tool.text => 'Texto con teclado',
         Tool.select => 'Seleccionar',
+        Tool.title => 'Título para el índice',
       };
       await t.tap(find.byTooltip(tip));
       await t.pump(const Duration(milliseconds: 400));

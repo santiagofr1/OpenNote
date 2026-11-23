@@ -18,6 +18,8 @@ import '../widgets/dialogs.dart';
 import 'context_menu.dart';
 import 'dock_layout.dart';
 import 'format_bar.dart';
+import 'handwriting.dart';
+import 'heading_dialog.dart';
 import 'history.dart';
 import 'ink.dart';
 import 'items_layer.dart';
@@ -62,11 +64,15 @@ class PageEditor extends StatefulWidget {
   /// el panel tiene que redibujarse. Recibe la hoja que conviene mostrar (null si no hay que moverse).
   final ValueChanged<int?>? onSheetsChanged;
 
+  /// Cambiaron los títulos del índice (se marcó uno, o se movieron / ocultaron / mudaron de hoja con lo que marcan).
+  final VoidCallback? onHeadingsChanged;
+
   /// La grabación de voz en curso (el audio que se graba se dibuja como etiqueta "Grabando") y qué hacer al tocar parar.
   final VoiceRecorder? recorder;
   final VoidCallback? onStopRecording;
   const PageEditor({
     this.onSheetsChanged,
+    this.onHeadingsChanged,
     this.recorder,
     this.onStopRecording,
     super.key,
@@ -192,6 +198,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       texts.attach(doc);
       history.clear();
       sel.clear();
+      _outline = null;
       pointer = null;
       live = null;
       _endShapeHold();
@@ -524,7 +531,13 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   bool _loadedAt(double y) => doc.isLoadedAt(doc.sheetOfY(y));
 
-  void _changed() => widget.onChanged();
+  void _changed() {
+    if (syncHeadings(doc)) {
+      _outline = null;
+      widget.onHeadingsChanged?.call();
+    }
+    widget.onChanged();
+  }
 
   void _saveSoon(String id, Duration delay) {
     _saveTimers[id]?.cancel();
@@ -554,6 +567,11 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         _startErase(p);
       case PenAction.select:
         _selDown(p);
+      case PenAction.title:
+        _clearSel();
+        sel.bandA = sel.bandB = p;
+        sel.titleBand = true;
+        liveTick.value++;
       case PenAction.draw:
         final pr = ts.current;
         live = Stroke(newId('s'), ts.tool == Tool.hl ? 'hl' : pr.tip, pr.color, pr.width, [], pr.opacity,
@@ -657,6 +675,16 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       return;
     }
     final band = sel.band;
+    if (band != null && sel.titleBand) {
+      sel.bandA = sel.bandB = null;
+      sel.titleBand = false;
+      liveTick.value++;
+      if (band.longestSide * scale < 6) return; // un toque: nada
+      // en modo ventana (no captura): solo lo que está adentro del recuadro, para no arrastrar renglones ni letras vecinas
+      final hit = Selection()..selectIn(doc, band, capture: false);
+      if (!hit.isEmpty) unawaited(_markHeading(hit.strokesOf(doc), hit.textsOf(doc), hit.itemsOf(doc)));
+      return;
+    }
     if (band != null) {
       if (band.longestSide * scale < 6) {
         // un toque, no un recuadro: elige el elemento de más arriba bajo el lápiz (o nada)
@@ -1158,6 +1186,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     if (t != Tool.select) _clearSel();
     setState(() => ts.tool = t);
     if (t != Tool.text) FocusScope.of(context).unfocus();
+    // por si al abrir la app no había internet: reintenta la bajada del modelo de la letra, en silencio
+    if (t == Tool.title) unawaited(handwriting?.ensureModel());
   }
 
   void _toolTap(Tool t) {
@@ -1658,6 +1688,71 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         duration: const Duration(milliseconds: 380), curve: Curves.easeOutQuart);
   }
 
+  /// Lleva la vista a la altura [yLocal] (local a la hoja) de la hoja [k], dejándola a ~120 px de arriba (el índice).
+  void scrollToSheetY(int k, double yLocal) {
+    if (!mounted) return;
+    if (!scroll.hasClients || !scroll.position.hasContentDimensions) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => scrollToSheetY(k, yLocal));
+      return;
+    }
+    k = k.clamp(0, doc.sheetCount - 1);
+    widget.sheetNotifier?.value = k;
+    scroll.animateTo(((k * kSheetStep + yLocal) * scale + kTopPad - 120).clamp(0.0, scroll.position.maxScrollExtent),
+        duration: const Duration(milliseconds: 380), curve: Curves.easeOutQuart);
+  }
+
+  // ---------------- índice ----------------
+  /// El índice del cuaderno armado (lo usa la capa en vivo con la herramienta Título); null = hay que rehacerlo.
+  List<OutlineEntry>? _outline;
+
+  /// Los títulos cambiaron desde afuera (el panel del índice): se rehace la numeración y se repinta.
+  void headingsChanged() {
+    _outline = null;
+    liveTick.value++;
+  }
+
+  /// Marca [strokes], [texts] e [items] como un título del índice: pregunta el nombre y el nivel y lo agrega a su hoja.
+  Future<void> _markHeading(List<Stroke> strokes, List<TextBlock> texts, List<Item> items) async {
+    final tops = [for (final s in strokes) s.bounds.top, for (final t in texts) t.y, for (final i in items) i.y];
+    if (tops.isEmpty) return;
+    final top = tops.reduce(min), k = doc.sheetOfY(top);
+    if (!doc.isLoadedAt(k)) return;
+    final sheetId = doc.sheets[k].id, local = top - k * kSheetStep;
+    var initial = '';
+    Future<String?>? recognizing;
+    var downloading = false;
+    if (texts.isNotEmpty) {
+      final first = (List.of(texts)..sort((a, b) => a.y.compareTo(b.y))).first;
+      initial = first.text.split('\n').map((l) => l.trim()).firstWhere((l) => l.isNotEmpty, orElse: () => '');
+      if (initial.length > 120) initial = initial.substring(0, 120);
+    } else if (strokes.isNotEmpty && handwriting != null) {
+      final hw = handwriting!;
+      downloading = !await hw.isModelReady();
+      if (!mounted) return;
+      recognizing = hw.recognize(strokes);
+    }
+    // nivel del título anterior (en la misma sección)
+    var level = 1;
+    for (final e in buildOutline(doc.nb)) {
+      if (e.sectionId != doc.nb.activeSection.id) continue;
+      if (e.sheet < k || (e.sheet == k && e.y < local)) level = e.level;
+    }
+    final r = await showHeadingDialog(context,
+        initialTitle: initial, initialLevel: level, recognizing: recognizing, downloading: downloading);
+    if (r == null || !mounted) return;
+    final i = doc.indexOfSheet(sheetId); // pudo moverse mientras se escribía
+    if (i < 0) return;
+    final m = doc.sheets[i];
+    m.heads.add(Heading(newId('h'),
+        level: r.level, title: r.title, y: local, ids: [for (final s in strokes) s.id, for (final t in texts) t.id, for (final it in items) it.id]));
+    m.updated = DateTime.now().millisecondsSinceEpoch;
+    syncHeadings(doc);
+    _outline = null;
+    liveTick.value++;
+    widget.onHeadingsChanged?.call();
+    _changed();
+  }
+
   /// Lleva la vista a un texto o elemento y lo deja seleccionado (búsqueda).
   void reveal(String id) {
     final t = doc.texts[id], it = doc.items[id];
@@ -2049,7 +2144,14 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   }
 
   void _paintLive(Canvas c) => paintLiveLayer(c,
-      doc: doc, scale: scale, sel: sel, live: live, eraserAt: eraserAt, eraserRadius: ts.eraserRadius, visible: _visiblePage());
+      doc: doc,
+      scale: scale,
+      sel: sel,
+      live: live,
+      eraserAt: eraserAt,
+      eraserRadius: ts.eraserRadius,
+      visible: _visiblePage(),
+      outline: ts.tool == Tool.title ? (_outline ??= buildOutline(doc.nb)) : null);
 
   Widget _textBlock(TextBlock t, bool textMode) {
     final ed = texts.editor(t.id);

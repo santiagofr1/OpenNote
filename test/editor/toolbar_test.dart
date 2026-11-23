@@ -12,6 +12,7 @@ void main() {
     bool clip = false,
   }) async {
     final ts = ToolState()..dock = vertical ? 'left' : 'top';
+    if (clip) ts.clipboard.strokes.add(Stroke('a', 'pen', '#000000', 1, [0, 0, .5, 1, 1, .5]));
     await t.binding.setSurfaceSize(Size(w, vertical ? h : 400));
     t.view.devicePixelRatio = 1;
     addTearDown(() => t.binding.setSurfaceSize(null));
@@ -75,4 +76,11 @@ void main() {
       expect(scroll.position.maxScrollExtent, 0);
     },
   );
+
+  testWidgets('con portapapeles y los 6 botones de herramienta, a 676 dp entra sin desplazarse', (t) async {
+    await pump(t, 676, clip: true);
+    expect(t.takeException(), isNull);
+    final scroll = t.state<ScrollableState>(find.byType(Scrollable));
+    expect(scroll.position.maxScrollExtent, 0);
+  });
 }

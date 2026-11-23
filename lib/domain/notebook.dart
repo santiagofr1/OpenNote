@@ -4,6 +4,7 @@ import 'package:crypto/crypto.dart';
 
 import 'paper_layout.dart';
 import 'folders.dart';
+import 'outline.dart';
 import 'values.dart';
 
 /// Una hoja del cuaderno: lo que se guarda en `notebook.json` (el contenido está en su `.sheet`).
@@ -17,6 +18,7 @@ class SheetMeta {
   int rev; // sube cada vez que cambia el contenido guardado
   int updated; // ms epoch, para sincronizar algún día
   String section; // id de la sección a la que pertenece ('' = sin decir: es de la primera, ver [Notebook.loadSheetsJson])
+  List<Heading> heads; // títulos del índice que marcan cosas de esta hoja
   SheetMeta(this.id,
       {this.title = '',
       this.bookmark = false,
@@ -25,8 +27,10 @@ class SheetMeta {
       double? spacing,
       this.rev = 0,
       this.updated = 0,
-      this.section = ''})
-      : spacing = spacing ?? defaultSpacing(bg);
+      this.section = '',
+      List<Heading>? heads})
+      : spacing = spacing ?? defaultSpacing(bg),
+        heads = heads ?? [];
 
   /// Cambia el fondo; el espaciado vuelve al por defecto si el actual no existe en el fondo nuevo.
   void setBg(String v) {
@@ -34,6 +38,7 @@ class SheetMeta {
     spacing = validSpacing(v, spacing);
   }
 
+  /// Con [id] nuevo (duplicar la hoja) los títulos del índice no se copian: siguen marcando lo de la hoja original.
   SheetMeta copy({String? id, String? title, bool? bookmark}) => SheetMeta(id ?? this.id,
       title: title ?? this.title,
       bookmark: bookmark ?? this.bookmark,
@@ -42,7 +47,8 @@ class SheetMeta {
       spacing: spacing,
       rev: rev,
       updated: updated,
-      section: section);
+      section: section,
+      heads: id != null ? null : [for (final h in heads) h.copy()]);
 
   factory SheetMeta.fromJson(Map j) => SheetMeta(
         j['id'] as String,
@@ -54,6 +60,7 @@ class SheetMeta {
         rev: (j['rev'] ?? 0) as int,
         updated: (j['updated'] ?? 0) as int,
         section: (j['section'] ?? '') as String, // los archivos viejos no la tienen
+        heads: [for (final h in (j['heads'] as List? ?? const [])) Heading.fromJson(h as Map)],
       );
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -65,6 +72,7 @@ class SheetMeta {
         'rev': rev,
         'updated': updated,
         if (section.isNotEmpty) 'section': section,
+        if (heads.isNotEmpty) 'heads': [for (final h in heads) h.toJson()],
       };
 }
 

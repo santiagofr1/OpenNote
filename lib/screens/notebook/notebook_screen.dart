@@ -18,6 +18,7 @@ import '../../sync/sync_controller.dart';
 import '../../widgets/dialogs.dart';
 import '../../widgets/pdf_progress.dart';
 import '../library/sync_indicator.dart';
+import 'index_panel.dart';
 import 'menus.dart';
 import 'pages_panel.dart';
 import 'search.dart';
@@ -55,6 +56,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
 
   // vista
   bool panel = false; // panel de hojas
+  bool indexOpen = false; // panel del índice (a la derecha)
   bool reading = false; // modo lectura
   bool fullscreen = false;
   bool onlyBookmarks = false;
@@ -71,6 +73,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
   final sheetNotifier = ValueNotifier(0);
   final _liveVersion = ValueNotifier(0); // cambió algo en la hoja abierta
   final _structure = ValueNotifier(0); // cambió el orden, la cantidad o el estilo de las hojas
+  final _headings = ValueNotifier(0); // cambiaron los títulos del índice
 
   @override
   void initState() {
@@ -332,6 +335,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
       _indexDirty = true;
       sheetNotifier.value = nb.last.clamp(0, d.sheetCount - 1);
       _structure.value++;
+      _headings.value++;
       _liveVersion.value++;
       setState(() => doc = d);
       await _saveIndex();
@@ -756,9 +760,15 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
                             onChanged: _docChanged,
                             onPrefsChanged: _prefsChanged,
                             onSheetsChanged: _sheetsChangedByEditor,
+                            onHeadingsChanged: () => _headings.value++,
                             recorder: recorder,
                             onStopRecording: stopVoice,
                           ),
+                  ),
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 240),
+                    curve: Curves.easeOutQuart,
+                    child: indexOpen && !fullscreen ? _indexPanel() : const SizedBox(width: 0),
                   ),
                 ]),
               ),
@@ -862,6 +872,52 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         onSections: _sectionsList,
       );
 
+  // (mientras se cambia de sección no hay documento: el panel deja su lugar vacío)
+  Widget _indexPanel() => doc == null
+      ? const SizedBox(width: 300)
+      : IndexPanel(
+          nb: nb,
+          refresh: Listenable.merge([_headings, _structure]),
+          onOpen: _openEntry,
+          onAction: _entryAction,
+        );
+
+  /// Lleva la vista al título [e] (cambiando de sección si es de otra).
+  Future<void> _openEntry(OutlineEntry e) async {
+    if (e.sectionId != nb.activeSection.id) {
+      await _switchSection(e.sectionId);
+      if (!mounted || doc == null || nb.activeSection.id != e.sectionId) return;
+      await WidgetsBinding.instance.endOfFrame; // que el editor nuevo ya esté armado
+      if (!mounted) return;
+    }
+    sheetNotifier.value = e.sheet;
+    editorKey.currentState?.scrollToSheetY(e.sheet, e.y);
+  }
+
+  /// Renombrar, cambiar de nivel o quitar un título desde el panel (puede ser de cualquier sección).
+  Future<void> _entryAction(OutlineEntry e, IndexAction a) async {
+    final m = nb.sheetsOf(e.sectionId).where((x) => x.id == e.sheetId).firstOrNull;
+    final h = m?.heads.where((x) => x.id == e.headingId).firstOrNull;
+    if (m == null || h == null) return;
+    switch (a) {
+      case IndexAction.rename:
+        final n = (await askText(context, 'Renombrar título', initial: h.title))?.trim();
+        if (n == null || n.isEmpty || !mounted) return;
+        h.title = n.length > 120 ? n.substring(0, 120) : n;
+      case IndexAction.levelUp:
+        h.level = (e.level - 1).clamp(1, 9); // sobre el nivel que se ve, no sobre el guardado
+      case IndexAction.levelDown:
+        h.level = (e.level + 1).clamp(1, 9);
+      case IndexAction.remove:
+        m.heads.remove(h);
+    }
+    m.updated = DateTime.now().millisecondsSinceEpoch;
+    _headings.value++;
+    _docChanged();
+    editorKey.currentState?.headingsChanged();
+    if (mounted) setState(() {});
+  }
+
   Widget _topBar(ColorScheme cs) {
     Widget act(IconData i, String tip, VoidCallback? f, {bool on = false, Key? key}) => Padding(
           padding: const EdgeInsets.symmetric(horizontal: 1),
@@ -907,6 +963,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
             final v = await showInsertMenu(context, at);
             if (v != null && mounted) await runInsert(v);
           }),
+          act(Symbols.toc, 'Índice', () => setState(() => indexOpen = !indexOpen), on: indexOpen, key: const Key('indexBtn')),
           act(Symbols.view_sidebar, 'Hojas', () => setState(() => panel = !panel), on: panel, key: const Key('pagesBtn')),
           act(Symbols.open_in_full, 'Pantalla completa', _toggleFullscreen),
           menuBtn(Symbols.more_vert, 'Más opciones', const Key('more'), (at) async {

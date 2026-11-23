@@ -52,6 +52,7 @@ class MoveDrag {
 class Selection {
   final strokes = <String>{}, texts = <String>{}, items = <String>{};
   Offset? bandA, bandB;
+  bool titleBand = false; // el rectángulo es el de la herramienta Título (siempre "captura", se dibuja siempre igual)
   MoveDrag? drag;
 
   bool get isEmpty => strokes.isEmpty && texts.isEmpty && items.isEmpty;
@@ -67,6 +68,7 @@ class Selection {
     texts.clear();
     items.clear();
     bandA = bandB = null;
+    titleBand = false;
     drag = null;
   }
 

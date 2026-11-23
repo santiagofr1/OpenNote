@@ -9,6 +9,7 @@ export 'geometry.dart';
 export 'notebook.dart';
 export 'paint_shapes.dart';
 export 'notebook_doc.dart';
+export 'outline.dart';
 export 'paper_layout.dart';
 export 'rich_text.dart';
 export 'shape_recognizer.dart';
