@@ -116,6 +116,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   /// Dedo apoyado que todavía puede ser un toque (para elegir un elemento): dónde y con qué scroll apoyó.
   ({int pointer, Offset global, double scrollY})? _tapCand;
+  // arrastre de la hoja con dos dedos (con el zoom fijado): punto medio y scrolls de partida, y la velocidad para la inercia
+  Offset _panMid0 = Offset.zero;
+  double _panY0 = 0, _panX0 = 0;
+  VelocityTracker? _panVel;
 
   /// Punteros apoyados sobre la barrita o las manijas de la selección: no cuentan como un toque sobre la hoja.
   final _selUiPointers = <int>{};
@@ -1347,6 +1351,16 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       pull.cancel();
       setState(() {});
     }
+    // con el zoom fijado, dos dedos arrastran la hoja (con inercia al soltar)
+    if (touch.length == 2 && ts.zoomLocked && pointer == null) {
+      final mid = touch.midpoint!;
+      touch.startPan();
+      pull.cancel();
+      _panMid0 = mid;
+      _panY0 = scroll.hasClients ? scroll.offset : 0;
+      _panX0 = hscroll.hasClients ? hscroll.offset : 0;
+      _panVel = VelocityTracker.withKind(PointerDeviceKind.touch)..addPosition(e.timeStamp, mid);
+    }
   }
 
   void _touchMove(PointerMoveEvent e) {
@@ -1355,6 +1369,19 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     stillPress.moved(e.position);
     final c = _tapCand;
     if (c != null && c.pointer == e.pointer && (e.position - c.global).distance > 10) _tapCand = null; // arrastra: no es un toque
+    if (touch.panning) {
+      final mid = touch.midpoint;
+      if (mid == null) return;
+      final d = mid - _panMid0;
+      if (scroll.hasClients && scroll.position.maxScrollExtent > 0) {
+        scroll.jumpTo((_panY0 - d.dy).clamp(0.0, scroll.position.maxScrollExtent));
+      }
+      if (hscroll.hasClients && hscroll.position.maxScrollExtent > 0) {
+        hscroll.jumpTo((_panX0 - d.dx).clamp(0.0, hscroll.position.maxScrollExtent));
+      }
+      _panVel?.addPosition(e.timeStamp, mid);
+      return;
+    }
     final p = touch.pinch();
     if (p == null) return;
     final box = _viewportKey.currentContext!.findRenderObject() as RenderBox;
@@ -1375,7 +1402,31 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       setState(() => touch.pinching = false);
       widget.onPrefsChanged();
     }
+    if (touch.panning && touch.length < 2) {
+      touch.endPan();
+      _panInertia();
+    } else if (touch.panning && touch.midpoint != null) {
+      // se levantó uno de los dedos y quedan otros dos: el arrastre sigue desde acá, sin salto
+      _panMid0 = touch.midpoint!;
+      _panY0 = scroll.hasClients ? scroll.offset : 0;
+      _panX0 = hscroll.hasClients ? hscroll.offset : 0;
+    }
     if (touch.count == 0) pull.cancel(); // soltó antes de completar: vuelve
+  }
+
+  /// Inercia al soltar el arrastre de dos dedos: sigue con la velocidad que llevaba.
+  void _panInertia() {
+    final v = _panVel?.getVelocity().pixelsPerSecond;
+    _panVel = null;
+    if (v == null) return;
+    void go(ScrollController c, double vel) {
+      if (!c.hasClients || vel.abs() <= 50) return;
+      final pos = c.position;
+      if (pos is ScrollPositionWithSingleContext) pos.goBallistic(-vel);
+    }
+
+    go(scroll, v.dy);
+    go(hscroll, v.dx);
   }
 
   void _toggleZoomLock() {
@@ -1889,8 +1940,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
               onNotification: (n) => pull.onScroll(n, touching: touch.count > 0),
               child: ScrollConfiguration(
                 // el lápiz NO scrollea: solo dedo y touchpad
+                // con el zoom fijado el dedo solo NO mueve la hoja (así la palma no la corre al escribir): se mueve con
+                // dos dedos; la rueda del mouse y el trackpad siguen andando
                 behavior: ScrollConfiguration.of(context).copyWith(
-                  dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.trackpad},
+                  dragDevices: {if (!ts.zoomLocked) PointerDeviceKind.touch, PointerDeviceKind.trackpad},
                   scrollbars: true,
                 ),
                 child: SingleChildScrollView(

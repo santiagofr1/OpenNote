@@ -844,6 +844,44 @@ void main() {
     expect(find.text('Pegar acá'), findsNothing);
   });
 
+  testWidgets('candado del zoom: un dedo no mueve la hoja y dos dedos sí', (t) async {
+    await start(t);
+    await createNotebook(t, 'Candado');
+    final ed = editor(t);
+    ed.widget.tools.zoomLocked = false;
+    final c = sheetCenter(t);
+
+    Future<void> drag(int fingers) async {
+      final gs = [for (var i = 0; i < fingers; i++) await t.createGesture(kind: PointerDeviceKind.touch)];
+      for (var i = 0; i < gs.length; i++) {
+        await gs[i].down(c + Offset(i * 100.0, 200));
+        await t.pump(const Duration(milliseconds: 30));
+      }
+      for (var s = 1; s <= 10; s++) {
+        for (var i = 0; i < gs.length; i++) {
+          await gs[i].moveTo(c + Offset(i * 100.0, 200 - s * 25.0));
+        }
+        await t.pump(const Duration(milliseconds: 16));
+      }
+      for (final g in gs) {
+        await g.up();
+      }
+      await settle(t, 300);
+    }
+
+    await t.tap(find.byTooltip('Fijar el zoom'));
+    await settle(t);
+    expect(ed.widget.tools.zoomLocked, isTrue);
+    final y0 = ed.scroll.offset;
+    await drag(1);
+    expect(ed.scroll.offset, y0, reason: 'un dedo no mueve la hoja con el candado');
+    await drag(2);
+    expect(ed.scroll.offset, greaterThan(y0 + 50), reason: 'dos dedos sí');
+    await t.tap(find.byTooltip('Soltar el zoom'));
+    await settle(t);
+    expect(ed.widget.tools.zoomLocked, isFalse);
+  });
+
   testWidgets('PDF: una hoja A4 por cada hoja del cuaderno, cada una con su papel', (t) async {
     final s = Storage(root: root);
     await s.init();
