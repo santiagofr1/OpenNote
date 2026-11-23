@@ -42,16 +42,17 @@ class SheetThumbPainter extends CustomPainter {
   final NotebookDoc doc;
   final int sheet;
   final int version; // cambia cuando se edita el cuaderno abierto
-  SheetThumbPainter(this.doc, {this.sheet = 0, this.version = 0});
+  final Map<String, ui.Image>? images; // imágenes y páginas de PDF ya cargadas (como en [paintSheet])
+  SheetThumbPainter(this.doc, {this.sheet = 0, this.version = 0, this.images});
   @override
   void paint(Canvas c, Size size) {
     final k = size.width / kW;
     c.scale(k);
-    if (sheet < doc.sheetCount) paintSheet(c, doc, sheet, k);
+    if (sheet < doc.sheetCount) paintSheet(c, doc, sheet, k, images: images);
   }
 
   @override
-  bool shouldRepaint(SheetThumbPainter o) => o.doc != doc || o.sheet != sheet || o.version != version;
+  bool shouldRepaint(SheetThumbPainter o) => o.doc != doc || o.sheet != sheet || o.version != version || o.images != images;
 }
 
 const _stickyText = Color(0xFF2B2A27);
