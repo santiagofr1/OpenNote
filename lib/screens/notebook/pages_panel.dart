@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../domain/domain.dart';
-import '../../rendering/sheet_render.dart';
+import '../../widgets/sheet_thumb.dart';
 import 'thumb_cache.dart';
 
 enum SheetAction { rename, addAfter, duplicate, moveUp, moveDown, delete }
@@ -416,17 +416,17 @@ class _SheetThumbState extends State<_SheetThumb> {
       return ValueListenableBuilder(
         valueListenable: w.liveVersion,
         builder: (_, v, _) =>
-            CustomPaint(painter: SheetThumbPainter(w.doc, sheet: w.sheet, version: w.version + (w.isCur ? v : 0))),
+            SheetThumb(doc: w.doc, sheet: w.sheet, version: w.version + (w.isCur ? v : 0), store: w.cache.store),
       );
     }
     final nb = w.doc.nb;
     final cached = w.cache.peek(nb, m);
-    if (cached != null) return CustomPaint(painter: SheetThumbPainter(cached, version: m.rev));
+    if (cached != null) return SheetThumb(doc: cached, version: m.rev, store: w.cache.store);
     return FutureBuilder<NotebookDoc?>(
       key: ValueKey('${m.id}#${m.rev}'),
       future: w.cache.get(nb, m),
       builder: (_, snap) =>
-          CustomPaint(painter: SheetThumbPainter(snap.data ?? _paper, version: snap.data == null ? -1 : m.rev)),
+          SheetThumb(doc: snap.data ?? _paper, version: snap.data == null ? -1 : m.rev, store: w.cache.store),
     );
   }
 }

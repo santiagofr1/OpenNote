@@ -10,10 +10,20 @@ abstract interface class NativeHandle {
   void dispose();
 }
 
-/// Borde difuminado (en unidades de hoja) para antialias por alfa en los costados de las tiras.
-/// 0 = apagado: Impeller de Android ya hace MSAA 4x en pantalla y en `toImage`. Si en la tablet se ven serruchos,
-/// poné 1 (cuesta ~3x vértices y colores por vértice: ver docs/TECNICO.md, "Trazos como mallas").
-double kMeshFeather = 0;
+/// Ancho del borde difuminado en píxeles de pantalla: el antialias de las mallas (`drawVertices` no lo tiene).
+const kFeatherPx = 1.0;
+
+/// Borde difuminado vigente, en unidades de hoja (0 = sin borde: tests y miniaturas). Lo fija el editor según el zoom
+/// (ver [featherForPxPerUnit]); las mallas recuerdan con cuál se armaron ([StrokeMesh.feather]).
+double meshFeather = 0;
+
+/// Borde (en unidades de hoja) que da [kFeatherPx] píxeles de pantalla con [pxPerUnit] píxeles por unidad (zoom por
+/// devicePixelRatio). El factor se cuantiza a escalones de 2^(1/2) para no rearmar las mallas en cada cuadro del zoom.
+double featherForPxPerUnit(double pxPerUnit) {
+  if (!(pxPerUnit > 0) || pxPerUnit.isInfinite) return 0;
+  final step = pow(2, (log(pxPerUnit) / ln2 * 2).round() / 2).toDouble();
+  return kFeatherPx / step;
+}
 
 /// Un trozo de malla de triángulos (índices de 16 bits: máx. [maxVertices] vértices).
 class MeshPart {
@@ -33,7 +43,10 @@ class StrokeMesh {
   static const maxVertices = 65000;
   final List<MeshPart> parts;
   final int generation;
-  StrokeMesh(this.parts, this.generation);
+
+  /// Borde difuminado (unidades de hoja) con el que se armó; 0 si no lleva.
+  final double feather;
+  StrokeMesh(this.parts, this.generation, [this.feather = 0]);
 
   int get bytes => parts.fold(0, (a, p) => a + p.bytes);
   int get vertexCount => parts.fold(0, (a, p) => a + p.vertexCount);
@@ -51,29 +64,29 @@ class StrokeMesh {
 /// se puede calcular en un isolate (al decodificar la hoja) y mandar sin copiar.
 StrokeMesh? buildStrokeMesh(Stroke s, {double? feather}) {
   if (s.n == 0) return null;
-  final f = feather ?? kMeshFeather;
+  final f = feather ?? meshFeather;
   final parts = <MeshPart>[];
   if (isPaint(s.k)) {
     // partes de tamaño fijo y alineadas al inicio: al dibujar en vivo solo cambia la última
     for (var a = 0; a < s.n; a += _paintChunk) {
-      _paintRange(s, a, min(a + _paintChunk, s.n), parts);
+      _paintRange(s, a, min(a + _paintChunk, s.n), f, parts);
     }
   } else {
     _buildRange(s, 0, s.n, f, parts);
   }
-  return StrokeMesh(parts, s.meshGen);
+  return StrokeMesh(parts, s.meshGen, f);
 }
 
 const _chunk = 6000; // puntos por parte (con 4 vértices por punto queda lejos del tope de 65k)
 const _paintChunk = 250; // la pintura lleva ~20 vértices por muestra y decoración: partes chicas
 
 /// Parte [a], [b) de una pintura; si igual se pasa del tope de vértices se parte en dos (disjuntas).
-void _paintRange(Stroke s, int a, int b, List<MeshPart> out) {
-  final part = _paintPart(s, a, b);
+void _paintRange(Stroke s, int a, int b, double feather, List<MeshPart> out) {
+  final part = _paintPart(s, a, b, feather);
   if (part.vertexCount > StrokeMesh.maxVertices && b - a > 1) {
     final mid = (a + b) ~/ 2;
-    _paintRange(s, a, mid, out);
-    _paintRange(s, mid, b, out);
+    _paintRange(s, a, mid, feather, out);
+    _paintRange(s, mid, b, feather, out);
     return;
   }
   out.add(part);
@@ -109,7 +122,7 @@ MeshPart _buildPart(Stroke s, int a, int b, double feather) {
 
   switch (s.k) {
     case final k when isPaint(k):
-      return _paintPart(s, a, b); // (no pasa por acá: buildStrokeMesh arma la pintura aparte)
+      return _paintPart(s, a, b, feather); // (no pasa por acá: buildStrokeMesh arma la pintura aparte)
     case 'hl':
     case 'fine':
       final w = _W(feather > 0);
@@ -127,7 +140,7 @@ MeshPart _buildPart(Stroke s, int a, int b, double feather) {
     case 'pencil':
       final w = _W(true);
       if (n == 1) {
-        _circle(w, x(0), y(0), s.w * .4, alpha(s.o * .6), 12);
+        _circle(w, x(0), y(0), s.w * .4, alpha(s.o * .6), 12, feather: feather);
         return w.done();
       }
       // El dibujo viejo era un drawLine por tramo con tapas redondas: el alfa se apilaba en cada unión (cuentas) y
@@ -161,15 +174,15 @@ MeshPart _buildPart(Stroke s, int a, int b, double feather) {
         ghw.add(s.w * .35 / 2);
         gcol.add(alpha(s.o * (.12 + .25 * q)));
       }
-      _stripDedupe(w, xs, ys, hw, col, round: true, feather: 0);
-      _stripDedupe(w, gx, gy, ghw, gcol, round: true, feather: 0);
+      _stripDedupe(w, xs, ys, hw, col, round: true, feather: feather);
+      _stripDedupe(w, gx, gy, ghw, gcol, round: true, feather: feather);
       return w.done();
     case 'calli':
       final w = _W(feather > 0);
       final col0 = feather > 0 ? argb : 0;
       final line = s.w * .22 / 2;
       if (n == 1) {
-        _circle(w, x(0), y(0), line, col0, 8);
+        _circle(w, x(0), y(0), line, col0, 8, feather: feather);
         return w.done();
       }
       // cinta: la punta plana a 45° (el ancho en cada dirección sale del vector fijo)
@@ -177,14 +190,29 @@ MeshPart _buildPart(Stroke s, int a, int b, double feather) {
       int? prev;
       for (var i = 0; i < n; i++) {
         final k = s.w * (.55 + .9 * pr(i));
-        final v0 = w.v(x(i) + d * k, y(i) - d * k, col0);
-        w.v(x(i) - d * k, y(i) + d * k, col0);
-        if (prev != null) w.quad(prev, prev + 1, v0 + 1, v0);
+        final int v0;
+        if (feather > 0) {
+          // borde solo en los costados largos (la cinta se abre sobre el vector fijo); las puntas quedan rectas
+          final kc = max(k - feather / 2, k * .3), ko = k + feather / 2, c0 = argb & 0x00FFFFFF;
+          v0 = w.v(x(i) + d * ko, y(i) - d * ko, c0);
+          w.v(x(i) + d * kc, y(i) - d * kc, argb);
+          w.v(x(i) - d * kc, y(i) + d * kc, argb);
+          w.v(x(i) - d * ko, y(i) + d * ko, c0);
+          if (prev != null) {
+            for (var j = 0; j < 3; j++) {
+              w.quad(prev + j, prev + j + 1, v0 + j + 1, v0 + j);
+            }
+          }
+        } else {
+          v0 = w.v(x(i) + d * k, y(i) - d * k, col0);
+          w.v(x(i) - d * k, y(i) + d * k, col0);
+          if (prev != null) w.quad(prev, prev + 1, v0 + 1, v0);
+        }
         prev = v0;
       }
       final xs = [for (var i = 0; i < n; i++) x(i)], ys = [for (var i = 0; i < n; i++) y(i)];
       final hw = List<double>.filled(n, line);
-      _stripDedupe(w, xs, ys, hw, feather > 0 ? List<int>.filled(n, argb) : null, round: true, feather: 0);
+      _stripDedupe(w, xs, ys, hw, feather > 0 ? List<int>.filled(n, argb) : null, round: true, feather: feather);
       return w.done();
     default:
       // pen / fountain: grosor según presión y (pluma) velocidad, con la misma fórmula que el dibujo viejo
@@ -193,7 +221,7 @@ MeshPart _buildPart(Stroke s, int a, int b, double feather) {
       final minF = cover ? 1.0 : (fountain ? .15 : .35), rangeF = cover ? 0.0 : (fountain ? 1.7 : 1.3);
       final w = _W(feather > 0);
       if (n == 1) {
-        _circle(w, x(0), y(0), s.w * (minF + rangeF * pr(0)) / 2, feather > 0 ? argb : 0, 16);
+        _circle(w, x(0), y(0), s.w * (minF + rangeF * pr(0)) / 2, feather > 0 ? argb : 0, 16, feather: feather);
         return w.done();
       }
       final xs = <double>[], ys = <double>[], hw = <double>[];
@@ -228,7 +256,7 @@ MeshPart _buildPart(Stroke s, int a, int b, double feather) {
 ///  - Las normales se suavizan por arco y los corrimientos del lado interno de una curva se recortan al radio de
 ///    curvatura local (sin pliegues).
 /// Las puntas desflecadas del pincel solo van en el inicio y el fin reales del trazo (no en los cortes entre partes).
-MeshPart _paintPart(Stroke s, int a, int b) {
+MeshPart _paintPart(Stroke s, int a, int b, double feather) {
   final p = s.pts, n = s.n;
   final w = _W(true), sw = max(s.w, 1.0), hw = sw / 2;
   final pp = s.pp ?? const PaintParams();
@@ -429,7 +457,7 @@ MeshPart _paintPart(Stroke s, int a, int b) {
         final fadeE = realEnd ? ((total - trimE - arc[i]) / (sw * .25)).clamp(0.0, 1.0) : 1.0;
         pc.add(argb(al * (.35 + .65 * min(fadeS, fadeE)), c));
       }
-      if (px.length >= 2) _stripDedupe(w, px, py, ph, pc, round: false, feather: 0);
+      if (px.length >= 2) _stripDedupe(w, px, py, ph, pc, round: false, feather: feather);
     }
   } else if (bgOn) {
     // resaltador: plano, translúcido, bordes limpios y extremos rectos; fibra: sólida y pareja, extremos redondeados
@@ -603,8 +631,27 @@ class _W implements ShapeSink {
 
 const _capSteps = 8;
 
-/// Círculo (abanico) de [steps] lados.
-void _circle(_W w, double cx, double cy, double r, int col, int steps) {
+/// Círculo (abanico) de [steps] lados. Con [feather] > 0 (y colores por vértice) el borde es un anillo de alfa 0.
+void _circle(_W w, double cx, double cy, double r, int col, int steps, {double feather = 0}) {
+  if (feather > 0 && w.colored) {
+    final rc = max(r - feather / 2, r * .3), ro = r + feather / 2, c0 = col & 0x00FFFFFF;
+    final c = w.v(cx, cy, col);
+    final inner = w.count, outer = inner + steps;
+    for (var k = 0; k < steps; k++) {
+      final a = 2 * pi * k / steps;
+      w.v(cx + rc * cos(a), cy + rc * sin(a), col);
+    }
+    for (var k = 0; k < steps; k++) {
+      final a = 2 * pi * k / steps;
+      w.v(cx + ro * cos(a), cy + ro * sin(a), c0);
+    }
+    for (var k = 0; k < steps; k++) {
+      final k1 = (k + 1) % steps;
+      w.tri(c, inner + k, inner + k1);
+      w.quad(inner + k, outer + k, outer + k1, inner + k1);
+    }
+    return;
+  }
   final c = w.v(cx, cy, col);
   final first = w.v(cx + r, cy, col);
   var prev = first;
@@ -647,7 +694,7 @@ void _stripDedupe(_W w, List<double> x, List<double> y, List<double> hw, List<in
     cs?.add(col![i]);
   }
   if (xs.length < 2) {
-    _circle(w, xs[0], ys[0], hs[0], cs?[0] ?? 0, 16);
+    _circle(w, xs[0], ys[0], hs[0], cs?[0] ?? 0, 16, feather: cs == null ? 0 : feather);
     return;
   }
   _strip(w, xs, ys, hs, cs, round: round, feather: feather);
@@ -710,7 +757,7 @@ void _strip(_W w, List<double> x, List<double> y, List<double> hw, List<int>? co
     } else {
       // giro cerrado: termina el tramo anterior, empieza otro y se redondea el vértice
       join(prev, pair(i, -dy[i - 1], dx[i - 1], 1));
-      _circle(w, x[i], y[i], hw[i], colAt(i), 10);
+      _circle(w, x[i], y[i], hw[i], colAt(i), 10, feather: fe ? feather : 0);
       prev = pair(i, -dy[i], dx[i], 1);
     }
   }

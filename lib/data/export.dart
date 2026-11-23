@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -98,6 +99,35 @@ Future<Map<String, ui.Image>> loadImages(Storage store, NotebookDoc doc, {int? s
     } else if (it.type == 'image' && it.file != null && !images.containsKey(it.file)) {
       final f = store.media(it.file!);
       if (await f.exists()) images[it.file!] = await decodeImage(await f.readAsBytes());
+    }
+  }
+  return images;
+}
+
+/// Las imágenes de la hoja [sheet] de [doc] para una miniatura de [pxWidth] px de ancho (como [loadImages] pero a ese
+/// tamaño y no al completo: son muchas tarjetas). Quien la pide libera las imágenes que recibe. Sin imágenes ni PDF en la
+/// hoja devuelve `{}` sin tocar el disco.
+Future<Map<String, ui.Image>> loadThumbImages(Storage store, NotebookDoc doc, int sheet, double pxWidth) async {
+  final images = <String, ui.Image>{};
+  final sheetRect = ui.Rect.fromLTWH(0, sheet * kSheetStep, kW, kSheetH);
+  for (final it in doc.items.values) {
+    if (it.file == null || (it.type != 'pdf' && it.type != 'image') || !it.rect.overlaps(sheetRect)) continue;
+    final w = it.w * pxWidth / kW;
+    final key = it.type == 'pdf' ? pdfImageKey(it) : it.file!;
+    if (images.containsKey(key)) continue;
+    final f = store.media(it.file!);
+    try {
+      if (!await f.exists()) continue;
+      if (it.type == 'pdf') {
+        final img = await pdfPages.page(f, it.page, pdfPixelWidth(w));
+        if (img != null) images[key] = img;
+      } else {
+        final codec = await ui.instantiateImageCodec(await f.readAsBytes(), targetWidth: max(1, w.ceil()));
+        images[key] = (await codec.getNextFrame()).image;
+        codec.dispose();
+      }
+    } catch (_) {
+      // una imagen rota no impide ver el resto de la miniatura
     }
   }
   return images;

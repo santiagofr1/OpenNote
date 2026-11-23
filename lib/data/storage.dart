@@ -300,12 +300,13 @@ class Storage {
     if (todo.isEmpty) return;
     final par = Storage.useIsolates ? min(Storage.loadParallelism, (todo.length / 8).ceil()) : 1;
     final gens = [for (final s in todo) s.meshGen];
+    final feather = meshFeather;
     // solo valores (no los Stroke, que arrastran a la UI): [k, c, w, o, copia de los puntos]
     final specs = [for (final s in todo) (s.id, s.k, s.c, s.w, s.o, List<double>.of(s.pts), s.pp)];
     final groups = <List<int>>[for (var g = 0; g < max(1, par); g++) [for (var i = g; i < todo.length; i += max(1, par)) i]];
     try {
       final parts = await Future.wait([
-        for (final g in groups) _meshSpecs([for (final i in g) specs[i]]),
+        for (final g in groups) _meshSpecs([for (final i in g) specs[i]], feather),
       ]);
       for (var gi = 0; gi < groups.length; gi++) {
         for (var j = 0; j < groups[gi].length; j++) {
@@ -627,13 +628,14 @@ Future<List<SheetContent?>> _decodeInIsolate(List<Uint8List?> raw) => _compute((
 /// El resultado vuelve en el orden pedido.
 Future<List<(SheetContent, String)?>> _decodeDigestInIsolate(List<Uint8List?> raw, List<bool> meshOf) async {
   final par = Storage.useIsolates ? min(Storage.loadParallelism, raw.length) : 1;
+  final feather = meshFeather; // el global no viaja al isolate: se manda el vigente
   // (los estáticos no viajan al isolate: [meshOf] dice, por hoja, si se arman las mallas ahí)
-  if (par <= 1) return _compute(() => [for (var i = 0; i < raw.length; i++) if (raw[i] == null) null else _tryDecodeDigest(raw[i]!, meshOf[i])]);
+  if (par <= 1) return _compute(() => [for (var i = 0; i < raw.length; i++) if (raw[i] == null) null else _tryDecodeDigest(raw[i]!, meshOf[i], feather)]);
   // reparto alternado: una hoja por isolate si hay tantos como hojas
   final groups = <List<int>>[for (var g = 0; g < par; g++) [for (var i = g; i < raw.length; i += par) i]];
   final parts = await Future.wait([
     for (final g in groups)
-      _compute(() => [for (final i in g) raw[i] == null ? null : _tryDecodeDigest(raw[i]!, meshOf[i])]),
+      _compute(() => [for (final i in g) raw[i] == null ? null : _tryDecodeDigest(raw[i]!, meshOf[i], feather)]),
   ]);
   final out = List<(SheetContent, String)?>.filled(raw.length, null);
   for (var g = 0; g < groups.length; g++) {
@@ -644,21 +646,22 @@ Future<List<(SheetContent, String)?>> _decodeDigestInIsolate(List<Uint8List?> ra
   return out;
 }
 
-(SheetContent, String)? _tryDecodeDigest(Uint8List b, bool mesh) {
+(SheetContent, String)? _tryDecodeDigest(Uint8List b, bool mesh, double feather) {
   final c = _tryDecode(b);
   if (c == null) return null;
   // las mallas de los trazos se arman acá, fuera del hilo de la UI (los buffers viajan sin copiarse)
   if (mesh) {
     for (final s in c.strokes) {
-      s.mesh = buildStrokeMesh(s);
+      s.mesh = buildStrokeMesh(s, feather: feather);
     }
   }
   return (c, sheetDigest(c));
 }
 
 // Desde una función suelta para que el isolate no arrastre la `Storage` (ni su estado) en el mensaje.
-Future<List<StrokeMesh?>> _meshSpecs(List<(String, String, String, double, double, List<double>, PaintParams?)> specs) =>
-    _compute(() => [for (final s in specs) buildStrokeMesh(Stroke(s.$1, s.$2, s.$3, s.$4, s.$6, s.$5, s.$7))]);
+Future<List<StrokeMesh?>> _meshSpecs(List<(String, String, String, double, double, List<double>, PaintParams?)> specs,
+        double feather) =>
+    _compute(() => [for (final s in specs) buildStrokeMesh(Stroke(s.$1, s.$2, s.$3, s.$4, s.$6, s.$5, s.$7), feather: feather)]);
 
 Future<List<String>> _digestInIsolate(List<SheetContent> contents) => _compute(() => [for (final c in contents) sheetDigest(c)]);
 

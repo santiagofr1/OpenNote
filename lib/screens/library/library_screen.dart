@@ -747,6 +747,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
                             child: NotebookCard(
                               key: Key('nb-${nb.name}'),
                               nb: nb,
+                              store: store,
                               thumb: thumbs[nb.id],
                               pressed: pressed == nb.id,
                               location: searching ? idx.pathLabel(nb.folder) : null,

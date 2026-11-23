@@ -73,4 +73,42 @@ void main() {
       expect(bytes / pts, lessThan(40));
     });
   });
+
+  testWidgets('costo del borde difuminado: vértices y tiempo de armado, con y sin borde', (tester) async {
+    await tester.runAsync(() async {
+      final ss = sheet();
+      final prev = meshFeather;
+      addTearDown(() => meshFeather = prev);
+      (int, int, int) armar(double f) {
+        for (final s in ss) {
+          buildStrokeMesh(s, feather: f); // calentar
+        }
+        final sw = Stopwatch()..start();
+        var v = 0, b = 0;
+        for (final s in ss) {
+          final m = buildStrokeMesh(s, feather: f)!;
+          v += m.vertexCount;
+          b += m.bytes;
+        }
+        sw.stop();
+        return (v, b, sw.elapsedMilliseconds);
+      }
+
+      final (v0, b0, t0) = armar(0);
+      final (v1, b1, t1) = armar(featherForPxPerUnit(1.5));
+      // ignore: avoid_print
+      print('armado de 46k puntos: sin borde $v0 vértices, ${(b0 / 1024 / 1024).toStringAsFixed(2)} MB, $t0 ms; '
+          'con borde $v1 vértices, ${(b1 / 1024 / 1024).toStringAsFixed(2)} MB, $t1 ms');
+      // y rasterizar con borde (lotes ya armados)
+      for (final s in ss) {
+        s.mesh = null;
+      }
+      meshFeather = featherForPxPerUnit(1.5);
+      paintStrokes(ui.Canvas(ui.PictureRecorder()), ss);
+      final conBorde = await rasterUs((c) => paintStrokes(c, ss));
+      // ignore: avoid_print
+      print('rasterizar con borde: ${conBorde / 1000} ms');
+      expect(v1, greaterThan(v0));
+    });
+  });
 }

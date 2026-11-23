@@ -81,9 +81,9 @@ void main() {
 
   testWidgets('con borde difuminado (antialias) sigue igual', (tester) async {
     await tester.runAsync(() async {
-      final prev = kMeshFeather;
-      kMeshFeather = 1;
-      addTearDown(() => kMeshFeather = prev);
+      final prev = meshFeather;
+      meshFeather = 1;
+      addTearDown(() => meshFeather = prev);
       for (final k in ['pen', 'fountain', 'fine', 'calli']) {
         final s = wave(k);
         final old = await render((c) => paintStrokeLegacy(c, s));
@@ -248,6 +248,80 @@ void main() {
       paintStrokes(c, ss);
       expect(identical(ss.first.batchCache, b1), isFalse);
       rec.endRecording().dispose();
+    });
+  });
+
+  group('borde difuminado en píxeles', () {
+    final prev = meshFeather;
+    tearDown(() => meshFeather = prev);
+
+    test('featherForPxPerUnit: 1 px de pantalla, en escalones de 2^(1/2)', () {
+      expect(featherForPxPerUnit(1.0), closeTo(1.0, 1e-9));
+      expect(featherForPxPerUnit(1.1), closeTo(1.0, 1e-9), reason: 'cerca del escalón: no cambia');
+      expect(featherForPxPerUnit(0.9), closeTo(1.0, 1e-9));
+      expect(featherForPxPerUnit(sqrt2), closeTo(1 / sqrt2, 1e-9));
+      expect(featherForPxPerUnit(1.5), closeTo(1 / sqrt2, 1e-9));
+      expect(featherForPxPerUnit(2), closeTo(.5, 1e-9));
+      for (final px in [.8, 1.0, 1.3, 2.1, 3.0, 5.7]) {
+        final f = featherForPxPerUnit(px);
+        // el borde, en píxeles, queda entre 1/sqrt(sqrt2) y sqrt(sqrt2) px: nunca borroso ni inexistente
+        expect(f * px, inInclusiveRange(1 / pow(2, .25) - 1e-9, pow(2, .25) + 1e-9), reason: 'px/unidad $px');
+      }
+      expect(featherForPxPerUnit(0), 0);
+      expect(featherForPxPerUnit(double.nan), 0);
+    });
+
+    test('ensureMesh rearma al cambiar meshFeather y no si no cambia', () {
+      meshFeather = 0;
+      final s = wave('pen');
+      final m0 = s.ensureMesh()!;
+      expect(m0.feather, 0);
+      expect(identical(s.ensureMesh(), m0), isTrue, reason: 'mismo borde: la misma malla');
+      meshFeather = .5;
+      final m1 = s.ensureMesh()!;
+      expect(identical(m1, m0), isFalse);
+      expect(m1.feather, .5);
+      expect(identical(s.ensureMesh(), m1), isTrue);
+      expect(s.batchCache, isNull, reason: 'el lote armado con la malla vieja se soltó');
+    });
+
+    test('todas las puntas llevan borde: más vértices y colores por vértice', () {
+      for (final k in ['pen', 'fountain', 'fine', 'hl', 'pencil', 'calli', 'paint-star']) {
+        final s = wave(k, w: 6);
+        final plain = buildStrokeMesh(s, feather: 0)!, soft = buildStrokeMesh(s, feather: .7)!;
+        expect(soft.colored, isTrue, reason: k);
+        expect(soft.vertexCount, greaterThan(plain.vertexCount), reason: k);
+        // un solo toque también
+        final dot = Stroke('p', k, '#22211e', 6, [100, 100, .6]);
+        expect(buildStrokeMesh(dot, feather: .7)!.vertexCount, greaterThanOrEqualTo(buildStrokeMesh(dot, feather: 0)!.vertexCount), reason: '$k punto');
+      }
+    });
+
+    test('con borde: colores por vértice, más vértices y el mismo ancho total', () {
+      // recta horizontal: el ancho visual se mide en y
+      final s = Stroke('r', 'fine', '#22211e', 4, [20, 100, .5, 120, 100, .5, 220, 100, .5]);
+      final plain = buildStrokeMesh(s, feather: 0)!;
+      final soft = buildStrokeMesh(s, feather: 1)!;
+      expect(plain.colored, isFalse);
+      expect(soft.colored, isTrue);
+      expect(soft.vertexCount, greaterThan(plain.vertexCount));
+      expect(soft.feather, 1);
+      double span(StrokeMesh m, {required bool opaqueOnly}) {
+        var lo = 1e9, hi = -1e9;
+        for (final p in m.parts) {
+          for (var i = 0; i < p.vertexCount; i++) {
+            if (opaqueOnly && (p.colors![i] >>> 24) == 0) continue;
+            if (p.pos[i * 2] < 40 || p.pos[i * 2] > 200) continue; // solo el tramo recto (sin tapas)
+            lo = min(lo, p.pos[i * 2 + 1]);
+            hi = max(hi, p.pos[i * 2 + 1]);
+          }
+        }
+        return hi - lo;
+      }
+
+      expect(span(plain, opaqueOnly: false), closeTo(4, 1e-4));
+      expect(span(soft, opaqueOnly: true), closeTo(3, 1e-4), reason: 'el núcleo opaco pierde medio borde de cada lado');
+      expect(span(soft, opaqueOnly: false), closeTo(5, 1e-4), reason: 'y el borde transparente suma medio borde afuera');
     });
   });
 }
