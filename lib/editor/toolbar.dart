@@ -57,8 +57,10 @@ class EditorToolbar extends StatelessWidget {
         if (vertical) const SizedBox(height: 4),
         _toolBtn(cs, Tool.pen, Symbols.stylus, 'Lápiz · tocá de nuevo para opciones', ts.pen),
         _toolBtn(cs, Tool.hl, Symbols.ink_highlighter, 'Resaltador · tocá de nuevo para opciones', ts.hl),
+        _toolBtn(cs, Tool.paint, Symbols.brush, 'Decorador · tocá de nuevo para opciones', ts.paint),
         _toolBtn(cs, Tool.text, Symbols.keyboard, 'Texto con teclado', null),
         _toolBtn(cs, Tool.select, Symbols.highlight_alt, 'Seleccionar', null),
+        _toolBtn(cs, Tool.title, Symbols.format_list_numbered, 'Título para el índice', null),
         _divider(cs),
         AnimatedOpacity(
           opacity: drawing ? 1 : .38,
@@ -111,13 +113,13 @@ class EditorToolbar extends StatelessWidget {
     });
   }
 
-  /// Ancho (dp) de la barra horizontal sin los colores rápidos. Medido: 560 de contenido + 12 de padding + margen.
-  static const _fixedWidth = 580.0;
+  /// Ancho (dp) de la barra horizontal sin los colores rápidos. Medido: 656 de contenido + 12 de padding + margen.
+  static const _fixedWidth = 676.0;
 
   /// Los recientes primero; si faltan, se completa con la paleta.
   List<String> _quickColors(int n) {
     final colors = <String>[...ts.recent];
-    for (final c in ts.tool == Tool.hl ? hlPalette : palette) {
+    for (final c in switch (ts.tool) { Tool.hl => hlPalette, Tool.paint => paintPalette, _ => palette }) {
       if (colors.length >= n) break;
       if (!colors.contains(c)) colors.add(c);
     }
@@ -259,7 +261,7 @@ class EditorToolbar extends StatelessWidget {
 
   /// Muestra el grosor actual: punto para el lápiz, barrita para el resaltador.
   Widget _widthBtn(ColorScheme cs, PenPreset p) {
-    final hl = ts.tool == Tool.hl;
+    final hl = ts.tool == Tool.hl || ts.tool == Tool.paint;
     final d = hl ? (p.width / 60 * 18).clamp(5.0, 18.0) : p.width.clamp(2.5, 16.0);
     return Tooltip(
       message: 'Punta, grosor y opacidad',

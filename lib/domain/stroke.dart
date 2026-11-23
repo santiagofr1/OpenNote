@@ -2,22 +2,104 @@ import 'dart:math';
 import 'dart:ui';
 
 import 'geometry.dart';
+import 'paint_shapes.dart';
 import 'stroke_mesh.dart';
 import 'values.dart';
 import 'z_order.dart';
 
+/// ¿[k] es una pintura decorativa (`paint-<forma>`, ver [paintShapeIds])?
+bool isPaint(String k) => k.startsWith('paint-') && paintShapeIds.contains(k.substring(6));
+
+/// Lo que se dibuja debajo de la tinta de su tanda: resaltador y pintura.
+bool isUnderInk(String k) => k == 'hl' || isPaint(k);
+
+/// Tipos de trazo de la pintura: pincel seco, resaltador (franja plana translúcida) y fibra (franja sólida pareja).
+const paintStyleIds = ['brush', 'hl', 'marker'];
+
+/// Ajustes de una franja de pintura (van en `pp` del trazo; valores 0..1, faltantes = valor por defecto).
+class PaintParams {
+  final double glitter, density, size; // brillo, cantidad de formas, tamaño de formas
+  final String? shapeColor; // null: según la forma; 'light' / 'dark': el fondo aclarado / oscurecido; '#rrggbb'
+  final String style; // 'brush' | 'hl' | 'marker' (ver [paintStyleIds])
+  final bool bg, shapes; // franja de fondo prendida / formas prendidas (al menos una de fondo, formas o brillo)
+  const PaintParams({
+    this.glitter = .5,
+    this.density = .5,
+    this.size = .5,
+    this.shapeColor,
+    this.style = 'brush',
+    this.bg = true,
+    this.shapes = true,
+  });
+
+  factory PaintParams.fromJson(Map j) => PaintParams(
+        glitter: jsonDouble(j['g'], .5).clamp(0.0, 1.0),
+        density: jsonDouble(j['sd'], .5).clamp(0.0, 1.0),
+        size: jsonDouble(j['ss'], .5).clamp(0.0, 1.0),
+        shapeColor: j['sc'] is String ? j['sc'] as String : null,
+        style: j['st'] is String && paintStyleIds.contains(j['st']) ? j['st'] as String : 'brush',
+        bg: j['bg'] is bool ? j['bg'] as bool : true,
+        shapes: j['sh'] is bool ? j['sh'] as bool : true,
+      );
+
+  /// Copia con cambios; [autoColor] borra el color de las formas (null no alcanza para eso).
+  PaintParams copyWith({
+    double? glitter,
+    double? density,
+    double? size,
+    String? shapeColor,
+    bool autoColor = false,
+    String? style,
+    bool? bg,
+    bool? shapes,
+  }) =>
+      PaintParams(
+        glitter: glitter ?? this.glitter,
+        density: density ?? this.density,
+        size: size ?? this.size,
+        shapeColor: autoColor ? null : (shapeColor ?? this.shapeColor),
+        style: style ?? this.style,
+        bg: bg ?? this.bg,
+        shapes: shapes ?? this.shapes,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'g': round2(glitter),
+        'sd': round2(density),
+        'ss': round2(size),
+        if (shapeColor != null) 'sc': shapeColor,
+        if (style != 'brush') 'st': style,
+        if (!bg) 'bg': false,
+        if (!shapes) 'sh': false,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      other is PaintParams &&
+      other.glitter == glitter &&
+      other.density == density &&
+      other.size == size &&
+      other.shapeColor == shapeColor &&
+      other.style == style &&
+      other.bg == bg &&
+      other.shapes == shapes;
+  @override
+  int get hashCode => Object.hash(glitter, density, size, shapeColor, style, bg, shapes);
+}
+
 /// Trazo: puntos guardados planos como [x, y, presión, x, y, presión, ...]
 class Stroke extends Layered {
-  // k = punta: pen | fountain | pencil | fine | calli | hl
+  // k = punta: pen | fountain | pencil | fine | calli | hl | pintura (paint-<forma>)
   @override
   final String id;
   final String k, c;
   final double w, o; // grosor y opacidad (0..1)
   final List<double> pts;
+  final PaintParams? pp; // ajustes de la pintura (null en los demás trazos)
   late final Color color = parseColor(c);
   Rect? _bounds;
 
-  Stroke(this.id, this.k, this.c, this.w, this.pts, [this.o = 1]);
+  Stroke(this.id, this.k, this.c, this.w, this.pts, [this.o = 1, this.pp]);
 
   /// Malla de triángulos del trazo (ver stroke_mesh.dart): se arma una vez (en el isolate al cargar la hoja, o al
   /// primer dibujo) y se descarta en [invalidate]. [batchCache] es el lote de trazos que el painter arma con éste
@@ -55,7 +137,7 @@ class Stroke extends Layered {
       y0 = min(y0, pts[i + 1]);
       y1 = max(y1, pts[i + 1]);
     }
-    final r = w * 1.6;
+    final r = w * 1.6; // cubre la franja de pintura (ancho w) con sus puntas
     return _bounds = Rect.fromLTRB(x0 - r, y0 - r, x1 + r, y1 + r);
   }
 
@@ -66,7 +148,7 @@ class Stroke extends Layered {
       p[i] += d.dx;
       p[i + 1] += d.dy;
     }
-    return Stroke(id ?? this.id, k, c, w, p, o)..z = z;
+    return Stroke(id ?? this.id, k, c, w, p, o, pp)..z = z;
   }
 
   /// Copia transformada por [t] (con otro [id] si hace falta): todos los puntos, y el grosor se multiplica por la escala.
@@ -78,14 +160,17 @@ class Stroke extends Layered {
       p[i] = q.dx;
       p[i + 1] = q.dy;
     }
-    return Stroke(id ?? this.id, k, c, w * t.scale, p, o)..z = z;
+    return Stroke(id ?? this.id, k, c, w * t.scale, p, o, pp)..z = z;
   }
+
+  /// Cuánto se aleja la tinta de la línea central: la mitad del grosor (un poco más en la pintura, por el desflecado).
+  double get _reach => isPaint(k) ? w * .55 : w / 2;
 
   /// ¿El trazo toca el rectángulo [r]? Real: algún tramo del recorrido, engordado la mitad del grosor,
   /// cruza el rectángulo (no alcanza con que se superpongan los rectángulos que envuelven).
   bool touchesRect(Rect r) {
     if (!bounds.overlaps(r)) return false;
-    final g = r.inflate(w / 2), p = pts;
+    final g = r.inflate(_reach), p = pts;
     if (n == 1) return g.contains(Offset(p[0], p[1]));
     for (var i = 1; i < n; i++) {
       if (segmentIntersectsRect(Offset(p[i * 3 - 3], p[i * 3 - 2]), Offset(p[i * 3], p[i * 3 + 1]), g)) return true;
@@ -145,6 +230,7 @@ class Stroke extends Layered {
             ...[jsonDouble(p[0]), jsonDouble(p[1]), (p as List).length > 2 ? jsonDouble(p[2], .5) : .5]
         ],
         jsonDouble(j['o'], 1),
+        j['pp'] is Map ? PaintParams.fromJson(j['pp'] as Map) : null,
       );
 
   Map<String, dynamic> toJson() => {
@@ -153,6 +239,7 @@ class Stroke extends Layered {
         'c': c,
         'w': w,
         if (o < 1) 'o': round2(o),
+        if (pp != null) 'pp': pp!.toJson(),
         'pts': [
           for (var i = 0; i < pts.length; i += 3) [round1(pts[i]), round1(pts[i + 1]), round2(pts[i + 2])]
         ],

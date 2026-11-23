@@ -130,8 +130,11 @@ apuntes/prefs.json                                  herramientas
 
 - `index.json` (`"format": 3`): cuadernos (id, nombre, favorito, PIN, fondo, papel y espaciado por
   defecto, última hoja, carpeta) y carpetas (id, nombre, padre).
-- `notebook.json`: por cada hoja, id, título, marcador, fondo, papel, espaciado (`spacing`, en mm;
-  opcional), `rev` y `updated`.
+- `notebook.json`: las secciones (`sections`: `{id, name, updated, last}`, en orden; `last` es el índice de la última
+  hoja vista dentro de esa sección), la abierta (`active`, id de sección) y, por cada hoja, id, `section` (id de su
+  sección), título, marcador, fondo, papel, espaciado (`spacing`, en mm; opcional), `rev` y `updated`. La lista `sheets`
+  trae TODAS las hojas, agrupadas en el orden de las secciones. Sigue siendo el formato 3: lo nuevo es opcional al leer
+  (ver "Secciones").
 
 ### Modelo en memoria
 
@@ -140,6 +143,39 @@ la tira. La hoja `k` ocupa `y` de `k * kSheetStep` a `k * kSheetStep + kSheetH`.
 pertenece a la hoja que contiene su borde de arriba.
 
 Al guardar se parte por hoja (coordenadas locales), y al leer se rearma la tira.
+
+#### Secciones
+
+Un cuaderno puede tener varias secciones, como las hojas de Excel (ej. "Teoría" y "Práctica"), cada una con sus propias
+hojas; se ve UNA a la vez. Escribir en una no toca la otra. Código: `Section` y `Notebook` en `lib/domain/notebook.dart`;
+abrir y cambiar, `Storage.openSection`; interfaz, `lib/screens/notebook/sections_menu.dart` y el botón del panel de hojas.
+
+- **Archivo viejo** (sin `sections`): una sola sección implícita con id FIJO `general` ("General", `kGeneralSection`). El id
+  es fijo para que dos equipos que sincronizan un cuaderno viejo no se inventen dos "General" distintas. Una hoja sin
+  `section`, o con el id de una sección que no existe, es de la PRIMERA sección.
+- **Al leer** (`Notebook.loadSheetsJson`) las hojas se reagrupan por el orden de las secciones, de forma estable (la
+  fusión de la sync las puede intercalar); al escribir (`sheetsJson`) salen agrupadas.
+- **Versión vieja de la app** con un archivo nuevo: ve todas las hojas en una sola tira y, si guarda, pierde la
+  agrupación en secciones (no los datos: ningún archivo de hoja se toca).
+- **En memoria**: `Notebook.sheets` sigue siendo la lista que usan `NotebookDoc` y todo el editor, pero tiene SOLO las
+  hojas de la sección activa; así los índices y las coordenadas globales (`k * kSheetStep`) no cambian de significado.
+  Las hojas de las demás secciones están en `Notebook.otherSheets` (agrupadas en el orden de las secciones) y no se tocan
+  mientras se edita. `allSheets` las junta en orden y `totalSheets` las cuenta (la tarjeta de la biblioteca y el aviso al
+  borrar un cuaderno muestran el total). `Notebook.last` es el índice de la hoja vista DENTRO de la sección activa.
+- **Cambiar de sección** (`NotebookScreenState._switchSection`): guarda lo pendiente y espera el guardado, suelta el
+  documento (el historial de deshacer se vacía: es otro documento), `Notebook.activate` deja en `sheets` las hojas de la
+  nueva y recuerda en la que se deja su última hoja vista, y `Storage.openSection` reabre con `openNotebook(around: last)`
+  y escribe `notebook.json` (la activa se recuerda). Una sección sin hojas (la dejó así una fusión) recibe una en blanco.
+- **Operaciones**: nueva sección (nombre "Sección N", una hoja en blanco con el estilo del cuaderno, al final, se abre),
+  renombrar, subir / bajar y borrar (con confirmación que dice cuántas hojas se borran; no se puede borrar la última; si
+  era la activa se abre la de al lado antes). Los archivos de una sección borrada los borra el guardado de siempre (ya no
+  figuran entre las hojas vivas). Fuera de alcance por ahora: mover una hoja de una sección a otra y buscar en todas las
+  secciones (la búsqueda es de la sección abierta).
+- **Interfaz**: en el panel de hojas, arriba, un botón (`sectionsButton`) con el nombre de la sección activa y una
+  flechita; despliega la lista (`section-<id>` con su cantidad de hojas, ⋮ con Renombrar / Subir / Bajar / Borrar, y
+  `newSection` al final). Está siempre, aunque haya una sola sección; las secciones no ocupan lugar fijo en la hoja.
+- Tests: `test/data/sections_test.dart` (modelo, ida y vuelta, regla de oro, duplicar, `.opennote`, PNG, fusión de la
+  sync), `test/screens/sections_ui_test.dart` (la UI) y un caso en `integration_test/app_test.dart`.
 
 #### Carga perezosa de hojas
 
@@ -175,7 +211,10 @@ cercanas (hasta ~11) quedan dentro de lo medido en la tablet (PSS 240 a 409 MB c
 por hoja (habría que medir mallas y lotes) porque el conteo ya acota el caso grave, el historial largo en cuadernos enormes.
 Las operaciones de hojas viejas (borrar, mover) también se descartan: la hoja borrada que guardaban en memoria se libera.
 
-**Regla de oro: nunca perder datos.** Una hoja no cargada NUNCA se escribe. `Storage._saveNow` solo toma hojas
+**Regla de oro: nunca perder datos.** NUNCA se borra ni se pisa un archivo de hoja de otra sección: el conjunto de hojas vivas
+(`alive` de `Storage._saveNow`), el de `onDisk` en `openNotebook` y el de `_sweep` incluyen los ids de TODAS las secciones
+(`Notebook.allSheets`), no solo los de `nb.sheets`; tampoco copian ni exportan solo la sección abierta (`copyNotebookFiles`,
+`.opennote`). Una hoja no cargada NUNCA se escribe. `Storage._saveNow` solo toma hojas
 cargadas (`splitSheets` ni siquiera devuelve las otras; hay un `assert` y una guarda que no escribe y loguea), también
 en el primer guardado y con todo sucio: las coordenadas en cada archivo son locales, así que mover, insertar o
 borrar hojas no cambia el contenido de las no cargadas (solo `notebook.json`). Al borrar una hoja sin cargar se
@@ -197,8 +236,10 @@ Qué pasa con el resto de la app cuando no está todo en memoria:
 - **Búsqueda** (`searchNotebookAll`): memoria para las cargadas y, para las demás, `Storage.readSheetTexts` (otro isolate,
   una hoja por vez, solo se devuelven los textos). Tocar un resultado carga esa hoja y va ahí.
 - **PDF / PNG** (`sheetSource`): hoja por hoja; las no cargadas se leen de disco (con la de arriba, por si un trazo se
-  pasa) y se sueltan. Lo cargado y sin guardar se exporta desde memoria.
-- **Duplicar cuaderno**: se copian los archivos (`Storage.copyNotebookFiles`), sin decodificar nada.
+  pasa) y se sueltan. Lo cargado y sin guardar se exporta desde memoria. Las hojas de las secciones no abiertas siempre
+  se leen de disco (`exportSource`).
+- **Duplicar cuaderno**: se copian los archivos de las hojas de todas las secciones (`Storage.copyNotebookFiles`), sin
+  decodificar nada; `Notebook.copySectionsFrom` copia las secciones.
 - **Duplicar una hoja** sin cargar: se carga primero (una sola hoja) y se duplica en memoria.
 - Los z (`Layered.z`) de una hoja que se carga van arriba de los de memoria: el orden *dentro* de cada hoja es el del
   archivo, pero lo que se arrastra de una hoja a otra conserva su z, así que su capa respecto a lo que ya había en la
@@ -303,6 +344,65 @@ se reemplazan por `Stroke.transformed` (todos los puntos; el grosor por la escal
 objeto), los elementos escalan su rectángulo y al rotar solo mueven su centro (no rotan), y los textos solo cambian de
 lugar. Todo es UN `EditAction`; deshacer devuelve los objetos originales, exactos.
 
+**Texto con teclado como entidad** (issue #12). `TextBlock` suma `scale` (1) y `angle` (radianes, 0). JSON: `s` y `a` solo si
+no son el valor por defecto (los archivos viejos cargan igual; la huella `sheetDigest`, el `.sheet` y el `.opennote` los llevan
+porque pasan por `toJson`). La escala sale desde la esquina de arriba a la izquierda (`x`, `y`) y multiplica letra y ancho; el
+giro es alrededor del centro del rectángulo ya escalado. `text_layout.dart`: `textRect` (escalado, sin giro), `textCorners`,
+`textBounds` (bounding box del girado: recuadro de la selección, "ventana" por su centro y "captura" por superposición),
+`textHit` (el punto se lleva al marco sin girar: el toque es contra el polígono girado) y `paintTextBlock` (miniaturas, PNG y
+PDF: `canvas.translate/rotate/scale` sobre el mismo `layoutBlock`). Un texto con `scale != 1` o `angle != 0` (`transformed`) ya no
+se acomoda al renglón (`snapTextY` se saltea al soltar, al mover con la agarradera y al arrastrar la selección); con 1 y 0 se
+comporta como siempre. Selección (`selection.dart`): las manijas de esquina multiplican `scale` y escalan la posición desde el
+pivote igual que los elementos (mínimo 1/4 de tamaño); la de rotar aparece con trazos y/o textos, suma al `angle` y gira el centro
+del texto alrededor del pivote (imán a 0/90/180/270); imágenes, audios y notas siguen solo moviendo su posición al rotar.
+`MoveDrag.textState` guarda escala y giro de antes para el "antes" del deshacer (un `EditAction` por transformación).
+Editar un texto transformado: `TextBlockView._transformed` envuelve el bloque en un `Transform` (T(centro)·R·T(-centro)·S): los campos
+se editan con la misma transformación y Flutter lleva foco, cursor y toques por la matriz; se eligió eso en vez de enderezarlo
+al editar porque no hay saltos y el modelo y el dibujo comparten matriz. "Enderezar" (barrita de selección, solo con un texto
+transformado) vuelve a 1 y 0 y lo acomoda al renglón desde su esquina de arriba; se deshace.
+
+**Elementos con el dedo** (issue #11a). El dedo scrollea (la hoja es un `SingleChildScrollView`), así que para elegir y
+mover con él hay dos piezas en `page_editor.dart`:
+- *Toque*: `_touchDown/_touchMove/_touchUp` (el `Listener` del visor, el mismo del pellizco y del menú de la hoja) siguen un
+  `_tapCand`: un solo dedo, sin moverse más de 10 px, sin que la hoja se haya movido, sin que `StillPressTimer` haya disparado
+  (el menú de la hoja cancela el candidato) y que no apoyó sobre la barrita ni las manijas (`_selUiPointers`). Al levantar,
+  `_fingerTap` elige la imagen / nota / audio de más arriba bajo el dedo (`hitStack`, solo `Item`), SIN cambiar de herramienta;
+  tocar vacío con algo elegido deselecciona (un hueco del recuadro no). En modo texto no elige (tocar es para escribir y
+  las notas se editan; un PDF importado es una imagen que cubre la hoja entera). En un audio, el botón de reproducir (los
+  primeros `kAudioPlayZone` = 54 unidades, y SOLO ahí tiene su `GestureDetector`) reproduce y no elige.
+- *Arrastre*: `SlopDragRecognizer` / `SlopDrag` (`slop_drag.dart`) es un reconocedor de un puntero que gana la arena a los
+  6 px (el scroll necesita 18 y un `PanGestureRecognizer` 36: por eso las manijas con `onPan` nunca andaban con el dedo) y es
+  traslúcido (no tapa el toque del botón de reproducir). Con algo elegido, `_sheet()` monta `selBody` (recuadro de la
+  selección + 12 px, solo dedo) que mueve con `Selection.startDrag/dragTo` y `_selDrop`, igual que el lápiz; se queda montado
+  mientras se arrastra (si no, se perdería el gesto). Las manijas usan el mismo reconocedor con 4 px y todos los dispositivos.
+  Un segundo dedo (`touch.length != 1`) lo retira: el pellizco sigue andando. Arrastrar el dedo fuera de lo elegido scrollea.
+
+### Grabación de voz (issue #10)
+
+Ya no es un diálogo modal (se borró `record_voice_dialog.dart`): grabar no bloquea el cuaderno.
+- `VoiceRecorder` (`lib/editor/voice_recorder.dart`, `ChangeNotifier`) vive en `NotebookScreenState.recorder`. Envuelve un
+  `AudioSource` (el micrófono: `RecordAudioSource` usa el paquete `record`, AAC en `.m4a`; los tests ponen `FakeAudioSource` en
+  `VoiceRecorder.sourceFactory`, el único punto de extensión), el cronómetro y el nivel. Una sola grabación a la vez.
+- Graba a `media/<id>.m4a.tmp` (la sync ignora los `.tmp`, ver `sync_paths.dart`) y al parar renombra a `.m4a`: nunca hay un
+  audio a medias con su nombre final.
+- "Grabación de voz" (`runInsert('voice')` → `_startVoice`) arranca el micrófono e inserta YA un `Item` de audio con `file` = el nombre
+  final y `dur` 0 en el centro de lo visible (`PageEditor.insertItem`, un paso de deshacer). Sin permiso o con otro error:
+  aviso con el mensaje y no se inserta nada. Con una grabación en curso: aviso "Ya hay una grabación en curso".
+- Mientras `recorder.isRecording(item.id)`, `ItemView` dibuja `RecordingChip` en vez de `AudioChip`: "Grabando", punto rojo que
+  late, tiempo y botón de parar (cuadrado; solo responde al dedo / mouse en esa zona, `RecordingChip.stopZone`). Es un elemento
+  común: se elige, se mueve y se escala, y se puede escribir, scrollear y cambiar de herramienta.
+- Parar (`stopVoice`, también al cerrar): renombra, `PageEditorState.setAudioDuration` pone `dur` (también en las copias del
+  historial: `History.patchItem`, así deshacer / rehacer lo devuelven con su duración), marca la hoja sucia y guarda.
+- Borrar o deshacer el elemento mientras graba: `_docChanged` ve que ya no está (`recorder.inserted` evita confundirlo antes de
+  que se inserte) y descarta (`discard`: para y borra el `.tmp`). Ojo: deshacer el BORRADO de una grabación descartada devuelve
+  una etiqueta de audio sin archivo.
+- Cerrar el cuaderno (`leave`, o `dispose` con la grabación en curso, o borrarlo) para y guarda lo grabado hasta ahí (borrarlo
+  descarta). Con la app en `paused` sigue grabando; en `detached` para y guarda. Límite: Android 11+ restringe el micrófono en
+  segundo plano a servicios en primer plano, y `record` no abre uno: en `paused` puede quedar en silencio; y si el sistema mata
+  el proceso queda un `.tmp` huérfano y el elemento con duración 0.
+- Tests: `test/editor/voice_recorder_test.dart` (grabador con micrófono falso), `test/screens/voice_notebook_test.dart` (cuaderno
+  abierto: etiqueta, escribir mientras graba, una sola, parar, deshacer, borrar, sin permiso, cerrar, `paused` / `detached`) y el caso de integración.
+
 ### Guardado
 
 - Guardar codifica en otro isolate solo las hojas sucias (`NotebookDoc.takeDirty`; los mapas de elementos avisan
@@ -329,11 +429,17 @@ Mover en el panel: asa `drag_handle` por miniatura (`thumbHandle-N`, destino `th
 ### Formato `.opennote`
 
 ZIP creado por `lib/data/opennote_file.dart`: `manifest.json` (app, versión de formato, nombre, fondo, papel,
-espaciado, cantidad de hojas), `notebook.json`, `sheets/<hoja>.sheet` (copiados de disco tal cual, sin cargar las hojas)
+espaciado, cantidad de hojas), `notebook.json` (con las secciones), `sheets/<hoja>.sheet` (de todas las secciones, copiados de disco tal cual, sin cargar las hojas)
 y `media/<archivo>` (solo lo que usan las hojas). Al importar se valida el manifest (versión, nombres de archivo
 seguros, hojas que coinciden) antes de escribir; un archivo roto lanza `OpennoteException` y no deja nada en disco.
-El cuaderno nuevo recibe un id nuevo y "X (importado)" si el nombre ya existe. Exportar: menú ⋮ del cuaderno y menú
-de mantener apretado en la biblioteca (`saveOpennote` en `export.dart`); importar: "+" de la biblioteca
+El cuaderno nuevo recibe un id nuevo y "X (importado)" si el nombre ya existe. Exportar: una sola entrada "Exportar" en el menú ⋮ del cuaderno y en el menú de mantener apretado de la biblioteca;
+abre `showExportSheet` (`menus.dart`) y exporta el cuaderno entero: PDF, "Imágenes (PNG)" (`buildNotebookPngs`: un PNG
+por hoja, de a una con `sheetSource`, en un ZIP con nombres "<cuaderno> - hoja 01.png", o el PNG directo si hay una sola
+hoja; con más de una sección el nombre lleva la sección, "<cuaderno> - <sección> - hoja 01.png", y el número es el de la
+hoja dentro de su sección). Con más de una sección, PDF y PNG preguntan antes qué secciones exportar
+(`askExportSections`, en `sections_menu.dart`: "Todas" o marcar a mano, en el orden de las secciones; las no abiertas se
+leen de disco, así que anda igual desde la biblioteca); `exportSheets` arma la lista de hojas. El `.opennote` exporta el
+cuaderno entero con sus secciones y al importar se conservan; progreso cancelable en `exportPngFlow`; guardado sustituible `saveImages`) y `.opennote` (`saveOpennote` en `export.dart`); dentro del cuaderno se suman "PDF de esta hoja" e "Imagen de esta hoja (PNG)"; importar: "+" de la biblioteca
 (`Pickers.opennote`). Ambos son sustituibles en los tests.
 
 ### Migración
@@ -363,6 +469,20 @@ una **malla de triángulos** (`lib/domain/stroke_mesh.dart`, `buildStrokeMesh`) 
     (se veían cuentas); la malla es continua, así que el lápiz queda un poco más parejo.
   - Caligrafía: cinta con la punta plana a 45° (2 vértices por punto) más una tira fina que mantiene el trazo visible
     cuando se mueve en la dirección de la punta.
+  - Decorador (herramienta propia, `k = 'paint-<forma>'`; `paint-none` es de los trazos viejos = formas apagadas; `c`
+    fondo, `w` ancho de franja, `o` opacidad, y `pp` opcional: `g` brillo, `sd`/`ss` cantidad/tamaño de formas, `sc`
+    color de formas y, solo si difieren del default, `st` tipo de trazo (`brush` | `hl` | `marker`), `bg` y `sh`
+    (fondo y formas prendidos; al menos uno de fondo/formas/brillo queda prendido). Solo se guarda en trazos de
+    este tipo): malla de colores por vértice, determinística (`_rnd`, hash de índices, nunca `Random`). Orden: fondo
+    (`brush`: 8-14 cerdas, tiras paralelas con desplazamiento, grosor, alfa y largo propios, puntas desflecadas solo en
+    el inicio/fin real; `hl`: banda plana translúcida con extremos rectos; `marker`: banda sólida con extremos
+    redondeados), puntitos de brillo y formas (`paint_shapes.dart`, un generador por forma dentro de su radio).
+    Pensado para dibujarse en vivo y en curvas: partes de 250 puntos alineadas al inicio (solo cambia la última al
+    seguir dibujando) cortadas de la misma curva suave con contexto de las vecinas (sin costuras); lo azaroso se ancla
+    al largo de arco (brillo en celdas fijas, formas por arco), no al largo total; normales suavizadas por arco
+    (cuerda de ±ancho/4) y corrimientos del lado interno recortados al radio de curvatura (sin pliegues).
+    Va en la pasada del resaltador (`isUnderInk`) y sin `saveLayer` (alfa en los vértices).
+    Una versión vieja que lee `paint-*` lo arma como bolígrafo (`default`).
 - **Opacidad < 1** (todas las puntas menos el lápiz): el trazo va en un `saveLayer` con el alfa, como antes, para que
   no se oscurezcan sus uniones. Esto incluye a fibra y resaltador, que antes usaban un `Path` sin capa.
 - **Lotes**: `paintStrokes` junta los trazos seguidos opacos del mismo color (y las mallas de colores entre sí) en
@@ -420,6 +540,10 @@ Detalle y decisiones en `docs/SINCRONIZACION.md` (sección "Decisión: Google Dr
   llega en el medio se junta en una más) y retroceso 30 s → 10 min ante errores. Expone `status` (`SyncStatus`) para el
   indicador (`screens/library/sync_indicator.dart`) y `remoteWaiting` (cuadernos abiertos con cambios de la nube sin aplicar).
   Los tiempos son parámetros del constructor; los tests lo corren con `fakeAsync` y una pasada falsa (`passOverride`).
+- `notebook.json`: `mergeNotebookJson` fusiona por id las hojas y también las secciones (`sections`); el resto (`active`)
+  es el local. El `section` de cada hoja viaja dentro de su objeto. Si un lado borra una sección y el otro le agregó
+  una hoja, la hoja se queda (editar le gana a borrar) y, al no existir su sección, pasa a la primera. Cambiar de sección o
+  de hoja vista cambia `active` / `last` en `notebook.json`, y eso se sube como cualquier otro cambio del archivo.
 - Cuaderno abierto: el motor solo SUBE lo ya guardado y nunca escribe local ahí; los cambios remotos se avisan en el
   editor ("Hay cambios de otro dispositivo" / Actualizar). Ver la regla de oro en `SINCRONIZACION.md`.
 - Cableado: `Library` crea el controlador, hace `store.onSaved = (_) => sync.notifySaved()` y es `WidgetsBindingObserver`
@@ -427,6 +551,27 @@ Detalle y decisiones en `docs/SINCRONIZACION.md` (sección "Decisión: Google Dr
 - Tests: `test/sync/sync_engine_test.dart` (motor, con dos dispositivos y cuaderno abierto), `test/sync/sync_controller_test.dart`
   (planificador con reloj falso), `test/screens/sync_ui_test.dart` (indicador y aviso), y en `integration_test/app_test.dart`
   el caso de sincronización automática (tarda ~15 s en la tablet: usa tiempos acortados `syncPoll` / `syncDebounce`).
+
+### Imágenes y audios en la sync (issue #11b)
+
+"Puse una imagen y un audio y falla la sincronización": no se pudo probar contra Drive real, así que la causa se buscó
+leyendo el camino de `media/` y se reprodujo con el remoto falso y un `http.Client` falso (`test/sync/sync_media_test.dart`).
+Causas encontradas, todas arregladas:
+
+1. **Nombre del archivo.** `makeAudioFileItem` sacaba la extensión de lo que viniera después del último punto de la RUTA
+   entera. Un audio sin extensión dentro de una carpeta con punto (el paquete de Android es `com.apuntes.apuntes`), o con
+   espacios / fechas con puntos en el nombre, daba un nombre en `media/` que no encaja en la regex de `sync_paths.dart`
+   (el motor lo ignora en silencio: el audio nunca llega al otro dispositivo) o que ni siquiera se podía copiar. Ahora
+   `mediaExt` toma solo la extensión del NOMBRE y solo si son 1 a 8 letras / números; si no, usa `m4a` (audio) o `jpg`.
+2. **Subida de archivos grandes.** `DriveRemoteStore.upload` mandaba todo en un solo pedido multipart, que Google recomienda
+   solo hasta 5 MB. Un audio importado o una foto grande se cortaba con facilidad. Desde `kResumableFrom` (5 MB) se usa la
+   subida reanudable (partes de 4 MiB, con reintento de la parte que falla). Ojo: probado solo contra un Drive falso.
+3. **Archivos a medio escribir y hash viejo.** `Storage.addMedia` / `addMediaFile` escribían directo al nombre final, así
+   que la sync podía subir un archivo a medias; y el motor anotaba en la base el hash de una lectura anterior a la subida:
+   un archivo que seguía creciendo dejaba un hash equivocado, la próxima subida mandaba `ifRemoteMd5` viejo y Drive
+   devolvía "El archivo cambió en la nube". Ahora los medios se escriben a `<nombre>.tmp` y se renombran (la sync ignora
+   `.tmp`), y `SyncEngine._readStable` lee los bytes una vez, calcula el hash de ESOS bytes y, si el archivo cambió
+   mientras se leía, lo deja para la próxima pasada.
 
 ## Compilar e instalar en la tablet
 

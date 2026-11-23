@@ -221,8 +221,51 @@ BlockLayout layoutBlock(TextBlock t, double line, {double scale = 1}) {
   return BlockLayout._(boxes, Size(maxW, y));
 }
 
-/// Rectángulo que ocupa un bloque de texto en la página (mínimo un renglón de [line] unidades).
+/// Rectángulo que ocupa un bloque de texto en la página (mínimo un renglón de [line] unidades), ya con su escala y SIN el giro:
+/// la esquina de arriba a la izquierda es (x, y) y el tamaño el del bloque por [TextBlock.scale].
 Rect textRect(TextBlock t, [double line = kLine]) {
   final s = layoutBlock(t, line).size;
-  return Offset(t.x, t.y) & Size(max(s.width, 20), max(s.height, line));
+  return Offset(t.x, t.y) & Size(max(s.width, 20) * t.scale, max(s.height, line) * t.scale);
+}
+
+/// Las 4 esquinas de [textRect] giradas [TextBlock.angle] alrededor de su centro (arriba-izq, arriba-der, abajo-der, abajo-izq).
+List<Offset> textCorners(TextBlock t, [double line = kLine]) {
+  final r = textRect(t, line);
+  if (t.angle == 0) return [r.topLeft, r.topRight, r.bottomRight, r.bottomLeft];
+  final c = r.center, ca = cos(t.angle), sa = sin(t.angle);
+  Offset rot(Offset p) {
+    final v = p - c;
+    return c + Offset(v.dx * ca - v.dy * sa, v.dx * sa + v.dy * ca);
+  }
+
+  return [for (final p in [r.topLeft, r.topRight, r.bottomRight, r.bottomLeft]) rot(p)];
+}
+
+/// Rectángulo que envuelve al texto ya girado (lo que se ve ocupar en la hoja).
+Rect textBounds(TextBlock t, [double line = kLine]) {
+  if (t.angle == 0) return textRect(t, line);
+  return unionRects([for (final p in textCorners(t, line)) Rect.fromPoints(p, p)])!;
+}
+
+/// Si el punto [p] cae sobre el texto (con margen [tol]), teniendo en cuenta el giro.
+bool textHit(TextBlock t, Offset p, double tol, [double line = kLine]) {
+  final r = textRect(t, line);
+  if (t.angle == 0) return r.inflate(tol).contains(p);
+  final v = p - r.center, ca = cos(-t.angle), sa = sin(-t.angle);
+  return r.inflate(tol).contains(r.center + Offset(v.dx * ca - v.dy * sa, v.dx * sa + v.dy * ca));
+}
+
+/// Dibuja el bloque [t] con su escala y giro (esquina de arriba a la izquierda en (x, y)).
+void paintTextBlock(Canvas c, TextBlock t, double line, {Color color = kInk}) {
+  final layout = layoutBlock(t, line);
+  if (!t.transformed) return layout.paint(c, Offset(t.x, t.y), color: color);
+  final r = textRect(t, line);
+  c.save();
+  c.translate(r.center.dx, r.center.dy);
+  c.rotate(t.angle);
+  c.translate(-r.center.dx, -r.center.dy);
+  c.translate(t.x, t.y);
+  c.scale(t.scale);
+  layout.paint(c, Offset.zero, color: color);
+  c.restore();
 }

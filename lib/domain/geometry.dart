@@ -26,6 +26,23 @@ int sheetCount(double h) => max(1, ((h + kGap) / kSheetStep).round());
 /// Alto de una página con [sheets] hojas (sin espacio después de la última).
 double heightFor(int sheets) => sheets * kSheetH + (sheets - 1) * kGap;
 
+/// La hoja con MÁS área visible en la vista que va de [viewTop] a [viewBottom] (coordenadas de la página); en un
+/// empate, la de arriba. Si la vista cae toda en un hueco entre hojas, la que tiene el centro más cerca.
+int mostVisibleSheetFor(double viewTop, double viewBottom, int sheetCount) {
+  var best = 0, bestArea = -1.0;
+  for (var k = 0; k < sheetCount; k++) {
+    final top = k * kSheetStep;
+    final area = min(viewBottom, top + kSheetH) - max(viewTop, top);
+    if (area > bestArea + 1e-9) {
+      best = k;
+      bestArea = area;
+    }
+  }
+  if (bestArea > 0) return best;
+  final mid = (viewTop + viewBottom) / 2;
+  return (mid / kSheetStep).round().clamp(0, max(0, sheetCount - 1));
+}
+
 /// Rectángulos de cada hoja dentro de la página.
 List<Rect> sheetRects(double h) => [
       for (var k = 0; k < sheetCount(h); k++) Rect.fromLTWH(0, k * kSheetStep, kW, kSheetH),
@@ -74,23 +91,24 @@ bool segmentIntersectsRect(Offset a, Offset b, Rect r) {
 
 /// Transformación de la selección: se escala [scale] y se rota [angle] (radianes) alrededor de [pivot], y después
 /// se corre [shift]. Mover es solo [shift]; escalar desde una esquina es [pivot] = la esquina opuesta; rotar,
-/// [pivot] = el centro del recuadro.
+/// [pivot] = el centro del recuadro. [kx] y [ky] estiran cada eje por separado (manijas del medio de cada lado):
+/// se aplican ANTES de escalar y girar, y en la práctica se usan solos (sin giro).
 class Xform {
   final Offset pivot;
-  final double scale, angle;
+  final double scale, angle, kx, ky;
   final Offset shift;
-  const Xform({this.pivot = Offset.zero, this.scale = 1, this.angle = 0, this.shift = Offset.zero});
+  const Xform({this.pivot = Offset.zero, this.scale = 1, this.angle = 0, this.kx = 1, this.ky = 1, this.shift = Offset.zero});
 
   /// Solo trasladar [d].
   const Xform.move(Offset d) : this(shift: d);
 
   /// No escala ni rota: es una traslación (y se calcula exacta, sin pasar por senos y cosenos).
-  bool get isMove => scale == 1 && angle == 0;
+  bool get isMove => scale == 1 && angle == 0 && kx == 1 && ky == 1;
   bool get isIdentity => isMove && shift == Offset.zero;
 
   Offset apply(Offset p) {
     if (isMove) return p + shift;
-    final v = (p - pivot) * scale, c = cos(angle), s = sin(angle);
+    final d = p - pivot, v = Offset(d.dx * kx, d.dy * ky) * scale, c = cos(angle), s = sin(angle);
     return pivot + shift + Offset(v.dx * c - v.dy * s, v.dx * s + v.dy * c);
   }
 

@@ -5,6 +5,7 @@
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -14,17 +15,24 @@ import 'package:apuntes/data/media_import.dart';
 import 'package:apuntes/data/sheet_codec.dart';
 import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/domain/domain.dart';
+import 'package:apuntes/editor/fake_audio_source.dart';
+import 'package:apuntes/editor/handwriting.dart';
 import 'package:apuntes/editor/page_editor.dart';
+import 'package:apuntes/editor/pdf_page_image.dart';
+import 'package:apuntes/editor/voice_recorder.dart';
+import 'package:apuntes/editor/selection.dart';
 import 'package:apuntes/editor/selection_menu.dart';
 import 'package:apuntes/rendering/sheet_image_cache.dart';
 import 'package:apuntes/rendering/text_layout.dart';
 import 'package:apuntes/sync/fake_backend.dart';
 import 'package:apuntes/sync/fake_remote_store.dart';
 import 'package:apuntes/sync/sync_engine.dart';
+import 'package:archive/archive.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 void main() {
@@ -182,6 +190,61 @@ void main() {
     await settle(t, 1200);
   });
 
+  testWidgets('decorador: su botón abre el panel, elige forma, tipo de trazo y fondo (y lo apaga una vez), y cada franja deja su trazo con su malla (issue #6)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Franjas');
+    final c = sheetCenter(t);
+    expect(find.byTooltip('Decorador · tocá de nuevo para opciones'), findsOneWidget);
+    await t.tap(find.byTooltip('Decorador · tocá de nuevo para opciones'));
+    await settle(t);
+    expect(editor(t).ts.tool, Tool.paint);
+    var y = -150.0;
+    final fondos = ['8fd8e0', 'e3cfa0', 'c9b3ec', 'f8c4a0', 'a8e2c4'];
+    final estilos = ['brush', 'hl', 'marker', 'brush'];
+    var i = 0;
+    for (final id in ['paint-stars', 'paint-hearts', 'paint-moons', 'paint-clouds']) {
+      await t.tap(find.byTooltip('Decorador · tocá de nuevo para opciones'));
+      await settle(t);
+      expect(find.byKey(const Key('paintPreview')), findsOneWidget);
+      await t.ensureVisible(find.byKey(Key('paintShape-$id')));
+      await t.tap(find.byKey(Key('paintShape-$id')));
+      await settle(t);
+      expect(editor(t).ts.paint.tip, id);
+      await t.ensureVisible(find.byKey(Key('paintSt-${estilos[i]}')));
+      await t.tap(find.byKey(Key('paintSt-${estilos[i]}')));
+      await settle(t);
+      expect(editor(t).ts.paintParams.style, estilos[i]);
+      await t.ensureVisible(find.byKey(Key('paint-${fondos[i]}')));
+      await t.tap(find.byKey(Key('paint-${fondos[i]}')));
+      await settle(t);
+      expect(editor(t).ts.paint.color, '#${fondos[i]}');
+      if (i == 3) {
+        await t.ensureVisible(find.byKey(const Key('paintBgSwitch')));
+        await t.tap(find.byKey(const Key('paintBgSwitch'))); // apaga el fondo: quedan formas y brillo
+        await settle(t);
+        expect(editor(t).ts.paintParams.bg, false);
+      }
+      // cierra el panel desde adentro (no a ciegas sobre la cortina)
+      Navigator.of(t.element(find.byKey(const Key('paintPreview')))).pop();
+      await settle(t);
+      expect(find.byKey(const Key('paintPreview')), findsNothing);
+      final before = editor(t).doc.strokes.length;
+      await stylusLine(t, c + Offset(-100, y), c + Offset(100, y));
+      y += 70;
+      expect(editor(t).doc.strokes.length, before + 1, reason: id);
+      final s = editor(t).doc.strokes.values.last;
+      expect(s.k, id);
+      expect(s.c, '#${fondos[i]}');
+      expect(s.pp, isNotNull);
+      expect(s.pp!.style, estilos[i]);
+      expect(s.ensureMesh()!.vertexCount, greaterThan(0));
+      i++;
+    }
+    expect(editor(t).doc.strokes.values.last.pp!.bg, false);
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+  });
+
   testWidgets('panel de páginas: contador, agregar hoja y marcador', (t) async {
     await start(t);
     await createNotebook(t, 'Panel');
@@ -208,6 +271,64 @@ void main() {
     await t.tap(find.byKey(const Key('back')));
     await settle(t, 1200);
     expect((await savedNotebook('Panel')).sheets[1].bookmark, isTrue);
+  });
+
+  testWidgets('secciones: crear una, escribir en ella, volver a la otra (no se ve), cerrar y reabrir el cuaderno', (t) async {
+    await start(t);
+    await createNotebook(t, 'Secciones');
+    await t.tap(find.byKey(const Key('pagesBtn')));
+    await settle(t, 600);
+
+    // el botón siempre está y muestra la sección activa
+    expect((t.widget(find.byKey(const Key('sectionName'))) as Text).data, 'General');
+    final c = sheetCenter(t);
+    await stylusLine(t, c, c + const Offset(200, 40));
+    expect(editor(t).doc.strokes.length, 1);
+
+    // nueva sección "Práctica": se abre con una hoja en blanco (no se ve lo de General)
+    await t.tap(find.byKey(const Key('sectionsButton')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('newSection')));
+    await settle(t);
+    await t.enterText(find.byKey(const Key('askText')), 'Práctica');
+    await t.tap(find.byKey(const Key('askOk')));
+    await settle(t, 2000);
+    expect((t.widget(find.byKey(const Key('sectionName'))) as Text).data, 'Práctica');
+    expect(editor(t).doc.sheetCount, 1);
+    expect(editor(t).doc.strokes, isEmpty);
+
+    // se escribe en ella
+    await stylusLine(t, sheetCenter(t), sheetCenter(t) + const Offset(0, 120));
+    expect(editor(t).doc.strokes.length, 1);
+    final practicaStroke = editor(t).doc.strokes.keys.single;
+
+    // volver a General: está su trazo y no el de Práctica
+    await t.tap(find.byKey(const Key('sectionsButton')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('section-$kGeneralSection')));
+    await settle(t, 2000);
+    expect((t.widget(find.byKey(const Key('sectionName'))) as Text).data, 'General');
+    expect(editor(t).doc.strokes.length, 1);
+    expect(editor(t).doc.strokes.containsKey(practicaStroke), isFalse);
+
+    // cerrar y reabrir el cuaderno: todo persiste
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+    final nb = await savedNotebook('Secciones');
+    expect(nb.sections.map((s) => s.name), ['General', 'Práctica']);
+    expect(nb.totalSheets, 2);
+    await t.tap(find.byKey(const Key('nb-Secciones')));
+    await settle(t, 1500);
+    await t.tap(find.byKey(const Key('pagesBtn')));
+    await settle(t, 600);
+    expect((t.widget(find.byKey(const Key('sectionName'))) as Text).data, 'General');
+    expect(editor(t).doc.strokes.length, 1);
+    await t.tap(find.byKey(const Key('sectionsButton')));
+    await settle(t);
+    await t.tap(find.byKey(Key('section-${nb.sections.last.id}')));
+    await settle(t, 2000);
+    expect((t.widget(find.byKey(const Key('sectionName'))) as Text).data, 'Práctica');
+    expect(editor(t).doc.strokes.keys.single, practicaStroke, reason: 'lo escrito en Práctica sigue ahí');
   });
 
   testWidgets('el contador del título sigue al scroll', (t) async {
@@ -363,7 +484,9 @@ void main() {
       saveOpennote = savedSave;
       Pickers.opennote = savedPick;
     });
-    await openMore(t, 'Exportar cuaderno (.opennote)');
+    await openMore(t, 'Exportar');
+    await t.tap(find.byKey(const Key('export-opennote')));
+    await settle(t, 600);
     expect(saved, isNotNull);
     await t.tap(find.byKey(const Key('back')));
     await settle(t, 1200);
@@ -693,6 +816,98 @@ void main() {
     expect(pages.first.width / pages.first.height, closeTo(210 / 297, .02), reason: 'tamaño A4');
   });
 
+  testWidgets('PDF importado: 50 páginas en menos de 2 s, entran en la hoja que se ve, se dibujan y se exportan (rápido, sin imágenes)',
+      (t) async {
+    final pdfBytes = (await t.runAsync(() async {
+      final d = pw.Document();
+      for (var i = 1; i <= 50; i++) {
+        d.addPage(pw.Page(
+          margin: const pw.EdgeInsets.all(40),
+          build: (_) => pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+            pw.Text('Tema $i', style: pw.TextStyle(fontSize: 40, fontWeight: pw.FontWeight.bold)),
+            for (var k = 0; k < 20; k++) pw.Paragraph(text: 'Linea $k de la pagina $i, con bastante texto para que se note.'),
+          ]),
+        ));
+      }
+      return Uint8List.fromList(await d.save());
+    }))!;
+    final savedPick = Pickers.pdf;
+    addTearDown(() => Pickers.pdf = savedPick);
+    Pickers.pdf = () async => (pdfBytes, 'Apuntes');
+    await start(t);
+    await createNotebook(t, 'PDF importado');
+    final ed = editor(t);
+    ed.doc.addSheet();
+    ed.doc.addSheet();
+    // un trazo en la hoja 2 (índice 1) para saber adónde va a parar
+    final mark = Stroke('marca', 'pen', '#22211e', 2.6, [100, kSheetStep + 200, .5, 500, kSheetStep + 200, .5]);
+    ed.doc.strokes[mark.id] = mark;
+    ed.doc.markDirtyElement(mark);
+    // ignore: invalid_use_of_protected_member
+    ed.setState(() {});
+    await settle(t, 600);
+    ed.scrollToSheet(1, animate: false);
+    await settle(t, 800);
+    expect(ed.mostVisibleSheet, 1);
+    final oldSheetId = ed.doc.sheets[1].id;
+    expect(ed.doc.sheetCount, 3);
+
+    final sw = Stopwatch()..start();
+    await t.tap(find.byKey(const Key('insert')));
+    await settle(t);
+    await t.tap(find.text('PDF'));
+    while (ed.doc.sheetCount < 53 && sw.elapsedMilliseconds < 10000) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      await t.pump();
+    }
+    final ms = sw.elapsedMilliseconds;
+    debugPrint('PDFIMPORT 50 paginas: $ms ms');
+    expect(ed.doc.sheetCount, 3 + 50);
+    expect(ms, lessThan(2000), reason: 'importar no rasteriza nada');
+    await settle(t, 600);
+
+    // la primera página quedó EN la hoja que se veía; la que se veía (y la marca) se corrió al final del PDF
+    final first = ed.doc.items.values.where((i) => ed.doc.sheetOfY(i.y) == 1).single;
+    expect([first.type, first.page], ['pdf', 0]);
+    expect(ed.doc.sheets[51].id, oldSheetId, reason: 'la hoja que se veía quedó después del PDF');
+    expect(ed.doc.sheetOfY(ed.doc.strokes['marca']!.bounds.top), 51);
+    final media = Directory('${root.path}/media').listSync().map((e) => e.path.split('/').last).toList();
+    expect(media.where((n) => n.endsWith('.pdf')).length, 1, reason: 'un solo PDF para las 50 páginas');
+    expect(media.where((n) => n.endsWith('.png')), isEmpty);
+
+    // la página visible termina mostrando imagen
+    final shown = find.descendant(of: find.byType(PdfPageImage), matching: find.byType(RawImage));
+    final sw2 = Stopwatch()..start();
+    while (shown.evaluate().isEmpty && sw2.elapsedMilliseconds < 3000) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await t.pump();
+    }
+    expect(shown, findsAtLeastNWidgets(1), reason: 'la página se dibuja a demanda');
+
+    // exportar la hoja: la página sale dibujada (no todo blanco)
+    final s = Storage(root: root);
+    await s.init();
+    final dark = await t.runAsync(() async {
+      final images = await loadImages(s, ed.doc, sheet: 1);
+      final png = await renderSheetPng(ed.doc, 1, images: images);
+      for (final im in images.values) {
+        im.dispose();
+      }
+      final img = await decodeImage(png);
+      final px = (await img.toByteData())!.buffer.asUint8List();
+      img.dispose();
+      for (var i = 0; i < px.length; i += 4) {
+        if (px[i] < 100 && px[i + 1] < 100 && px[i + 2] < 100) return true;
+      }
+      return false;
+    });
+    expect(dark, isTrue, reason: 'la hoja exportada trae el texto del PDF');
+
+    await t.tap(find.byTooltip('Deshacer'));
+    await settle(t, 800);
+    expect(ed.doc.sheetCount, 3, reason: 'importar es un solo paso de deshacer');
+  });
+
   Future<void> createFolder(WidgetTester t, String name) async {
     await t.tap(find.byKey(const Key('new')));
     await settle(t);
@@ -999,10 +1214,16 @@ void main() {
     await createNotebook(t, 'Manijas');
     final p = docToScreen(t);
     final ed = editor(t);
+    // En la tablet real la parte visible de la hoja es mucho más baja que 800 unidades (escala ~1,6 en horizontal): todo
+    // se acomoda dentro de lo que se ve (comprimiendo solo la altura) para no dibujar ni arrastrar fuera de la pantalla.
+    final view = t.getRect(find.byType(PageEditor)), origin = p(Offset.zero);
+    final visH = view.height / ed.scale;
+    final top = (view.top - origin.dy) / ed.scale + visH * .22, ky = (visH * .5 / 600).clamp(0.2, 1.0);
+    Offset q(double x, double y) => p(Offset(x, top + (y - 100) * ky));
     // dos trazos que se estiran juntos y uno lejos que no entra al recuadro
-    await stylusLine(t, p(const Offset(200, 200)), p(const Offset(400, 200)));
-    await stylusLine(t, p(const Offset(200, 260)), p(const Offset(400, 320)));
-    await stylusLine(t, p(const Offset(600, 700)), p(const Offset(800, 700)));
+    await stylusLine(t, q(200, 200), q(400, 200));
+    await stylusLine(t, q(200, 260), q(400, 320));
+    await stylusLine(t, q(600, 700), q(800, 700));
     expect(ed.doc.strokes.length, 3);
     final ids = ed.doc.strokes.keys.toList();
     final far = ids.last;
@@ -1012,7 +1233,7 @@ void main() {
 
     await t.tap(find.byTooltip('Seleccionar'));
     await settle(t);
-    await stylusDrag(t, p(const Offset(150, 150)), p(const Offset(450, 360))); // ventana sobre los dos primeros
+    await stylusDrag(t, q(150, 150), q(450, 360)); // ventana sobre los dos primeros
     expect(ed.sel.strokes, {ids[0], ids[1]});
     for (final n in ['tl', 'tr', 'br', 'bl', 'rotate']) {
       expect(find.byKey(Key('selHandle-$n')), findsOneWidget, reason: 'manija $n');
@@ -1054,10 +1275,10 @@ void main() {
     // tocar afuera, sobre el trazo lejano: solo cancela (no elige nada); otro toque sí elige
     await t.tap(find.byTooltip('Rehacer'));
     await settle(t);
-    await stylusDrag(t, p(const Offset(100, 100)), p(const Offset(600, 450))); // vuelve a seleccionar los dos
+    await stylusDrag(t, q(100, 100), q(600, 450)); // vuelve a seleccionar los dos
     expect(ed.sel.strokes.length, 2);
     Future<void> tapAt(Offset d) async {
-      final g = await t.startGesture(p(d), kind: PointerDeviceKind.stylus);
+      final g = await t.startGesture(q(d.dx, d.dy), kind: PointerDeviceKind.stylus);
       await g.up();
       await settle(t);
     }
@@ -1068,6 +1289,334 @@ void main() {
     expect(find.byKey(const Key('selHandle-br')), findsNothing);
     await tapAt(const Offset(700, 700));
     expect(ed.sel.strokes, {far}, reason: 'el segundo toque, ya sin selección, elige');
+  });
+
+  testWidgets('selección: las manijas del medio estiran solo a lo ancho o solo a lo alto (trazos e imagen)', (t) async {
+    final img = await fakeImage(400, 300);
+    Pickers.image = (_) async => img;
+    await start(t);
+    await createNotebook(t, 'Estirar');
+    final p = docToScreen(t);
+    final ed = editor(t);
+    // igual que en el test de escalar: todo dentro de la parte visible de la hoja
+    final view = t.getRect(find.byType(PageEditor)), origin = p(Offset.zero);
+    final visH = view.height / ed.scale;
+    final top = (view.top - origin.dy) / ed.scale + visH * .22, ky = (visH * .5 / 600).clamp(0.2, 1.0);
+    Offset q(double x, double y) => p(Offset(x, top + (y - 100) * ky));
+    // un trazo en L
+    await stylusLine(t, q(200, 200), q(200, 450));
+    await stylusLine(t, q(200, 450), q(450, 450));
+    expect(ed.doc.strokes.length, 2);
+
+    await t.tap(find.byTooltip('Seleccionar'));
+    await settle(t);
+    await stylusDrag(t, q(150, 150), q(500, 500)); // ventana sobre la L
+    expect(ed.sel.strokes.length, 2);
+    for (final n in ['top', 'right', 'bottom', 'left']) {
+      expect(find.byKey(Key('selHandle-$n')), findsOneWidget, reason: 'manija $n');
+    }
+    final r0 = ed.sel.contentRect(ed.doc)!;
+
+    // a la derecha: crece el ancho, el alto no
+    final right = t.getCenter(find.byKey(const Key('selHandle-right')));
+    await stylusDrag(t, right, right + const Offset(120, 0));
+    final r1 = ed.sel.contentRect(ed.doc)!;
+    expect(r1.width, greaterThanOrEqualTo(r0.width * 1.3), reason: 'se estiró a lo ancho');
+    expect((r1.height - r0.height).abs(), lessThan(2), reason: 'el alto no cambia');
+
+    // deshacer vuelve (y suelta la selección, como siempre): se mide la L directamente y se vuelve a seleccionar
+    final lIds = Set.of(ed.sel.strokes);
+    await t.tap(find.byTooltip('Deshacer'));
+    await settle(t);
+    final r2 = contentBounds([for (final id in lIds) ed.doc.strokes[id]!], const [], const [])!;
+    expect(r2.width, closeTo(r0.width, 1e-6));
+    expect(r2.height, closeTo(r0.height, 1e-6));
+    await stylusDrag(t, q(150, 150), q(500, 500));
+    expect(ed.sel.strokes, lIds);
+
+    // hacia abajo: crece el alto, el ancho no
+    final bottom = t.getCenter(find.byKey(const Key('selHandle-bottom')));
+    await stylusDrag(t, bottom, bottom + const Offset(0, 40));
+    final r3 = ed.sel.contentRect(ed.doc)!;
+    expect(r3.height, greaterThan(r0.height * 1.05), reason: 'se estiró a lo alto');
+    expect((r3.width - r0.width).abs(), lessThan(2), reason: 'el ancho no cambia');
+
+    // una imagen sola: estirada a la derecha pierde la proporción
+    await t.tap(find.byKey(const Key('insert')));
+    await settle(t);
+    await t.tap(find.text('Imagen'));
+    await settle(t, 1200);
+    final it = ed.doc.items.values.single;
+    await t.tap(find.byTooltip('Seleccionar'));
+    await settle(t);
+    final g = await t.startGesture(p(it.rect.center), kind: PointerDeviceKind.stylus);
+    await g.up();
+    await settle(t);
+    expect(ed.sel.items, {it.id});
+    expect(ed.sel.strokes, isEmpty);
+    final w0 = it.w, h0 = it.h;
+    final side = t.getCenter(find.byKey(const Key('selHandle-right')));
+    final target = Offset(min(side.dx + 60, view.right - 20), side.dy);
+    await stylusDrag(t, side, target);
+    final it2 = ed.doc.items[it.id]!;
+    expect(it2.w, greaterThan(w0 * 1.02), reason: 'la imagen se ensanchó');
+    expect(it2.h, closeTo(h0, 1e-6), reason: 'el alto queda igual: la proporción se rompe');
+  });
+
+  testWidgets('con el dedo se selecciona y mueve una imagen / audio (issue #11a)', (t) async {
+    final img = await fakeImage(400, 300);
+    Pickers.image = (_) async => img;
+    final audioSrc = File('${root.path}/clase.m4a')..writeAsBytesSync(List.filled(2048, 3));
+    Pickers.audio = () async => audioSrc;
+    Pickers.audioLength = (_) async => 4000;
+    await start(t);
+    await createNotebook(t, 'Dedo');
+    for (final label in ['Imagen', 'Archivo de audio']) {
+      await t.tap(find.byKey(const Key('insert')));
+      await settle(t);
+      await t.tap(find.text(label));
+      await settle(t, 1200);
+    }
+    final ed = editor(t);
+    final image = ed.doc.items.values.firstWhere((i) => i.type == 'image');
+    final audio = ed.doc.items.values.firstWhere((i) => i.type == 'audio');
+    // cada uno en su lugar (los dos se insertaron en el centro), uno al lado del otro: en la tablet en horizontal
+    // se ven menos de 800 unidades de alto y un audio más abajo quedaba fuera de pantalla
+    for (final (it, x, y) in [(image, 40.0, 150.0), (audio, 620.0, 250.0)]) {
+      ed.doc.markDirtyElement(it);
+      it..x = x..y = y;
+      ed.doc.markDirtyElement(it);
+    }
+    ed.refresh();
+    await t.tap(find.byTooltip('Lápiz · tocá de nuevo para opciones'));
+    await settle(t);
+    final p = docToScreen(t);
+    Future<void> fingerTap(Offset a) async {
+      final g = await t.startGesture(a, kind: PointerDeviceKind.touch);
+      await t.pump(const Duration(milliseconds: 50));
+      await g.up();
+      await settle(t, 300);
+    }
+
+    // un toque del dedo elige (con el lápiz como herramienta) y aparecen la barrita y las manijas
+    await fingerTap(p(Offset(image.x + image.w / 2, image.y + image.h / 2)));
+    expect(ed.selI, {image.id});
+    expect(find.byKey(const Key('selHandle-br')), findsOneWidget);
+    await fingerTap(p(Offset(audio.x + 200, audio.y + 32)));
+    expect(ed.selI, {audio.id}, reason: 'el audio también, tocando afuera del botón de reproducir');
+
+    // arrastrar con el dedo lo elegido lo mueve, sin scrollear
+    final y0 = ed.scroll.offset, x0 = audio.x, yy0 = audio.y;
+    final from = p(Offset(audio.x + 200, audio.y + 32));
+    final g = await t.startGesture(from, kind: PointerDeviceKind.touch);
+    for (var i = 1; i <= 10; i++) {
+      await g.moveTo(from + Offset(0, -12.0 * i));
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    await g.up();
+    await settle(t, 300);
+    expect(ed.scroll.offset, y0, reason: 'no scrolleó');
+    expect(audio.y, lessThan(yy0 - 40), reason: 'el audio subió');
+    expect(audio.x, closeTo(x0, 2));
+
+    // arrastrar en otro lado sigue scrolleando
+    final y1 = ed.scroll.offset;
+    final other = t.getCenter(find.byType(PageEditor)) + const Offset(300, 0);
+    final g2 = await t.startGesture(other, kind: PointerDeviceKind.touch);
+    for (var i = 1; i <= 10; i++) {
+      await g2.moveTo(other + Offset(0, -25.0 * i));
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    await g2.up();
+    await settle(t, 300);
+    expect(ed.scroll.offset, greaterThan(y1 + 50), reason: 'sigue scrolleando');
+  });
+
+  testWidgets('grabar voz no bloquea: se puede escribir mientras graba y la etiqueta se mueve (issue #10)', (t) async {
+    // el micrófono de verdad no se puede usar en un test: se pone uno falso en el único punto de extensión
+    VoiceRecorder.sourceFactory = FakeAudioSource.new;
+    addTearDown(() => VoiceRecorder.sourceFactory = RecordAudioSource.new);
+    await start(t);
+    await createNotebook(t, 'Voz');
+    await t.tap(find.byKey(const Key('insert')));
+    await settle(t);
+    await t.tap(find.text('Grabación de voz'));
+    await settle(t, 800);
+    final ed = editor(t);
+    expect(find.byType(AlertDialog), findsNothing, reason: 'ya no hay un diálogo que bloquee el cuaderno');
+    final audio = ed.doc.items.values.single;
+    expect(audio.type, 'audio');
+    expect(audio.dur, 0);
+    expect(find.byKey(const ValueKey('recordingChip')), findsOneWidget);
+    expect(find.byKey(const ValueKey('recordingTime')), findsOneWidget);
+    expect(find.byKey(const ValueKey('recordingDot')), findsOneWidget);
+
+    // escribir con el teclado mientras graba
+    await t.tap(find.byTooltip('Texto con teclado'));
+    await settle(t, 600);
+    final b = ed.doc.texts.values.single;
+    await t.enterText(find.byKey(Key('para-${b.id}-0')), 'escribo mientras grabo');
+    await settle(t, 400);
+    expect(b.text, 'escribo mientras grabo');
+    expect(find.byKey(const ValueKey('recordingChip')), findsOneWidget, reason: 'sigue grabando');
+
+    // una segunda grabación no arranca
+    await t.tap(find.byKey(const Key('insert')));
+    await settle(t);
+    await t.tap(find.text('Grabación de voz'));
+    await settle(t, 600);
+    expect(find.text('Ya hay una grabación en curso'), findsOneWidget);
+    expect(ed.doc.items.values.length, 1);
+
+    // la etiqueta se elige con el dedo y se mueve como cualquier elemento
+    await t.tap(find.byTooltip('Lápiz · tocá de nuevo para opciones'));
+    await settle(t);
+    final p = docToScreen(t);
+    final g0 = await t.startGesture(p(Offset(audio.x + 120, audio.y + 32)), kind: PointerDeviceKind.touch);
+    await t.pump(const Duration(milliseconds: 50));
+    await g0.up();
+    await settle(t, 300);
+    expect(ed.selI, {audio.id});
+    final y0 = audio.y;
+    final from = p(Offset(audio.x + 120, audio.y + 32));
+    final g = await t.startGesture(from, kind: PointerDeviceKind.touch);
+    for (var i = 1; i <= 10; i++) {
+      await g.moveTo(from + Offset(0, 10.0 * i));
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    await g.up();
+    await settle(t, 300);
+    expect(audio.y, greaterThan(y0 + 40), reason: 'la etiqueta de grabación se movió');
+    expect(find.byKey(const ValueKey('recordingChip')), findsOneWidget, reason: 'y sigue grabando');
+
+    // parar con el botón de la etiqueta: queda un audio común con duración y el archivo final
+    await t.tap(find.byKey(const ValueKey('recordingStop')));
+    await settle(t, 1500);
+    expect(find.byKey(const ValueKey('recordingChip')), findsNothing);
+    expect(audio.dur, greaterThan(0));
+    expect(File('${root.path}/media/${audio.file}').existsSync(), isTrue);
+    expect(File('${root.path}/media/${audio.file}.tmp').existsSync(), isFalse);
+
+    // volver y entrar: quedó guardado donde se lo movió
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1500);
+    final nb = await savedNotebook('Voz');
+    final st = Storage(root: root);
+    await st.init();
+    final saved = (await st.loadNotebook(nb)).items.values.single;
+    expect(saved.dur, audio.dur);
+    expect(saved.y, closeTo(audio.y, .01));
+  });
+
+  testWidgets('indicador de grabación: parar, cancelar y renombrar audios (issue #14)', (t) async {
+    VoiceRecorder.sourceFactory = FakeAudioSource.new;
+    addTearDown(() => VoiceRecorder.sourceFactory = RecordAudioSource.new);
+    await start(t);
+    await createNotebook(t, 'Indicador');
+    final ed = editor(t);
+    Future<void> record() async {
+      await t.tap(find.byKey(const Key('insert')));
+      await settle(t);
+      await t.tap(find.text('Grabación de voz'));
+      await settle(t, 800);
+    }
+
+    // grabar: aparece el indicador con el nombre; parar desde él guarda "Audio 1"
+    expect(find.byKey(const ValueKey('recIndicator')), findsNothing);
+    await record();
+    expect(find.byKey(const ValueKey('recIndicator')), findsOneWidget);
+    expect(find.textContaining('Grabando · Audio 1'), findsWidgets);
+    await t.tap(find.byKey(const ValueKey('recIndicatorStop')));
+    await settle(t, 1500);
+    expect(find.byKey(const ValueKey('recIndicator')), findsNothing);
+    final first = ed.doc.items.values.single;
+    expect(first.text, 'Audio 1');
+    expect(first.dur, greaterThan(0));
+    expect(find.textContaining('Audio 1 ·'), findsOneWidget);
+
+    // grabar otro (Audio 2) y cancelarlo desde el indicador: no queda elemento ni archivo
+    await record();
+    expect(find.textContaining('Grabando · Audio 2'), findsWidgets);
+    await t.tap(find.byKey(const ValueKey('recIndicatorCancel')));
+    await settle(t, 1500);
+    expect(find.byKey(const ValueKey('recIndicator')), findsNothing);
+    expect(ed.doc.items.values.single.id, first.id);
+    expect(Directory('${root.path}/media').listSync().length, 1);
+
+    // renombrar el primero desde la barrita de la selección
+    ed.sel.replace(items: [first.id]);
+    ed.refresh();
+    await settle(t);
+    await t.tap(find.text('Renombrar'));
+    await settle(t);
+    await t.enterText(find.byKey(const Key('askText')), 'Clase 3');
+    await t.tap(find.byKey(const Key('askOk')));
+    await settle(t);
+    expect(first.text, 'Clase 3');
+    expect(find.textContaining('Clase 3 ·'), findsOneWidget);
+
+    // volver: se guarda (sin esto el guardado pendiente escribe cuando el test siguiente ya borró la carpeta)
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1500);
+    final st = Storage(root: root);
+    await st.init();
+    final saved = (await st.loadNotebook(await savedNotebook('Indicador'))).items;
+    expect(saved[first.id]?.text, 'Clase 3', reason: 'el nombre quedó guardado');
+  });
+
+  testWidgets('texto con teclado: seleccionar, escalar y rotar como una entidad, deshacer (issue #12)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Texto libre');
+    await t.tap(find.byTooltip('Texto con teclado'));
+    await settle(t, 600);
+    final ed = editor(t);
+    final b0 = ed.doc.texts.values.single;
+    await t.enterText(find.byKey(Key('para-${b0.id}-0')), 'texto libre');
+    await settle(t, 400);
+    await t.tap(find.byTooltip('Seleccionar'));
+    await settle(t);
+    final p = docToScreen(t);
+    final r = textRect(b0, ed.doc.lineAt(b0.y));
+    // ventana alrededor del texto
+    await stylusDrag(t, p(r.topLeft - const Offset(25, 25)), p(r.bottomRight + const Offset(25, 25)));
+    expect(ed.sel.texts, {b0.id});
+    expect(find.byKey(const Key('selHandle-rotate')), findsOneWidget, reason: 'la manija de rotar también con solo texto');
+    final x0 = b0.x, y0 = b0.y;
+
+    // escalar con la esquina de abajo a la derecha
+    final tl = t.getCenter(find.byKey(const Key('selHandle-tl'))), br = t.getCenter(find.byKey(const Key('selHandle-br')));
+    await stylusDrag(t, br, tl + (br - tl) * 1.5);
+    var tx = ed.doc.texts.values.single;
+    expect(tx.scale, closeTo(1.5, .15));
+    expect(tx.transformed, isTrue);
+
+    // rotar ~90° con la manija de arriba
+    final rot = t.getCenter(find.byKey(const Key('selHandle-rotate')));
+    final c = (t.getCenter(find.byKey(const Key('selHandle-tl'))) + t.getCenter(find.byKey(const Key('selHandle-br')))) / 2;
+    await stylusDrag(t, rot, c + Offset((rot - c).distance, 0));
+    tx = ed.doc.texts.values.single;
+    expect(tx.angle, closeTo(pi / 2, .2));
+    expect(find.text('Enderezar'), findsOneWidget);
+
+    // se guarda con su escala y giro
+    await settle(t, 1200);
+    final nb = await savedNotebook('Texto libre');
+    final st = Storage(root: root);
+    await st.init();
+    final saved = (await st.loadNotebook(nb)).texts.values.single;
+    expect(saved.scale, closeTo(tx.scale, 1e-9));
+    expect(saved.angle, closeTo(tx.angle, 1e-9));
+
+    // deshacer: el giro y después la escala; vuelve a su lugar
+    await t.tap(find.byTooltip('Deshacer'));
+    await settle(t);
+    expect(ed.doc.texts.values.single.angle, 0);
+    await t.tap(find.byTooltip('Deshacer'));
+    await settle(t);
+    tx = ed.doc.texts.values.single;
+    expect(tx.scale, 1);
+    expect(tx.x, closeTo(x0, .01));
+    expect(tx.y, closeTo(y0, .01));
   });
 
   testWidgets('scroll rápido de punta a punta: sin errores; quieto usa imágenes; un trazo nuevo se ve y se guarda', (t) async {
@@ -1287,6 +1836,74 @@ void main() {
     expect(ed.doc.items.containsKey('nota'), isTrue);
   });
 
+  testWidgets('Exportar: una sola opción con PDF, PNG y .opennote', (t) async {
+    await start(t);
+    await createNotebook(t, 'Exporta');
+    for (var i = 0; i < 2; i++) {
+      await t.tap(find.byKey(const Key('insert')));
+      await settle(t);
+      await t.tap(find.text('Hoja nueva'));
+      await settle(t, 800);
+    }
+    // dentro del cuaderno: el menú ⋮ tiene una sola entrada "Exportar" (sin "Guardar como" ni el .opennote suelto)
+    await t.tap(find.byKey(const Key('more')));
+    await settle(t);
+    expect(find.text('Exportar'), findsOneWidget);
+    expect(find.text('Guardar como'), findsNothing);
+    expect(find.text('Exportar cuaderno (.opennote)'), findsNothing);
+    await t.tap(find.text('Exportar'));
+    await settle(t, 600);
+    for (final k in ['pdf', 'sheet', 'sheetpng', 'png', 'opennote']) {
+      expect(find.byKey(Key('export-$k')), findsOneWidget, reason: 'opción $k');
+    }
+    // "Imágenes (PNG)" exporta todo el cuaderno: un .zip con un PNG por hoja (el diálogo del sistema se reemplaza)
+    Uint8List? zipBytes;
+    bool? wasZip;
+    final savedImages = saveImages;
+    saveImages = (bytes, name, zip) async {
+      zipBytes = bytes;
+      wasZip = zip;
+      return true;
+    };
+    addTearDown(() => saveImages = savedImages);
+    await t.tap(find.byKey(const Key('export-png')));
+    for (var i = 0; i < 100 && zipBytes == null; i++) {
+      await settle(t, 100);
+    }
+    expect(zipBytes, isNotNull);
+    expect(wasZip, isTrue);
+    final entries = ZipDecoder().decodeBytes(zipBytes!).where((f) => f.isFile).toList();
+    expect(entries.map((f) => f.name), ['Exporta - hoja 01.png', 'Exporta - hoja 02.png', 'Exporta - hoja 03.png']);
+    for (final f in entries) {
+      expect(f.content.take(4).toList(), [0x89, 0x50, 0x4E, 0x47], reason: '${f.name} es un PNG');
+    }
+    await settle(t, 600);
+    await t.tap(find.byKey(const Key('more')));
+    await settle(t);
+    await t.tap(find.text('Exportar'));
+    await settle(t, 600);
+    await t.tapAt(const Offset(10, 10)); // cierra la hoja sin guardar nada
+    await settle(t, 600);
+    expect(find.byKey(const Key('export-pdf')), findsNothing);
+
+    // desde la biblioteca: mismas opciones menos "PDF de esta hoja"
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+    await t.longPress(find.byKey(const Key('nb-Exporta')));
+    await settle(t, 600);
+    expect(find.text('Exportar a PDF'), findsNothing);
+    await t.tap(find.byKey(const Key('exportNotebook')));
+    await settle(t, 600);
+    for (final k in ['pdf', 'png', 'opennote']) {
+      expect(find.byKey(Key('export-$k')), findsOneWidget, reason: 'opción $k');
+    }
+    expect(find.byKey(const Key('export-sheet')), findsNothing);
+    expect(find.byKey(const Key('export-sheetpng')), findsNothing);
+    await t.tapAt(const Offset(10, 10));
+    await settle(t, 600);
+    expect(t.takeException(), isNull);
+  });
+
   testWidgets('sincronización: "Sincronizar ahora" sube un cuaderno y otro dispositivo lo baja (remoto falso)', (t) async {
     final remote = FakeRemoteStore();
     await t.pumpWidget(ApuntesApp(root: root, backend: FakeBackend(remote)));
@@ -1481,4 +2098,181 @@ void main() {
     expect(remote.has('crypto.json'), isFalse, reason: 'no se activó nada');
     expect(t.takeException(), isNull);
   });
+
+  testWidgets('figuras inteligentes: un círculo a mano con el lápiz quieto se convierte, se agranda arrastrando, el interruptor la apaga (issue #3)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Figuras');
+    final p = docToScreen(t);
+    final ed = editor(t);
+    // todo dentro de la parte visible de la hoja (ver el test de la selección)
+    final view = t.getRect(find.byType(PageEditor)), origin = p(Offset.zero);
+    final visH = view.height / ed.scale;
+    final cy = (view.top - origin.dy) / ed.scale + visH * .4, r = min(90.0, visH * .22);
+    final center = Offset(400, cy);
+
+    /// círculo a mano (40 puntos, ruido determinístico) y se queda quieto ~800 ms reales; devuelve el lápiz apoyado
+    Future<TestGesture> circleAndHold() async {
+      Offset pt(int i) {
+        final a = 2 * pi * i / 40, k = 1 + .02 * sin(i * 2.3);
+        return p(center + Offset(cos(a), sin(a)) * r * k);
+      }
+
+      final g = await t.startGesture(pt(0), kind: PointerDeviceKind.stylus);
+      for (var i = 1; i <= 41; i++) {
+        await g.moveTo(pt(i % 40 == 0 ? 0 : i));
+        await t.pump(const Duration(milliseconds: 16));
+      }
+      final end = DateTime.now().add(const Duration(milliseconds: 800));
+      while (DateTime.now().isBefore(end)) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        await t.pump();
+      }
+      return g;
+    }
+
+    var g = await circleAndHold();
+    expect(ed.snappedKind, ShapeKind.circle);
+    final w0 = ed.live!.bounds.width;
+    // alejar el lápiz del centro agranda la figura
+    final from = p(center + Offset(r, 0));
+    for (var i = 1; i <= 5; i++) {
+      await g.moveTo(from + Offset(i * 12.0, 0));
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    await g.up();
+    await settle(t);
+    expect(ed.snappedKind, isNull, reason: 'al soltar se limpia');
+    expect(ed.doc.strokes.length, 1);
+    expect(ed.doc.strokes.values.single.bounds.width, greaterThan(w0 + 5));
+
+    await t.tap(find.byTooltip('Deshacer'));
+    await settle(t);
+    expect(ed.doc.strokes, isEmpty);
+
+    // apagar el interruptor en el panel del lápiz
+    await t.tap(find.byTooltip('Lápiz · tocá de nuevo para opciones'));
+    await settle(t);
+    expect(ed.ts.shapeSnap, isTrue);
+    await t.ensureVisible(find.byKey(const Key('shapeSnapSwitch')));
+    await t.tap(find.byKey(const Key('shapeSnapSwitch')));
+    await settle(t);
+    expect(ed.ts.shapeSnap, isFalse);
+    Navigator.of(t.element(find.byKey(const Key('shapeSnapSwitch')))).pop();
+    await settle(t);
+    expect(find.byKey(const Key('shapeSnapSwitch')), findsNothing);
+
+    g = await circleAndHold();
+    expect(ed.snappedKind, isNull);
+    await g.up();
+    await settle(t);
+    expect(ed.doc.strokes.length, 1);
+    final s = ed.doc.strokes.values.single;
+    // a mano quedan los ~42 puntos del gesto; la figura limpia tiene uno cada 2 unidades (más de 100 con este radio)
+    expect(s.n, inInclusiveRange(30, 60), reason: 'sigue siendo el trazo a mano');
+  });
+
+  testWidgets('índice: la herramienta Título marca tinta (letra reconocida) y texto, el panel numera por niveles y lleva a la hoja (issue #13)', (t) async {
+    final saved = handwriting;
+    handwriting = _FakeHandwriting('Introducción');
+    addTearDown(() => handwriting = saved);
+    await start(t);
+    await createNotebook(t, 'Indice');
+    final ed = editor(t);
+    // Todo se acomoda en lo que se ve (como en 'selección: escalar con la esquina...'); se recalcula en cada paso
+    // porque el scroll y el ancho del editor (con los paneles abiertos) cambian.
+    Offset Function(double, double) mk() {
+      final p = docToScreen(t);
+      final view = t.getRect(find.byType(PageEditor)), origin = p(Offset.zero);
+      final visH = view.height / ed.scale;
+      // bien adentro de la hoja que se ve (no en el borde de abajo de la anterior ni en el hueco entre hojas)
+      final top = max((view.top - origin.dy) / ed.scale + visH * .22, ed.visibleSheet * kSheetStep + 60.0),
+          ky = (visH * .5 / 600).clamp(0.2, 1.0);
+      return (x, y) => p(Offset(x, top + (y - 100) * ky));
+    }
+
+    String fieldText() => t.widget<TextField>(find.byKey(const Key('headingName'))).controller!.text;
+    List<String?> entry(String id) => [
+          for (final w in t.widgetList<Text>(find.descendant(of: find.byKey(Key('indexEntry-$id')), matching: find.byType(Text)))) w.data
+        ];
+
+    // hoja 1: un trazo marcado con la letra reconocida
+    var q = mk();
+    await stylusLine(t, q(200, 200), q(400, 200));
+    expect(ed.doc.strokes.length, 1);
+    final id1 = ed.doc.strokes.keys.single;
+    await t.tap(find.byTooltip('Título para el índice'));
+    await settle(t);
+    await stylusDrag(t, q(150, 150), q(450, 260));
+    await settle(t, 600);
+    expect(find.byKey(const Key('headingName')), findsOneWidget);
+    expect(fieldText(), 'Introducción');
+    await t.tap(find.byKey(const Key('headingOk')));
+    await settle(t, 600);
+    final h1 = ed.doc.sheets[0].heads.single;
+    expect(h1.ids, [id1]);
+
+    // hoja 2: otro trazo, con nombre escrito y un nivel más
+    await t.tap(find.byKey(const Key('pagesBtn')));
+    await settle(t, 600);
+    await t.tap(find.byKey(const Key('addPage')));
+    await settle(t, 800);
+    await t.tap(find.byKey(const Key('pagesBtn'))); // cierra el panel
+    await settle(t, 600);
+    expect(ed.visibleSheet, 1);
+    await t.tap(find.byTooltip('Lápiz · tocá de nuevo para opciones'));
+    await settle(t);
+    q = mk();
+    await stylusLine(t, q(200, 200), q(400, 200));
+    expect(ed.doc.strokes.length, 2);
+    await t.tap(find.byTooltip('Título para el índice'));
+    await settle(t);
+    await stylusDrag(t, q(150, 150), q(450, 260));
+    await settle(t, 600);
+    await t.enterText(find.byKey(const Key('headingName')), 'Objetivos');
+    await t.tap(find.byKey(const Key('headingLevelUp')));
+    await t.pump();
+    await t.tap(find.text('Agregar'));
+    await settle(t, 600);
+    final h2 = ed.doc.sheets[1].heads.single;
+
+    // el panel: numerado por niveles, con la hoja a la derecha
+    await t.tap(find.byKey(const Key('indexBtn')));
+    await settle(t, 600);
+    expect(entry(h1.id), ['1', 'Introducción', '1']);
+    expect(entry(h2.id), ['1.1', 'Objetivos', '2']);
+
+    // tocar una entrada lleva a su hoja
+    expect(ed.visibleSheet, 1);
+    await t.tap(find.byKey(Key('indexEntry-${h1.id}')));
+    await settle(t, 1000);
+    expect(ed.visibleSheet, 0);
+    expect(t.widget<Text>(find.byKey(const Key('sheetCounter'))).data, '1 / 2');
+
+    // borrar el primer trazo: su entrada desaparece (y Objetivos pasa a ser el 1)
+    await t.tap(find.byTooltip('Seleccionar'));
+    await settle(t);
+    final p = docToScreen(t), r = ed.doc.strokes[id1]!.bounds;
+    await stylusDrag(t, p(r.topLeft - const Offset(25, 25)), p(r.bottomRight + const Offset(25, 25)));
+    expect(ed.sel.strokes, {id1});
+    await t.tap(find.descendant(of: find.byType(SelectionMenu), matching: find.text('Eliminar')));
+    await settle(t, 600);
+    expect(ed.doc.strokes.length, 1);
+    expect(find.byKey(Key('indexEntry-${h1.id}')), findsNothing);
+    expect(entry(h2.id), ['1', 'Objetivos', '2']);
+
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+  });
+}
+
+/// Reconocimiento de letra de mentira: siempre lee [text].
+class _FakeHandwriting implements HandwritingRecognizer {
+  final String text;
+  _FakeHandwriting(this.text);
+  @override
+  Future<bool> isModelReady() async => true;
+  @override
+  Future<bool> ensureModel() async => true;
+  @override
+  Future<String?> recognize(List<Stroke> strokes) async => text;
 }

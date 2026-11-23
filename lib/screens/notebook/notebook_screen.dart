@@ -13,14 +13,16 @@ import '../../data/storage.dart';
 import '../../domain/domain.dart';
 import '../../editor/history.dart';
 import '../../editor/page_editor.dart';
+import '../../editor/voice_recorder.dart';
 import '../../sync/sync_controller.dart';
 import '../../widgets/dialogs.dart';
 import '../../widgets/pdf_progress.dart';
-import '../../widgets/record_voice_dialog.dart';
 import '../library/sync_indicator.dart';
+import 'index_panel.dart';
 import 'menus.dart';
 import 'pages_panel.dart';
 import 'search.dart';
+import 'sections_menu.dart';
 import 'thumb_cache.dart';
 import 'style_dialog.dart';
 
@@ -49,8 +51,12 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
   Timer? _saveTimer, _prefsTimer;
   bool _dirty = false, _indexDirty = false, _deleted = false;
 
+  /// La grabación de voz en curso: vive acá (no en un diálogo), así se puede seguir escribiendo mientras graba.
+  late final recorder = VoiceRecorder(store);
+
   // vista
   bool panel = false; // panel de hojas
+  bool indexOpen = false; // panel del índice (a la derecha)
   bool reading = false; // modo lectura
   bool fullscreen = false;
   bool onlyBookmarks = false;
@@ -67,6 +73,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
   final sheetNotifier = ValueNotifier(0);
   final _liveVersion = ValueNotifier(0); // cambió algo en la hoja abierta
   final _structure = ValueNotifier(0); // cambió el orden, la cantidad o el estilo de las hojas
+  final _headings = ValueNotifier(0); // cambiaron los títulos del índice
 
   @override
   void initState() {
@@ -93,16 +100,26 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     searchCtrl.dispose();
     _searchTimer?.cancel();
     if (fullscreen) SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    if (recorder.recording) {
+      unawaited(_closeVoice()); // el cuaderno se cierra grabando: se para y se guarda lo grabado hasta ahí
+    } else {
+      recorder.dispose();
+    }
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) _flush(); // al salir de la app, guardar ya
+    // en segundo plano (paused) se sigue grabando, como cualquier grabador; si la app se cierra, se para y se guarda
+    if (state == AppLifecycleState.detached) unawaited(stopVoice());
   }
 
   // ================= guardado =================
   void _docChanged() {
+    // se borró (o se deshizo) el elemento que está grabando: se para y se tira lo grabado
+    final r = recorder, id = r.itemId;
+    if (id != null && r.inserted && doc != null && !doc!.items.containsKey(id)) unawaited(r.discard());
     _dirty = true;
     _liveVersion.value++;
     _saveTimer?.cancel();
@@ -143,6 +160,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
 
   /// salir del cuaderno: guarda todo y vuelve a la biblioteca
   Future<void> leave([Object? result]) async {
+    await stopVoice(); // si estaba grabando, se guarda lo grabado hasta ahora
     await _flush();
     _prefsTimer?.cancel();
     await store.savePrefs(widget.tools.toJson());
@@ -266,6 +284,134 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     }
   }
 
+  // ================= secciones =================
+  /// Despliega la lista de secciones debajo del botón del panel ([anchor], global) y ejecuta lo que se elija.
+  Future<void> _sectionsList(Rect anchor) async {
+    if (doc == null || _switching) return;
+    final r = await showSectionsList(context, anchor, nb);
+    if (r == null || !mounted) return;
+    final id = r.id;
+    switch (r.action) {
+      case SectionAction.open:
+        if (id != null) await _switchSection(id);
+      case SectionAction.create:
+        await _newSection();
+      case SectionAction.rename:
+        if (id != null) await _renameSection(id);
+      case SectionAction.moveUp:
+        if (id != null) await _moveSection(id, -1);
+      case SectionAction.moveDown:
+        if (id != null) await _moveSection(id, 1);
+      case SectionAction.delete:
+        if (id != null) await _deleteSection(id);
+    }
+  }
+
+  bool _switching = false; // se está cambiando de sección (el documento no existe un momento)
+
+  /// Cambia a la sección [id]: guarda lo pendiente y espera el guardado, suelta el documento (es otro: el historial
+  /// de deshacer se vacía), activa la sección y reabre en su última hoja vista.
+  Future<void> _switchSection(String id) async {
+    if (_switching || doc == null || id == nb.activeSection.id) return;
+    _switching = true;
+    try {
+      await stopVoice(); // una grabación en curso es de la sección que se deja: se guarda antes
+      await _flush();
+      await store.settle(nb.id);
+      if (!mounted) return;
+      // el documento viejo ya no vale: las hojas de [nb] van a ser otras
+      searching = false;
+      hits = [];
+      searchCtrl.clear();
+      setState(() => doc = null);
+      NotebookDoc d;
+      try {
+        d = await store.openSection(nb, id);
+      } catch (e) {
+        if (mounted) snack(context, 'No se pudo abrir la sección: $e');
+        d = await store.openNotebook(nb, around: nb.last); // se vuelve a la que estaba
+      }
+      if (!mounted) return;
+      _indexDirty = true;
+      sheetNotifier.value = nb.last.clamp(0, d.sheetCount - 1);
+      _structure.value++;
+      _headings.value++;
+      _liveVersion.value++;
+      setState(() => doc = d);
+      await _saveIndex();
+    } finally {
+      _switching = false;
+    }
+  }
+
+  String _newSectionName() {
+    var n = nb.sections.length + 1;
+    while (nb.sections.any((s) => s.name == 'Sección $n')) {
+      n++;
+    }
+    return 'Sección $n';
+  }
+
+  /// Nueva sección al final, con una hoja en blanco del estilo del cuaderno; se abre.
+  Future<void> _newSection() async {
+    final n = (await askText(context, 'Nueva sección', initial: _newSectionName(), hint: 'Ej: Práctica', ok: 'Crear'))?.trim();
+    if (n == null || n.isEmpty || !mounted) return;
+    final s = nb.addSection(n); // todavía solo en memoria: la hoja en blanco se escribe al abrirla
+    await _switchSection(s.id);
+  }
+
+  Future<void> _renameSection(String id) async {
+    final s = nb.sectionById(id);
+    if (s == null) return;
+    final n = (await askText(context, 'Renombrar sección', initial: s.name))?.trim();
+    if (n == null || n.isEmpty || !mounted) return;
+    nb.renameSection(id, n);
+    await _saveSections();
+  }
+
+  Future<void> _moveSection(String id, int delta) async {
+    if (!nb.moveSection(id, delta)) return;
+    await _saveSections();
+  }
+
+  /// Guarda `notebook.json` con los cambios de las secciones (nombre, orden) y refresca lo que las muestra.
+  Future<void> _saveSections() async {
+    final d = doc;
+    if (d == null) return;
+    nb.touch();
+    _indexDirty = true;
+    _structure.value++;
+    if (mounted) setState(() {});
+    await store.saveNotebook(d);
+    await _saveIndex();
+  }
+
+  /// Borra la sección [id] con todas sus hojas (pide confirmación y dice cuántas son). Si es la abierta, se pasa antes a otra.
+  Future<void> _deleteSection(String id) async {
+    final s = nb.sectionById(id);
+    if (s == null) return;
+    if (nb.sections.length < 2) {
+      snack(context, 'No se puede borrar la única sección del cuaderno');
+      return;
+    }
+    final n = nb.sheetCountOf(id);
+    if (!await confirmDelete(context, 'Borrar la sección "${s.name}"',
+        'Se ${n == 1 ? 'borra 1 hoja con todo lo que tiene' : 'borran $n hojas con todo lo que tienen'}. No se puede deshacer.')) {
+      return;
+    }
+    if (!mounted) return;
+    if (id == nb.activeSection.id) {
+      // se pasa a la sección de al lado (la de abajo, o la de arriba si era la última)
+      final i = nb.sections.indexWhere((x) => x.id == id);
+      final next = nb.sections[i + 1 < nb.sections.length ? i + 1 : i - 1].id;
+      await _switchSection(next);
+      if (!mounted || doc == null) return;
+    }
+    // los archivos de sus hojas los borra el guardado: ya no figuran entre las hojas vivas del cuaderno
+    if (nb.removeSection(id) == null) return;
+    await _saveSections();
+  }
+
   // ================= insertar (+) =================
   /// También lo usan los tests.
   Future<void> runInsert(String v) async {
@@ -278,11 +424,10 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         case 'sticky':
           ed?.insertItem(makeSticky());
         case 'audio':
-          final it = await makeAudioFileItem(store);
+          final it = await makeAudioFileItem(store, name: nextAudioName(doc!.items.values));
           if (it != null) ed?.insertItem(it);
         case 'voice':
-          final it = await recordVoice(context, store);
-          if (it != null) ed?.insertItem(it);
+          await _startVoice();
         case 'sheet':
           _addSheetAfter(curSheet);
         case 'pdf':
@@ -293,29 +438,104 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     }
   }
 
+  /// "Grabación de voz": empieza a grabar y pone YA el audio en la hoja visible como etiqueta "Grabando" (un elemento común:
+  /// se mueve, se elige, se deshace). Se sigue escribiendo mientras graba; para con el botón de la etiqueta (ver [stopVoice]).
+  Future<void> _startVoice() async {
+    if (recorder.busy) {
+      if (mounted) snack(context, 'Ya hay una grabación en curso');
+      return;
+    }
+    final it = makeAudioItem('${newId('m')}.m4a', 0, name: nextAudioName(doc!.items.values));
+    try {
+      await recorder.start(it.id, it.file!);
+    } on VoiceException catch (e) {
+      if (mounted) snack(context, e.message);
+      return;
+    }
+    final ed = editorKey.currentState;
+    if (!mounted || ed == null) {
+      await recorder.discard();
+      return;
+    }
+    ed.insertItem(it, onInserted: () => recorder.inserted = true);
+  }
+
+  /// Cancela la grabación (X del indicador): tira lo grabado y saca el audio de la hoja sin dejar rastro en el historial
+  /// (ver [PageEditor.removeItemForgetting]).
+  Future<void> cancelVoice() async {
+    final id = recorder.itemId;
+    if (id == null) return;
+    await recorder.discard();
+    editorKey.currentState?.removeItemForgetting(id);
+  }
+
+  /// Para la grabación: renombra el archivo, le pone la duración al elemento, marca la hoja sucia y guarda.
+  /// No hace nada si no había una grabación.
+  Future<void> stopVoice() async {
+    final res = await recorder.stop();
+    if (res == null) return;
+    final ed = editorKey.currentState;
+    if (ed != null && ed.setAudioDuration(res.itemId, res.ms)) return; // ya avisó que cambió (guarda en 600 ms)
+    final it = doc?.items[res.itemId];
+    if (it == null) {
+      unawaited(deleteQuietly(store.media(res.file))); // el elemento ya no está: el audio tampoco
+      return;
+    }
+    // sin editor (el cuaderno se está cerrando): se le pone la duración al elemento y se guarda ya
+    doc!.markDirtyElement(it);
+    it.dur = res.ms;
+    doc!.markDirtyElement(it);
+    _dirty = true;
+    await _flush();
+  }
+
+  /// El cuaderno se cierra (dispose) con una grabación en curso.
+  Future<void> _closeVoice() async {
+    try {
+      if (_deleted) {
+        await recorder.discard();
+      } else {
+        await stopVoice();
+      }
+    } finally {
+      recorder.dispose();
+    }
+  }
+
   Future<void> _importPdf() async {
     if (!mounted) return;
     final progress = ValueNotifier(0);
-    unawaited(showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Importando PDF'),
-        content: ValueListenableBuilder(
-          valueListenable: progress,
-          builder: (_, n, _) => Column(mainAxisSize: MainAxisSize.min, children: [
-            const LinearProgressIndicator(),
-            const SizedBox(height: 12),
-            Text(n == 0 ? 'Elegí el archivo…' : 'Hoja $n'),
-          ]),
+    var shown = false;
+    // el diálogo aparece solo si tarda (elegir el archivo también cuenta); si termina antes, ni se ve
+    final timer = Timer(const Duration(milliseconds: 400), () {
+      if (!mounted) return;
+      shown = true;
+      unawaited(showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Importando PDF'),
+          content: ValueListenableBuilder(
+            valueListenable: progress,
+            builder: (_, n, _) => Column(mainAxisSize: MainAxisSize.min, children: [
+              const LinearProgressIndicator(),
+              const SizedBox(height: 12),
+              Text(n == 0 ? 'Elegí el archivo…' : 'Hoja $n'),
+            ]),
+          ),
         ),
-      ),
-    ));
-    final sheets = await importPdf(store, onPage: (n) => progress.value = n);
-    if (mounted) Navigator.of(context).pop();
+      ));
+    });
+    final List<(SheetMeta, SheetContent)> sheets;
+    try {
+      sheets = await importPdf(store, onPage: (n) => progress.value = n);
+    } finally {
+      timer.cancel();
+      if (shown && mounted) Navigator.of(context).pop();
+    }
     if (sheets.isEmpty || !mounted) return;
-    // después de la hoja actual
-    final at = curSheet + 1;
+    // la primera página entra EN la hoja que se está viendo; esa hoja y las siguientes se corren después del PDF
+    final at = editorKey.currentState?.mostVisibleSheet ?? curSheet;
     _sheetOp((d) => [
           for (var i = 0; i < sheets.length; i++)
             SheetPresenceOp.added(d, d.insertSheet(at + i, meta: sheets[i].$1, content: sheets[i].$2)),
@@ -334,10 +554,8 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         });
       case 'style':
         await _styleDialog();
-      case 'saveas':
-        await _saveAs();
-      case 'opennote':
-        await _exportOpennote();
+      case 'export':
+        await _export();
       case 'fav':
         setState(() => nb.favorite = !nb.favorite);
         await _saveIndex();
@@ -410,21 +628,27 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     }
   }
 
-  Future<void> _saveAs() async {
+  Future<void> _export() async {
     final d = doc;
     if (d == null) return;
     final k = curSheet, meta = d.sheets[k];
     final sheetName = 'Hoja ${k + 1}${meta.title.isEmpty ? '' : ' · ${meta.title}'}';
-    final v = await showSaveAsSheet(context, sheetName: sheetName);
+    final v = await showExportSheet(context, sheetName: sheetName);
     if (v == null || !mounted) return;
     switch (v) {
-      case 'nb':
-        await exportPdfFlow(context, store, d);
+      case 'pdf':
+        final secs = await askExportSections(context, nb); // con varias secciones, cuáles
+        if (secs != null && mounted) await exportPdfFlow(context, store, d, sections: secs);
       case 'sheet':
         await exportPdfFlow(context, store, d, only: [k], name: '${nb.name} - hoja ${k + 1}');
       case 'png':
+        final secs = await askExportSections(context, nb);
+        if (secs != null && mounted) await exportPngFlow(context, store, d, sections: secs);
+      case 'sheetpng':
         final ok = await saveSheetPng(store, d, k, '${nb.name} - hoja ${k + 1}');
         if (ok && mounted) snack(context, 'Imagen guardada');
+      case 'opennote':
+        await _exportOpennote();
     }
   }
 
@@ -547,7 +771,15 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
                             onChanged: _docChanged,
                             onPrefsChanged: _prefsChanged,
                             onSheetsChanged: _sheetsChangedByEditor,
+                            onHeadingsChanged: () => _headings.value++,
+                            recorder: recorder,
+                            onStopRecording: stopVoice,
                           ),
+                  ),
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 240),
+                    curve: Curves.easeOutQuart,
+                    child: indexOpen && !fullscreen ? _indexPanel() : const SizedBox(width: 0),
                   ),
                 ]),
               ),
@@ -559,6 +791,12 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
                 width: 420,
                 child: SearchResults(query: searchCtrl.text, hits: hits, onTap: _goHit),
               ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 16,
+              child: Center(child: _recordingIndicator(cs)),
+            ),
             if (fullscreen)
               Positioned(
                 top: 12,
@@ -579,7 +817,56 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     );
   }
 
-  Widget _pagesPanel() => PagesPanel(
+  /// Indicador flotante mientras se graba: nombre, tiempo, parar y cancelar; tocar el cuerpo lleva a donde está el audio.
+  Widget _recordingIndicator(ColorScheme cs) => ListenableBuilder(
+        listenable: recorder,
+        builder: (_, _) {
+          final id = recorder.itemId;
+          if (id == null) return const SizedBox.shrink();
+          final name = doc?.items[id]?.text ?? '';
+          final red = cs.error;
+          return Material(
+            key: const ValueKey('recIndicator'),
+            color: cs.surfaceContainerHigh,
+            elevation: 6,
+            shape: StadiumBorder(side: BorderSide(color: red.withValues(alpha: .35), width: 1.5)),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              InkWell(
+                customBorder: const StadiumBorder(),
+                onTap: () => editorKey.currentState?.scrollToItem(id),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    _PulsingDot(color: red),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Grabando${name.isEmpty ? '' : ' · $name'}  ${fmtDuration(recorder.elapsedMs)}',
+                      style: TextStyle(fontSize: 15, color: cs.onSurface, fontFeatures: const [FontFeature.tabularFigures()]),
+                    ),
+                  ]),
+                ),
+              ),
+              IconButton(
+                key: const ValueKey('recIndicatorStop'),
+                tooltip: 'Parar y guardar',
+                onPressed: stopVoice,
+                style: IconButton.styleFrom(backgroundColor: red, foregroundColor: Colors.white),
+                icon: const Icon(Symbols.stop, size: 20, fill: 1),
+              ),
+              IconButton(
+                key: const ValueKey('recIndicatorCancel'),
+                tooltip: 'Cancelar y descartar',
+                onPressed: cancelVoice,
+                icon: Icon(Symbols.close, size: 20, weight: 300, color: cs.onSurfaceVariant),
+              ),
+              const SizedBox(width: 4),
+            ]),
+          );
+        },
+      );
+
+  // (mientras se cambia de sección no hay documento: el panel deja su lugar vacío)
+  Widget _pagesPanel() => doc == null ? const SizedBox(width: 300) : PagesPanel(
         doc: doc!,
         thumbs: thumbs,
         current: sheetNotifier,
@@ -593,7 +880,54 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         onToggleBookmark: _toggleBookmark,
         onAction: _sheetAction,
         onMove: _moveSheet,
+        onSections: _sectionsList,
       );
+
+  // (mientras se cambia de sección no hay documento: el panel deja su lugar vacío)
+  Widget _indexPanel() => doc == null
+      ? const SizedBox(width: 300)
+      : IndexPanel(
+          nb: nb,
+          refresh: Listenable.merge([_headings, _structure]),
+          onOpen: _openEntry,
+          onAction: _entryAction,
+        );
+
+  /// Lleva la vista al título [e] (cambiando de sección si es de otra).
+  Future<void> _openEntry(OutlineEntry e) async {
+    if (e.sectionId != nb.activeSection.id) {
+      await _switchSection(e.sectionId);
+      if (!mounted || doc == null || nb.activeSection.id != e.sectionId) return;
+      await WidgetsBinding.instance.endOfFrame; // que el editor nuevo ya esté armado
+      if (!mounted) return;
+    }
+    sheetNotifier.value = e.sheet;
+    editorKey.currentState?.scrollToSheetY(e.sheet, e.y);
+  }
+
+  /// Renombrar, cambiar de nivel o quitar un título desde el panel (puede ser de cualquier sección).
+  Future<void> _entryAction(OutlineEntry e, IndexAction a) async {
+    final m = nb.sheetsOf(e.sectionId).where((x) => x.id == e.sheetId).firstOrNull;
+    final h = m?.heads.where((x) => x.id == e.headingId).firstOrNull;
+    if (m == null || h == null) return;
+    switch (a) {
+      case IndexAction.rename:
+        final n = (await askText(context, 'Renombrar título', initial: h.title))?.trim();
+        if (n == null || n.isEmpty || !mounted) return;
+        h.title = n.length > 120 ? n.substring(0, 120) : n;
+      case IndexAction.levelUp:
+        h.level = (e.level - 1).clamp(1, 9); // sobre el nivel que se ve, no sobre el guardado
+      case IndexAction.levelDown:
+        h.level = (e.level + 1).clamp(1, 9);
+      case IndexAction.remove:
+        m.heads.remove(h);
+    }
+    m.updated = DateTime.now().millisecondsSinceEpoch;
+    _headings.value++;
+    _docChanged();
+    editorKey.currentState?.headingsChanged();
+    if (mounted) setState(() {});
+  }
 
   Widget _topBar(ColorScheme cs) {
     Widget act(IconData i, String tip, VoidCallback? f, {bool on = false, Key? key}) => Padding(
@@ -640,6 +974,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
             final v = await showInsertMenu(context, at);
             if (v != null && mounted) await runInsert(v);
           }),
+          act(Symbols.toc, 'Índice', () => setState(() => indexOpen = !indexOpen), on: indexOpen, key: const Key('indexBtn')),
           act(Symbols.view_sidebar, 'Hojas', () => setState(() => panel = !panel), on: panel, key: const Key('pagesBtn')),
           act(Symbols.open_in_full, 'Pantalla completa', _toggleFullscreen),
           menuBtn(Symbols.more_vert, 'Más opciones', const Key('more'), (at) async {
@@ -719,4 +1054,28 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
             },
           ),
       ]);
+}
+
+/// Punto que late (el de "grabando").
+class _PulsingDot extends StatefulWidget {
+  final Color color;
+  const _PulsingDot({required this.color});
+  @override
+  State<_PulsingDot> createState() => _PulsingDotState();
+}
+
+class _PulsingDotState extends State<_PulsingDot> with SingleTickerProviderStateMixin {
+  late final pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => FadeTransition(
+        opacity: Tween(begin: .3, end: 1.0).animate(pulse),
+        child: Container(width: 12, height: 12, decoration: BoxDecoration(color: widget.color, shape: BoxShape.circle)),
+      );
 }

@@ -3,7 +3,7 @@ import 'dart:ui';
 
 final _rnd = Random.secure();
 
-/// Id corto y aleatorio con prefijo: 's' trazo, 't' texto, 'i' elemento, 'p' página, 'n' cuaderno, 'm' archivo.
+/// Id corto y aleatorio con prefijo: 's' trazo, 't' texto, 'i' elemento, 'p' página, 'n' cuaderno, 'c' sección, 'm' archivo.
 String newId(String prefix) =>
     prefix + List.generate(6, (_) => _rnd.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
 

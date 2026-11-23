@@ -25,7 +25,7 @@ class NotebookCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final n = nb.sheets.length;
+    final n = nb.totalSheets; // de todas las secciones
     return GestureDetector(
       onTap: onTap,
       onLongPress: onLongPress,

@@ -73,7 +73,7 @@ Uint8List encodeSheet(SheetContent c) {
     'items': [for (final i in c.items) {...i.toJson(), 'z': rank[i.id]}],
     'strokes': [
       for (final s in c.strokes)
-        {'id': s.id, 'k': s.k, 'c': s.c, 'w': s.w, if (s.o < 1) 'o': round2(s.o), 'n': s.n, 'z': rank[s.id]}
+        {'id': s.id, 'k': s.k, 'c': s.c, 'w': s.w, if (s.o < 1) 'o': round2(s.o), if (s.pp != null) 'pp': s.pp!.toJson(), 'n': s.n, 'z': rank[s.id]}
     ],
   });
   final json = utf8.encode(meta);
@@ -160,7 +160,7 @@ SheetContent decodeSheet(Uint8List bytes) {
         pts[i * 3 + 2] = r.b[r.pos++] / 255;
       }
       strokes.add(Stroke(s['id'] as String, (s['k'] ?? 'pen') as String, (s['c'] ?? '#22211e') as String,
-          jsonDouble(s['w'], 2), pts, jsonDouble(s['o'], 1))
+          jsonDouble(s['w'], 2), pts, jsonDouble(s['o'], 1), s['pp'] is Map ? PaintParams.fromJson(s['pp'] as Map) : null)
         ..z = (s['z'] as num? ?? 0).toInt());
     }
     return SheetContent(
@@ -193,7 +193,7 @@ String sheetDigest(SheetContent c) {
   for (final e in sortByZ([...c.items, ...c.strokes, ...c.texts])) {
     switch (e) {
       case Stroke s:
-        b.write('S|${s.id}|${s.k}|${s.c}|${s.w}|${s.o < 1 ? round2(s.o) : 1}|${s.n}|');
+        b.write('S|${s.id}|${s.k}|${s.c}|${s.w}|${s.o < 1 ? round2(s.o) : 1}|${s.pp == null ? '' : jsonEncode(s.pp!.toJson())}|${s.n}|');
         for (var i = 0; i < s.pts.length; i++) {
           b
             ..write(i % 3 == 2 ? (s.pts[i] * 255).round().clamp(0, 255) : (s.pts[i] * 10).round())

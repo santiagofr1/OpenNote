@@ -178,11 +178,11 @@ class TextBlockView extends StatelessWidget {
       ..line = line
       ..scale = scale;
     final focused = editor.hasFocus && textMode;
-    return Positioned(
+    final view = Positioned(
       left: t.x * scale,
       top: t.y * scale,
       width: t.w * scale,
-      child: IgnorePointer(
+      child: _transformed(IgnorePointer(
         ignoring: !textMode,
         child: Stack(clipBehavior: Clip.none, children: [
           Container(
@@ -221,8 +221,26 @@ class TextBlockView extends StatelessWidget {
               ),
             ),
         ]),
-      ),
+      )),
     );
+    return view;
+  }
+
+  /// Con escala o giro el campo se edita con la MISMA transformación (un [Transform] alrededor del bloque: el foco, el cursor y
+  /// los toques siguen andando porque Flutter los lleva por la matriz; es lo más robusto y el texto se ve igual que sin
+  /// editar). La escala sale desde la esquina de arriba a la izquierda y el giro es alrededor del centro del rectángulo ya
+  /// escalado, el mismo que mide el modelo (`textRect`).
+  Widget _transformed(Widget child) {
+    final t = block;
+    if (!t.transformed) return child;
+    final r = textRect(t, line);
+    final c = Offset(r.width / 2, r.height / 2) * scale;
+    final m = Matrix4.identity()
+      ..translateByDouble(c.dx, c.dy, 0, 1)
+      ..rotateZ(t.angle)
+      ..translateByDouble(-c.dx, -c.dy, 0, 1)
+      ..scaleByDouble(t.scale, t.scale, 1, 1);
+    return Transform(transform: m, child: child);
   }
 
   Widget _paraRow(int i) {

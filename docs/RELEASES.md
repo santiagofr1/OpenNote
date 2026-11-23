@@ -27,6 +27,14 @@ instrucciones de instalación para Linux. Al final avisa al repo apt (`santiagof
 sin él no falla, el cron horario del repo apt lo levanta igual. Para que apt lo tome hay que listar
 `santiagofr1/OpenNote` en el `apps.txt` de ese repo.
 
+Con el mismo esquema corre el job `windows` (`windows-latest`, `needs: release`): compila
+`flutter build windows --release` (`--build-name=1.0.<run_number>`, `--build-number=<run_number> + 100`, con los IDs de
+Google desde los mismos secretos), arma el instalador con Inno Setup (`windows/installer/opennote.iss`, versión por
+`/DAppVersion=`; usa `iscc` y, si no está, `choco install innosetup`) y sube
+`OpenNote-v<versión>-windows-setup.exe` a la misma release con `softprops/action-gh-release@v2`. El `AppId` del
+instalador es fijo, así una versión nueva se instala sobre la anterior. Si el job falla, el APK y el .deb no se ven
+afectados. El instalador no está firmado (SmartScreen avisa). Las notas de la release mencionan el asset de Windows.
+
 Si falta el secreto del keystore, el job falla a propósito. Nunca se publica una release firmada con
 la clave de debug.
 

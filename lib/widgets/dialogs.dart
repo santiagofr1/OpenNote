@@ -68,7 +68,7 @@ Future<bool> confirmDelete(BuildContext context, String title, String msg) async
     false;
 
 Future<bool> confirmDeleteNotebook(BuildContext context, Notebook nb) =>
-    confirmDelete(context, 'Borrar "${nb.name}"', 'Se borran sus ${nb.sheets.length} ${nb.sheets.length == 1 ? 'hoja' : 'hojas'}. No se puede deshacer.');
+    confirmDelete(context, 'Borrar "${nb.name}"', 'Se borran sus ${nb.totalSheets} ${nb.totalSheets == 1 ? 'hoja' : 'hojas'}. No se puede deshacer.');
 
 Future<String?> askPin(BuildContext context, String title, {String? subtitle}) {
   final c = TextEditingController();

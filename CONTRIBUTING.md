@@ -16,6 +16,14 @@ flutter test               # tests de lógica pura, en la PC
 Necesitás Flutter en canal *stable*. Para compilar para la tablet también hacen falta el Android SDK y
 JDK 21 (con `JAVA_HOME` apuntando a él).
 
+## Ramas
+
+- **`main`**: lo que se publica. Cada push compila y saca una release (APK, `.deb` y `.exe`), así que solo recibe
+  merges desde `dev`.
+- **`dev`**: funciones ya probadas en la tablet. Cuando se juntan un par, `dev` se mergea a `main`.
+- **Ramas de trabajo** (`feat/…`, `fix/…`): salen de `dev` y vuelven a `dev`. **Los PR van contra `dev`**, no contra
+  `main`. Una vez mergeadas se borran.
+
 ## Antes de mandar un PR
 
 - `flutter analyze` sin avisos nuevos. Si tu cambio agrega un aviso, arreglalo antes de pedir revisión.

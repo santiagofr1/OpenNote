@@ -21,7 +21,7 @@ class OpennoteException implements Exception {
 
 /// Un `.opennote` es un ZIP con:
 ///   `manifest.json`            {app, format, name, bg, paper, spacing, sheets, exported}
-///   `notebook.json`            orden y datos de las hojas (igual que en disco)
+///   `notebook.json`            secciones, orden y datos de las hojas (igual que en disco; todas las secciones)
 ///   `sheets/<hoja>.sheet`      el archivo de cada hoja tal cual está en disco (sin decodificar)
 ///   `media/<archivo>`          las imágenes y audios que usan las hojas
 /// Las hojas no cargadas se copian de disco: no hace falta cargarlas. Lo que esté sin guardar tiene que guardarse antes
@@ -30,7 +30,7 @@ Future<Uint8List> exportNotebookBytes(Storage store, Notebook nb) async {
   await store.settle(nb.id);
   final zip = Archive();
   final media = <String>{};
-  for (final m in nb.sheets) {
+  for (final m in nb.allSheets) {
     final f = store.sheetFile(nb.id, m.id);
     if (!await f.exists()) continue; // hoja nueva que nunca se escribió: queda vacía al importar
     final bytes = await f.readAsBytes();
@@ -49,7 +49,7 @@ Future<Uint8List> exportNotebookBytes(Storage store, Notebook nb) async {
     'bg': nb.bg,
     'paper': nb.paper,
     'spacing': nb.spacing,
-    'sheets': nb.sheets.length,
+    'sheets': nb.totalSheets,
     'exported': DateTime.now().millisecondsSinceEpoch,
   };
   zip.add(ArchiveFile.bytes('manifest.json', utf8.encode(jsonEncode(manifest))));
@@ -101,9 +101,11 @@ Future<Notebook> importNotebookBytes(Storage store, Uint8List bytes,
     throw OpennoteException('El archivo es de una versión más nueva de OpenNote. Actualizá la app para abrirlo.');
   }
   final List<SheetMeta> sheets;
+  final Map nbJson;
   try {
-    final nbJson = readJson('notebook.json');
-    sheets = [for (final s in (nbJson['sheets'] as List)) SheetMeta.fromJson(s as Map)];
+    nbJson = readJson('notebook.json');
+    // se lee con el mismo código que el disco: archivos viejos (sin secciones) quedan en "General"
+    sheets = (Notebook('', '')..loadSheetsJson(nbJson)).allSheets;
   } on OpennoteException {
     rethrow;
   } catch (_) {
@@ -148,8 +150,8 @@ Future<Notebook> importNotebookBytes(Storage store, Uint8List bytes,
       bg: (manifest['bg'] ?? 'lined') as String,
       paper: (manifest['paper'] ?? '#fffefb') as String,
       spacing: (manifest['spacing'] as num?)?.toDouble(),
-      folder: folder,
-      sheets: sheets)
+      folder: folder)
+    ..loadSheetsJson(nbJson) // secciones y hojas (las secciones se conservan al importar)
     ..touch();
   // la media es compartida: lo que ya está no se pisa
   for (final e in media.entries) {

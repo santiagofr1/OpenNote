@@ -12,7 +12,7 @@ bool wantsEraser(PointerEvent e) =>
     (isStylus(e) && (e.buttons & (kPrimaryStylusButton | kSecondaryStylusButton)) != 0) ||
     (e.kind == PointerDeviceKind.mouse && (e.buttons & kSecondaryMouseButton) != 0);
 
-enum PenAction { erase, draw, select }
+enum PenAction { erase, draw, select, title }
 
 /// Qué hace un puntero que apoya en la hoja con la herramienta [tool].
 /// null: nada (el dedo solo scrollea y así la palma se ignora; en modo texto el lápiz toca los campos).
@@ -24,7 +24,8 @@ PenAction? penActionFor(PointerDownEvent e, Tool tool) {
   return switch (tool) {
     Tool.text => null,
     Tool.select => PenAction.select,
-    Tool.pen || Tool.hl => PenAction.draw,
+    Tool.title => PenAction.title,
+    Tool.pen || Tool.hl || Tool.paint => PenAction.draw,
   };
 }
 

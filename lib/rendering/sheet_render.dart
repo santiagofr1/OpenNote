@@ -26,12 +26,12 @@ void paintSheet(Canvas c, NotebookDoc doc, int sheet, double pxPerUnit, {Map<Str
     if (run.strokes != null) {
       paintStrokes(c, run.strokes!, cull: visible);
     } else if (e is Item) {
-      if (e.rect.overlaps(visible)) paintItem(c, e, images?[e.file]);
+      if (e.rect.overlaps(visible)) paintItem(c, e, images?[e.type == 'pdf' ? pdfImageKey(e) : e.file]);
     } else if (e is TextBlock) {
       final t = e;
       // kLine * 40: tope generoso del alto de un texto, para no medirlos todos
-      if (t.text.trim().isEmpty || t.y > top + kSheetH || t.y + kLine * 40 < top) continue;
-      layoutBlock(t, doc.lineAt(t.y)).paint(c, Offset(t.x, t.y));
+      if (t.text.trim().isEmpty || t.y > top + kSheetH || t.y + kLine * 40 * t.scale + (t.angle == 0 ? 0 : kLine * 40 * t.scale) < top) continue;
+      paintTextBlock(c, t, doc.lineAt(t.y));
     }
   }
   c.restore();
@@ -56,6 +56,9 @@ class SheetThumbPainter extends CustomPainter {
 
 const _stickyText = Color(0xFF2B2A27);
 
+/// Clave, en el mapa de imágenes de [paintSheet], de la página de PDF de [it].
+String pdfImageKey(Item it) => '${it.file}#${it.page}';
+
 /// Elemento insertado (para miniaturas y PDF; en el editor son widgets).
 void paintItem(Canvas c, Item it, ui.Image? img) {
   final r = it.rect;
@@ -66,6 +69,16 @@ void paintItem(Canvas c, Item it, ui.Image? img) {
             Paint()..filterQuality = FilterQuality.medium);
       } else {
         c.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(6)), Paint()..color = const Color(0xFFE6E3DA));
+      }
+    case 'pdf':
+      if (img != null) {
+        c.drawImageRect(img, Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()), r,
+            Paint()..filterQuality = FilterQuality.medium);
+      } else {
+        c.drawRect(r, Paint()..color = const Color(0xFFFFFFFF));
+        c.drawRect(r.deflate(.5), Paint()
+          ..style = PaintingStyle.stroke
+          ..color = const Color(0x22000000));
       }
     case 'sticky':
       final rr = RRect.fromRectAndRadius(r, const Radius.circular(10));
@@ -88,7 +101,7 @@ void paintItem(Canvas c, Item it, ui.Image? img) {
       c.drawRRect(rr, Paint()..color = const Color(0xFFE9E6F5));
       c.drawCircle(Offset(r.left + r.height / 2, r.center.dy), r.height * .3, Paint()..color = const Color(0xFF5B4FC4));
       final tp = TextPainter(
-        text: TextSpan(text: 'Audio ${fmtDuration(it.dur)}', style: const TextStyle(fontSize: 20, color: _stickyText)),
+        text: TextSpan(text: '${it.text.isEmpty ? 'Audio' : it.text} ${fmtDuration(it.dur)}', style: const TextStyle(fontSize: 20, color: _stickyText)),
         textDirection: TextDirection.ltr,
       )..layout();
       tp.paint(c, Offset(r.left + r.height + 6, r.center.dy - tp.height / 2));

@@ -1,7 +1,9 @@
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'paint_shapes.dart';
 import 'stroke.dart';
+import 'values.dart';
 
 /// Algo con memoria nativa que hay que soltar (el `ui.Vertices` que arma el painter).
 abstract interface class NativeHandle {
@@ -51,11 +53,31 @@ StrokeMesh? buildStrokeMesh(Stroke s, {double? feather}) {
   if (s.n == 0) return null;
   final f = feather ?? kMeshFeather;
   final parts = <MeshPart>[];
-  _buildRange(s, 0, s.n, f, parts);
+  if (isPaint(s.k)) {
+    // partes de tamaño fijo y alineadas al inicio: al dibujar en vivo solo cambia la última
+    for (var a = 0; a < s.n; a += _paintChunk) {
+      _paintRange(s, a, min(a + _paintChunk, s.n), parts);
+    }
+  } else {
+    _buildRange(s, 0, s.n, f, parts);
+  }
   return StrokeMesh(parts, s.meshGen);
 }
 
 const _chunk = 6000; // puntos por parte (con 4 vértices por punto queda lejos del tope de 65k)
+const _paintChunk = 250; // la pintura lleva ~20 vértices por muestra y decoración: partes chicas
+
+/// Parte [a], [b) de una pintura; si igual se pasa del tope de vértices se parte en dos (disjuntas).
+void _paintRange(Stroke s, int a, int b, List<MeshPart> out) {
+  final part = _paintPart(s, a, b);
+  if (part.vertexCount > StrokeMesh.maxVertices && b - a > 1) {
+    final mid = (a + b) ~/ 2;
+    _paintRange(s, a, mid, out);
+    _paintRange(s, mid, b, out);
+    return;
+  }
+  out.add(part);
+}
 
 void _buildRange(Stroke s, int a, int b, double feather, List<MeshPart> out) {
   if (b - a > _chunk) {
@@ -86,6 +108,8 @@ MeshPart _buildPart(Stroke s, int a, int b, double feather) {
   int alpha(double al) => ((al.clamp(0.0, 1.0)) * 255).round() << 24 | rgb;
 
   switch (s.k) {
+    case final k when isPaint(k):
+      return _paintPart(s, a, b); // (no pasa por acá: buildStrokeMesh arma la pintura aparte)
     case 'hl':
     case 'fine':
       final w = _W(feather > 0);
@@ -191,6 +215,328 @@ MeshPart _buildPart(Stroke s, int a, int b, double feather) {
   }
 }
 
+/// Pintura decorativa (`paint-*`): una franja de fondo (pincel seco, resaltador o fibra, según `pp.style`), brillo y
+/// formas, cada cosa activable. Todo con color por vértice (el alfa también) y determinístico: lo "azaroso" sale de
+/// [_rnd] (hash de índices), nunca de un Random. Orden (lo de después queda arriba): fondo, brillo, formas.
+///
+/// Pensada para dibujarse en vivo (el trazo se re-malla en cada punto) y para curvas cerradas:
+///  - La parte [a], [b) se corta de la MISMA curva suave que todo el trazo (cada parte tiene los puntos de control de
+///    sus vecinas como contexto), así que las uniones entre partes quedan en el mismo punto y con la misma normal.
+///  - Todo lo "azaroso" se ancla al largo de arco desde el inicio de la parte (celdas fijas), no al largo total: lo ya
+///    dibujado no se mueve cuando el trazo crece; solo cambia la punta final.
+///  - Las normales se suavizan por arco y los corrimientos del lado interno de una curva se recortan al radio de
+///    curvatura local (sin pliegues).
+/// Las puntas desflecadas del pincel solo van en el inicio y el fin reales del trazo (no en los cortes entre partes).
+MeshPart _paintPart(Stroke s, int a, int b) {
+  final p = s.pts, n = s.n;
+  final w = _W(true), sw = max(s.w, 1.0), hw = sw / 2;
+  final pp = s.pp ?? const PaintParams();
+  final showShapes = pp.shapes && s.k != 'paint-none';
+  final bgOn = pp.bg || (!showShapes && pp.glitter <= 0); // defensivo: nunca un trazo invisible
+  const maxV = StrokeMesh.maxVertices - 100; // tope duro: un trazo larguísimo con pocos puntos no pasa de acá
+  final nb = (sw / 4).round().clamp(8, 14);
+  double dist(double x0, double y0, double x1, double y1) => sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0));
+
+  // 1) línea central suave de la parte, con contexto de las vecinas (iS / iE: dónde empieza y termina lo propio)
+  final xs = <double>[], ys = <double>[];
+  var iS = 0, iE = 0;
+  if (n == 1) {
+    // un toque: mancha corta horizontal
+    xs.addAll([p[0] - sw * .3, p[0] + sw * .3]);
+    ys.addAll([p[1], p[1]]);
+    iE = 1;
+  } else {
+    final ctx = hw * 1.5 + 8;
+    var ea = a, eb = b, acc = 0.0;
+    for (var c = 0; ea > 0 && acc < ctx && c < 80; c++, ea--) {
+      acc += dist(p[ea * 3], p[ea * 3 + 1], p[ea * 3 - 3], p[ea * 3 - 2]);
+    }
+    acc = 0;
+    for (var c = 0; eb < n && acc < ctx && c < 80; c++, eb++) {
+      acc += dist(p[eb * 3 - 3], p[eb * 3 - 2], p[eb * 3], p[eb * 3 + 1]);
+    }
+    // la curva es la cadena de cuadráticas por los puntos medios con cada punto como control (como el Path viejo)
+    (double, double) startOf(int i) =>
+        i <= 1 ? (p[0], p[1]) : ((p[i * 3 - 3] + p[i * 3]) / 2, (p[i * 3 - 2] + p[i * 3 + 1]) / 2);
+    (double, double) endOf(int i) => i == n - 1
+        ? (p[i * 3], p[i * 3 + 1])
+        : i == 0
+            ? (p[0], p[1])
+            : ((p[i * 3] + p[i * 3 + 3]) / 2, (p[i * 3 + 1] + p[i * 3 + 4]) / 2);
+    final st = startOf(ea);
+    xs.add(st.$1);
+    ys.add(st.$2);
+    for (var i = ea; i < eb; i++) {
+      if (i == a) iS = xs.length - 1;
+      if (i == n - 1) {
+        xs.add(p[i * 3]);
+        ys.add(p[i * 3 + 1]);
+      } else if (i > 0) {
+        final cx = xs.last, cy = ys.last, qx = p[i * 3], qy = p[i * 3 + 1];
+        final (ex, ey) = endOf(i);
+        final len = (qx - cx).abs() + (qy - cy).abs() + (ex - qx).abs() + (ey - qy).abs();
+        final steps = (len / 5).ceil().clamp(1, 8);
+        for (var k = 1; k <= steps; k++) {
+          final t = k / steps, u = 1 - t;
+          xs.add(u * u * cx + 2 * u * t * qx + t * t * ex);
+          ys.add(u * u * cy + 2 * u * t * qy + t * t * ey);
+        }
+      }
+      if (i == b - 1) iE = xs.length - 1;
+    }
+  }
+  final ra = List<double>.filled(xs.length, 0);
+  for (var i = 1; i < xs.length; i++) {
+    ra[i] = ra[i - 1] + dist(xs[i - 1], ys[i - 1], xs[i], ys[i]);
+  }
+  final arcS = ra[iS], arcE = ra[iE], ownLen = arcE - arcS;
+  if (ownLen < .05) return w.done();
+
+  // 2) re-muestreo por largo de arco: grilla anclada al inicio de la parte (+ una muestra justo en el fin propio).
+  // El paso crece si el trazo es tan largo que no entraría.
+  final ds = max(sw * .12 < 2 ? 2.0 : min(sw * .12, 6.0), ownLen / (30000 / (2 * nb)));
+  final us = <double>[];
+  var addedE = false;
+  for (var k = -(arcS / ds).floor(); arcS + k * ds <= ra.last + 1e-9; k++) {
+    final u = arcS + k * ds;
+    if (u < arcE - .02) {
+      us.add(u);
+    } else {
+      if (!addedE) us.add(arcE);
+      addedE = true;
+      if (u > arcE + .02) us.add(u);
+    }
+  }
+  if (!addedE) us.add(arcE);
+  final me = us.length;
+  final ex = List<double>.filled(me, 0), ey = List<double>.filled(me, 0);
+  var rj = 1;
+  for (var i = 0; i < me; i++) {
+    final u = us[i];
+    while (rj < ra.length - 1 && ra[rj] < u) {
+      rj++;
+    }
+    final seg = ra[rj] - ra[rj - 1], t = seg <= 0 ? 0.0 : ((u - ra[rj - 1]) / seg).clamp(0.0, 1.0);
+    ex[i] = xs[rj - 1] + (xs[rj] - xs[rj - 1]) * t;
+    ey[i] = ys[rj - 1] + (ys[rj] - ys[rj - 1]) * t;
+  }
+  // índices de lo propio
+  var i0 = 0, i1 = me - 1;
+  for (var i = 0; i < me; i++) {
+    if ((us[i] - arcS).abs() <= 1e-9) i0 = i;
+    if ((us[i] - arcE).abs() <= 1e-9) i1 = i;
+  }
+  if (i1 - i0 < 1) return w.done();
+
+  // 3) tangentes suavizadas por arco (cuerda entre ±hw/2), normales y curvatura con signo
+  // (la cuerda se toma sobre la línea cruda en u ± hw/2, no sobre las muestras: así no depende de la grilla y dos
+  // partes vecinas dan la misma normal en su unión)
+  (double, double) rawAt(double u) {
+    var lo = 1, hi = ra.length - 1;
+    while (lo < hi) {
+      final mid = (lo + hi) >> 1;
+      if (ra[mid] < u) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    final seg = ra[lo] - ra[lo - 1], t = seg <= 0 ? 0.0 : ((u - ra[lo - 1]) / seg).clamp(0.0, 1.0);
+    return (xs[lo - 1] + (xs[lo] - xs[lo - 1]) * t, ys[lo - 1] + (ys[lo] - ys[lo - 1]) * t);
+  }
+
+  final tx = List<double>.filled(me, 1), ty = List<double>.filled(me, 0);
+  for (var i = 0; i < me; i++) {
+    final (x0, y0) = rawAt(max(us[i] - hw / 2, 0));
+    final (x1, y1) = rawAt(min(us[i] + hw / 2, ra.last));
+    var dx = x1 - x0, dy = y1 - y0;
+    var l = sqrt(dx * dx + dy * dy);
+    if (l < 1e-9) {
+      final q0 = max(i - 1, 0), q1 = min(i + 1, me - 1);
+      dx = ex[q1] - ex[q0];
+      dy = ey[q1] - ey[q0];
+      l = sqrt(dx * dx + dy * dy);
+    }
+    if (l < 1e-9) {
+      dx = 1;
+      dy = 0;
+      l = 1;
+    }
+    tx[i] = dx / l;
+    ty[i] = dy / l;
+  }
+  var kap = List<double>.filled(me, 0);
+  for (var i = 1; i < me - 1; i++) {
+    kap[i] = (tx[i - 1] * ty[i + 1] - ty[i - 1] * tx[i + 1]) / max(us[i + 1] - us[i - 1], 1e-6);
+  }
+  final ks = List<double>.of(kap); // un promedio de 3 muestras saca el ruido del re-muestreo
+  for (var i = 1; i < me - 1; i++) {
+    ks[i] = (kap[i - 1] + kap[i] * 2 + kap[i + 1]) / 4;
+  }
+  kap = ks;
+
+  // 4) lo propio: arrays cortados a [i0, i1]
+  final m = i1 - i0 + 1;
+  final sx = ex.sublist(i0, i1 + 1), sy = ey.sublist(i0, i1 + 1);
+  final nx = [for (var i = i0; i <= i1; i++) -ty[i]], ny = [for (var i = i0; i <= i1; i++) tx[i]];
+  final stx = tx.sublist(i0, i1 + 1), sty = ty.sublist(i0, i1 + 1);
+  final sk = kap.sublist(i0, i1 + 1);
+  final arc = [for (var i = i0; i <= i1; i++) us[i] - arcS];
+  final total = arc[m - 1];
+
+  /// Corrimiento [off] sobre la normal en la muestra [i], sin pasar del radio de curvatura del lado interno.
+  double ef(int i, double off) {
+    final k = sk[i];
+    if (off * k > 0) {
+      final lim = .85 / k.abs();
+      if (off.abs() > lim) return off.sign * lim;
+    }
+    return off;
+  }
+
+  final rgb = s.color.toARGB32() & 0x00FFFFFF;
+  int argb(double al, int c) => ((al.clamp(0.0, 1.0)) * 255).round() << 24 | c;
+  final salt = a * 131;
+  final realStart = a == 0, realEnd = b == n;
+
+  // a) fondo
+  if (bgOn && pp.style == 'brush') {
+    // cerdas: tiras finas paralelas, cada una con desplazamiento, grosor, alfa y largo propios
+    final trimCap = total * .4; // entre las dos puntas nunca se come más del 80% de la tira
+    for (var j = 0; j < nb && w.count < maxV; j++) {
+      final edge = j == 0 || j == nb - 1 ? 1.3 : 1.0;
+      final off0 = ((j + .5) / nb * 2 - 1) * hw * .92 + (_rnd(j, 1) - .5) * hw * .1;
+      final hb = hw / nb * (.8 + .6 * _rnd(j, 2));
+      final al = s.o * (.55 + .45 * _rnd(j, 3));
+      final tint = (_rnd(j, 6) - .5) * .16; // varía el tono: + aclara, - oscurece
+      final c = tint >= 0 ? _mix(rgb, 0xFFFFFF, tint) : _mix(rgb, 0, -tint);
+      final trimS = realStart ? min(pow(_rnd(j, 4), 1.5) * sw * .55 * edge, trimCap) : 0.0;
+      final trimE = realEnd ? min(pow(_rnd(j, 5), 1.5) * sw * .55 * edge, trimCap) : 0.0;
+      final px = <double>[], py = <double>[], ph = <double>[], pc = <int>[];
+      final phase = _rnd(j, 7) * 2 * pi;
+      for (var i = 0; i < m; i++) {
+        if (arc[i] < trimS || arc[i] > total - trimE) continue;
+        final off = ef(i, off0 + sin(arc[i] / (sw * .8) + phase) * hw * .03);
+        final qx = sx[i] + nx[i] * off, qy = sy[i] + ny[i] * off;
+        // la tira solo avanza: un punto que retrocede (o casi no avanza) en la dirección de la tangente se descarta
+        if (px.isNotEmpty && (qx - px.last) * stx[i] + (qy - py.last) * sty[i] <= .2) continue;
+        px.add(qx);
+        py.add(qy);
+        ph.add(hb);
+        // la punta se desvanece en los últimos pasos: queda desflecada
+        final fadeS = realStart ? ((arc[i] - trimS) / (sw * .25)).clamp(0.0, 1.0) : 1.0;
+        final fadeE = realEnd ? ((total - trimE - arc[i]) / (sw * .25)).clamp(0.0, 1.0) : 1.0;
+        pc.add(argb(al * (.35 + .65 * min(fadeS, fadeE)), c));
+      }
+      if (px.length >= 2) _stripDedupe(w, px, py, ph, pc, round: false, feather: 0);
+    }
+  } else if (bgOn) {
+    // resaltador: plano, translúcido, bordes limpios y extremos rectos; fibra: sólida y pareja, extremos redondeados
+    final marker = pp.style == 'marker';
+    final col = argb(marker ? min(1.0, s.o + .1) : s.o * .55, rgb);
+    int? prev;
+    for (var i = 0; i < m; i++) {
+      final l = w.v(sx[i] + nx[i] * ef(i, hw), sy[i] + ny[i] * ef(i, hw), col);
+      w.v(sx[i] + nx[i] * ef(i, -hw), sy[i] + ny[i] * ef(i, -hw), col);
+      if (prev != null) w.quad(prev, prev + 1, l + 1, l);
+      prev = l;
+    }
+    if (marker) {
+      if (realStart) _semi(w, sx[0], sy[0], nx[0], ny[0], -stx[0], -sty[0], hw, col);
+      if (realEnd) _semi(w, sx[m - 1], sy[m - 1], nx[m - 1], ny[m - 1], stx[m - 1], sty[m - 1], hw, col);
+    }
+  }
+
+  // punto de la franja a [u] de arco y [v] de lado (v en -hw..hw), con el mismo recorte de curvatura que las cerdas
+  (double, double) at(double u, double v) {
+    var lo = 1, hi = m - 1;
+    while (lo < hi) {
+      final mid = (lo + hi) >> 1;
+      if (arc[mid] < u) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    final i = lo;
+    final seg = arc[i] - arc[i - 1], t = seg <= 0 ? 0.0 : ((u - arc[i - 1]) / seg).clamp(0.0, 1.0);
+    final e0 = ef(i - 1, v), e1 = ef(i, v);
+    final x0 = sx[i - 1] + nx[i - 1] * e0, y0 = sy[i - 1] + ny[i - 1] * e0;
+    final x1 = sx[i] + nx[i] * e1, y1 = sy[i] + ny[i] * e1;
+    return (x0 + (x1 - x0) * t, y0 + (y1 - y0) * t);
+  }
+
+  // b) brillo: puntitos aclarados (la mayoría) y algunos oscurecidos, ~1 cada 80 u² de franja con el brillo en .5.
+  // Se recorre el arco en celdas de largo fijo y cada celda lleva su cantidad con semilla (parte, celda): lo ya
+  // dibujado no cambia al seguir dibujando.
+  if (pp.glitter > 0) {
+    final cl = max(sw * .5, total / 20000);
+    final lambda = cl * sw / 80 * pp.glitter * 2;
+    for (var k = 0; k * cl < total && w.count < maxV - 8; k++) {
+      final cell = (a * 7919 + k) * 257;
+      final cnt = (lambda + _rnd(cell, 9)).floor();
+      for (var t = 0; t < cnt && w.count < maxV - 8; t++) {
+        final h = cell + t + 1;
+        final u = (k + _rnd(h, 10)) * cl;
+        if (u > total) continue;
+        final (x, y) = at(u, (_rnd(h, 11) * 2 - 1) * hw * .95);
+        final r = 1 + 1.5 * _rnd(h, 12);
+        final dark = _rnd(h, 13) < .3;
+        final col = dark
+            ? argb(s.o * (.3 + .3 * _rnd(h, 14)), _mix(rgb, 0, .35))
+            : argb(s.o * (.5 + .4 * _rnd(h, 14)), _mix(rgb, 0xFFFFFF, .65));
+        _circle(w, x, y, r, col, 6);
+      }
+    }
+  }
+
+  // c) formas repartidas dentro de la franja: color propio (o claro/oscuro del fondo), cantidad y tamaño ajustables
+  if (showShapes) {
+    final step = sw * (1.4 - 1.2 * pp.density);
+    var u = total < step ? total / 2 : step * .4;
+    final sc = pp.shapeColor;
+    for (var k = 0; u <= total && w.count < maxV - 100; k++, u += step * (.75 + .5 * _rnd(salt + k, 20))) {
+      final r = min(sw * (.1 + .3 * pp.size) * (.6 + .8 * _rnd(salt + k, 21)), hw * .95);
+      final v = (_rnd(salt + k, 22) * 2 - 1) * max(0.0, hw - r * 1.1);
+      final (x, y) = at(u, v);
+      final id = s.k.substring(6);
+      final col = argb(s.o * (_whiteShapes.contains(id) ? .75 : .85), _shapeRgb(sc, rgb, _defaultShapeRgb(id, rgb)));
+      paintShape(w, id, x, y, r, _rnd(salt + k, 23) * 2 * pi, col);
+    }
+  }
+  return w.done();
+}
+
+/// Número pseudoaleatorio estable en [0, 1) a partir de dos enteros (hash de bits, sin Random).
+double _rnd(int i, int salt) {
+  var x = (i * 374761393 + salt * 668265263) & 0xFFFFFFFF;
+  x = ((x ^ (x >> 16)) * 0x45d9f3b) & 0xFFFFFFFF;
+  x = ((x ^ (x >> 16)) * 0x45d9f3b) & 0xFFFFFFFF;
+  x ^= x >> 16;
+  return x / 4294967296.0;
+}
+
+/// Formas que por defecto van en blanco; las de [_goldShapes] en dorado oscuro y el resto en el fondo aclarado.
+const _whiteShapes = {'stars', 'sparkles', 'dots', 'circles', 'bangs', 'clouds', 'bubbles'};
+const _goldShapes = {'moons', 'bolts', 'ticks', 'crosses'};
+int _defaultShapeRgb(String id, int rgb) =>
+    _whiteShapes.contains(id) ? 0xFFFFFF : _mix(rgb, _goldShapes.contains(id) ? 0x8a6a2a : 0xFFFFFF, .55);
+
+/// Color de las formas: [sc] es null (el de la forma por defecto, [def]), 'light' / 'dark' (el fondo [rgb] aclarado u
+/// oscurecido) o un hex '#rrggbb'.
+int _shapeRgb(String? sc, int rgb, int def) => switch (sc) {
+      null => def,
+      'light' => _mix(rgb, 0xFFFFFF, .6),
+      'dark' => _mix(rgb, 0, .35),
+      _ => parseColor(sc).toARGB32() & 0x00FFFFFF,
+    };
+
+/// Mezcla el color [rgb] hacia [to] (ambos 0xRRGGBB) una fracción [t].
+int _mix(int rgb, int to, double t) {
+  int ch(int sh) => (((rgb >> sh) & 255) * (1 - t) + ((to >> sh) & 255) * t).round().clamp(0, 255);
+  return ch(16) << 16 | ch(8) << 8 | ch(0);
+}
+
 /// Variación de alfa del lápiz por vértice: pseudoaleatoria pero estable (depende solo del índice global del punto),
 /// entre [_grainLo] y [_grainHi] (se probó: más variación aleja al lápiz del dibujo viejo en la métrica del test).
 const double _grainLo = .85, _grainHi = 1.15;
@@ -223,14 +569,16 @@ void _smoothCenterline(List<double> p, List<double> xs, List<double> ys) {
   ys.add(p[n * 2 - 1]);
 }
 
-class _W {
+class _W implements ShapeSink {
   final bool colored;
   final pos = <double>[];
   final idx = <int>[];
   final cols = <int>[];
   _W(this.colored);
 
+  @override
   int get count => pos.length >> 1;
+  @override
   int v(double x, double y, [int c = 0]) {
     pos
       ..add(x)
@@ -239,6 +587,7 @@ class _W {
     return count - 1;
   }
 
+  @override
   void tri(int a, int b, int c) => idx
     ..add(a)
     ..add(b)

@@ -12,6 +12,14 @@ import 'remote_store.dart';
 import 'sync_paths.dart';
 
 const _folderMime = 'application/vnd.google-apps.folder';
+/// Desde este tamaño se sube con la subida reanudable de Drive (por partes, con reintento de la parte que falle); más
+/// chico, en un solo pedido (multipart). Google recomienda multipart hasta 5 MB: con audios importados o fotos grandes el
+/// pedido único se corta con facilidad en una conexión de tablet.
+const kResumableFrom = 5 * 1024 * 1024;
+
+/// Tamaño de cada parte de la subida reanudable (múltiplo de 256 KiB).
+const kUploadChunk = 4 * 1024 * 1024;
+
 const _fields = 'id,name,mimeType,md5Checksum,modifiedTime,createdTime,parents';
 
 class _Node {
@@ -245,15 +253,17 @@ class DriveRemoteStore implements RemoteStore, PurgingRemoteStore {
           throw const RemoteConflictException();
         }
         final media = drive.Media(Stream.value(bytes), bytes.length);
+        final opts = bytes.length > kResumableFrom ? drive.ResumableUploadOptions(chunkSize: kUploadChunk) : drive.UploadOptions.defaultOptions;
         final drive.File res;
         if (existing != null) {
-          res = await _api.files.update(drive.File(), existing.id, uploadMedia: media, $fields: _fields);
+          res = await _api.files.update(drive.File(), existing.id, uploadMedia: media, uploadOptions: opts, $fields: _fields);
         } else {
           final slash = path.lastIndexOf('/');
           final parent = await _ensureFolders(slash < 0 ? '' : path.substring(0, slash));
           res = await _api.files.create(
             drive.File(name: path.substring(slash + 1), parents: [parent], mimeType: 'application/octet-stream'),
             uploadMedia: media,
+            uploadOptions: opts,
             $fields: _fields,
           );
         }

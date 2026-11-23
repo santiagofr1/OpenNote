@@ -1,30 +1,46 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../domain/domain.dart';
+import '../rendering/pdf_pages.dart';
 import '../rendering/sheet_render.dart';
 import 'storage.dart';
 
 /// Resolución de cada hoja exportada (ancho en píxeles): ~200 ppp en A4.
 const _pxWidth = 1654.0;
 
-/// Arma el PDF del cuaderno: una hoja A4 por cada hoja, cada una con su fondo y su papel.
-/// [only]: índices de las hojas a incluir (todas si es null). [onProgress] recibe (hechas, total).
-Future<Uint8List> buildNotebookPdf(Storage store, NotebookDoc nb,
-    {void Function(int, int)? onProgress, List<int>? only}) async {
-  final sheets = [
-    for (var k = 0; k < nb.sheetCount; k++)
-      if (only == null || only.contains(k)) k
+/// Una hoja a exportar: su lugar [k] dentro de las hojas [list] de su sección [section].
+typedef ExportSheet = ({Section section, int k, List<SheetMeta> list});
+
+/// Las hojas a exportar, en el orden de las secciones. [sections]: ids de las secciones a incluir (todas si es null);
+/// [only]: índices de hojas de la sección ABIERTA (si se da, se exporta solo eso y [sections] no cuenta).
+List<ExportSheet> exportSheets(Notebook nb, {Set<String>? sections, List<int>? only}) {
+  if (only != null) {
+    return [for (var k = 0; k < nb.sheets.length; k++) if (only.contains(k)) (section: nb.activeSection, k: k, list: nb.sheets)];
+  }
+  return [
+    for (final s in nb.sections)
+      if (sections == null || sections.contains(s.id))
+        for (var k = 0; k < nb.sheetsOf(s.id).length; k++) (section: s, k: k, list: nb.sheetsOf(s.id)),
   ];
+}
+
+/// Arma el PDF del cuaderno: una hoja A4 por cada hoja, cada una con su fondo y su papel. Las secciones elegidas
+/// ([sections], todas si es null) van una atrás de la otra, en su orden.
+/// [only]: índices de las hojas de la sección abierta a incluir. [onProgress] recibe (hechas, total).
+Future<Uint8List> buildNotebookPdf(Storage store, NotebookDoc nb,
+    {void Function(int, int)? onProgress, List<int>? only, Set<String>? sections}) async {
+  final sheets = exportSheets(nb.nb, sections: sections, only: only);
   final pdf = pw.Document(title: nb.nb.name, creator: 'OpenNote');
   var done = 0;
-  for (final k in sheets) {
+  for (final e in sheets) {
     // las hojas sin cargar se leen de disco de a una y se sueltan: el PDF no necesita todo el cuaderno en memoria
-    final (src, i) = await sheetSource(store, nb, k);
+    final (src, i) = await exportSource(store, nb, e);
     final images = await loadImages(store, src, sheet: i);
     final Uint8List png;
     try {
@@ -57,13 +73,29 @@ Future<(NotebookDoc, int)> sheetSource(Storage store, NotebookDoc nb, int k) asy
   return (NotebookDoc.fromSheets(Notebook('', '', sheets: metas), contents), metas.length - 1);
 }
 
+/// Como [sheetSource] pero para una hoja de [exportSheets]: si es de la sección abierta sale del documento; si es de
+/// otra sección, de disco (con la de arriba de SU sección, por si un trazo se pasa).
+Future<(NotebookDoc, int)> exportSource(Storage store, NotebookDoc doc, ExportSheet e) async {
+  if (e.section.id == doc.nb.activeSection.id) return sheetSource(store, doc, e.k);
+  final metas = [if (e.k > 0) e.list[e.k - 1], e.list[e.k]];
+  final contents = [for (final m in metas) await store.readSheetContent(doc.nb, m)];
+  return (NotebookDoc.fromSheets(Notebook('', '', sheets: metas), contents), metas.length - 1);
+}
+
 /// Imágenes insertadas en [doc] (solo las de la hoja [sheet] si se da), decodificadas, por nombre de archivo
-/// (las que faltan se saltean).
+/// (las que faltan se saltean). Las páginas de PDF van por [pdfImageKey], dibujadas al ancho de la salida.
 Future<Map<String, ui.Image>> loadImages(Storage store, NotebookDoc doc, {int? sheet}) async {
   final images = <String, ui.Image>{};
   for (final it in doc.items.values) {
     if (sheet != null && !it.rect.overlaps(ui.Rect.fromLTWH(0, sheet * kSheetStep, kW, kSheetH))) continue;
-    if (it.type == 'image' && it.file != null && !images.containsKey(it.file)) {
+    if (it.type == 'pdf' && it.file != null) {
+      final key = pdfImageKey(it);
+      final f = store.media(it.file!);
+      if (!images.containsKey(key) && await f.exists()) {
+        final img = await pdfPages.page(f, it.page, pdfPixelWidth(it.w * _pxWidth / kW));
+        if (img != null) images[key] = img;
+      }
+    } else if (it.type == 'image' && it.file != null && !images.containsKey(it.file)) {
       final f = store.media(it.file!);
       if (await f.exists()) images[it.file!] = await decodeImage(await f.readAsBytes());
     }
@@ -116,6 +148,64 @@ Future<bool> saveSheetPng(Storage store, NotebookDoc doc, int sheet, String name
   );
   return uri != null;
 }
+
+/// Un PNG por hoja, de a una (no carga todo en memoria). Con varias hojas arma un ZIP con los nombres
+/// "`cuaderno` - hoja 01.png" (ceros según la cantidad); con una sola devuelve el PNG directo (`zip` falso).
+/// Si el cuaderno tiene más de una sección el nombre lleva la sección: "`cuaderno` - `sección` - hoja 01.png" (el número
+/// es el de la hoja dentro de su sección). [sections]: ids de las secciones a incluir (todas si es null).
+/// [onProgress] recibe (hechas, total). Si [cancelled] da true entre hoja y hoja, devuelve null.
+Future<({Uint8List bytes, bool zip})?> buildNotebookPngs(Storage store, NotebookDoc doc,
+    {void Function(int, int)? onProgress, bool Function()? cancelled, Set<String>? sections}) async {
+  final refs = exportSheets(doc.nb, sections: sections);
+  final n = refs.length;
+  final safe = safeFileName(doc.nb.name).trim();
+  final name = safe.isEmpty ? 'Cuaderno' : safe;
+  final most = refs.fold<int>(1, (m, e) => e.list.length > m ? e.list.length : m);
+  final width = '$most'.length < 2 ? 2 : '$most'.length;
+  final multi = doc.nb.sections.length > 1;
+  final used = <String>{};
+  final zip = Archive();
+  Uint8List? single;
+  for (var d = 0; d < n; d++) {
+    final e = refs[d], k = e.k;
+    if (cancelled?.call() ?? false) return null;
+    onProgress?.call(d, n);
+    final (src, i) = await exportSource(store, doc, e);
+    final images = await loadImages(store, src, sheet: i);
+    final Uint8List png;
+    try {
+      png = await renderSheetPng(src, i, images: images);
+    } finally {
+      for (final img in images.values) {
+        img.dispose();
+      }
+    }
+    if (n == 1) single = png;
+    final sec = safeFileName(e.section.name).trim();
+    final base = '$name - ${multi ? '${sec.isEmpty ? 'Sección' : sec} - ' : ''}hoja ${'${k + 1}'.padLeft(width, '0')}';
+    var file = base;
+    for (var c = 2; !used.add(file); c++) {
+      file = '$base ($c)'; // dos secciones con el mismo nombre: no se pisan
+    }
+    zip.add(ArchiveFile.bytes('$file.png', png));
+  }
+  onProgress?.call(n, n);
+  if (single != null) return (bytes: single, zip: false);
+  return (bytes: Uint8List.fromList(ZipEncoder().encode(zip)), zip: true);
+}
+
+/// Guarda lo de [buildNotebookPngs] (un `.zip`, o un `.png` si [zip] es falso), preguntando dónde.
+/// Es una variable para que los tests la reemplacen. Falso si el usuario canceló.
+Future<bool> Function(Uint8List bytes, String name, bool zip) saveImages = (bytes, name, zip) async {
+  final safe = safeFileName(name).trim();
+  final uri = await FilePicker.saveFile(
+    dialogTitle: 'Guardar imágenes',
+    fileName: '${safe.isEmpty ? 'Cuaderno' : safe}.${zip ? 'zip' : 'png'}',
+    bytes: bytes,
+    mimeType: zip ? 'application/zip' : 'image/png',
+  );
+  return uri != null;
+};
 
 /// Abre el selector del sistema para elegir carpeta y nombre, y guarda el `.opennote`. Falso si el usuario canceló.
 /// Es una variable para que los tests la reemplacen (no pueden manejar el diálogo del sistema).
