@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../data/updates.dart';
@@ -136,19 +137,19 @@ Future<void> _downloadAndInstall(BuildContext context, UpdateInfo info) async {
     ),
   );
   final nav = Navigator.of(context, rootNavigator: true);
-  File? apk;
+  File? file;
   try {
-    apk = await Updates.download(info, (done, total) => progress.value = total > 0 ? done / total : null, cancel);
+    file = await Updates.download(info, (done, total) => progress.value = total > 0 ? done / total : null, cancel);
   } finally {
     if (nav.mounted) nav.pop(); // cierra el diálogo de progreso
     progress.dispose();
   }
   if (!context.mounted || cancel.cancelled) return;
-  if (apk == null) {
+  if (file == null) {
     snack(context, 'No pudimos bajar la actualización. Probá de nuevo en un rato.');
     return;
   }
-  final r = await Updates.install(apk);
+  final r = await Updates.install(file);
   if (!context.mounted) return;
   switch (r) {
     case InstallResult.launched:
@@ -173,7 +174,58 @@ Future<void> _downloadAndInstall(BuildContext context, UpdateInfo info) async {
         ),
       );
       if (go == true) await Updates.openInstallSettings();
+    case InstallResult.installed:
+      final restart = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('OpenNote se actualizó'),
+          content: Text('Ya quedó instalada la ${info.version}. Reiniciá la app para usarla.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Después')),
+            FilledButton(
+              key: const Key('updateRestart'),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Reiniciar ahora'),
+            ),
+          ],
+        ),
+      );
+      if (restart == true) await Updates.restart();
+    case InstallResult.cancelled:
+      snack(context, 'Actualización cancelada.');
+    case InstallResult.manual:
+      final cmd = 'sudo apt install ${file.path}';
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Instalala a mano'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('No encontramos cómo pedir permisos de administrador. Abrí una terminal y corré:'),
+              const SizedBox(height: 12),
+              SelectableText(cmd, key: const Key('updateManualCmd'), style: const TextStyle(fontFamily: 'monospace')),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: cmd));
+                if (ctx.mounted) snack(ctx, 'Comando copiado');
+              },
+              child: const Text('Copiar'),
+            ),
+            FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('Listo')),
+          ],
+        ),
+      );
     case InstallResult.failed:
-      snack(context, 'No pudimos abrir el instalador. Probá de nuevo en un rato.');
+      snack(
+        context,
+        Updates.platform() == UpdatePlatform.android
+            ? 'No pudimos abrir el instalador. Probá de nuevo en un rato.'
+            : 'No se pudo instalar la actualización. Probá de nuevo en un rato.',
+      );
   }
 }
