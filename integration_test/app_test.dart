@@ -30,6 +30,7 @@ import 'package:apuntes/sync/sync_engine.dart';
 import 'package:archive/archive.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -988,6 +989,54 @@ void main() {
     await t.tap(find.byTooltip('Deshacer'));
     await settle(t, 800);
     expect(ed.doc.sheetCount, 3, reason: 'importar es un solo paso de deshacer');
+  });
+
+  testWidgets('PDF importado: la miniatura del cuaderno en la biblioteca muestra la página (no queda en blanco)', (t) async {
+    final pdfBytes = (await t.runAsync(() async {
+      final d = pw.Document();
+      d.addPage(pw.Page(
+        margin: const pw.EdgeInsets.all(40),
+        build: (_) => pw.Container(color: const PdfColor.fromInt(0xFF3B82F6), width: 400, height: 600),
+      ));
+      return Uint8List.fromList(await d.save());
+    }))!;
+    final savedPick = Pickers.pdf;
+    addTearDown(() => Pickers.pdf = savedPick);
+    Pickers.pdf = () async => (pdfBytes, 'Azul');
+    await start(t);
+    await createNotebook(t, 'Miniatura PDF');
+    await t.tap(find.byKey(const Key('insert')));
+    await settle(t);
+    await t.tap(find.text('PDF'));
+    await settle(t, 1500);
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+
+    // la miniatura pide la página de PDF a demanda: se espera a que aparezca algo que no sea papel blanco
+    final card = find.byKey(const Key('nb-Miniatura PDF'));
+    expect(card, findsOneWidget);
+    final cover = find.descendant(of: card, matching: find.byType(RepaintBoundary)).first;
+    var colored = false;
+    final sw = Stopwatch()..start();
+    while (!colored && sw.elapsedMilliseconds < 5000) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await t.pump();
+      final b = t.renderObject<RenderRepaintBoundary>(cover);
+      final data = await t.runAsync(() async {
+        final img = await b.toImage();
+        final bytes = (await img.toByteData())!;
+        img.dispose();
+        return bytes;
+      });
+      for (var i = 0; i < data!.lengthInBytes; i += 4) {
+        final r = data.getUint8(i), g = data.getUint8(i + 1), bl = data.getUint8(i + 2);
+        if (bl > r + 60 && bl > g) {
+          colored = true; // hay azul: la página del PDF
+          break;
+        }
+      }
+    }
+    expect(colored, isTrue, reason: 'la miniatura muestra la página del PDF importado, no un recuadro blanco');
   });
 
   testWidgets('PDF importado: la goma sobre la página pinta un corrector del color del fondo', (t) async {

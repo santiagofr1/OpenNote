@@ -285,6 +285,17 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     }
   }
 
+  /// Ajusta el borde difuminado de las mallas ([meshFeather]) al zoom y la densidad de píxeles actuales: 1 px de
+  /// pantalla en escalones (ver [featherForPxPerUnit]). Nunca durante el pellizco (se rearmaría todo a cada cuadro):
+  /// al soltar, el rebuild vuelve a pasar por acá. Las mallas se rehacen solas al pintar ([Stroke.ensureMesh]) y las
+  /// imágenes de la caché se regeneran solas porque el cambio de escala cambia su tamaño (no hace falta invalidarlas).
+  void _syncMeshFeather() {
+    if (touch.pinching) return;
+    final f = featherForPxPerUnit(scale * _dpr);
+    if (f == meshFeather) return;
+    meshFeather = f;
+  }
+
   void _touchAll() {
     _sheetRuns.clear();
     _imgs.invalidateAll();
@@ -2014,6 +2025,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         _viewH = box.maxHeight;
         _viewW = box.maxWidth;
         _dpr = View.of(context).devicePixelRatio;
+        _syncMeshFeather();
         developer.Timeline.timeSync('ON canvas range+sync', () {
           _range = _calcRange();
           _requestSync();

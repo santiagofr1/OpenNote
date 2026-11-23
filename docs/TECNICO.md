@@ -501,9 +501,23 @@ una **malla de triángulos** (`lib/domain/stroke_mesh.dart`, `buildStrokeMesh`) 
   resaltador ~28 B/punto (medido 28-32 con las tapas de trazos de 57 puntos); caligrafía ~56; lápiz ~72 (colores). Una
   hoja de 46k puntos de bolígrafo son 1,4 MB. Mientras se dibuja hay además la copia nativa del lote (otro tanto).
   Los trazos de más de 6000 puntos se parten en partes (índices de 16 bits).
-- **Antialias**: `kMeshFeather` (por defecto 0, apagado). Impeller en Android usa MSAA 4x en pantalla y en `toImage`,
-  y en la PC los bordes salen bien. Si en la tablet se ven serruchos, ponerlo en 1: cada borde de las tiras lleva una
-  franja exterior de alfa 0 (4 vértices por punto con colores, ~84 B/punto); las tapas y uniones no se difuminan.
+- **Antialias** (issue #20): `drawVertices` no tiene antialias, y con trazos de 2-3 px en pantalla el MSAA 4x de Impeller
+  no alcanza (en Linux/Skia no hay nada): el trazo se veía dentado. Cada borde de las tiras lleva una franja de alfa 0
+  (mismo color, alfa 0 afuera; el núcleo opaco pierde medio borde de cada lado, así el ancho total no cambia). Vale
+  para todas las puntas (bolígrafo, pluma, fibra, resaltador, corrector, lápiz, caligrafía en los costados largos,
+  cerdas de la pintura) y para los círculos de puntos sueltos y giros cerrados; las tapas redondas, las formas y el brillo
+  de la pintura no se difuminan. Cuesta ~2x vértices (con borde son 4 por punto en vez de 2 y colores por vértice: en
+  la hoja de 46k puntos, 107k -> 198k vértices, 1,4 -> 3,9 MB, armado 7 -> 15 ms; rasterizar por software 9 -> 32 ms).
+  - **El ancho va en píxeles de pantalla**, no en unidades de hoja: un valor fijo se vería borroso con mucho zoom.
+    `meshFeather` (global, unidades de hoja; 0 = sin borde, el valor en tests y miniaturas) lo fija `PageEditor`
+    con `featherForPxPerUnit(scale * devicePixelRatio)` = `kFeatherPx` (1 px) / escalón, donde el escalón cuantiza los
+    px por unidad a potencias de 2^(1/2): entre zooms cercanos no cambia y el borde queda entre 0,84 y 1,19 px.
+  - **Cuándo se rearma**: la malla guarda el borde con que se armó (`StrokeMesh.feather`); `Stroke.ensureMesh`
+    la rehace (y suelta el lote) si `meshFeather` cambió, de forma perezosa al pintar. El editor lo revisa en cada
+    layout (`_syncMeshFeather`: al abrir, botones de zoom, cambio de ventana), NUNCA durante el pellizco, y al
+    soltar vuelve a pasar. Las imágenes de la caché se regeneran solas (el cambio de escala cambia su tamaño). Las mallas que se
+    arman en isolates al cargar reciben el `meshFeather` vigente como argumento (el global no viaja al isolate).
+    Las miniaturas, el PNG y el PDF usan lo que haya en el global (a ese tamaño no se nota); no lo tocan.
 - **`SheetImageCache`**: con la hoja vectorial barata, `defaultMinPoints` sube de 1500 a 12000 y `maxPointsPerStrip` de
   3000 a 8000 (una hoja de 46k puntos son ~6 franjas en vez de ~16). Hay que medir en la tablet y ajustar.
 - **Microbenchmark** (`test/rendering/stroke_bench_test.dart`, PC con rasterizador por software, orientativo; 46k
