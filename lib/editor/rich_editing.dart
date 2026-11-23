@@ -13,6 +13,9 @@ import '../rendering/text_layout.dart';
 /// principio del párrafo) lo notamos aunque el teclado del celular no mande ninguna tecla.
 const kGuide = '​';
 
+/// Último color de resaltado elegido (Ctrl+Shift+H lo vuelve a poner). Lo actualiza también la barra de formato.
+int lastHighlight = 0xFFF7D22C;
+
 /// Tamaños (pt) de la lista de la barra de formato.
 const kSizes = <double>[8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48];
 
@@ -198,6 +201,18 @@ class BlockEditor {
   }
 
   void focusEnd() => focusAt(fields.length - 1, body.paras.last.length);
+
+  /// Agrega [n] párrafos normales y vacíos al final (como apretar Enter [n] veces al final del bloque)
+  /// y pone el cursor en el último.
+  void appendParagraphs(int n) {
+    if (n <= 0) return;
+    final before = fields.length, end = body.globalOf(body.paras.length - 1, body.paras.last.length);
+    var b = body.replaceRange(end, end, '\n' * n);
+    b = b.mapParas(end + 1, end + n, (q) => q.copyWith(style: ParaStyle.normal, list: ListKind.none, indent: 0, checked: false));
+    _setBody(b);
+    pending = null;
+    _afterStructure(before - 1, before, end + n);
+  }
 
   // ---- selección ----
   /// Rango local [inicio, fin] del párrafo [i] y su posición global.
@@ -512,6 +527,7 @@ class BlockEditor {
   }
 
   void setHighlight(int? c) {
+    if (c != null) lastHighlight = c;
     final (s, e) = globalSel;
     if (s == e) {
       pending = (pending ?? body.styleAt(s)).withHighlight(c);
@@ -555,6 +571,46 @@ class BlockEditor {
     if (e is! KeyDownEvent && e is! KeyRepeatEvent) return false;
     final k = e.logicalKey, hw = HardwareKeyboard.instance;
     final ctrl = hw.isControlPressed || hw.isMetaPressed;
+    final pk = e.physicalKey;
+    // Alt+Shift+5: tachado
+    if (hw.isAltPressed && hw.isShiftPressed && !ctrl && pk == PhysicalKeyboardKey.digit5) {
+      toggleFmt(Fmt.strike);
+      return true;
+    }
+    if (ctrl && hw.isShiftPressed && !hw.isAltPressed) {
+      // Ctrl+Shift+H: pone / saca el resaltado; Ctrl+Shift+8 / 7 / 9: viñetas / numerada / tareas
+      if (k == LogicalKeyboardKey.keyH) {
+        setHighlight(currentHighlight != null ? null : lastHighlight);
+        return true;
+      }
+      final l = pk == PhysicalKeyboardKey.digit8
+          ? ListKind.bullet
+          : pk == PhysicalKeyboardKey.digit7
+              ? ListKind.numbered
+              : pk == PhysicalKeyboardKey.digit9
+                  ? ListKind.checklist
+                  : null;
+      if (l != null) {
+        setList(l);
+        return true;
+      }
+    }
+    if (ctrl && !hw.isAltPressed) {
+      // Ctrl+L / E / R / J: alinear izquierda / centro / derecha / justificar
+      final a = k == LogicalKeyboardKey.keyL
+          ? ParaAlign.left
+          : k == LogicalKeyboardKey.keyE
+              ? ParaAlign.center
+              : k == LogicalKeyboardKey.keyR
+                  ? ParaAlign.right
+                  : k == LogicalKeyboardKey.keyJ
+                      ? ParaAlign.justify
+                      : null;
+      if (a != null && !hw.isShiftPressed) {
+        setAlign(a);
+        return true;
+      }
+    }
     if (ctrl) {
       final f = k == LogicalKeyboardKey.keyB
           ? Fmt.bold

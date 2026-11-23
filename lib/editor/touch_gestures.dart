@@ -8,6 +8,7 @@ class TouchTracker {
   final _pos = <int, Offset>{}; // posición global de cada dedo
   int count = 0; // dedos apoyados (decide si "tirar" para agregar hoja)
   bool pinching = false;
+  bool panning = false; // dos dedos arrastrando la hoja (con el zoom fijado)
   double _dist0 = 1, _zoom0 = 1;
 
   int get length => _pos.length;
@@ -23,6 +24,7 @@ class TouchTracker {
     _pos.clear();
     count = 0;
     pinching = false;
+    panning = false;
   }
 
   void move(int pointer, Offset global) => _pos[pointer] = global;
@@ -39,6 +41,16 @@ class TouchTracker {
     _zoom0 = zoom;
     pinching = true;
   }
+
+  /// Punto medio (global) de los dos primeros dedos; null si hay menos de dos.
+  Offset? get midpoint {
+    if (_pos.length < 2) return null;
+    final p = _pos.values.take(2).toList();
+    return (p[0] + p[1]) / 2;
+  }
+
+  void startPan() => panning = true;
+  void endPan() => panning = false;
 
   /// Zoom pedido por los dos primeros dedos y su punto medio (global); null si no hay pellizco.
   ({double zoom, Offset focal})? pinch() {

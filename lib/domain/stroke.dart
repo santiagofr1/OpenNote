@@ -10,6 +10,9 @@ import 'z_order.dart';
 /// ¿[k] es una pintura decorativa (`paint-<forma>`, ver [paintShapeIds])?
 bool isPaint(String k) => k.startsWith('paint-') && paintShapeIds.contains(k.substring(6));
 
+/// Punta del corrector que la goma pinta sobre un PDF: trazo opaco de ancho constante (sin presión) y extremos redondos.
+const kCoverTip = 'cover';
+
 /// Lo que se dibuja debajo de la tinta de su tanda: resaltador y pintura.
 bool isUnderInk(String k) => k == 'hl' || isPaint(k);
 
@@ -89,7 +92,7 @@ class PaintParams {
 
 /// Trazo: puntos guardados planos como [x, y, presión, x, y, presión, ...]
 class Stroke extends Layered {
-  // k = punta: pen | fountain | pencil | fine | calli | hl | pintura (paint-<forma>)
+  // k = punta: pen | fountain | pencil | fine | calli | hl | cover | pintura (paint-<forma>)
   @override
   final String id;
   final String k, c;

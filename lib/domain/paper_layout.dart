@@ -86,6 +86,8 @@ double textInset(double line) => line * 4 / kLine;
 double snapTextY(double localY, String bg, double spacing, {bool floor = false}) {
   final line = textLine(bg, spacing), o = mmToUnits(gridOriginMm(bg, spacing)), inset = textInset(line);
   final r = (localY - inset - o) / line;
-  final n = max(0, (floor ? r.floorToDouble() : r.roundToDouble())).toInt();
+  // renglones "virtuales" hacia arriba (con el mismo interlineado) mientras queden dentro de la hoja
+  final minN = ((-(o + inset)) / line).ceil();
+  final n = max(minN, (floor ? r.floorToDouble() : r.roundToDouble()).toInt());
   return o + n * line + inset;
 }

@@ -74,6 +74,19 @@ void main() {
       }
     });
 
+    test('en el margen de arriba da un renglón virtual (no la primera línea del fondo) y nunca es negativo', () {
+      for (final s in kLinedSpacings) {
+        final line = mmToUnits(s), first = ruleYs(s.toDouble()).first;
+        final r = snapTextY(first - line * 1.5, 'lined', s, floor: true);
+        expect(r, lessThan(first), reason: '$s mm: arriba de la primera línea');
+        expect(r, greaterThanOrEqualTo(0));
+        expect(snapTextY(-500, 'lined', s), greaterThanOrEqualTo(0));
+      }
+      for (final s in kGridSpacings) {
+        expect(snapTextY(-500, 'grid', s), greaterThanOrEqualTo(0));
+      }
+    });
+
     test('la letra escala con el renglón: 8 mm queda casi como antes', () {
       expect(fontForLine(textLine('lined', 8)), closeTo(20, .1));
       expect(fontForLine(textLine('lined', 10)) / fontForLine(textLine('lined', 7)), closeTo(10 / 7, 1e-9));

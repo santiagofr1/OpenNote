@@ -12,6 +12,7 @@ import '../data/updates.dart' show CancelFlag;
 import '../domain/domain.dart';
 import '../rendering/ink_layers.dart';
 import '../rendering/paper.dart';
+import '../rendering/pdf_cover.dart';
 import '../rendering/sheet_image_cache.dart';
 import '../rendering/text_layout.dart';
 import '../widgets/dialogs.dart';
@@ -116,6 +117,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   /// Dedo apoyado que todavía puede ser un toque (para elegir un elemento): dónde y con qué scroll apoyó.
   ({int pointer, Offset global, double scrollY})? _tapCand;
+  // arrastre de la hoja con dos dedos (con el zoom fijado): punto medio y scrolls de partida, y la velocidad para la inercia
+  Offset _panMid0 = Offset.zero;
+  double _panY0 = 0, _panX0 = 0;
+  VelocityTracker? _panVel;
 
   /// Punteros apoyados sobre la barrita o las manijas de la selección: no cuentan como un toque sobre la hoja.
   final _selUiPointers = <int>{};
@@ -176,7 +181,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     doc.addLoadListener(_onSheetLoaded);
     scroll.addListener(_onScroll);
     _imgs.still = true; // abierto y sin mover: lo que falte de las visibles se genera ya
-    _imgs.busy = () => pointer != null || live != null || erased != null || touch.pinching; // no generar con el lápiz en uso
+    _imgs.busy = () => pointer != null || live != null || _cover != null || erased != null || touch.pinching; // no generar con el lápiz en uso
     WidgetsBinding.instance.addPostFrameCallback((_) => scrollToSheet(widget.initialSheet, animate: false));
   }
 
@@ -202,6 +207,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       pointer = null;
       live = null;
       _endShapeHold();
+      _endCover();
       erased = null;
       eraserAt = null;
       liveTick.value++;
@@ -513,7 +519,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final f = texts.focused;
     if (f != null) byId(f.block.id);
     _stickyFocus.forEach(byId);
-    for (final s in [?live, ...?erased]) {
+    for (final s in [?live, ?_cover, ...?erased]) {
       out.addAll(doc.sheetIdsOfRect(s.bounds));
     }
     for (final it in doc.items.values) {
@@ -657,6 +663,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     }
     if (erased != null) {
       _eraseAt(p);
+      _coverAdd(p);
       eraserAt = p;
     } else if (s != null) {
       if (_snapFit != null) {
@@ -713,7 +720,11 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       return;
     }
     if (erased != null) {
-      if (erased!.isNotEmpty) _pushUndo(EditAction(removed: erased!));
+      if (_cover != null) {
+        _commitCover(erased!);
+      } else if (erased!.isNotEmpty) {
+        _pushUndo(EditAction(removed: erased!));
+      }
       erased = null;
       eraserAt = null;
       liveTick.value++;
@@ -742,9 +753,93 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   void _startErase(Offset p) {
     erased = [];
+    _endCover();
+    // sobre un PDF y sin tocar tinta: la goma corrige (pinta del color del fondo) todo el gesto
+    final pdf = strokesHit(doc, p, ts.eraserRadius).isEmpty ? _pdfAt(p) : null;
+    if (pdf != null) _startCover(pdf, p);
     _eraseAt(p);
     eraserAt = p;
     liveTick.value++;
+  }
+
+  // ---- corrector: la goma sobre un PDF importado ----
+  Item? _coverItem; // PDF sobre el que va el gesto
+  Stroke? _cover; // corrector en curso (se dibuja en vivo)
+  bool _coverColored = false; // ya llegó el color real
+  final _pendingCovers = <String, EditAction>{}; // confirmados que todavía esperan su color
+
+  /// El PDF (el de z más alta) que contiene [p], o null.
+  Item? _pdfAt(Offset p) {
+    Item? best;
+    for (final it in doc.items.values) {
+      if (it.type != 'pdf' || it.file == null || !it.rect.contains(p)) continue;
+      if (best == null || it.z > best.z) best = it;
+    }
+    return best;
+  }
+
+  void _endCover() {
+    _coverItem = null;
+    _cover = null;
+    _coverColored = false;
+  }
+
+  void _startCover(Item pdf, Offset p) {
+    final r = ts.eraserRadius;
+    final c = _cover = Stroke(newId('s'), kCoverTip, '#ffffff', 2 * r, [], 1);
+    _coverItem = pdf;
+    _coverColored = false;
+    _coverAdd(p);
+    final path = widget.store.media(pdf.file!).path;
+    unawaited(pdfCoverColor(pdf, p, r, path).then((argb) => _coverColorArrived(c.id, argb), onError: (_) {}));
+  }
+
+  /// Suma [p] (recortado al PDF) al corrector en curso.
+  void _coverAdd(Offset p) {
+    final c = _cover, it = _coverItem;
+    if (c == null || it == null) return;
+    final q = Offset(p.dx.clamp(it.x, it.x + it.w), p.dy.clamp(it.y, it.y + it.h));
+    appendInkPoint(c, q, .5);
+  }
+
+  /// Mismo corrector con otro color (el color de un trazo es final).
+  Stroke _recolored(Stroke s, String hex) => Stroke(s.id, s.k, hex, s.w, s.pts, s.o)..z = s.z;
+
+  void _coverColorArrived(String id, int argb) {
+    if (!mounted) return;
+    final hex = '#${(argb & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
+    final cur = _cover;
+    if (cur != null && cur.id == id) {
+      _coverColored = true;
+      _cover = _recolored(cur, hex);
+      liveTick.value++;
+      return;
+    }
+    final act = _pendingCovers.remove(id);
+    if (act == null) return;
+    final i = act.added.indexWhere((s) => s.id == id);
+    if (i < 0) return;
+    final old = act.added[i], fin = _recolored(old, hex);
+    act.added[i] = fin; // deshacer/rehacer usan el trazo final
+    if (identical(doc.strokes[id], old)) {
+      doc.strokes[id] = fin;
+      doc.markDirtyElement(fin);
+      _changed();
+    }
+  }
+
+  /// Suelta el gesto: el corrector pasa a la página junto con la tinta que se llevó, en un solo paso de deshacer.
+  void _commitCover(List<Stroke> removed) {
+    final s = _cover!;
+    final colored = _coverColored;
+    _endCover();
+    s.z = doc.nextZ(); // arriba de todo
+    doc.strokes[s.id] = s;
+    final act = EditAction(added: [s], removed: removed);
+    if (!colored) _pendingCovers[s.id] = act;
+    _pushUndo(act);
+    _growIfNeeded(s.bounds.bottom);
+    _changed();
   }
 
   void _eraseAt(Offset pt) {
@@ -1105,18 +1200,48 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     _createTextAt(_toPage(d.localPosition));
   }
 
+  /// Un toque en modo texto en el punto [p] de la hoja (para los tests).
+  @visibleForTesting
+  void tapTextAt(Offset p) => _createTextAt(p);
+
   void _createTextAt(Offset p) {
     if (!_loadedAt(p.dy)) {
       _requestSync();
       return;
     }
-    final x = p.dx.clamp(16.0, kW - 120);
-    var y = max(0.0, doc.snapTextY(p.dy, floor: true)); // el renglón de esa hoja
-    // en el espacio entre hojas (o sin lugar para un renglón): a la siguiente
-    if (y % kSheetStep > kSheetH - doc.lineAt(y) && y ~/ kSheetStep < doc.sheetCount - 1) {
+    final x = p.dx.clamp(4.0, kW - 40);
+    var y = doc.snapTextY(p.dy, floor: true); // el renglón de esa hoja (puede ser uno virtual, arriba del primero)
+    // pasa a la hoja siguiente solo si el renglón no entra en esta (o cae en el espacio entre hojas)
+    if (y % kSheetStep + doc.lineAt(y) > kSheetH && y ~/ kSheetStep < doc.sheetCount - 1) {
       y = doc.snapTextY((y ~/ kSheetStep + 1) * kSheetStep, floor: true);
     }
-    _placeText(x, y);
+    if (_followBlockAbove(p)) return;
+    _placeText(x.toDouble(), y);
+  }
+
+  /// Tocar debajo del último renglón de un bloque (a lo sumo 3 renglones) y en su ancho sigue ese bloque:
+  /// agrega los párrafos que faltan y deja el cursor en el último. false si no hay bloque así.
+  bool _followBlockAbove(Offset p) {
+    final k = p.dy ~/ kSheetStep;
+    TextBlock? best;
+    var bestRows = 0, bestGap = double.infinity;
+    for (final t in doc.texts.values) {
+      if (t.y ~/ kSheetStep != k || t.transformed) continue;
+      final line = doc.lineAt(t.y), r = textRect(t, line), gap = p.dy - r.bottom;
+      if (gap < 0 || p.dx < t.x - 2 * line || p.dx > t.x + t.w) continue;
+      final rows = (gap / line).floor() + 1;
+      if (rows > 3 || gap >= bestGap) continue;
+      best = t;
+      bestRows = rows;
+      bestGap = gap;
+    }
+    final ed = best == null ? null : texts.editor(best.id);
+    if (best == null || ed == null) return false;
+    ed.appendParagraphs(bestRows);
+    showKeyboard();
+    _textEdited(best);
+    _changed();
+    return true;
   }
 
   /// Un bloque nuevo y vacío en ([x], [y]) (y ya sobre el renglón), con el foco y el teclado.
@@ -1195,6 +1320,20 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     if (t != Tool.text) FocusScope.of(context).unfocus();
     // por si al abrir la app no había internet: reintenta la bajada del modelo de la letra, en silencio
     if (t == Tool.title) unawaited(handwriting?.ensureModel());
+  }
+
+  // ---- atajos de teclado de la pantalla del cuaderno (fuera de los textos) ----
+  /// Algún campo de texto del editor tiene el foco.
+  bool get textFocused => texts.anyFocused;
+
+  void undo() => _undoRedo(undo: true);
+  void redo() => _undoRedo(undo: false);
+
+  /// Elegir una herramienta con una tecla suelta (P, H, T, S). Texto abre un bloque, como el botón.
+  void pickTool(Tool t) {
+    if (widget.readOnly) return;
+    if (t != Tool.text && ts.tool == t) return;
+    _toolTap(t);
   }
 
   void _toolTap(Tool t) {
@@ -1303,6 +1442,16 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       pull.cancel();
       setState(() {});
     }
+    // con el zoom fijado, dos dedos arrastran la hoja (con inercia al soltar)
+    if (touch.length == 2 && ts.zoomLocked && pointer == null) {
+      final mid = touch.midpoint!;
+      touch.startPan();
+      pull.cancel();
+      _panMid0 = mid;
+      _panY0 = scroll.hasClients ? scroll.offset : 0;
+      _panX0 = hscroll.hasClients ? hscroll.offset : 0;
+      _panVel = VelocityTracker.withKind(PointerDeviceKind.touch)..addPosition(e.timeStamp, mid);
+    }
   }
 
   void _touchMove(PointerMoveEvent e) {
@@ -1311,6 +1460,19 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     stillPress.moved(e.position);
     final c = _tapCand;
     if (c != null && c.pointer == e.pointer && (e.position - c.global).distance > 10) _tapCand = null; // arrastra: no es un toque
+    if (touch.panning) {
+      final mid = touch.midpoint;
+      if (mid == null) return;
+      final d = mid - _panMid0;
+      if (scroll.hasClients && scroll.position.maxScrollExtent > 0) {
+        scroll.jumpTo((_panY0 - d.dy).clamp(0.0, scroll.position.maxScrollExtent));
+      }
+      if (hscroll.hasClients && hscroll.position.maxScrollExtent > 0) {
+        hscroll.jumpTo((_panX0 - d.dx).clamp(0.0, hscroll.position.maxScrollExtent));
+      }
+      _panVel?.addPosition(e.timeStamp, mid);
+      return;
+    }
     final p = touch.pinch();
     if (p == null) return;
     final box = _viewportKey.currentContext!.findRenderObject() as RenderBox;
@@ -1331,7 +1493,31 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       setState(() => touch.pinching = false);
       widget.onPrefsChanged();
     }
+    if (touch.panning && touch.length < 2) {
+      touch.endPan();
+      _panInertia();
+    } else if (touch.panning && touch.midpoint != null) {
+      // se levantó uno de los dedos y quedan otros dos: el arrastre sigue desde acá, sin salto
+      _panMid0 = touch.midpoint!;
+      _panY0 = scroll.hasClients ? scroll.offset : 0;
+      _panX0 = hscroll.hasClients ? hscroll.offset : 0;
+    }
     if (touch.count == 0) pull.cancel(); // soltó antes de completar: vuelve
+  }
+
+  /// Inercia al soltar el arrastre de dos dedos: sigue con la velocidad que llevaba.
+  void _panInertia() {
+    final v = _panVel?.getVelocity().pixelsPerSecond;
+    _panVel = null;
+    if (v == null) return;
+    void go(ScrollController c, double vel) {
+      if (!c.hasClients || vel.abs() <= 50) return;
+      final pos = c.position;
+      if (pos is ScrollPositionWithSingleContext) pos.goBallistic(-vel);
+    }
+
+    go(scroll, v.dy);
+    go(hscroll, v.dx);
   }
 
   void _toggleZoomLock() {
@@ -1596,6 +1782,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     sel.clear();
     pointer = null;
     live = null;
+    _endCover();
     erased = null;
     eraserAt = null;
     _changed();
@@ -1845,8 +2032,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
               onNotification: (n) => pull.onScroll(n, touching: touch.count > 0),
               child: ScrollConfiguration(
                 // el lápiz NO scrollea: solo dedo y touchpad
+                // con el zoom fijado el dedo solo NO mueve la hoja (así la palma no la corre al escribir): se mueve con
+                // dos dedos; la rueda del mouse y el trackpad siguen andando
                 behavior: ScrollConfiguration.of(context).copyWith(
-                  dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.trackpad},
+                  dragDevices: {if (!ts.zoomLocked) PointerDeviceKind.touch, PointerDeviceKind.trackpad},
                   scrollbars: true,
                 ),
                 child: SingleChildScrollView(
@@ -2154,7 +2343,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       doc: doc,
       scale: scale,
       sel: sel,
-      live: live,
+      live: _cover ?? live,
       eraserAt: eraserAt,
       eraserRadius: ts.eraserRadius,
       visible: _visiblePage(),

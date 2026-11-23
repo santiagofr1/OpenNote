@@ -149,13 +149,13 @@ Future<bool> saveSheetPng(Storage store, NotebookDoc doc, int sheet, String name
   return uri != null;
 }
 
-/// Un PNG por hoja, de a una (no carga todo en memoria). Con varias hojas arma un ZIP con los nombres
-/// "`cuaderno` - hoja 01.png" (ceros según la cantidad); con una sola devuelve el PNG directo (`zip` falso).
-/// Si el cuaderno tiene más de una sección el nombre lleva la sección: "`cuaderno` - `sección` - hoja 01.png" (el número
-/// es el de la hoja dentro de su sección). [sections]: ids de las secciones a incluir (todas si es null).
-/// [onProgress] recibe (hechas, total). Si [cancelled] da true entre hoja y hoja, devuelve null.
-Future<({Uint8List bytes, bool zip})?> buildNotebookPngs(Storage store, NotebookDoc doc,
-    {void Function(int, int)? onProgress, bool Function()? cancelled, Set<String>? sections}) async {
+/// Cada hoja como PNG, de a una (no carga todo en memoria), con el nombre de archivo que le toca:
+/// "`cuaderno` - hoja 01.png" (ceros según la cantidad); si el cuaderno tiene más de una sección lleva la sección:
+/// "`cuaderno` - `sección` - hoja 01.png" (el número es el de la hoja dentro de su sección). Los nombres no se pisan.
+/// [sections]: ids de las secciones a incluir (todas si es null). [onProgress] recibe (hechas, total) antes de cada hoja.
+/// Si [cancelled] da true entre hoja y hoja, el flujo termina sin dar las que faltan.
+Stream<({String name, Uint8List png})> notebookPngs(Storage store, NotebookDoc doc,
+    {Set<String>? sections, void Function(int, int)? onProgress, bool Function()? cancelled}) async* {
   final refs = exportSheets(doc.nb, sections: sections);
   final n = refs.length;
   final safe = safeFileName(doc.nb.name).trim();
@@ -164,11 +164,9 @@ Future<({Uint8List bytes, bool zip})?> buildNotebookPngs(Storage store, Notebook
   final width = '$most'.length < 2 ? 2 : '$most'.length;
   final multi = doc.nb.sections.length > 1;
   final used = <String>{};
-  final zip = Archive();
-  Uint8List? single;
   for (var d = 0; d < n; d++) {
     final e = refs[d], k = e.k;
-    if (cancelled?.call() ?? false) return null;
+    if (cancelled?.call() ?? false) return;
     onProgress?.call(d, n);
     final (src, i) = await exportSource(store, doc, e);
     final images = await loadImages(store, src, sheet: i);
@@ -180,16 +178,29 @@ Future<({Uint8List bytes, bool zip})?> buildNotebookPngs(Storage store, Notebook
         img.dispose();
       }
     }
-    if (n == 1) single = png;
     final sec = safeFileName(e.section.name).trim();
     final base = '$name - ${multi ? '${sec.isEmpty ? 'Sección' : sec} - ' : ''}hoja ${'${k + 1}'.padLeft(width, '0')}';
     var file = base;
     for (var c = 2; !used.add(file); c++) {
       file = '$base ($c)'; // dos secciones con el mismo nombre: no se pisan
     }
-    zip.add(ArchiveFile.bytes('$file.png', png));
+    yield (name: '$file.png', png: png);
   }
   onProgress?.call(n, n);
+}
+
+/// Un PNG por hoja ([notebookPngs]). Con varias hojas arma un ZIP; con una sola devuelve el PNG directo (`zip` falso).
+/// [onProgress] recibe (hechas, total). Si [cancelled] da true entre hoja y hoja, devuelve null.
+Future<({Uint8List bytes, bool zip})?> buildNotebookPngs(Storage store, NotebookDoc doc,
+    {void Function(int, int)? onProgress, bool Function()? cancelled, Set<String>? sections}) async {
+  final n = exportSheets(doc.nb, sections: sections).length;
+  final zip = Archive();
+  Uint8List? single;
+  await for (final p in notebookPngs(store, doc, sections: sections, onProgress: onProgress, cancelled: cancelled)) {
+    if (n == 1) single = p.png;
+    zip.add(ArchiveFile.bytes(p.name, p.png));
+  }
+  if (zip.length < n) return null; // se canceló
   if (single != null) return (bytes: single, zip: false);
   return (bytes: Uint8List.fromList(ZipEncoder().encode(zip)), zip: true);
 }
