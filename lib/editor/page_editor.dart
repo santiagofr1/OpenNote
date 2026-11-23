@@ -12,6 +12,7 @@ import '../data/updates.dart' show CancelFlag;
 import '../domain/domain.dart';
 import '../rendering/ink_layers.dart';
 import '../rendering/paper.dart';
+import '../rendering/pdf_cover.dart';
 import '../rendering/sheet_image_cache.dart';
 import '../rendering/text_layout.dart';
 import '../widgets/dialogs.dart';
@@ -176,7 +177,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     doc.addLoadListener(_onSheetLoaded);
     scroll.addListener(_onScroll);
     _imgs.still = true; // abierto y sin mover: lo que falte de las visibles se genera ya
-    _imgs.busy = () => pointer != null || live != null || erased != null || touch.pinching; // no generar con el lápiz en uso
+    _imgs.busy = () => pointer != null || live != null || _cover != null || erased != null || touch.pinching; // no generar con el lápiz en uso
     WidgetsBinding.instance.addPostFrameCallback((_) => scrollToSheet(widget.initialSheet, animate: false));
   }
 
@@ -202,6 +203,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       pointer = null;
       live = null;
       _endShapeHold();
+      _endCover();
       erased = null;
       eraserAt = null;
       liveTick.value++;
@@ -513,7 +515,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final f = texts.focused;
     if (f != null) byId(f.block.id);
     _stickyFocus.forEach(byId);
-    for (final s in [?live, ...?erased]) {
+    for (final s in [?live, ?_cover, ...?erased]) {
       out.addAll(doc.sheetIdsOfRect(s.bounds));
     }
     for (final it in doc.items.values) {
@@ -657,6 +659,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     }
     if (erased != null) {
       _eraseAt(p);
+      _coverAdd(p);
       eraserAt = p;
     } else if (s != null) {
       if (_snapFit != null) {
@@ -713,7 +716,11 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       return;
     }
     if (erased != null) {
-      if (erased!.isNotEmpty) _pushUndo(EditAction(removed: erased!));
+      if (_cover != null) {
+        _commitCover(erased!);
+      } else if (erased!.isNotEmpty) {
+        _pushUndo(EditAction(removed: erased!));
+      }
       erased = null;
       eraserAt = null;
       liveTick.value++;
@@ -742,9 +749,93 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   void _startErase(Offset p) {
     erased = [];
+    _endCover();
+    // sobre un PDF y sin tocar tinta: la goma corrige (pinta del color del fondo) todo el gesto
+    final pdf = strokesHit(doc, p, ts.eraserRadius).isEmpty ? _pdfAt(p) : null;
+    if (pdf != null) _startCover(pdf, p);
     _eraseAt(p);
     eraserAt = p;
     liveTick.value++;
+  }
+
+  // ---- corrector: la goma sobre un PDF importado ----
+  Item? _coverItem; // PDF sobre el que va el gesto
+  Stroke? _cover; // corrector en curso (se dibuja en vivo)
+  bool _coverColored = false; // ya llegó el color real
+  final _pendingCovers = <String, EditAction>{}; // confirmados que todavía esperan su color
+
+  /// El PDF (el de z más alta) que contiene [p], o null.
+  Item? _pdfAt(Offset p) {
+    Item? best;
+    for (final it in doc.items.values) {
+      if (it.type != 'pdf' || it.file == null || !it.rect.contains(p)) continue;
+      if (best == null || it.z > best.z) best = it;
+    }
+    return best;
+  }
+
+  void _endCover() {
+    _coverItem = null;
+    _cover = null;
+    _coverColored = false;
+  }
+
+  void _startCover(Item pdf, Offset p) {
+    final r = ts.eraserRadius;
+    final c = _cover = Stroke(newId('s'), kCoverTip, '#ffffff', 2 * r, [], 1);
+    _coverItem = pdf;
+    _coverColored = false;
+    _coverAdd(p);
+    final path = widget.store.media(pdf.file!).path;
+    unawaited(pdfCoverColor(pdf, p, r, path).then((argb) => _coverColorArrived(c.id, argb), onError: (_) {}));
+  }
+
+  /// Suma [p] (recortado al PDF) al corrector en curso.
+  void _coverAdd(Offset p) {
+    final c = _cover, it = _coverItem;
+    if (c == null || it == null) return;
+    final q = Offset(p.dx.clamp(it.x, it.x + it.w), p.dy.clamp(it.y, it.y + it.h));
+    appendInkPoint(c, q, .5);
+  }
+
+  /// Mismo corrector con otro color (el color de un trazo es final).
+  Stroke _recolored(Stroke s, String hex) => Stroke(s.id, s.k, hex, s.w, s.pts, s.o)..z = s.z;
+
+  void _coverColorArrived(String id, int argb) {
+    if (!mounted) return;
+    final hex = '#${(argb & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
+    final cur = _cover;
+    if (cur != null && cur.id == id) {
+      _coverColored = true;
+      _cover = _recolored(cur, hex);
+      liveTick.value++;
+      return;
+    }
+    final act = _pendingCovers.remove(id);
+    if (act == null) return;
+    final i = act.added.indexWhere((s) => s.id == id);
+    if (i < 0) return;
+    final old = act.added[i], fin = _recolored(old, hex);
+    act.added[i] = fin; // deshacer/rehacer usan el trazo final
+    if (identical(doc.strokes[id], old)) {
+      doc.strokes[id] = fin;
+      doc.markDirtyElement(fin);
+      _changed();
+    }
+  }
+
+  /// Suelta el gesto: el corrector pasa a la página junto con la tinta que se llevó, en un solo paso de deshacer.
+  void _commitCover(List<Stroke> removed) {
+    final s = _cover!;
+    final colored = _coverColored;
+    _endCover();
+    s.z = doc.nextZ(); // arriba de todo
+    doc.strokes[s.id] = s;
+    final act = EditAction(added: [s], removed: removed);
+    if (!colored) _pendingCovers[s.id] = act;
+    _pushUndo(act);
+    _growIfNeeded(s.bounds.bottom);
+    _changed();
   }
 
   void _eraseAt(Offset pt) {
@@ -1596,6 +1687,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     sel.clear();
     pointer = null;
     live = null;
+    _endCover();
     erased = null;
     eraserAt = null;
     _changed();
@@ -2154,7 +2246,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       doc: doc,
       scale: scale,
       sel: sel,
-      live: live,
+      live: _cover ?? live,
       eraserAt: eraserAt,
       eraserRadius: ts.eraserRadius,
       visible: _visiblePage(),

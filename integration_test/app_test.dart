@@ -33,6 +33,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:pdf/pdf.dart' show PdfColor;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
@@ -907,6 +908,81 @@ void main() {
     await t.tap(find.byTooltip('Deshacer'));
     await settle(t, 800);
     expect(ed.doc.sheetCount, 3, reason: 'importar es un solo paso de deshacer');
+  });
+
+  testWidgets('PDF importado: la goma sobre la página pinta un corrector del color del fondo', (t) async {
+    final pdfBytes = (await t.runAsync(() async {
+      final d = pw.Document();
+      d.addPage(pw.Page(
+        margin: const pw.EdgeInsets.all(40),
+        pageTheme: pw.PageTheme(
+          margin: const pw.EdgeInsets.all(40),
+          buildBackground: (_) => pw.FullPage(ignoreMargins: true, child: pw.Container(color: const PdfColor.fromInt(0xFFFFF0C0))),
+        ),
+        build: (_) => pw.Text('Tema 1', style: pw.TextStyle(fontSize: 40)),
+      ));
+      return Uint8List.fromList(await d.save());
+    }))!;
+    final savedPick = Pickers.pdf;
+    addTearDown(() => Pickers.pdf = savedPick);
+    Pickers.pdf = () async => (pdfBytes, 'Fondo');
+    await start(t);
+    await createNotebook(t, 'Goma en PDF');
+    final ed = editor(t);
+    await t.tap(find.byKey(const Key('insert')));
+    await settle(t);
+    await t.tap(find.text('PDF'));
+    await settle(t, 1500);
+    final pdf = ed.doc.items.values.firstWhere((i) => i.type == 'pdf');
+    await settle(t, 800);
+
+    // goma (punta de goma del lápiz) por el medio de la página, lejos del texto
+    final toScreen = docToScreen(t);
+    final y = pdf.y + pdf.h * .6;
+    final a = toScreen(Offset(pdf.x + pdf.w * .2, y)), b = toScreen(Offset(pdf.x + pdf.w * .8, y));
+    final g = await t.startGesture(a, kind: PointerDeviceKind.invertedStylus);
+    for (var i = 1; i <= 10; i++) {
+      await g.moveTo(Offset.lerp(a, b, i / 10)!);
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    await g.up();
+    await settle(t, 300);
+    final covers = [for (final s in ed.doc.strokes.values) if (s.k == kCoverTip) s];
+    expect(covers, hasLength(1), reason: 'la goma sobre el PDF deja un corrector');
+
+    // el color real llega (primero es blanco) y es el del fondo
+    final sw = Stopwatch()..start();
+    while (ed.doc.strokes[covers.single.id]!.c == '#ffffff' && sw.elapsedMilliseconds < 5000) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await t.pump();
+    }
+    final cover = ed.doc.strokes[covers.single.id]!;
+    expect(cover.c, isNot('#ffffff'));
+
+    // exportada la hoja, el centro del trazo es del color del fondo
+    final s = Storage(root: root);
+    await s.init();
+    final sheet = ed.doc.sheetOfY(pdf.y);
+    final px = await t.runAsync(() async {
+      final images = await loadImages(s, ed.doc, sheet: sheet);
+      final png = await renderSheetPng(ed.doc, sheet, images: images);
+      for (final im in images.values) {
+        im.dispose();
+      }
+      final img = await decodeImage(png);
+      final data = (await img.toByteData())!.buffer.asUint8List();
+      final k = img.width / kW;
+      final cx = (cover.pts[0] + cover.pts[cover.pts.length - 3]) / 2, cy = cover.pts[1] - sheet * kSheetStep;
+      final i = ((cy * k).round() * img.width + (cx * k).round()) * 4;
+      final out = [data[i], data[i + 1], data[i + 2]];
+      img.dispose();
+      return out;
+    });
+    final want = cover.color.toARGB32();
+    expect(px![0], closeTo((want >> 16) & 0xFF, 6));
+    expect(px[1], closeTo((want >> 8) & 0xFF, 6));
+    expect(px[2], closeTo(want & 0xFF, 6));
+    expect((px[0] - 0xFF).abs() + (px[2] - 0xFF).abs(), greaterThan(30), reason: 'no es blanco: es el fondo del PDF');
   });
 
   Future<void> createFolder(WidgetTester t, String name) async {

@@ -170,6 +170,7 @@ void paintStrokeLegacy(Canvas c, Stroke s) {
       _pathStroke(c, s, s.color.withValues(alpha: s.o), StrokeCap.butt);
       return;
     case 'fine':
+    case kCoverTip:
       _pathStroke(c, s, s.color.withValues(alpha: s.o), StrokeCap.round);
       return;
     case 'pencil':

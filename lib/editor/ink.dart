@@ -50,6 +50,7 @@ void appendInkPoint(Stroke s, Offset p, double pressure) {
   s.invalidate();
 }
 
-/// Trazos que toca la goma de radio [r] en [pt].
+/// Trazos que toca la goma de radio [r] en [pt]. Los correctores del PDF ([kCoverTip]) no cuentan: se sacan con
+/// Deshacer o seleccionándolos.
 List<Stroke> strokesHit(NotebookDoc doc, Offset pt, double r) =>
-    [for (final s in doc.strokes.values) if (s.hitBy(pt, r)) s];
+    [for (final s in doc.strokes.values) if (s.k != kCoverTip && s.hitBy(pt, r)) s];
