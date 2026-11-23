@@ -15,13 +15,13 @@ const papers = [
 ];
 
 /// Lo elegido en el diálogo: [all] aplica a todas las hojas (y a las nuevas); si no, solo a la hoja visible.
-typedef StyleChoice = ({String bg, String paper, double spacing, bool all});
+typedef StyleChoice = ({String bg, String paper, String size, double spacing, bool all});
 
-/// Estilo de hoja: fondo, color de papel y espaciado (en mm de A4), con vista previa.
+/// Estilo de hoja: fondo, color de papel y tamaño y espaciado (en mm reales del tamaño de la hoja), con vista previa.
 /// Parte del estilo de la hoja [sheet] (la que se está viendo). Devuelve lo elegido, o null si se canceló.
 Future<StyleChoice?> showStyleDialog(BuildContext context, NotebookDoc doc, {required int sheet}) async {
   final cur = doc.sheets[sheet.clamp(0, doc.sheetCount - 1)];
-  var bg = cur.bg, paper = cur.paper, spacing = cur.spacing, all = true;
+  var bg = cur.bg, paper = cur.paper, size = cur.size, spacing = cur.spacing, all = true;
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => StatefulBuilder(builder: (ctx, set) {
@@ -45,6 +45,13 @@ Future<StyleChoice?> showStyleDialog(BuildContext context, NotebookDoc doc, {req
       final title = TextStyle(fontWeight: FontWeight.w500, color: cs.onSurface);
       final options = spacingsFor(bg);
       final controls = Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('Tamaño', style: title),
+        const SizedBox(height: 8),
+        Wrap(spacing: 8, children: [
+          for (final (v, label) in kPaperSizes)
+            ChoiceChip(key: Key('size-$v'), label: Text(label), selected: size == v, onSelected: (_) => set(() => size = v)),
+        ]),
+        const SizedBox(height: 18),
         Text('Fondo', style: title),
         const SizedBox(height: 8),
         Wrap(spacing: 8, runSpacing: 8, children: [
@@ -101,7 +108,7 @@ Future<StyleChoice?> showStyleDialog(BuildContext context, NotebookDoc doc, {req
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Expanded(child: controls),
               const SizedBox(width: 20),
-              PaperPreview(bg: bg, paper: paper, spacing: spacing, width: 130),
+              PaperPreview(bg: bg, paper: paper, spacing: spacing, size: size, width: 130),
             ]),
           ),
         ),
@@ -112,5 +119,5 @@ Future<StyleChoice?> showStyleDialog(BuildContext context, NotebookDoc doc, {req
       );
     }),
   );
-  return ok == true ? (bg: bg, paper: paper, spacing: spacing, all: all) : null;
+  return ok == true ? (bg: bg, paper: paper, size: size, spacing: spacing, all: all) : null;
 }

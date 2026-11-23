@@ -31,7 +31,7 @@ List<ExportSheet> exportSheets(Notebook nb, {Set<String>? sections, List<int>? o
   ];
 }
 
-/// Arma el PDF del cuaderno: una hoja A4 por cada hoja, cada una con su fondo y su papel. Las secciones elegidas
+/// Arma el PDF del cuaderno: una página del tamaño de cada hoja, cada una con su fondo y su papel. Las secciones elegidas
 /// ([sections], todas si es null) van una atrás de la otra, en su orden.
 /// [only]: índices de las hojas de la sección abierta a incluir. [onProgress] recibe (hechas, total).
 Future<Uint8List> buildNotebookPdf(Storage store, NotebookDoc nb,
@@ -51,8 +51,9 @@ Future<Uint8List> buildNotebookPdf(Storage store, NotebookDoc nb,
         img.dispose();
       }
     }
+    final m = src.sheets[i];
     pdf.addPage(pw.Page(
-      pageFormat: PdfPageFormat.a4,
+      pageFormat: PdfPageFormat(paperWidthMm(m.size) * PdfPageFormat.mm, paperHeightMm(m.size) * PdfPageFormat.mm),
       margin: pw.EdgeInsets.zero,
       build: (_) => pw.Image(pw.MemoryImage(png), fit: pw.BoxFit.fill),
     ));

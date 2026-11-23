@@ -17,7 +17,7 @@ void paintSheet(Canvas c, NotebookDoc doc, int sheet, double pxPerUnit, {Map<Str
   c.clipRect(const Rect.fromLTWH(0, 0, kW, kSheetH));
   c.drawRect(const Rect.fromLTWH(0, 0, kW, kSheetH), Paint()..color = parseColor(meta.paper));
   // en miniaturas chicas las líneas no pueden ser más finas que esto o desaparecen
-  paintPaperPattern(c, meta.bg, meta.spacing, ruleWidth: max(.6, 1 / pxPerUnit), marginWidth: max(.8, 1.2 / pxPerUnit));
+  paintPaperPattern(c, meta.bg, meta.spacing, size: meta.size, ruleWidth: max(.6, 1 / pxPerUnit), marginWidth: max(.8, 1.2 / pxPerUnit));
   c.translate(0, -top);
   final visible = Rect.fromLTWH(0, top, kW, kSheetH);
   // un solo orden de dibujo para todo; de cada tanda de trazos seguidos, los resaltadores van primero

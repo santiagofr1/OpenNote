@@ -5,11 +5,13 @@ import 'package:flutter/material.dart';
 import '../domain/domain.dart';
 import '../rendering/paper.dart';
 
-/// Vista previa de una hoja A4 con su papel y su fondo (mismo dibujo que las miniaturas y el PDF).
+/// Vista previa de una hoja con su papel y su fondo (mismo dibujo que las miniaturas y el PDF).
 class PaperPreview extends StatelessWidget {
   final String bg, paper;
+  final String size;
   final double spacing, width;
-  const PaperPreview({super.key, required this.bg, required this.paper, required this.spacing, this.width = 150});
+  const PaperPreview(
+      {super.key, required this.bg, required this.paper, required this.spacing, this.size = 'a4', this.width = 150});
 
   @override
   Widget build(BuildContext context) {
@@ -21,25 +23,25 @@ class PaperPreview extends StatelessWidget {
       child: CustomPaint(
         key: const Key('stylePreview'),
         size: Size(width, width * kSheetH / kW),
-        painter: _PreviewPainter(bg, paper, spacing),
+        painter: _PreviewPainter(bg, paper, spacing, size),
       ),
     );
   }
 }
 
 class _PreviewPainter extends CustomPainter {
-  final String bg, paper;
+  final String bg, paper, paperSize;
   final double spacing;
-  _PreviewPainter(this.bg, this.paper, this.spacing);
+  _PreviewPainter(this.bg, this.paper, this.spacing, this.paperSize);
 
   @override
   void paint(Canvas c, Size size) {
     final k = size.width / kW;
     c.scale(k);
     c.drawRect(const Rect.fromLTWH(0, 0, kW, kSheetH), Paint()..color = parseColor(paper));
-    paintPaperPattern(c, bg, spacing, ruleWidth: max(.6, 1 / k), marginWidth: max(.8, 1.2 / k));
+    paintPaperPattern(c, bg, spacing, size: paperSize, ruleWidth: max(.6, 1 / k), marginWidth: max(.8, 1.2 / k));
   }
 
   @override
-  bool shouldRepaint(_PreviewPainter o) => o.bg != bg || o.paper != paper || o.spacing != spacing;
+  bool shouldRepaint(_PreviewPainter o) => o.bg != bg || o.paper != paper || o.spacing != spacing || o.paperSize != paperSize;
 }

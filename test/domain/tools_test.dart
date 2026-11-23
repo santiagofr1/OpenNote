@@ -53,6 +53,40 @@ void main() {
     expect(t.pen.color, '#1d4ed8');
   });
 
+  test('favoritos: pickColor no los reordena, setFavorite cambia solo un lugar y cada herramienta tiene los suyos', () {
+    final t = ToolState();
+    final antes = List<String>.from(t.favorites);
+    t.pickColor(antes[2]);
+    expect(t.favorites, antes);
+    t.setFavorite(2, '#123456');
+    expect(t.favorites, [antes[0], antes[1], '#123456', antes[3]]);
+    t.setFavorite(4, '#000000');
+    t.setFavorite(-1, '#000000');
+    expect(t.favorites.length, 4);
+    expect(t.penFav[2], '#123456');
+    t.tool = Tool.hl;
+    expect(t.favorites, same(t.hlFav));
+    expect(t.hlFav[2], isNot('#123456'));
+    t.tool = Tool.paint;
+    expect(t.favorites, same(t.paintFav));
+  });
+
+  test('favoritos: ida y vuelta; si están mal en las prefs quedan los de siempre', () {
+    final a = ToolState()
+      ..setFavorite(1, '#abcdef')
+      ..tool = Tool.paint
+      ..setFavorite(3, '#fedcba');
+    final b = ToolState()..load(jsonDecode(jsonEncode(a.toJson())) as Map);
+    expect(b.penFav, a.penFav);
+    expect(b.paintFav, a.paintFav);
+    expect(b.hlFav, a.hlFav);
+    final d = ToolState();
+    final c = ToolState()..load({'penFav': ['#111111', '#222222', '#333333'], 'hlFav': ['#111111', 'rojo', '#333333', '#444444']});
+    expect(c.penFav, d.penFav);
+    expect(c.hlFav, d.hlFav);
+    expect(c.paintFav, d.paintFav);
+  });
+
   test('current y eraserRadius según la herramienta', () {
     final t = ToolState();
     expect(t.current, same(t.pen));
