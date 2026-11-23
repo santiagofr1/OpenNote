@@ -2151,7 +2151,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       eraserAt: eraserAt,
       eraserRadius: ts.eraserRadius,
       visible: _visiblePage(),
-      outline: ts.tool == Tool.title ? (_outline ??= buildOutline(doc.nb)) : null);
+      outline: _outline ??= buildOutline(doc.nb));
 
   Widget _textBlock(TextBlock t, bool textMode) {
     final ed = texts.editor(t.id);
