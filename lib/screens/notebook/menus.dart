@@ -31,6 +31,7 @@ Future<String?> showMoreMenu(BuildContext context, Offset at, Notebook nb) => sh
       items: [
         const PopupMenuItem(value: 'search', child: MenuRow(Symbols.search, 'Buscar')),
         const PopupMenuItem(value: 'style', child: MenuRow(Symbols.palette, 'Estilo de hoja')),
+        const PopupMenuItem(value: 'shortcuts', child: MenuRow(Symbols.keyboard, 'Atajos de teclado')),
         const PopupMenuDivider(),
         const PopupMenuItem(value: 'export', child: MenuRow(Symbols.ios_share, 'Exportar')),
         const PopupMenuDivider(),

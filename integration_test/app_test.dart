@@ -6,7 +6,6 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:apuntes/app.dart';
@@ -31,6 +30,7 @@ import 'package:apuntes/sync/sync_engine.dart';
 import 'package:archive/archive.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:pdf/pdf.dart' show PdfColor;
@@ -572,6 +572,48 @@ void main() {
     expect(saved.body.paras[0].runs.first.style.bold, isTrue);
   });
 
+  testWidgets('texto con teclado como en Word: va donde se toca, tocar debajo sigue el bloque y Ctrl+Shift+H resalta (issue #16)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Word');
+    final ed = editor(t);
+    await t.tap(find.byTooltip('Texto con teclado'));
+    await settle(t, 600);
+    FocusManager.instance.primaryFocus?.unfocus(); // el bloque vacío del botón se borra solo
+    await settle(t, 300);
+    expect(ed.doc.texts, isEmpty);
+
+    // en el margen de arriba, antes de la primera línea del rayado
+    ed.tapTextAt(const Offset(150, 20));
+    await settle(t, 400);
+    var b = ed.doc.texts.values.single;
+    expect(b.y, lessThan(mmToUnits(24)), reason: 'queda arriba de la primera línea');
+    await t.enterText(find.byKey(Key('para-${b.id}-0')), 'hola');
+    await settle(t, 300);
+    FocusManager.instance.primaryFocus?.unfocus();
+    await settle(t, 300);
+
+    // justo debajo: sigue el mismo bloque
+    final rect = textRect(b, ed.doc.lineAt(b.y));
+    ed.tapTextAt(Offset(170, rect.bottom + 3));
+    await settle(t, 400);
+    expect(ed.doc.texts.length, 1);
+    b = ed.doc.texts.values.single;
+    expect(b.body.paras.length, 2);
+    await t.enterText(find.byKey(Key('para-${b.id}-1')), 'chau');
+    await settle(t, 300);
+
+    // Ctrl+A y Ctrl+Shift+H: el párrafo queda resaltado
+    await t.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await t.sendKeyEvent(LogicalKeyboardKey.keyA);
+    await t.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await t.sendKeyEvent(LogicalKeyboardKey.keyH);
+    await t.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await t.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await settle(t, 300);
+    expect(b.body.paras[1].runs.every((r) => r.style.highlight != null), isTrue);
+    expect(b.body.paras[1].text, 'chau');
+  });
+
   testWidgets('texto: tamaño en puntos desde la barra, A+ / A- y queda guardado', (t) async {
     await start(t);
     await createNotebook(t, 'Tamaño');
@@ -802,6 +844,44 @@ void main() {
     expect(ed.widget.tools.zoom, fixed);
     expect(find.byKey(const Key('nbTitle')), findsOneWidget, reason: 'mantener dos dedos no abre el menú de pegar');
     expect(find.text('Pegar acá'), findsNothing);
+  });
+
+  testWidgets('candado del zoom: un dedo no mueve la hoja y dos dedos sí', (t) async {
+    await start(t);
+    await createNotebook(t, 'Candado');
+    final ed = editor(t);
+    ed.widget.tools.zoomLocked = false;
+    final c = sheetCenter(t);
+
+    Future<void> drag(int fingers) async {
+      final gs = [for (var i = 0; i < fingers; i++) await t.createGesture(kind: PointerDeviceKind.touch)];
+      for (var i = 0; i < gs.length; i++) {
+        await gs[i].down(c + Offset(i * 100.0, 200));
+        await t.pump(const Duration(milliseconds: 30));
+      }
+      for (var s = 1; s <= 10; s++) {
+        for (var i = 0; i < gs.length; i++) {
+          await gs[i].moveTo(c + Offset(i * 100.0, 200 - s * 25.0));
+        }
+        await t.pump(const Duration(milliseconds: 16));
+      }
+      for (final g in gs) {
+        await g.up();
+      }
+      await settle(t, 300);
+    }
+
+    await t.tap(find.byTooltip('Fijar el zoom'));
+    await settle(t);
+    expect(ed.widget.tools.zoomLocked, isTrue);
+    final y0 = ed.scroll.offset;
+    await drag(1);
+    expect(ed.scroll.offset, y0, reason: 'un dedo no mueve la hoja con el candado');
+    await drag(2);
+    expect(ed.scroll.offset, greaterThan(y0 + 50), reason: 'dos dedos sí');
+    await t.tap(find.byTooltip('Soltar el zoom'));
+    await settle(t);
+    expect(ed.widget.tools.zoomLocked, isFalse);
   });
 
   testWidgets('PDF: una hoja A4 por cada hoja del cuaderno, cada una con su papel', (t) async {
