@@ -193,6 +193,26 @@ void main() {
     await settle(t, 1200);
   });
 
+  testWidgets('barra: 4 colores favoritos fijos; tocar elige sin reordenar y mantener apretado guarda el color actual (issue #23)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Favoritos');
+    final ts = editor(t).ts;
+    final antes = List<String>.from(ts.favorites);
+    await t.tap(find.byKey(const ValueKey('fav-2')));
+    await settle(t);
+    expect(ts.pen.color, antes[2]);
+    expect(ts.favorites, antes, reason: 'elegir un favorito no los reordena');
+    await t.longPress(find.byKey(const ValueKey('fav-0')));
+    await settle(t);
+    expect(ts.favorites, [antes[2], antes[1], antes[2], antes[3]]);
+    // dejar los favoritos como estaban
+    ts.setFavorite(0, antes[0]);
+    editor(t).widget.onPrefsChanged();
+    expect(ts.favorites, antes);
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+  });
+
   testWidgets('decorador: su botón abre el panel, elige forma, tipo de trazo y fondo (y lo apaga una vez), y cada franja deja su trazo con su malla (issue #6)', (t) async {
     await start(t);
     await createNotebook(t, 'Franjas');

@@ -1386,6 +1386,14 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     _openPanel();
   }
 
+  /// Mantener un favorito de la barra: guarda ahí el color actual de la herramienta.
+  void _setFavorite(int slot) {
+    if (!ts.drawing) _setTool(Tool.pen);
+    setState(() => ts.setFavorite(slot, ts.current.color));
+    widget.onPrefsChanged();
+    snack(context, 'Favorito guardado', duration: const Duration(milliseconds: 1200), width: 260);
+  }
+
   void _pickQuick(String c) {
     if (!ts.drawing) _setTool(Tool.pen);
     setState(() => ts.pickColor(c));
@@ -1999,6 +2007,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             _openPanel();
           },
           onPickColor: _pickQuick,
+          onSetFavorite: _setFavorite,
           onBg: (v) {
             setState(() => doc.sheets[visibleSheet].setBg(v)); // la hoja que se está viendo
             _changed();

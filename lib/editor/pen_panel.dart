@@ -159,6 +159,19 @@ class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
         ]),
         const SizedBox(height: 6),
 
+        _label('Favoritos'),
+        Wrap(spacing: 6, runSpacing: 6, children: [
+          for (final (i, c) in ts.favorites.indexed)
+            GestureDetector(
+              key: ValueKey('panelFav-$i'),
+              onLongPress: () => _set(() => ts.setFavorite(i, ts.current.color)),
+              child: _swatch(c, c == p.color),
+            ),
+        ]),
+        const SizedBox(height: 4),
+        Text('Mantené apretado un favorito para guardar ahí el color actual.',
+            style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        const SizedBox(height: 10),
         _label('Color'),
         if (isHl)
           Wrap(spacing: 6, runSpacing: 6, children: [for (final c in hlPalette) _swatch(c, c == p.color)])
@@ -402,6 +415,19 @@ class _PaintPanelState extends State<_PaintPanel> with _PanelParts<_PaintPanel> 
             const Divider(height: 20),
             _switchRow('Fondo', const Key('paintBgSwitch'), pp.bg, _canOff(false, true, true), (on) => _pp((q) => q.copyWith(bg: on))),
             if (pp.bg) ...[
+              _label('Favoritos'),
+              Wrap(spacing: 6, runSpacing: 6, children: [
+                for (final (i, c) in ts.paintFav.indexed)
+                  GestureDetector(
+                    key: ValueKey('panelFav-$i'),
+                    onLongPress: () => _set(() => ts.setFavorite(i, p.color)),
+                    child: _dot(c, c == p.color, () => _set(() => ts.pickColor(c)), key: Key('paintFav-$i')),
+                  ),
+              ]),
+              const SizedBox(height: 4),
+              Text('Mantené apretado un favorito para guardar ahí el color actual.',
+                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+              const SizedBox(height: 10),
               Wrap(spacing: 6, runSpacing: 6, children: [
                 for (final c in [...paintPalette, ...ts.paintRecent.where((c) => !paintPalette.contains(c))]) _dot(c, c == p.color, () => _set(() => ts.pickColor(c))),
               ]),
