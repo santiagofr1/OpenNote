@@ -26,6 +26,23 @@ int sheetCount(double h) => max(1, ((h + kGap) / kSheetStep).round());
 /// Alto de una página con [sheets] hojas (sin espacio después de la última).
 double heightFor(int sheets) => sheets * kSheetH + (sheets - 1) * kGap;
 
+/// La hoja con MÁS área visible en la vista que va de [viewTop] a [viewBottom] (coordenadas de la página); en un
+/// empate, la de arriba. Si la vista cae toda en un hueco entre hojas, la que tiene el centro más cerca.
+int mostVisibleSheetFor(double viewTop, double viewBottom, int sheetCount) {
+  var best = 0, bestArea = -1.0;
+  for (var k = 0; k < sheetCount; k++) {
+    final top = k * kSheetStep;
+    final area = min(viewBottom, top + kSheetH) - max(viewTop, top);
+    if (area > bestArea + 1e-9) {
+      best = k;
+      bestArea = area;
+    }
+  }
+  if (bestArea > 0) return best;
+  final mid = (viewTop + viewBottom) / 2;
+  return (mid / kSheetStep).round().clamp(0, max(0, sheetCount - 1));
+}
+
 /// Rectángulos de cada hoja dentro de la página.
 List<Rect> sheetRects(double h) => [
       for (var k = 0; k < sheetCount(h); k++) Rect.fromLTWH(0, k * kSheetStep, kW, kSheetH),

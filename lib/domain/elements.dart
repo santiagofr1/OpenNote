@@ -44,18 +44,19 @@ class TextBlock extends Layered {
 class Item extends Layered {
   @override
   final String id;
-  final String type; // image | sticky | audio
+  final String type; // image | sticky | audio | pdf
   double x, y, w, h;
-  String? file; // nombre del archivo en media/ (imagen o audio)
+  String? file; // nombre del archivo en media/ (imagen, audio o PDF)
   String text; // nota adhesiva
   String color; // nota adhesiva
   int dur; // audio, en ms
+  int page; // pdf: índice (desde 0) de la página del PDF `file`
   Item(this.id, this.type, this.x, this.y, this.w, this.h,
-      {this.file, this.text = '', this.color = '#fde68a', this.dur = 0});
+      {this.file, this.text = '', this.color = '#fde68a', this.dur = 0, this.page = 0});
 
   Rect get rect => Rect.fromLTWH(x, y, w, h);
   Item copy({String? id, Offset d = Offset.zero}) =>
-      Item(id ?? this.id, type, x + d.dx, y + d.dy, w, h, file: file, text: text, color: color, dur: dur)..z = z;
+      Item(id ?? this.id, type, x + d.dx, y + d.dy, w, h, file: file, text: text, color: color, dur: dur, page: page)..z = z;
 
   factory Item.fromJson(Map j) => Item(
         j['id'] as String,
@@ -68,6 +69,7 @@ class Item extends Layered {
         text: (j['text'] ?? '') as String,
         color: (j['color'] ?? '#fde68a') as String,
         dur: (j['dur'] ?? 0) as int,
+        page: (j['pg'] ?? 0) as int,
       )..z = (j['z'] as num? ?? 0).toInt();
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -80,6 +82,7 @@ class Item extends Layered {
         if (text.isNotEmpty) 'text': text,
         if (type == 'sticky') 'color': color,
         if (dur > 0) 'dur': dur,
+        if (type == 'pdf') 'pg': page,
       };
 }
 

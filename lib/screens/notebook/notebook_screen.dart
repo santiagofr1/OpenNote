@@ -505,26 +505,37 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
   Future<void> _importPdf() async {
     if (!mounted) return;
     final progress = ValueNotifier(0);
-    unawaited(showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Importando PDF'),
-        content: ValueListenableBuilder(
-          valueListenable: progress,
-          builder: (_, n, _) => Column(mainAxisSize: MainAxisSize.min, children: [
-            const LinearProgressIndicator(),
-            const SizedBox(height: 12),
-            Text(n == 0 ? 'Elegí el archivo…' : 'Hoja $n'),
-          ]),
+    var shown = false;
+    // el diálogo aparece solo si tarda (elegir el archivo también cuenta); si termina antes, ni se ve
+    final timer = Timer(const Duration(milliseconds: 400), () {
+      if (!mounted) return;
+      shown = true;
+      unawaited(showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Importando PDF'),
+          content: ValueListenableBuilder(
+            valueListenable: progress,
+            builder: (_, n, _) => Column(mainAxisSize: MainAxisSize.min, children: [
+              const LinearProgressIndicator(),
+              const SizedBox(height: 12),
+              Text(n == 0 ? 'Elegí el archivo…' : 'Hoja $n'),
+            ]),
+          ),
         ),
-      ),
-    ));
-    final sheets = await importPdf(store, onPage: (n) => progress.value = n);
-    if (mounted) Navigator.of(context).pop();
+      ));
+    });
+    final List<(SheetMeta, SheetContent)> sheets;
+    try {
+      sheets = await importPdf(store, onPage: (n) => progress.value = n);
+    } finally {
+      timer.cancel();
+      if (shown && mounted) Navigator.of(context).pop();
+    }
     if (sheets.isEmpty || !mounted) return;
-    // después de la hoja actual
-    final at = curSheet + 1;
+    // la primera página entra EN la hoja que se está viendo; esa hoja y las siguientes se corren después del PDF
+    final at = editorKey.currentState?.mostVisibleSheet ?? curSheet;
     _sheetOp((d) => [
           for (var i = 0; i < sheets.length; i++)
             SheetPresenceOp.added(d, d.insertSheet(at + i, meta: sheets[i].$1, content: sheets[i].$2)),

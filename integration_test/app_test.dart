@@ -18,6 +18,7 @@ import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/editor/fake_audio_source.dart';
 import 'package:apuntes/editor/handwriting.dart';
 import 'package:apuntes/editor/page_editor.dart';
+import 'package:apuntes/editor/pdf_page_image.dart';
 import 'package:apuntes/editor/voice_recorder.dart';
 import 'package:apuntes/editor/selection.dart';
 import 'package:apuntes/editor/selection_menu.dart';
@@ -31,6 +32,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 void main() {
@@ -812,6 +814,98 @@ void main() {
     final pages = await Printing.raster(bytes, dpi: 20).toList();
     expect(pages.length, 3);
     expect(pages.first.width / pages.first.height, closeTo(210 / 297, .02), reason: 'tamaño A4');
+  });
+
+  testWidgets('PDF importado: 50 páginas en menos de 2 s, entran en la hoja que se ve, se dibujan y se exportan (rápido, sin imágenes)',
+      (t) async {
+    final pdfBytes = (await t.runAsync(() async {
+      final d = pw.Document();
+      for (var i = 1; i <= 50; i++) {
+        d.addPage(pw.Page(
+          margin: const pw.EdgeInsets.all(40),
+          build: (_) => pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+            pw.Text('Tema $i', style: pw.TextStyle(fontSize: 40, fontWeight: pw.FontWeight.bold)),
+            for (var k = 0; k < 20; k++) pw.Paragraph(text: 'Linea $k de la pagina $i, con bastante texto para que se note.'),
+          ]),
+        ));
+      }
+      return Uint8List.fromList(await d.save());
+    }))!;
+    final savedPick = Pickers.pdf;
+    addTearDown(() => Pickers.pdf = savedPick);
+    Pickers.pdf = () async => (pdfBytes, 'Apuntes');
+    await start(t);
+    await createNotebook(t, 'PDF importado');
+    final ed = editor(t);
+    ed.doc.addSheet();
+    ed.doc.addSheet();
+    // un trazo en la hoja 2 (índice 1) para saber adónde va a parar
+    final mark = Stroke('marca', 'pen', '#22211e', 2.6, [100, kSheetStep + 200, .5, 500, kSheetStep + 200, .5]);
+    ed.doc.strokes[mark.id] = mark;
+    ed.doc.markDirtyElement(mark);
+    // ignore: invalid_use_of_protected_member
+    ed.setState(() {});
+    await settle(t, 600);
+    ed.scrollToSheet(1, animate: false);
+    await settle(t, 800);
+    expect(ed.mostVisibleSheet, 1);
+    final oldSheetId = ed.doc.sheets[1].id;
+    expect(ed.doc.sheetCount, 3);
+
+    final sw = Stopwatch()..start();
+    await t.tap(find.byKey(const Key('insert')));
+    await settle(t);
+    await t.tap(find.text('PDF'));
+    while (ed.doc.sheetCount < 53 && sw.elapsedMilliseconds < 10000) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      await t.pump();
+    }
+    final ms = sw.elapsedMilliseconds;
+    debugPrint('PDFIMPORT 50 paginas: $ms ms');
+    expect(ed.doc.sheetCount, 3 + 50);
+    expect(ms, lessThan(2000), reason: 'importar no rasteriza nada');
+    await settle(t, 600);
+
+    // la primera página quedó EN la hoja que se veía; la que se veía (y la marca) se corrió al final del PDF
+    final first = ed.doc.items.values.where((i) => ed.doc.sheetOfY(i.y) == 1).single;
+    expect([first.type, first.page], ['pdf', 0]);
+    expect(ed.doc.sheets[51].id, oldSheetId, reason: 'la hoja que se veía quedó después del PDF');
+    expect(ed.doc.sheetOfY(ed.doc.strokes['marca']!.bounds.top), 51);
+    final media = Directory('${root.path}/media').listSync().map((e) => e.path.split('/').last).toList();
+    expect(media.where((n) => n.endsWith('.pdf')).length, 1, reason: 'un solo PDF para las 50 páginas');
+    expect(media.where((n) => n.endsWith('.png')), isEmpty);
+
+    // la página visible termina mostrando imagen
+    final shown = find.descendant(of: find.byType(PdfPageImage), matching: find.byType(RawImage));
+    final sw2 = Stopwatch()..start();
+    while (shown.evaluate().isEmpty && sw2.elapsedMilliseconds < 3000) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await t.pump();
+    }
+    expect(shown, findsAtLeastNWidgets(1), reason: 'la página se dibuja a demanda');
+
+    // exportar la hoja: la página sale dibujada (no todo blanco)
+    final s = Storage(root: root);
+    await s.init();
+    final dark = await t.runAsync(() async {
+      final images = await loadImages(s, ed.doc, sheet: 1);
+      final png = await renderSheetPng(ed.doc, 1, images: images);
+      for (final im in images.values) {
+        im.dispose();
+      }
+      final img = await decodeImage(png);
+      final px = (await img.toByteData())!.buffer.asUint8List();
+      img.dispose();
+      for (var i = 0; i < px.length; i += 4) {
+        if (px[i] < 100 && px[i + 1] < 100 && px[i + 2] < 100) return true;
+      }
+      return false;
+    });
+    expect(dark, isTrue, reason: 'la hoja exportada trae el texto del PDF');
+
+    await t.tap(find.byTooltip('Deshacer'));
+    await settle(t, 800);
+    expect(ed.doc.sheetCount, 3, reason: 'importar es un solo paso de deshacer');
   });
 
   Future<void> createFolder(WidgetTester t, String name) async {

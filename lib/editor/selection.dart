@@ -169,7 +169,7 @@ class Selection {
         minKx = max(minKx, min(60 / t.w, 1.0));
       }
       for (final it in itemsOf(doc)) {
-        final need = max(60 / it.w, it.type == 'image' ? 0.0 : (it.type == 'audio' ? 56 : 60) / it.h);
+        final need = max(60 / it.w, it.type == 'image' || it.type == 'pdf' ? 0.0 : (it.type == 'audio' ? 56 : 60) / it.h);
         minScale = max(minScale, min(need, 1.0));
         minKx = max(minKx, min(60 / it.w, 1.0));
         minKy = max(minKy, min((it.type == 'audio' ? 56 : 60) / it.h, 1.0));
