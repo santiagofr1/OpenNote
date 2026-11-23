@@ -21,6 +21,10 @@ class FakeRemoteStore implements RemoteStore {
   bool offline = false;
   int _ops = 0;
 
+  /// Gancho opcional: corre al empezar cada subida, antes de que se complete (simula que la app sigue guardando
+  /// archivos mientras la red está lenta).
+  Future<void> Function(String path)? onUpload;
+
   void _tick() {
     if (offline || (failAfter != null && _ops >= failAfter!)) throw const RemoteOfflineException();
     _ops++;
@@ -84,6 +88,7 @@ class FakeRemoteStore implements RemoteStore {
   @override
   Future<RemoteFile> upload(String path, Uint8List bytes, {String? ifRemoteMd5}) async {
     _tick();
+    await onUpload?.call(path);
     if (_files[path]?.md5 != ifRemoteMd5) throw const RemoteConflictException();
     uploads++;
     uploaded.add(path);

@@ -218,14 +218,20 @@ class SyncEngine {
     return out;
   }
 
-  /// El estado de [p] en disco ahora (null si no existe). Si tamaño y fecha son los de la base, no se relee.
+  /// El estado de [p] en disco ahora (null si no existe). Si tamaño y fecha son los de la base, no se relee, salvo el
+  /// índice y los notebook.json: son chicos y se hashean siempre. Antes se usaba el atajo también para ellos y, si la
+  /// biblioteca guardaba el índice mientras se subía, la base quedaba con el hash viejo y la fecha/tamaño nuevos: el
+  /// atajo devolvía para siempre el hash viejo y el cambio nunca se subía. Releyendo, un estado ya trabado se arregla
+  /// solo en la próxima pasada.
   Future<FileBase?> _stat(String p) async {
     final f = store.syncFile(p);
     final s = await f.stat();
     if (s.type == FileSystemEntityType.notFound) return null;
     final mt = s.modified.millisecondsSinceEpoch;
     final b = _st.base[p];
-    if (b != null && b.size == s.size && b.mtime == mt) return b;
+    final kind = syncKind(p);
+    final siempreLee = kind == SyncKind.indexFile || kind == SyncKind.notebook;
+    if (!siempreLee && b != null && b.size == s.size && b.mtime == mt) return b;
     final bytes = await f.readAsBytes();
     final h = p == 'index.json' ? _md5(utf8.encode(normalizeIndex(utf8.decode(bytes, allowMalformed: true)))) : _md5(bytes);
     return FileBase(h, s.size, mt);
@@ -233,7 +239,8 @@ class SyncEngine {
 
   /// Escribe [bytes] en [p] solo si en disco sigue lo que se vio ([expect], null = no existía): si alguien lo tocó
   /// mientras tanto (la biblioteca guardó el índice, por ejemplo) no se pisa y queda para la próxima pasada.
-  Future<void> _writeLocal(String p, Uint8List bytes, String? expect) async {
+  /// Devuelve el `stat` tomado justo después de escribir, para anotarlo en la base.
+  Future<FileStat> _writeLocal(String p, Uint8List bytes, String? expect) async {
     final nb = notebookIdOf(p);
     if (nb != null && openNotebooks().contains(nb)) throw const _Skip(); // se abrió mientras tanto
     if ((await _stat(p))?.md5 != expect) throw const _Skip();
@@ -244,6 +251,7 @@ class SyncEngine {
     await store.writeSyncFile(p, bytes);
     _rep.localChanged = true;
     if (p == 'index.json') _rep.indexChanged = true;
+    return store.syncFile(p).stat();
   }
 
   /// Lo de la nube para [p] no se aplica ahora porque el cuaderno está abierto.
@@ -304,6 +312,15 @@ class SyncEngine {
     return (bytes, _md5(bytes), after);
   }
 
+  /// Como [_readStable] pero para index.json / notebook.json: devuelve el texto (normalizado si es el índice), el hash de
+  /// ESE texto y el `stat` tomado antes de leer. Si el archivo cambió mientras se leía, queda para la próxima pasada.
+  Future<(String, String, FileStat)> _readStableText(String p) async {
+    final (bytes, _, st) = await _readStable(p);
+    final raw = utf8.decode(bytes, allowMalformed: true);
+    final t = p == 'index.json' ? normalizeIndex(raw) : raw;
+    return (t, p == 'index.json' ? _md5(utf8.encode(t)) : _md5(bytes), st);
+  }
+
   Future<void> _uploadFile(String p) async {
     final (bytes, h, st) = await _readStable(p);
     await _upload(p, bytes);
@@ -347,8 +364,8 @@ class SyncEngine {
   Future<void> _takeRemote(String p, String? expectLocal) async {
     final bytes = await _download(p);
     if (syncKind(p) == SyncKind.sheet) decodeSheet(bytes); // un archivo roto en la nube no entra
-    await _writeLocal(p, bytes, expectLocal);
-    await _markBase(p, _md5(bytes));
+    final st = await _writeLocal(p, bytes, expectLocal);
+    await _markBase(p, _md5(bytes), stat: st);
   }
 
   /// Misma hoja editada en los dos lados: queda la local y la remota pasa a ser una hoja nueva "(conflicto)" justo
@@ -393,10 +410,6 @@ class SyncEngine {
     final isIndex = p == 'index.json';
     final nb = notebookIdOf(p);
     final l = await _stat(p), L = l?.md5, R = _st.remote[p], B = _st.base[p]?.md5;
-    Future<String> localText() async {
-      final t = await store.syncFile(p).readAsString();
-      return isIndex ? normalizeIndex(t) : t;
-    }
     Future<(Uint8List, String)> remoteText() async {
       final b = await _download(p);
       final t = utf8.decode(b);
@@ -409,15 +422,15 @@ class SyncEngine {
     }
 
     Future<void> up() async {
-      final t = await localText();
+      final (t, h, st) = await _readStableText(p);
       await _upload(p, Uint8List.fromList(utf8.encode(t)));
-      await _markBase(p, L!, text: t);
+      await _markBase(p, h, text: t, stat: st);
     }
 
     Future<void> down(String? expect) async {
       final (b, t) = await remoteText();
-      await _writeLocal(p, b, expect);
-      await _markBase(p, _md5(b), text: t);
+      final st = await _writeLocal(p, b, expect);
+      await _markBase(p, _md5(b), text: t, stat: st);
     }
 
     if (_upOnly && !_upOnlyOk(L, R, B)) {
@@ -426,7 +439,11 @@ class SyncEngine {
       return _wait(p);
     }
     if (L == null && R == null) return _unBase(p);
-    if (L == R) return _markBase(p, L!, text: await localText());
+    if (L == R) {
+      final (t, h, st) = await _readStableText(p);
+      if (h != L) throw const _Skip(); // cambió entre medio: queda para la próxima pasada
+      return _markBase(p, h, text: t, stat: st);
+    }
     if (L != null && R == null) {
       if (B == null || isIndex || L != B || _active.contains(nb)) {
         if (nb != null && B != null) _kept.add(nb);
@@ -445,15 +462,16 @@ class SyncEngine {
     }
     if (B == null || (L != B && R != B)) {
       final (rb, rt) = await remoteText();
-      final lt = await localText();
+      final (lt, lh, lst) = await _readStableText(p);
       final merged = merge(_st.baseText[p] ?? '{}', lt, rt);
       final mb = Uint8List.fromList(utf8.encode(merged));
       final mh = _md5(mb);
-      if (mh != L) await _writeLocal(p, mb, L);
+      var st = lst;
+      if (mh != lh) st = await _writeLocal(p, mb, lh);
       if (mh != R) {
         await _upload(p, mb);
       }
-      return _markBase(p, mh, text: merged);
+      return _markBase(p, mh, text: merged, stat: st);
     }
     if (L == B) return down(L);
     return up();
