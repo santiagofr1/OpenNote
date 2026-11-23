@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import '../../data/storage.dart';
 import '../../domain/domain.dart';
-import '../../rendering/sheet_render.dart';
+import '../../widgets/sheet_thumb.dart';
 
 /// Tarjeta de un cuaderno en la biblioteca: miniatura de la primera hoja, nombre y fecha.
 /// Quien la arma le pone la key `nb-<nombre>` (la usan los tests).
 class NotebookCard extends StatelessWidget {
   final Notebook nb;
+  final Storage store; // de ahí salen las imágenes y páginas de PDF de la miniatura
   final NotebookDoc? thumb; // primera hoja, null mientras carga
   final bool pressed; // resaltada mientras está abierto su menú
   final String? location; // ruta de su carpeta (al buscar); reemplaza la fecha
@@ -16,6 +18,7 @@ class NotebookCard extends StatelessWidget {
   const NotebookCard(
       {super.key,
       required this.nb,
+      required this.store,
       this.thumb,
       this.pressed = false,
       this.location,
@@ -91,6 +94,6 @@ class NotebookCard extends StatelessWidget {
     }
     final t = thumb;
     if (t == null) return Container(color: const Color(0xFFFFFEFB));
-    return RepaintBoundary(child: CustomPaint(painter: SheetThumbPainter(t)));
+    return RepaintBoundary(child: SheetThumb(doc: t, store: store));
   }
 }
