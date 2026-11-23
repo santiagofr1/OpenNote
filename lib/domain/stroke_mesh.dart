@@ -189,7 +189,8 @@ MeshPart _buildPart(Stroke s, int a, int b, double feather) {
     default:
       // pen / fountain: grosor según presión y (pluma) velocidad, con la misma fórmula que el dibujo viejo
       final fountain = s.k == 'fountain';
-      final minF = fountain ? .15 : .35, rangeF = fountain ? 1.7 : 1.3;
+      final cover = s.k == kCoverTip; // corrector: grosor parejo, sin presión
+      final minF = cover ? 1.0 : (fountain ? .15 : .35), rangeF = cover ? 0.0 : (fountain ? 1.7 : 1.3);
       final w = _W(feather > 0);
       if (n == 1) {
         _circle(w, x(0), y(0), s.w * (minF + rangeF * pr(0)) / 2, feather > 0 ? argb : 0, 16);

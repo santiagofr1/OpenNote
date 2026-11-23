@@ -23,13 +23,15 @@ void main() {
   }
 
   Future<({PageEditorState ed, ToolState tools, Offset Function(double, double) at})> open(WidgetTester t, NotebookDoc doc,
-      {Tool tool = Tool.pen}) async {
+      {Tool tool = Tool.pen, bool locked = false}) async {
     t.view.physicalSize = const Size(1600, 1000);
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.reset);
     final store = Storage(root: root);
     await t.runAsync(store.init);
-    final tools = ToolState()..tool = tool;
+    final tools = ToolState()
+      ..tool = tool
+      ..zoomLocked = locked;
     await t.pumpWidget(MaterialApp(
       home: Scaffold(
         body: PageEditor(doc: doc, tools: tools, store: store, onChanged: () {}, onPrefsChanged: () {}),
@@ -186,5 +188,87 @@ void main() {
     expect(find.text('Pegar acá'), findsWidgets, reason: 'se abrió el menú de la hoja');
     while (t.takeException() != null) {} // (con la fuente de los tests el menú desborda unos píxeles)
     expect(h.ed.sel.isEmpty, isTrue, reason: 'mantener apretado no elige');
+  });
+
+  // ---------------- scroll con dos dedos y candado del zoom (issue #18) ----------------
+  Future<(TestGesture, TestGesture)> twoDown(WidgetTester t, Offset a, Offset b) async {
+    final g1 = await t.startGesture(a, kind: PointerDeviceKind.touch);
+    await t.pump(const Duration(milliseconds: 16));
+    final g2 = await t.startGesture(b, kind: PointerDeviceKind.touch);
+    await t.pump(const Duration(milliseconds: 16));
+    return (g1, g2);
+  }
+
+  Future<void> twoDrag(WidgetTester t, (TestGesture, TestGesture) g, Offset a, Offset b, Offset by,
+      {int steps = 10, int ms = 16}) async {
+    // los eventos de prueba llevan marca de tiempo 0: se la ponemos para que haya velocidad
+    var now = Duration.zero;
+    for (var i = 1; i <= steps; i++) {
+      now += Duration(milliseconds: ms);
+      await g.$1.moveTo(a + by * (i / steps), timeStamp: now);
+      await g.$2.moveTo(b + by * (i / steps), timeStamp: now);
+      await t.pump(Duration(milliseconds: ms));
+    }
+  }
+
+  group('candado del zoom: scroll con dos dedos', () {
+    const a = Offset(1100, 800), b = Offset(1200, 800);
+
+    testWidgets('un dedo no mueve la hoja', (t) async {
+      final h = await open(t, armado(), locked: true);
+      final y0 = h.ed.scroll.offset;
+      await fingerDrag(t, const Offset(1100, 800), const Offset(1100, 500));
+      expect(h.ed.scroll.offset, y0);
+    });
+
+    testWidgets('dos dedos arrastran la hoja sin cambiar el zoom', (t) async {
+      final h = await open(t, armado(), locked: true);
+      final y0 = h.ed.scroll.offset, z0 = h.tools.zoom;
+      final g = await twoDown(t, a, b);
+      await twoDrag(t, g, a, b, const Offset(0, -300));
+      await t.pump(const Duration(milliseconds: 400)); // quietos un rato: sin inercia
+      expect(h.ed.scroll.offset - y0, closeTo(300, 20));
+      expect(h.tools.zoom, z0);
+      await g.$1.up();
+      await g.$2.up();
+      await t.pumpAndSettle();
+    });
+
+    testWidgets('al soltar con un movimiento rápido sigue por inercia', (t) async {
+      final h = await open(t, armado(), locked: true);
+      final y0 = h.ed.scroll.offset;
+      final g = await twoDown(t, a, b);
+      await twoDrag(t, g, a, b, const Offset(0, -250), steps: 5, ms: 8);
+      final suelto = h.ed.scroll.offset;
+      expect(suelto, greaterThan(y0 + 100));
+      await g.$1.up();
+      await g.$2.up();
+      await t.pumpAndSettle();
+      expect(h.ed.scroll.offset, greaterThan(suelto + 10), reason: 'siguió después de soltar');
+    });
+
+    testWidgets('sin candado: un dedo scrollea y dos dedos separándose hacen zoom', (t) async {
+      final h = await open(t, armado());
+      final y0 = h.ed.scroll.offset;
+      await fingerDrag(t, const Offset(1100, 800), const Offset(1100, 500));
+      expect(h.ed.scroll.offset, greaterThan(y0 + 100));
+      final z0 = h.tools.zoom;
+      final g = await twoDown(t, const Offset(600, 500), const Offset(700, 500));
+      for (var i = 1; i <= 8; i++) {
+        await g.$1.moveTo(Offset(600 - i * 20.0, 500));
+        await g.$2.moveTo(Offset(700 + i * 20.0, 500));
+        await t.pump(const Duration(milliseconds: 16));
+      }
+      await g.$1.up();
+      await g.$2.up();
+      await t.pump(const Duration(milliseconds: 1200));
+      expect(h.tools.zoom, greaterThan(z0));
+    });
+
+    testWidgets('con candado un toque corto sigue eligiendo', (t) async {
+      final h = await open(t, armado(), locked: true);
+      await fingerTap(t, h.at(350, 400));
+      expect(h.ed.sel.isEmpty, isFalse, reason: 'eligió la imagen');
+    });
   });
 }

@@ -6,11 +6,11 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:apuntes/app.dart';
 import 'package:apuntes/data/export.dart';
+import 'package:apuntes/data/export_folder.dart';
 import 'package:apuntes/data/media_import.dart';
 import 'package:apuntes/data/sheet_codec.dart';
 import 'package:apuntes/data/storage.dart';
@@ -30,8 +30,10 @@ import 'package:apuntes/sync/sync_engine.dart';
 import 'package:archive/archive.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:pdf/pdf.dart' show PdfColor;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
@@ -570,6 +572,48 @@ void main() {
     expect(saved.body.paras[0].runs.first.style.bold, isTrue);
   });
 
+  testWidgets('texto con teclado como en Word: va donde se toca, tocar debajo sigue el bloque y Ctrl+Shift+H resalta (issue #16)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Word');
+    final ed = editor(t);
+    await t.tap(find.byTooltip('Texto con teclado'));
+    await settle(t, 600);
+    FocusManager.instance.primaryFocus?.unfocus(); // el bloque vacío del botón se borra solo
+    await settle(t, 300);
+    expect(ed.doc.texts, isEmpty);
+
+    // en el margen de arriba, antes de la primera línea del rayado
+    ed.tapTextAt(const Offset(150, 20));
+    await settle(t, 400);
+    var b = ed.doc.texts.values.single;
+    expect(b.y, lessThan(mmToUnits(24)), reason: 'queda arriba de la primera línea');
+    await t.enterText(find.byKey(Key('para-${b.id}-0')), 'hola');
+    await settle(t, 300);
+    FocusManager.instance.primaryFocus?.unfocus();
+    await settle(t, 300);
+
+    // justo debajo: sigue el mismo bloque
+    final rect = textRect(b, ed.doc.lineAt(b.y));
+    ed.tapTextAt(Offset(170, rect.bottom + 3));
+    await settle(t, 400);
+    expect(ed.doc.texts.length, 1);
+    b = ed.doc.texts.values.single;
+    expect(b.body.paras.length, 2);
+    await t.enterText(find.byKey(Key('para-${b.id}-1')), 'chau');
+    await settle(t, 300);
+
+    // Ctrl+A y Ctrl+Shift+H: el párrafo queda resaltado
+    await t.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await t.sendKeyEvent(LogicalKeyboardKey.keyA);
+    await t.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await t.sendKeyEvent(LogicalKeyboardKey.keyH);
+    await t.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await t.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await settle(t, 300);
+    expect(b.body.paras[1].runs.every((r) => r.style.highlight != null), isTrue);
+    expect(b.body.paras[1].text, 'chau');
+  });
+
   testWidgets('texto: tamaño en puntos desde la barra, A+ / A- y queda guardado', (t) async {
     await start(t);
     await createNotebook(t, 'Tamaño');
@@ -802,6 +846,44 @@ void main() {
     expect(find.text('Pegar acá'), findsNothing);
   });
 
+  testWidgets('candado del zoom: un dedo no mueve la hoja y dos dedos sí', (t) async {
+    await start(t);
+    await createNotebook(t, 'Candado');
+    final ed = editor(t);
+    ed.widget.tools.zoomLocked = false;
+    final c = sheetCenter(t);
+
+    Future<void> drag(int fingers) async {
+      final gs = [for (var i = 0; i < fingers; i++) await t.createGesture(kind: PointerDeviceKind.touch)];
+      for (var i = 0; i < gs.length; i++) {
+        await gs[i].down(c + Offset(i * 100.0, 200));
+        await t.pump(const Duration(milliseconds: 30));
+      }
+      for (var s = 1; s <= 10; s++) {
+        for (var i = 0; i < gs.length; i++) {
+          await gs[i].moveTo(c + Offset(i * 100.0, 200 - s * 25.0));
+        }
+        await t.pump(const Duration(milliseconds: 16));
+      }
+      for (final g in gs) {
+        await g.up();
+      }
+      await settle(t, 300);
+    }
+
+    await t.tap(find.byTooltip('Fijar el zoom'));
+    await settle(t);
+    expect(ed.widget.tools.zoomLocked, isTrue);
+    final y0 = ed.scroll.offset;
+    await drag(1);
+    expect(ed.scroll.offset, y0, reason: 'un dedo no mueve la hoja con el candado');
+    await drag(2);
+    expect(ed.scroll.offset, greaterThan(y0 + 50), reason: 'dos dedos sí');
+    await t.tap(find.byWidgetPredicate((w) => w is Tooltip && (w.message ?? '').startsWith('Zoom fijo')));
+    await settle(t);
+    expect(ed.widget.tools.zoomLocked, isFalse);
+  });
+
   testWidgets('PDF: una hoja A4 por cada hoja del cuaderno, cada una con su papel', (t) async {
     final s = Storage(root: root);
     await s.init();
@@ -908,6 +990,81 @@ void main() {
     expect(ed.doc.sheetCount, 3, reason: 'importar es un solo paso de deshacer');
   });
 
+  testWidgets('PDF importado: la goma sobre la página pinta un corrector del color del fondo', (t) async {
+    final pdfBytes = (await t.runAsync(() async {
+      final d = pw.Document();
+      d.addPage(pw.Page(
+        pageTheme: pw.PageTheme(
+          margin: const pw.EdgeInsets.all(40),
+          buildBackground: (_) => pw.FullPage(ignoreMargins: true, child: pw.Container(color: const PdfColor.fromInt(0xFFFFF0C0))),
+        ),
+        build: (_) => pw.Text('Tema 1', style: pw.TextStyle(fontSize: 40)),
+      ));
+      return Uint8List.fromList(await d.save());
+    }))!;
+    final savedPick = Pickers.pdf;
+    addTearDown(() => Pickers.pdf = savedPick);
+    Pickers.pdf = () async => (pdfBytes, 'Fondo');
+    await start(t);
+    await createNotebook(t, 'Goma en PDF');
+    final ed = editor(t);
+    await t.tap(find.byKey(const Key('insert')));
+    await settle(t);
+    await t.tap(find.text('PDF'));
+    await settle(t, 1500);
+    final pdf = ed.doc.items.values.firstWhere((i) => i.type == 'pdf');
+    await settle(t, 800);
+
+    // goma (punta de goma del lápiz) por el medio de la página, lejos del texto
+    final toScreen = docToScreen(t);
+    // a la altura del centro de lo que se ve (en horizontal la hoja A4 no entra entera en la pantalla)
+    final cy = sheetCenter(t).dy;
+    final a = Offset(toScreen(Offset(pdf.x + pdf.w * .2, 0)).dx, cy), b = Offset(toScreen(Offset(pdf.x + pdf.w * .8, 0)).dx, cy);
+    final g = await t.startGesture(a, kind: PointerDeviceKind.invertedStylus);
+    for (var i = 1; i <= 10; i++) {
+      await g.moveTo(Offset.lerp(a, b, i / 10)!);
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    await g.up();
+    await settle(t, 300);
+    final covers = [for (final s in ed.doc.strokes.values) if (s.k == kCoverTip) s];
+    expect(covers, hasLength(1), reason: 'la goma sobre el PDF deja un corrector');
+
+    // el color real llega (primero es blanco) y es el del fondo
+    final sw = Stopwatch()..start();
+    while (ed.doc.strokes[covers.single.id]!.c == '#ffffff' && sw.elapsedMilliseconds < 5000) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await t.pump();
+    }
+    final cover = ed.doc.strokes[covers.single.id]!;
+    expect(cover.c, isNot('#ffffff'));
+
+    // exportada la hoja, el centro del trazo es del color del fondo
+    final s = Storage(root: root);
+    await s.init();
+    final sheet = ed.doc.sheetOfY(pdf.y);
+    final px = await t.runAsync(() async {
+      final images = await loadImages(s, ed.doc, sheet: sheet);
+      final png = await renderSheetPng(ed.doc, sheet, images: images);
+      for (final im in images.values) {
+        im.dispose();
+      }
+      final img = await decodeImage(png);
+      final data = (await img.toByteData())!.buffer.asUint8List();
+      final k = img.width / kW;
+      final cx = (cover.pts[0] + cover.pts[cover.pts.length - 3]) / 2, cy = cover.pts[1] - sheet * kSheetStep;
+      final i = ((cy * k).round() * img.width + (cx * k).round()) * 4;
+      final out = [data[i], data[i + 1], data[i + 2]];
+      img.dispose();
+      return out;
+    });
+    final want = cover.color.toARGB32();
+    expect(px![0], closeTo((want >> 16) & 0xFF, 6));
+    expect(px[1], closeTo((want >> 8) & 0xFF, 6));
+    expect(px[2], closeTo(want & 0xFF, 6));
+    expect((px[0] - 0xFF).abs() + (px[2] - 0xFF).abs(), greaterThan(30), reason: 'no es blanco: es el fondo del PDF');
+  });
+
   Future<void> createFolder(WidgetTester t, String name) async {
     await t.tap(find.byKey(const Key('new')));
     await settle(t);
@@ -917,6 +1074,47 @@ void main() {
     await t.tap(find.byKey(const Key('askOk')));
     await settle(t, 800);
   }
+
+  testWidgets('exportar carpeta: un .zip con una carpeta por cuaderno y sus PNG', (t) async {
+    await start(t);
+    await createNotebook(t, 'Apuntes'); // se abre solo: dibujar un trazo y volver
+    await stylusLine(t, sheetCenter(t) + const Offset(-100, 0), sheetCenter(t) + const Offset(100, 40));
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+    await createFolder(t, 'Facultad');
+    await holdOn(t, find.byKey(const Key('nb-Apuntes')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('moveTo')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('moveTarget-Facultad')));
+    await settle(t, 800);
+
+    Uint8List? zipBytes;
+    String? zipName;
+    final savedZip = saveFolderZip;
+    saveFolderZip = (zip, name) async {
+      zipBytes = await zip.readAsBytes();
+      zipName = name;
+      return true;
+    };
+    addTearDown(() => saveFolderZip = savedZip);
+    await holdOn(t, find.byKey(const Key('folder-Facultad')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('exportFolder')));
+    await settle(t, 600);
+    await t.tap(find.byKey(const Key('folderExport-png')));
+    for (var i = 0; i < 200 && zipBytes == null; i++) {
+      await settle(t, 100);
+    }
+    expect(zipBytes, isNotNull);
+    expect(zipName, 'Facultad');
+    final entries = ZipDecoder().decodeBytes(zipBytes!).where((f) => f.isFile).toList();
+    expect(entries.map((f) => f.name), ['Facultad/Apuntes/Apuntes - hoja 01.png']);
+    expect(entries.single.content.take(4).toList(), [0x89, 0x50, 0x4E, 0x47]);
+    await settle(t, 600);
+    expect(find.text('Carpeta exportada'), findsOneWidget);
+    expect(t.takeException(), isNull);
+  });
 
   testWidgets('carpetas: crear, meter un cuaderno, renombrar y sacar', (t) async {
     await start(t);
