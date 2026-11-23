@@ -10,16 +10,21 @@ void main() {
   final info = UpdateInfo(
     version: AppVersion.tryParse('1.0.12')!,
     notes: List.generate(40, (i) => '- Cambio $i').join('\n'),
-    apkUrl: 'https://example.com/a.apk',
+    url: 'https://example.com/a.apk',
+    fileName: 'a.apk',
     size: 10,
   );
   var skipped = 0, downloads = 0;
   var installs = <File>[];
   var openedSettings = 0;
+  var restarts = 0;
   InstallResult result = InstallResult.launched;
+  final oldPlatform = Updates.platform, oldRestart = Updates.restart;
 
   setUp(() {
-    skipped = downloads = openedSettings = 0;
+    skipped = downloads = openedSettings = restarts = 0;
+    Updates.platform = () => UpdatePlatform.android;
+    Updates.restart = () async => restarts++;
     installs = [];
     result = InstallResult.launched;
     Updates.download = (i, progress, cancel) async {
@@ -35,6 +40,11 @@ void main() {
     Updates.openInstallSettings = () async => openedSettings++;
   });
 
+  tearDownAll(() {
+    Updates.platform = oldPlatform;
+    Updates.restart = oldRestart;
+  });
+
   Future<void> open(
     WidgetTester t, {
     UpdateInfo? with_,
@@ -46,6 +56,7 @@ void main() {
     addTearDown(t.view.reset);
     await t.pumpWidget(
       MaterialApp(
+        theme: ThemeData(snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating)),
         home: Builder(
           builder: (ctx) => Scaffold(
             body: TextButton(
@@ -126,7 +137,7 @@ void main() {
     expect(find.byType(AlertDialog), findsNothing);
   });
 
-  UpdateInfo withNotes(String n) => UpdateInfo(version: info.version, notes: n, apkUrl: info.apkUrl, size: 10);
+  UpdateInfo withNotes(String n) => UpdateInfo(version: info.version, notes: n, url: info.url, fileName: info.fileName, size: 10);
 
   testWidgets('muestra "Tenés la X → nueva Y" con la instalada', (t) async {
     await open(t, installed: AppVersion.tryParse('1.0.4'));
@@ -155,5 +166,61 @@ void main() {
     await open(t, installed: AppVersion.tryParse('1.0.4'), size: const Size(360, 640));
     expect(t.takeException(), isNull);
     expect(find.byKey(const Key('updateNow')), findsOneWidget);
+  });
+
+  Future<void> update(WidgetTester t) async {
+    await t.tap(find.byKey(const Key('updateNow')));
+    await t.pumpAndSettle();
+  }
+
+  testWidgets('Linux: instalada ofrece reiniciar y reinicia', (t) async {
+    Updates.platform = () => UpdatePlatform.linux;
+    result = InstallResult.installed;
+    await open(t);
+    await update(t);
+    expect(find.text('OpenNote se actualizó'), findsOneWidget);
+    await t.tap(find.byKey(const Key('updateRestart')));
+    await t.pumpAndSettle();
+    expect(restarts, 1);
+  });
+
+  testWidgets('instalada y Después no reinicia y cierra el diálogo', (t) async {
+    result = InstallResult.installed;
+    await open(t);
+    await update(t);
+    await t.tap(find.text('Después'));
+    await t.pumpAndSettle();
+    expect(restarts, 0);
+    expect(find.byType(AlertDialog), findsNothing);
+  });
+
+  testWidgets('cancelada muestra el aviso', (t) async {
+    result = InstallResult.cancelled;
+    await open(t);
+    await update(t);
+    expect(find.text('Actualización cancelada.'), findsOneWidget);
+  });
+
+  testWidgets('manual muestra el comando para copiar', (t) async {
+    result = InstallResult.manual;
+    await open(t);
+    await update(t);
+    expect(find.text('Instalala a mano'), findsOneWidget);
+    expect(t.widget<SelectableText>(find.byKey(const Key('updateManualCmd'))).data, 'sudo apt install /tmp/fake.apk');
+  });
+
+  testWidgets('falla: el texto depende de la plataforma', (t) async {
+    result = InstallResult.failed;
+    Updates.platform = () => UpdatePlatform.linux;
+    await open(t);
+    await update(t);
+    expect(find.text('No se pudo instalar la actualización. Probá de nuevo en un rato.'), findsOneWidget);
+  });
+
+  testWidgets('falla en Android mantiene el texto de siempre', (t) async {
+    result = InstallResult.failed;
+    await open(t);
+    await update(t);
+    expect(find.text('No pudimos abrir el instalador. Probá de nuevo en un rato.'), findsOneWidget);
   });
 }
