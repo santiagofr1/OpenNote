@@ -13,7 +13,8 @@ void main() {
     final u = parseRelease(fixture())!;
     expect(u.version.toString(), '1.0.12');
     expect(u.notes, startsWith('- Arregla el zoom'));
-    expect(u.apkUrl, endsWith('/OpenNote-v1.0.12.apk'));
+    expect(u.url, endsWith('/OpenNote-v1.0.12.apk'));
+    expect(u.fileName, 'OpenNote-v1.0.12.apk');
     expect(u.size, 52428800);
   });
 
@@ -36,8 +37,32 @@ void main() {
       'browser_download_url': 'https://github.com/santiagofr1/OpenNote/releases/download/v1.0.12/opennote_1.0.12_amd64.deb',
     };
     final u = parseRelease({...j, 'assets': [deb, ...assets]})!;
-    expect(u.apkUrl, endsWith('/OpenNote-v1.0.12.apk'));
+    expect(u.url, endsWith('/OpenNote-v1.0.12.apk'));
     expect(parseRelease({...j, 'assets': [deb]}), isNull);
+  });
+
+  test('release: en Linux elige el .deb y en Windows el setup.exe', () {
+    const base = 'https://github.com/santiagofr1/OpenNote/releases/download/v1.0.12';
+    Map<String, dynamic> asset(String n, int size) => {'name': n, 'size': size, 'browser_download_url': '$base/$n'};
+    final j = {
+      ...fixture(),
+      'assets': [
+        asset('OpenNote-v1.0.12.apk', 10),
+        asset('opennote_1.0.12_amd64.deb', 20),
+        asset('OpenNote-v1.0.12-windows-setup.exe', 30),
+      ],
+    };
+    final a = parseRelease(j)!;
+    expect((a.fileName, a.size), ('OpenNote-v1.0.12.apk', 10));
+    final l = parseRelease(j, platform: UpdatePlatform.linux)!;
+    expect(l.url, '$base/opennote_1.0.12_amd64.deb');
+    expect((l.fileName, l.size), ('opennote_1.0.12_amd64.deb', 20));
+    final w = parseRelease(j, platform: UpdatePlatform.windows)!;
+    expect(w.url, '$base/OpenNote-v1.0.12-windows-setup.exe');
+    expect((w.fileName, w.size), ('OpenNote-v1.0.12-windows-setup.exe', 30));
+    final onlyApk = {...j, 'assets': [asset('OpenNote-v1.0.12.apk', 10)]};
+    expect(parseRelease(onlyApk, platform: UpdatePlatform.linux), isNull);
+    expect(parseRelease(onlyApk, platform: UpdatePlatform.windows), isNull);
   });
 
   test('newerThan compara con la versión instalada', () {

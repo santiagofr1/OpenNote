@@ -50,7 +50,7 @@ jobs:
       - name: Set version
         run: |
           echo "VERSION_NAME=1.0.${{ github.run_number }}" >> "$GITHUB_ENV"
-          echo "VERSION_CODE=$(( ${{ github.run_number }} + 100 ))" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$(( ${{ github.run_number }} + 200 ))" >> "$GITHUB_ENV"
 
       - name: Decode signing keystore
         env:
@@ -242,7 +242,7 @@ jobs:
       - name: Set version
         run: |
           echo "VERSION_NAME=1.0.${{ github.run_number }}" >> "$GITHUB_ENV"
-          echo "VERSION_CODE=$(( ${{ github.run_number }} + 100 ))" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$(( ${{ github.run_number }} + 200 ))" >> "$GITHUB_ENV"
 
       - name: Datos de Google (opcional)
         env:

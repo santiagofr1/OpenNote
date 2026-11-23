@@ -9,13 +9,23 @@ import 'package:path_provider/path_provider.dart';
 
 import '../domain/version.dart';
 
+/// Plataformas donde la app se actualiza sola.
+enum UpdatePlatform { android, linux, windows }
+
 /// Una versión nueva publicada en GitHub Releases.
 class UpdateInfo {
-  const UpdateInfo({required this.version, required this.notes, required this.apkUrl, required this.size});
+  const UpdateInfo({
+    required this.version,
+    required this.notes,
+    required this.url,
+    required this.fileName,
+    required this.size,
+  });
   final AppVersion version;
   final String notes;
-  final String apkUrl;
-  final int size; // bytes del APK (0 = desconocido)
+  final String url;
+  final String fileName; // nombre del asset (.apk, .deb o .exe)
+  final int size; // bytes del instalador (0 = desconocido)
 }
 
 /// Resultado de buscar: [update] es la versión nueva (null si ya está al día);
@@ -27,8 +37,14 @@ class UpdateCheck {
 }
 
 /// Del JSON de `releases/latest` a [UpdateInfo]. Null si es borrador o prerelease, si el tag no es
-/// `v<x>.<y>.<z>` o si no trae un `.apk`.
-UpdateInfo? parseRelease(Map<String, dynamic> json) {
+/// `v<x>.<y>.<z>` o si no trae el instalador de la plataforma: `.apk` (Android), `_amd64.deb` (Linux) o
+/// `-windows-setup.exe` (Windows).
+UpdateInfo? parseRelease(Map<String, dynamic> json, {UpdatePlatform platform = UpdatePlatform.android}) {
+  final suffix = switch (platform) {
+    UpdatePlatform.android => '.apk',
+    UpdatePlatform.linux => '_amd64.deb',
+    UpdatePlatform.windows => '-windows-setup.exe',
+  };
   if (json['draft'] == true || json['prerelease'] == true) return null;
   final v = AppVersion.tryParse(json['tag_name'] as String?);
   if (v == null) return null;
@@ -37,12 +53,13 @@ UpdateInfo? parseRelease(Map<String, dynamic> json) {
   for (final a in assets) {
     if (a is! Map) continue;
     final name = a['name'], url = a['browser_download_url'];
-    if (name is String && url is String && name.toLowerCase().endsWith('.apk')) {
+    if (name is String && url is String && name.toLowerCase().endsWith(suffix)) {
       final size = a['size'];
       return UpdateInfo(
         version: v,
         notes: ((json['body'] as String?) ?? '').trim(),
-        apkUrl: url,
+        url: url,
+        fileName: name,
         size: size is int ? size : 0,
       );
     }
@@ -108,7 +125,14 @@ class CancelFlag {
   }
 }
 
-enum InstallResult { launched, needsPermission, failed }
+enum InstallResult {
+  launched,
+  needsPermission,
+  failed,
+  installed, // ya quedó instalada (Linux)
+  cancelled, // el usuario cerró el pedido de contraseña
+  manual, // no hay pkexec: hay que instalar a mano
+}
 
 /// Operaciones de actualización. Son variables para que los tests las reemplacen
 /// (como `Pickers`): los tests no tocan la red ni el instalador.
@@ -116,34 +140,60 @@ class Updates {
   static const repoApi = 'https://api.github.com/repos/santiagofr1/OpenNote/releases/latest';
   static const _channel = MethodChannel('opennote/updater');
 
-  /// La búsqueda automática solo corre en Android release (no en debug/`.test` ni en tests).
-  static bool Function() autoSupported = () => !kIsWeb && Platform.isAndroid && kReleaseMode;
+  /// Plataforma donde corre la app, o null si no se actualiza sola.
+  static UpdatePlatform? Function() platform = () {
+    if (kIsWeb) return null;
+    if (Platform.isAndroid) return UpdatePlatform.android;
+    if (Platform.isLinux) return UpdatePlatform.linux;
+    if (Platform.isWindows) return UpdatePlatform.windows;
+    return null;
+  };
+
+  /// La búsqueda automática solo corre en release en una plataforma soportada (no en debug/`.test` ni en tests).
+  static bool Function() autoSupported = () => kReleaseMode && platform() != null;
 
   static Future<AppVersion?> Function() installed = () async =>
       AppVersion.tryParse((await PackageInfo.fromPlatform()).version);
 
   static Future<UpdateCheck> Function() check = () async {
     try {
+      final p = platform();
+      if (p == null) return const UpdateCheck(failed: true);
       final json = await _getJson(repoApi);
       if (json == null) return const UpdateCheck(failed: true);
-      final info = newerThan(parseRelease(json), await installed());
+      final info = newerThan(parseRelease(json, platform: p), await installed());
       return UpdateCheck(update: info);
     } catch (_) {
       return const UpdateCheck(failed: true);
     }
   };
 
-  /// Baja el APK al caché y verifica el tamaño. Null si se canceló o falló.
+  /// Baja el instalador al caché y verifica el tamaño. Null si se canceló o falló.
   static Future<File?> Function(UpdateInfo, void Function(int done, int total), CancelFlag) download = _download;
 
   static Future<InstallResult> Function(File) install = (f) async {
-    try {
-      if (await _channel.invokeMethod<bool>('canInstall') != true) return InstallResult.needsPermission;
-      await _channel.invokeMethod('install', f.path);
-      return InstallResult.launched;
-    } catch (_) {
-      return InstallResult.failed;
+    switch (platform()) {
+      case UpdatePlatform.android:
+        try {
+          if (await _channel.invokeMethod<bool>('canInstall') != true) return InstallResult.needsPermission;
+          await _channel.invokeMethod('install', f.path);
+          return InstallResult.launched;
+        } catch (_) {
+          return InstallResult.failed;
+        }
+      case UpdatePlatform.linux:
+        return _installLinux(f);
+      case UpdatePlatform.windows:
+        return _installWindows(f);
+      case null:
+        return InstallResult.failed;
     }
+  };
+
+  /// Reabre la app (después de actualizar en Linux).
+  static Future<void> Function() restart = () async {
+    await Process.start(Platform.resolvedExecutable, const [], mode: ProcessStartMode.detached);
+    exit(0);
   };
 
   /// Abre "instalar apps desconocidas" de OpenNote.
@@ -152,6 +202,29 @@ class Updates {
       await _channel.invokeMethod('openInstallSettings');
     } catch (_) {}
   };
+}
+
+Future<InstallResult> _installLinux(File f) async {
+  try {
+    final r = await Process.run('pkexec', ['apt-get', 'install', '-y', f.path]);
+    if (r.exitCode == 0) return InstallResult.installed;
+    if (r.exitCode == 126 || r.exitCode == 127) return InstallResult.cancelled;
+    return InstallResult.failed;
+  } on ProcessException {
+    return InstallResult.manual;
+  } catch (_) {
+    return InstallResult.failed;
+  }
+}
+
+Future<InstallResult> _installWindows(File f) async {
+  try {
+    await Process.start(f.path, ['/SILENT', '/CLOSEAPPLICATIONS', '/RESTARTAPPLICATIONS'],
+        mode: ProcessStartMode.detached);
+    return InstallResult.launched; // el instalador cierra la app solo
+  } catch (_) {
+    return InstallResult.failed;
+  }
 }
 
 Future<Map<String, dynamic>?> _getJson(String url) async {
@@ -175,16 +248,18 @@ Future<Map<String, dynamic>?> _getJson(String url) async {
 }
 
 Future<File?> _download(UpdateInfo info, void Function(int, int) progress, CancelFlag cancel) async {
-  final dir = Directory('${(await getTemporaryDirectory()).path}/updates');
-  if (await dir.exists()) await dir.delete(recursive: true); // APKs viejos
+  // En Android el nombre de la carpeta lo exige file_paths.xml; en Linux el tmp es /tmp, compartido.
+  final sub = Updates.platform() == UpdatePlatform.android ? 'updates' : 'opennote-updates';
+  final dir = Directory('${(await getTemporaryDirectory()).path}/$sub');
+  if (await dir.exists()) await dir.delete(recursive: true); // instaladores viejos
   await dir.create(recursive: true);
-  final file = File('${dir.path}/OpenNote-v${info.version}.apk');
+  final file = File('${dir.path}/${info.fileName}');
   final c = HttpClient()..connectionTimeout = const Duration(seconds: 15);
   cancel._onCancel = () => c.close(force: true);
   IOSink? sink;
   var ok = false;
   try {
-    final req = await c.getUrl(Uri.parse(info.apkUrl));
+    final req = await c.getUrl(Uri.parse(info.url));
     req.headers.set(HttpHeaders.userAgentHeader, 'OpenNote-app');
     final res = await req.close();
     if (res.statusCode != 200) return null;
