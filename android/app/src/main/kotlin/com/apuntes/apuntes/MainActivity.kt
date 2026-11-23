@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.view.MotionEvent
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -40,5 +41,17 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    // Lápiz sin esperar al cuadro: Android entrega sus movimientos apenas pasan en vez de juntarlos hasta el
+    // próximo vsync (hasta ~16 ms menos de demora en la tinta). Se pide en cada gesto, al apoyar. El dedo y el mouse quedan como siempre.
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
+            val tool = ev.getToolType(0)
+            if (tool == MotionEvent.TOOL_TYPE_STYLUS || tool == MotionEvent.TOOL_TYPE_ERASER) {
+                window.decorView.requestUnbufferedDispatch(ev)
+            }
+        }
+        return super.dispatchTouchEvent(ev)
     }
 }
