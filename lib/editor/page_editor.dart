@@ -598,7 +598,9 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         liveTick.value++;
       case PenAction.draw:
         final pr = ts.current;
-        live = Stroke(newId('s'), ts.tool == Tool.hl ? 'hl' : pr.tip, pr.color, pr.width, [], pr.opacity,
+        live = Stroke(newId('s'), ts.tool == Tool.hl ? 'hl' : pr.tip, pr.color,
+            pr.width * kMm / unitsPerMm(doc.sizeAt(p.dy)), // mismo grosor en papel: en A3 las unidades son más chicas
+            [], pr.opacity,
             ts.tool == Tool.paint ? ts.paintParams : null);
         appendInkPoint(live!, p, pressureOf(e));
         _snapFit = _snapBase = _snapGrab = null;
@@ -1293,11 +1295,11 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     // el renglón de abajo de lo último (se sube un renglón menos un pelo: queda en el más cercano hacia abajo)
     var y = bottom != null
         ? doc.snapTextY(bottom! + line - 0.01, floor: true)
-        : doc.snapTextY(max(region.top + line * .5, sheetTop + mmToUnits(kTopMarginMm) - line) + line - 0.01, floor: true);
+        : doc.snapTextY(max(region.top + line * .5, sheetTop + topMarginUnits(doc.sheets[k].size) - line) + line - 0.01, floor: true);
     if (y - sheetTop > kSheetH - line && k < doc.sheetCount - 1) {
       y = doc.snapTextY((k + 1) * kSheetStep + 1, floor: false); // no entra: a la hoja siguiente
     }
-    _placeText(mmToUnits(kMarginMm) + 10, y);
+    _placeText(marginUnits(doc.sheets[k].size) + 10, y);
     if (scroll.hasClients && y + line > region.bottom) {
       final to = (y * scale + kTopPad - scroll.position.viewportDimension * .4).clamp(0.0, scroll.position.maxScrollExtent);
       scroll.animateTo(to, duration: const Duration(milliseconds: 300), curve: Curves.easeOutQuart);

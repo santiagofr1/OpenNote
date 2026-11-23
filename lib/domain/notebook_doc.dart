@@ -224,14 +224,17 @@ class NotebookDoc {
   /// Alto del renglón de texto (unidades) de la hoja que contiene [y].
   double lineAt(double y) {
     final m = sheets[sheetOfY(y)];
-    return paper.textLine(m.bg, m.spacing);
+    return paper.textLine(m.bg, m.spacing, size: m.size);
   }
+
+  /// Tamaño de papel (a4 | a3 | a5) de la hoja que contiene [y].
+  String sizeAt(double y) => sheets[sheetOfY(y)].size;
 
   /// Lleva la y global [y] de un texto al renglón de SU hoja (cada hoja tiene su espaciado).
   /// [floor]: al renglón de arriba en vez del más cercano.
   double snapTextY(double y, {bool floor = false}) {
     final k = sheetOfY(y), m = sheets[k];
-    return k * kSheetStep + paper.snapTextY(y - k * kSheetStep, m.bg, m.spacing, floor: floor);
+    return k * kSheetStep + paper.snapTextY(y - k * kSheetStep, m.bg, m.spacing, floor: floor, size: m.size);
   }
 
   // ================= hojas sucias =================

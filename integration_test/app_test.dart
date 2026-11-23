@@ -745,6 +745,7 @@ void main() {
     // solo la hoja que se ve (la 2, que acaba de agregarse)
     await openMore(t, 'Estilo de hoja');
     await t.tap(find.byKey(const Key('applySheet')));
+    await t.tap(find.byKey(const Key('size-a3')));
     await t.tap(find.text('Cuadriculado'));
     await settle(t, 300);
     await t.tap(find.byKey(const Key('spacing-7')));
@@ -759,12 +760,15 @@ void main() {
     expect([nb.sheets[0].bg, nb.sheets[0].spacing], ['lined', 8.0], reason: 'la otra hoja no cambia');
     expect([nb.sheets[1].bg, nb.sheets[1].paper, nb.sheets[1].spacing], ['grid', '#fbf3e0', 7.0]);
     expect([nb.bg, nb.spacing], ['lined', 8.0], reason: 'las hojas nuevas siguen igual');
+    expect([nb.sheets[0].size, nb.sheets[1].size, nb.size], ['a4', 'a3', 'a4'], reason: 'el tamaño es por hoja');
+    expect(textLine('grid', 7, size: 'a3'), lessThan(textLine('grid', 7)), reason: 'en A3 el renglón es más chico en unidades');
 
     // todo el cuaderno (es lo que viene marcado), y también las hojas nuevas
     await t.tap(find.byKey(const Key('nb-Estilo')));
     await settle(t, 1200);
     await openMore(t, 'Estilo de hoja');
     await t.tap(find.byKey(const Key('applyAll')));
+    await t.tap(find.byKey(const Key('size-a4'))); // se vuelve a A4 para todo el cuaderno
     await t.tap(find.text('Rayado'));
     await settle(t, 300);
     await t.tap(find.byKey(const Key('spacing-10')));
@@ -779,7 +783,7 @@ void main() {
     expect(nb.sheets.length, 2);
     expect([nb.bg, nb.paper, nb.spacing], ['lined', '#eaf3fb', 10.0], reason: 'también el estilo de las hojas nuevas');
     for (final sheet in nb.sheets) {
-      expect([sheet.bg, sheet.paper, sheet.spacing], ['lined', '#eaf3fb', 10.0]);
+      expect([sheet.bg, sheet.paper, sheet.spacing, sheet.size], ['lined', '#eaf3fb', 10.0, 'a4']);
     }
   });
 

@@ -33,6 +33,8 @@ void main() {
     }
   }
 
+  bool tester(WidgetTester t, String key) => find.byKey(Key(key)).evaluate().isNotEmpty;
+
   group('diálogo suelto', () {
     Future<StyleChoice?> open(WidgetTester t, NotebookDoc doc, Future<void> Function() body) async {
       t.view.physicalSize = const Size(1200, 1000);
@@ -93,6 +95,18 @@ void main() {
         await t.pumpAndSettle();
       });
       expect((r!.bg, r.paper, r.spacing, r.all), ('grid', '#fbf3e0', 7.0, true));
+    });
+
+    testWidgets('elegir el tamaño A3 lo devuelve', (t) async {
+      final doc = NotebookDoc(Notebook.create('x'));
+      final r = await open(t, doc, () async {
+        expect(tester(t, 'size-a4'), isTrue);
+        await t.tap(find.byKey(const Key('size-a3')));
+        await t.pumpAndSettle();
+        await t.tap(find.byKey(const Key('styleOk')));
+        await t.pumpAndSettle();
+      });
+      expect(r!.size, 'a3');
     });
 
     testWidgets('esta hoja, y cancelar devuelve null', (t) async {

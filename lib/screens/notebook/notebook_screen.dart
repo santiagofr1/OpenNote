@@ -669,11 +669,13 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
       m.bg = r.bg;
       m.paper = r.paper;
       m.spacing = r.spacing;
+      m.size = r.size;
     }
     if (r.all) {
       nb.bg = r.bg;
       nb.paper = r.paper;
       nb.spacing = r.spacing;
+      nb.size = r.size;
       _indexDirty = true;
       d.sheets.forEach(apply);
     } else {

@@ -20,7 +20,7 @@ class OpennoteException implements Exception {
 }
 
 /// Un `.opennote` es un ZIP con:
-///   `manifest.json`            {app, format, name, bg, paper, spacing, sheets, exported}
+///   `manifest.json`            {app, format, name, bg, paper, spacing, size, sheets, exported}
 ///   `notebook.json`            secciones, orden y datos de las hojas (igual que en disco; todas las secciones)
 ///   `sheets/<hoja>.sheet`      el archivo de cada hoja tal cual está en disco (sin decodificar)
 ///   `media/<archivo>`          las imágenes y audios que usan las hojas
@@ -49,6 +49,7 @@ Future<Uint8List> exportNotebookBytes(Storage store, Notebook nb) async {
     'bg': nb.bg,
     'paper': nb.paper,
     'spacing': nb.spacing,
+    if (nb.size != 'a4') 'size': nb.size,
     'sheets': nb.totalSheets,
     'exported': DateTime.now().millisecondsSinceEpoch,
   };
@@ -150,6 +151,7 @@ Future<Notebook> importNotebookBytes(Storage store, Uint8List bytes,
       bg: (manifest['bg'] ?? 'lined') as String,
       paper: (manifest['paper'] ?? '#fffefb') as String,
       spacing: (manifest['spacing'] as num?)?.toDouble(),
+      size: validPaperSize(manifest['size']),
       folder: folder)
     ..loadSheetsJson(nbJson) // secciones y hojas (las secciones se conservan al importar)
     ..touch();

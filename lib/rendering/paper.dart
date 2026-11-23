@@ -6,34 +6,35 @@ const _ruleColor = Color(0xFFD5DFEE);
 const _marginColor = Color(0xFFF0C9C9);
 const _dotColor = Color(0xFFB9C3D3);
 
-/// Renglones / cuadrícula / puntos de una hoja, con origen en su esquina y medidas en mm reales de A4
+/// Renglones / cuadrícula / puntos de una hoja, con origen en su esquina y medidas en mm reales del tamaño [size]
 /// según [spacing] (ver paper_layout.dart). Los grosores van aparte porque dependen de la escala de quien dibuja.
-void paintPaperPattern(Canvas c, String bg, double spacing, {required double ruleWidth, required double marginWidth}) {
+void paintPaperPattern(Canvas c, String bg, double spacing,
+    {String size = 'a4', required double ruleWidth, required double marginWidth}) {
   final rule = Paint()
     ..color = _ruleColor
     ..strokeWidth = ruleWidth;
   switch (bg) {
     case 'lined':
-      for (final y in ruleYs(spacing)) {
+      for (final y in ruleYs(spacing, size: size)) {
         c.drawLine(Offset(0, y), Offset(kW, y), rule);
       }
-      final mx = mmToUnits(kMarginMm);
+      final mx = marginUnits(size);
       c.drawLine(Offset(mx, 0), Offset(mx, kSheetH), Paint()
         ..color = _marginColor
         ..strokeWidth = marginWidth);
     case 'grid':
-      for (final y in gridYs(spacing)) {
+      for (final y in gridYs(spacing, size: size)) {
         c.drawLine(Offset(0, y), Offset(kW, y), rule);
       }
-      for (final x in gridXs(spacing)) {
+      for (final x in gridXs(spacing, size: size)) {
         c.drawLine(Offset(x, 0), Offset(x, kSheetH), rule);
       }
     case 'dots':
       final dot = Paint()..color = _dotColor;
-      final xs = gridXs(spacing);
-      for (final y in gridYs(spacing)) {
+      final xs = gridXs(spacing, size: size);
+      for (final y in gridYs(spacing, size: size)) {
         for (final x in xs) {
-          c.drawCircle(Offset(x, y), 1.4, dot);
+          c.drawCircle(Offset(x, y), 1.4 * unitsPerMm(size) / kMm, dot);
         }
       }
   }
@@ -47,7 +48,7 @@ class SheetPainter extends CustomPainter {
   final int first, last;
   final String _sig; // cómo estaban los estilos al crearse (la lista se modifica en el lugar)
   SheetPainter(this.sheets, this.scale, this.first, this.last)
-      : _sig = [for (var k = first; k <= last && k < sheets.length; k++) '${sheets[k].bg}${sheets[k].paper}${sheets[k].spacing}'].join('|');
+      : _sig = [for (var k = first; k <= last && k < sheets.length; k++) '${sheets[k].bg}${sheets[k].paper}${sheets[k].spacing}${sheets[k].size}'].join('|');
 
   @override
   void paint(Canvas c, Size size) {
@@ -63,7 +64,7 @@ class SheetPainter extends CustomPainter {
       c.clipRect(r);
       c.translate(0, r.top);
       // líneas de un píxel de pantalla, sin importar el zoom
-      paintPaperPattern(c, sheets[k].bg, sheets[k].spacing, ruleWidth: 1 / scale, marginWidth: 1.2 / scale);
+      paintPaperPattern(c, sheets[k].bg, sheets[k].spacing, size: sheets[k].size, ruleWidth: 1 / scale, marginWidth: 1.2 / scale);
       c.restore();
     }
   }

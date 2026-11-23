@@ -15,6 +15,7 @@ class SheetMeta {
   String bg; // lined | grid | dots | blank
   String paper; // color del papel
   double spacing; // interlineado / paso de la cuadrícula en mm (ver paper_layout.dart)
+  String size; // a4 | a3 | a5 (ver paper_layout.dart)
   int rev; // sube cada vez que cambia el contenido guardado
   int updated; // ms epoch, para sincronizar algún día
   String section; // id de la sección a la que pertenece ('' = sin decir: es de la primera, ver [Notebook.loadSheetsJson])
@@ -25,6 +26,7 @@ class SheetMeta {
       this.bg = 'lined',
       this.paper = '#fffefb',
       double? spacing,
+      this.size = 'a4',
       this.rev = 0,
       this.updated = 0,
       this.section = '',
@@ -45,6 +47,7 @@ class SheetMeta {
       bg: bg,
       paper: paper,
       spacing: spacing,
+      size: size,
       rev: rev,
       updated: updated,
       section: section,
@@ -57,6 +60,7 @@ class SheetMeta {
         bg: (j['bg'] ?? 'lined') as String,
         paper: (j['paper'] ?? '#fffefb') as String,
         spacing: (j['spacing'] as num?)?.toDouble(), // los archivos viejos no lo tienen: el por defecto del fondo
+        size: validPaperSize(j['size']), // los archivos viejos no lo tienen: A4
         rev: (j['rev'] ?? 0) as int,
         updated: (j['updated'] ?? 0) as int,
         section: (j['section'] ?? '') as String, // los archivos viejos no la tienen
@@ -69,6 +73,7 @@ class SheetMeta {
         'bg': bg,
         'paper': paper,
         'spacing': spacing,
+        if (size != 'a4') 'size': size,
         'rev': rev,
         'updated': updated,
         if (section.isNotEmpty) 'section': section,
@@ -113,6 +118,7 @@ class Notebook {
   String active; // id de la sección abierta
   String bg, paper; // estilo de las hojas nuevas
   double spacing; // espaciado (mm) de las hojas nuevas
+  String size; // tamaño de las hojas nuevas
   int updated; // última edición (ms)
   int last; // índice de la última hoja vista (dentro de la sección activa)
   bool favorite;
@@ -125,6 +131,7 @@ class Notebook {
       this.bg = 'lined',
       this.paper = '#fffefb',
       double? spacing,
+      this.size = 'a4',
       this.updated = 0,
       this.last = 0,
       this.favorite = false,
@@ -144,7 +151,7 @@ class Notebook {
 
   /// Hoja nueva con el estilo del cuaderno, de la sección [section] (o la activa). No la agrega.
   SheetMeta newSheet({String? section}) =>
-      SheetMeta(newId('h'), bg: bg, paper: paper, spacing: spacing, section: section ?? active);
+      SheetMeta(newId('h'), bg: bg, paper: paper, spacing: spacing, size: size, section: section ?? active);
 
   // ---------- secciones ----------
   Section get activeSection => sectionById(active) ?? sections.first;
@@ -286,6 +293,7 @@ class Notebook {
         bg: (n['bg'] ?? 'lined') as String,
         paper: (n['paper'] ?? '#fffefb') as String,
         spacing: (n['spacing'] as num?)?.toDouble(),
+        size: validPaperSize(n['size']),
         updated: (n['updated'] ?? 0) as int,
         last: (n['last'] ?? 0) as int,
         favorite: (n['favorite'] ?? false) as bool,
@@ -301,6 +309,7 @@ class Notebook {
         'bg': bg,
         'paper': paper,
         'spacing': spacing,
+        if (size != 'a4') 'size': size,
         'last': last,
         if (favorite) 'favorite': true,
         if (pin != null) 'pin': pin,
