@@ -64,7 +64,10 @@ class _DragSourceState extends State<DragSource> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Listener(
+    // clic derecho (PC): el mismo menú que mantener apretado
+    return GestureDetector(
+      onSecondaryTapUp: (_) => widget.onHold(context),
+      child: Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: (e) => _down = e.position,
       child: LongPressDraggable<LibraryDrag>(
@@ -119,6 +122,7 @@ class _DragSourceState extends State<DragSource> {
           child: widget.child,
         ),
         child: widget.child,
+      ),
       ),
     );
   }

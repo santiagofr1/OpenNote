@@ -1178,17 +1178,6 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   void _duplicateSel() => _insert(sel.strokesOf(doc), sel.textsOf(doc), const Offset(30, 30), sel.itemsOf(doc));
 
-  /// Pegar desde la barra: si lo copiado está a la vista, corrido; si no, arriba de lo que se ve.
-  void _paste() {
-    final c = ts.clipboard;
-    final r = clipboardBounds(c);
-    if (r == null) return;
-    final top = max(0.0, (scroll.offset - kTopPad) / scale);
-    final bottom = top + scroll.position.viewportDimension / scale;
-    final d = (r.top > top && r.top < bottom - 60) ? const Offset(30, 30) : Offset(90 - r.left, top + 60 - r.top);
-    _insert(c.strokes, c.texts, d, c.items);
-  }
-
   /// Pegar desde el menú de la hoja: la esquina de lo copiado va a [p].
   void _pasteAt(Offset p) {
     final c = ts.clipboard;
@@ -1931,7 +1920,6 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
           grip: grip,
           canUndo: history.canUndo,
           canRedo: history.canRedo,
-          bg: doc.sheets[visibleSheet].bg,
           onToolTap: _toolTap,
           onToolLongPress: (t) {
             _setTool(t);
@@ -1939,15 +1927,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
           },
           onPickColor: _pickQuick,
           onSetFavorite: _setFavorite,
-          onBg: (v) {
-            setState(() => doc.sheets[visibleSheet].setBg(v)); // la hoja que se está viendo
-            _changed();
-          },
           onOpenPanel: _openPanelForDrawing,
           onUndo: () => _undoRedo(undo: true),
           onRedo: () => _undoRedo(undo: false),
           onToggleZoomLock: _toggleZoomLock,
-          onPaste: _paste,
         ),
         onDock: (d) {
           setState(() => ts.dock = d);

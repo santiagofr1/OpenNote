@@ -4,21 +4,19 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../domain/domain.dart';
-import '../widgets/backgrounds.dart';
 
 /// Barra de herramientas del editor. Zonas de tamaño fijo para que nada salte al cambiar de herramienta.
-/// Arriba:   [mover][herramientas] | [colores][más colores][grosor] | [deshacer][rehacer][candado][fondo][pegar]
+/// Arriba:   [mover][herramientas] | [colores][más colores][grosor] | [deshacer][rehacer][candado]
 /// Costado:  lo mismo, en columna.
 class EditorToolbar extends StatelessWidget {
   final ToolState ts;
   final bool vertical;
   final Widget grip; // agarradera para mover la barra (la pone DockLayout)
   final bool canUndo, canRedo;
-  final String bg; // fondo de la hoja que se está viendo
   final ValueChanged<Tool> onToolTap, onToolLongPress;
-  final ValueChanged<String> onPickColor, onBg;
+  final ValueChanged<String> onPickColor;
   final ValueChanged<int> onSetFavorite;
-  final VoidCallback onOpenPanel, onUndo, onRedo, onToggleZoomLock, onPaste;
+  final VoidCallback onOpenPanel, onUndo, onRedo, onToggleZoomLock;
 
   const EditorToolbar({
     super.key,
@@ -27,17 +25,14 @@ class EditorToolbar extends StatelessWidget {
     required this.grip,
     required this.canUndo,
     required this.canRedo,
-    required this.bg,
     required this.onToolTap,
     required this.onToolLongPress,
     required this.onPickColor,
     required this.onSetFavorite,
-    required this.onBg,
     required this.onOpenPanel,
     required this.onUndo,
     required this.onRedo,
     required this.onToggleZoomLock,
-    required this.onPaste,
   });
 
   @override
@@ -46,13 +41,10 @@ class EditorToolbar extends StatelessWidget {
     final drawing = ts.drawing;
     final cur = ts.current;
     final axis = vertical ? Axis.vertical : Axis.horizontal;
-    final hasClip = !ts.clipboard.isEmpty;
     return LayoutBuilder(builder: (context, box) {
       final room = vertical ? box.maxHeight : box.maxWidth;
       // Los 4 favoritos fijos: arriba se muestran tantos como entren; al costado, siempre los 4.
       final nColors = vertical ? 4 : ((room - _fixedWidth) / _slot.width).floor().clamp(0, 4);
-      // Muy angosto: 'Pegar' sin portapapeles (invisible) no ocupa lugar.
-      final narrow = !vertical && room < _fixedWidth + 2 * _slot.width;
       final side = BorderSide(color: cs.outlineVariant.withValues(alpha: .6));
       final children = <Widget>[
         grip,
@@ -77,16 +69,6 @@ class EditorToolbar extends StatelessWidget {
         _icon(cs, Symbols.undo, 'Deshacer', canUndo ? onUndo : null),
         _icon(cs, Symbols.redo, 'Rehacer', canRedo ? onRedo : null),
         _lockBtn(cs),
-        _bgMenu(cs),
-        if (!(narrow && !hasClip))
-        IgnorePointer(
-          ignoring: !hasClip,
-          child: AnimatedOpacity(
-            opacity: hasClip ? 1 : 0,
-            duration: const Duration(milliseconds: 160),
-            child: _icon(cs, Symbols.content_paste, 'Pegar', onPaste),
-          ),
-        ),
       ];
       return Container(
         width: vertical ? 60 : null,
@@ -115,8 +97,8 @@ class EditorToolbar extends StatelessWidget {
     });
   }
 
-  /// Ancho (dp) de la barra horizontal sin los colores favoritos. Medido: 656 de contenido + 12 de padding + margen.
-  static const _fixedWidth = 676.0;
+  /// Ancho (dp) de la barra horizontal sin los colores favoritos. Medido: 676 con fondo y pegar, menos 44 de Pegar y 48 del fondo.
+  static const _fixedWidth = 584.0;
 
   Widget _lockBtn(ColorScheme cs) {
     final on = ts.zoomLocked;
@@ -289,24 +271,4 @@ class EditorToolbar extends StatelessWidget {
       ),
     );
   }
-
-  Widget _bgMenu(ColorScheme cs) => PopupMenuButton<String>(
-        tooltip: 'Fondo de la hoja',
-        icon: Icon(Symbols.background_grid_small, size: 22, weight: 300, color: cs.onSurfaceVariant),
-        initialValue: bg,
-        position: PopupMenuPosition.under,
-        onSelected: onBg,
-        itemBuilder: (_) => [
-          for (final (v, i, label) in backgrounds)
-            PopupMenuItem(
-              value: v,
-              child: Row(children: [
-                Icon(i, size: 20, weight: 300, color: cs.onSurfaceVariant),
-                const SizedBox(width: 12),
-                Expanded(child: Text(label)),
-                if (bg == v) Icon(Symbols.check, size: 18, weight: 500, color: cs.primary),
-              ]),
-            ),
-        ],
-      );
 }
