@@ -10,20 +10,27 @@
 [![Hecho con Flutter](https://img.shields.io/badge/hecho%20con-Flutter-02569B.svg?logo=flutter&logoColor=white)](https://flutter.dev)
 
 OpenNote es una app de apuntes a mano con S Pen (y también con teclado) para tablets Android.
-Es gratis, es de código abierto, funciona sin conexión y tus apuntes son tuyos: se guardan en tu tablet,
-sin cuentas ni servidores.
+Es gratis, es de código abierto, funciona sin conexión y tus apuntes son tuyos: se guardan en tu dispositivo,
+sin cuentas ni servidores propios. Si querés, los sincronizás entre la tablet y la PC con tu propio Google Drive.
 
 ## Qué tiene
 
 - **Escritura con presión**: el trazo engrosa o se afina según cuánto apretás el lápiz.
 - **Puntas y colores**: bolígrafo, pluma, lápiz, fibra y caligrafía, más resaltador, con paleta propia y grosores a elección.
+- **Figuras inteligentes**: dibujás una recta, círculo, elipse, rectángulo/cuadrado, triángulo o polígono, dejás el
+  lápiz quieto un instante y se vuelve una figura prolija; sin levantar el lápiz la agrandás o achicás. Se activa o
+  desactiva en el panel del lápiz.
 - **Borrador en el botón**: apretá el botón del S Pen para borrar. Hay tres tamaños de goma.
 - **Texto con formato**: tocá el tecladito y se abre un renglón nuevo con negrita, cursiva, subrayado, colores,
   títulos, listas, sangría y alineación.
+- **Índice del cuaderno**: con la herramienta Título encerrás lo que escribiste (a mano o con teclado) y lo marcás
+  como Título 1, 2, 3…; la letra a mano se lee sola, sin internet. El panel Índice muestra todo numerado (1, 1.1,
+  1.2…) con el número de hoja y te lleva a cada título; los títulos marcados se ven en la hoja con su número y viajan
+  con la sincronización.
 - **Selección tipo AutoCAD**: arrastrando hacia la derecha tomás lo que queda adentro del recuadro; hacia la
   izquierda, todo lo que el recuadro toca. Un toque elige un solo elemento y tocar de nuevo alterna al de abajo (por
   ejemplo, solo el resaltador de una palabra); tocar afuera deselecciona. Dejando el dedo apretado sobre la hoja, "Seleccionar todo" toma lo de esa hoja y
-  "Seleccionar todo el cuaderno" carga y toma todas. Después podés mover, copiar, duplicar o eliminar.
+  "Seleccionar todo el cuaderno" carga y toma todas. Después podés mover, copiar, duplicar o eliminar. Las esquinas escalan manteniendo la proporción y los puntos del medio de cada lado estiran solo a lo ancho o solo a lo alto; también se puede rotar.
 - **Orden de capas**: traer al frente, subir, bajar o enviar al fondo lo seleccionado. Se puede deshacer.
 - **Imágenes, notas adhesivas y audios**: insertalos dentro de la hoja, junto con la tinta.
 - **Cuadernos como tira de hojas**: deslizás de una hoja a otra y el título muestra cuál estás viendo (por
@@ -36,7 +43,9 @@ sin cuentas ni servidores.
   y cuadernos protegidos con PIN.
 - **Modo lectura**: para leer sin tocar nada por error.
 - **Exportar e importar**: con una sola opción "Exportar" sacás cuadernos a PDF o PNG, o enteros como archivo `.opennote` para respaldarlos o
-  pasarlos a otra tablet; importá `.opennote`, PDF, imágenes y audios.
+  pasarlos a otra tablet; importá `.opennote`, PDF, imágenes y audios. Un PDF importado entra en la hoja que estás viendo y sus páginas se abren al instante, listas para escribir encima.
+- **Sincronización con Google Drive (opcional)**: te conectás una vez con tu cuenta de Google y la tablet y la app de PC (Linux y Windows) quedan sincronizadas solas. La app solo ve su propia carpeta "OpenNote" en tu Drive, los cambios hechos en dos dispositivos se combinan hoja por hoja, y podés activar cifrado de extremo a extremo con una frase para que nadie más pueda leer tus apuntes, ni siquiera Google.
+- **App de PC**: la misma app para Linux y Windows, con tus cuadernos sincronizados; se instala desde el repo apt o el instalador (ver Instalación).
 - **Aspecto Material You**: sigue el tema de tu tablet.
 
 ## Capturas
@@ -47,6 +56,12 @@ sin cuentas ni servidores.
     <td align="center"><img src="docs/img/02_panel_hojas.png" width="260" alt="El panel de hojas con las miniaturas de cada hoja del cuaderno"><br><sub><b>Panel de hojas</b>: miniaturas para saltar, mover o marcar cada hoja.</sub></td>
     <td align="center"><img src="docs/img/03_biblioteca.png" width="260" alt="La biblioteca con carpetas y cuadernos"><br><sub><b>Biblioteca</b>: carpetas, favoritos y miniaturas de tus cuadernos.</sub></td>
   </tr>
+  <tr>
+    <td align="center"><img src="docs/img/04_indice.png" width="260" alt="El panel Índice con los títulos del cuaderno numerados por niveles"><br><sub><b>Índice</b>: títulos a mano numerados por niveles, con el panel para saltar a cada uno.</sub></td>
+    <td align="center"><img src="docs/img/05_figuras.png" width="260" alt="Figuras prolijas dibujadas a partir del trazo, con manijas para estirar y rotar"><br><sub><b>Figuras y selección</b>: figuras prolijas a partir del trazo, con manijas para estirar y rotar.</sub></td>
+    <td align="center"><img src="docs/img/06_pdf.png" width="260" alt="Un PDF importado con resaltador y respuestas a mano encima"><br><sub><b>PDF anotado</b>: un PDF importado con resaltador y respuestas a mano encima.</sub></td>
+  </tr>
+  <tr><td colspan="3" align="center"><img src="docs/img/07_sync.png" width="800" alt="El mismo cuaderno abierto en la tablet y en la app de Linux, sincronizados con Google Drive"><br><sub><b>Tablet y PC sincronizadas</b>: el mismo cuaderno en la tablet y en la app de Linux, con Google Drive.</sub></td></tr>
 </table>
 
 ## Instalación
