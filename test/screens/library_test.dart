@@ -1,10 +1,12 @@
 import 'dart:io';
 
 import 'package:apuntes/app.dart';
+import 'package:apuntes/data/export_folder.dart';
 import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/screens/library/library_drag.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// La biblioteca con carpetas: navegar, crear, mover, borrar y buscar (Storage real en una carpeta temporal).
@@ -78,6 +80,48 @@ void main() {
     await t.longPress(f);
     await settle(t, 400);
   }
+
+  group('exportar carpeta', () {
+    final savedZip = saveFolderZip;
+    tearDown(() => saveFolderZip = savedZip);
+
+    testWidgets('Exportar > OpenNote guarda el zip y avisa', (t) async {
+      final tmp = (await t.runAsync(() => Directory.systemTemp.createTemp('apuntes_library_tmp')))!;
+      addTearDown(() => tmp.delete(recursive: true));
+      t.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          const MethodChannel('plugins.flutter.io/path_provider'), (call) async => tmp.path);
+      addTearDown(() => t.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(const MethodChannel('plugins.flutter.io/path_provider'), null));
+      String? name;
+      var size = 0;
+      saveFolderZip = (zip, n) async {
+        name = n;
+        size = await zip.length();
+        return true;
+      };
+      await start(t);
+      await hold(t, k('folder-Facultad'));
+      await tap(t, k('exportFolder'));
+      expect(find.text('Exportar carpeta'), findsOneWidget);
+      await t.tap(k('folderExport-opennote'));
+      for (var i = 0; i < 50 && name == null; i++) {
+        await settle(t, 100);
+      }
+      await settle(t, 300);
+      expect(name, 'Facultad');
+      expect(size, greaterThan(0));
+      expect(find.text('Carpeta exportada'), findsOneWidget);
+    });
+
+    testWidgets('una carpeta sin cuadernos avisa que está vacía', (t) async {
+      await start(t);
+      await tap(t, k('folder-Facultad'));
+      await hold(t, k('folder-Análisis'));
+      await tap(t, k('exportFolder'));
+      expect(find.text('La carpeta está vacía'), findsOneWidget);
+      expect(find.text('Exportar carpeta'), findsNothing);
+    });
+  });
 
   testWidgets('navegar: entrar a una carpeta, subir con la flecha, con las migas y con atrás', (t) async {
     await start(t);
