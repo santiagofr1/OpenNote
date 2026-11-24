@@ -1211,6 +1211,51 @@ void main() {
     expect((px[0] - 0xFF).abs() + (px[2] - 0xFF).abs(), greaterThan(30), reason: 'no es blanco: es el fondo del PDF');
   });
 
+  testWidgets('índice: la herramienta Título marca un renglón impreso de una página de PDF y lo sugiere del texto (issue #41)', (t) async {
+    final pdfBytes = (await t.runAsync(() async {
+      final d = pw.Document();
+      d.addPage(pw.Page(
+        margin: const pw.EdgeInsets.all(40),
+        build: (_) => pw.Text('Capitulo Uno', style: pw.TextStyle(fontSize: 40)),
+      ));
+      return Uint8List.fromList(await d.save());
+    }))!;
+    final savedPick = Pickers.pdf;
+    addTearDown(() => Pickers.pdf = savedPick);
+    Pickers.pdf = () async => (pdfBytes, 'Libro');
+    await start(t);
+    await createNotebook(t, 'Indice PDF');
+    final ed = editor(t);
+    await t.tap(find.byKey(const Key('insert')));
+    await settle(t);
+    await t.tap(find.text('PDF'));
+    await settle(t, 1500);
+    final pdf = ed.doc.items.values.firstWhere((i) => i.type == 'pdf');
+    await settle(t, 800);
+
+    // recuadro sobre el renglón impreso (arriba de la página A4: 595 x 842 pt, texto entre los 40 y los 90 pt)
+    await t.tap(find.byTooltip('Título para el índice'));
+    await settle(t);
+    final toScreen = docToScreen(t);
+    await stylusDrag(t, toScreen(Offset(pdf.x + pdf.w * .03, pdf.y + pdf.h * .03)),
+        toScreen(Offset(pdf.x + pdf.w * .9, pdf.y + pdf.h * .12)));
+    await settle(t, 800);
+    expect(find.byKey(const Key('headingName')), findsOneWidget);
+    expect(t.widget<TextField>(find.byKey(const Key('headingName'))).controller!.text, 'Capitulo Uno');
+    await t.tap(find.byKey(const Key('headingOk')));
+    await settle(t, 600);
+
+    final h = ed.doc.sheets[ed.doc.sheetOfY(pdf.y)].heads.single;
+    expect(h.ids, [pdf.id]);
+    expect(h.box, isNotNull);
+    expect(h.y, lessThan(pdf.h * .12), reason: 'la marca queda en el renglón, no arriba de toda la página');
+
+    await t.tap(find.byKey(const Key('indexBtn')));
+    await settle(t, 600);
+    expect(find.byKey(Key('indexEntry-${h.id}')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(Key('indexEntry-${h.id}')), matching: find.text('Capitulo Uno')), findsOneWidget);
+  });
+
   Future<void> createFolder(WidgetTester t, String name) async {
     await t.tap(find.byKey(const Key('new')));
     await settle(t);

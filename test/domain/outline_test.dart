@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:apuntes/domain/domain.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -159,6 +161,41 @@ void main() {
       final d = NotebookDoc.lazy(nb);
       expect(syncHeadings(d), isFalse);
       expect(nb.sheets[0].heads.single.hidden, isFalse);
+    });
+  });
+
+  group('título con zona (box) sobre un PDF', () {
+    Item pdf(double y) => Item('p', 'pdf', 100, y, 300, 400, file: 'a.pdf');
+
+    test('json ida y vuelta, y sin box no hay clave', () {
+      final h = head('h', 1, 10, ids: ['p'])..box = const Rect.fromLTWH(10.04, 20.26, 100, 15);
+      final j = h.toJson();
+      expect(j['b'], [10, 20.3, 100, 15]);
+      final r = Heading.fromJson(j);
+      expect(r.box, const Rect.fromLTWH(10, 20.3, 100, 15));
+      expect(r.copy().box, r.box);
+      expect(head('h2', 1, 0).toJson().containsKey('b'), isFalse);
+      expect(Heading.fromJson({'id': 'z', 'b': 'basura'}).box, isNull);
+      expect(Heading.fromJson({'id': 'z', 'b': [1, 2]}).box, isNull);
+    });
+
+    test('syncHeadings usa la altura de la zona y se oculta si se borra el elemento', () {
+      final d = docOf(1);
+      d.items['p'] = pdf(50);
+      d.sheets[0].heads.add(head('h', 1, 0, ids: ['p'])..box = const Rect.fromLTWH(10, 120, 100, 15));
+      expect(syncHeadings(d), isTrue);
+      expect(d.sheets[0].heads.single.y, 170);
+      d.items.remove('p');
+      syncHeadings(d);
+      expect(d.sheets[0].heads.single.hidden, isTrue);
+    });
+
+    test('headingBounds devuelve la zona, no el elemento entero', () {
+      final d = docOf(1);
+      d.items['p'] = pdf(50);
+      final h = head('h', 1, 0, ids: ['p'])..box = const Rect.fromLTWH(10, 120, 100, 15);
+      expect(headingBounds(d, h, (_) => Rect.zero), const Rect.fromLTWH(110, 170, 100, 15));
+      expect(headingBounds(d, head('g', 1, 0, ids: ['p']), (_) => Rect.zero), d.items['p']!.rect);
     });
   });
 }

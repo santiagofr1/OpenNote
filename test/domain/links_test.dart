@@ -63,6 +63,14 @@ void main() {
       final back = pdfPointFor(it, c, page)!;
       expect(back, const Offset(180, 650));
     });
+
+    test('pdfRectFor: rect de la hoja a puntos del PDF, recortado al elemento', () {
+      final r = pdfRectFor(it, const Rect.fromLTRB(130, 1050, 250, 1100), page)!;
+      expect([r.left, r.top, r.right, r.bottom], [60, 700, 300, 600]);
+      final c = pdfRectFor(it, const Rect.fromLTRB(0, 900, 1000, 1100), page)!; // se pasa por todos lados
+      expect([c.left, c.top, c.right, c.bottom], [0, 800, 600, 600]);
+      expect(pdfRectFor(it, const Rect.fromLTRB(0, 0, 50, 50), page), isNull);
+    });
   });
 
   test('un Item link pasa por el codec de hojas', () {

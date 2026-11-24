@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -22,6 +23,7 @@ class PdfPages {
   final _flights = <String, Future<ui.Image?>>{};
   final _sizes = <String, List<ui.Size>>{};
   final _links = <String, List<PdfLink>>{}; // '<archivo>#<página>' (la más vieja primero)
+  final _texts = <String, PdfPageText>{}; // '<archivo>#<página>' (la más vieja primero)
   int _imageBytes = 0;
 
   Future<void> _ready() => _init ??= pdfrxFlutterInitialize();
@@ -89,6 +91,36 @@ class PdfPages {
     }
   }
 
+  /// El texto de la página [page] (desde 0) de [f] que cae dentro del rectángulo dado en puntos del PDF (origen abajo,
+  /// [top] >= [bottom]): los caracteres cuyo centro está adentro, en el orden del texto, con los espacios y saltos
+  /// juntados en uno. '' si no hay texto (PDF escaneado) o falla.
+  Future<String> textIn(File f, int page, double left, double top, double right, double bottom) async {
+    final key = '${f.path}#$page';
+    var pt = _texts.remove(key);
+    if (pt == null) {
+      final d = await _open(f.path);
+      if (d == null || page < 0 || page >= d.pages.length) return '';
+      try {
+        pt = await d.pages[page].loadStructuredText();
+      } catch (e) {
+        debugPrint('PdfPages: no se pudo leer el texto de ${f.path} página $page: $e');
+        return '';
+      }
+    }
+    _texts[key] = pt;
+    while (_texts.length > 8) {
+      _texts.remove(_texts.keys.first);
+    }
+    final b = StringBuffer();
+    final n = min(pt.fullText.length, pt.charRects.length);
+    for (var i = 0; i < n; i++) {
+      final r = pt.charRects[i];
+      final cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2;
+      if (cx >= left && cx <= right && cy <= top && cy >= bottom) b.write(pt.fullText[i]);
+    }
+    return b.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
   /// La página [page] (desde 0) de [f] dibujada a [pixelWidth] px de ancho; null si el archivo falta o está roto.
   /// Quien la pide recibe un clon y lo libera cuando termina (así la caché puede soltar la suya sin romper lo que se
   /// está dibujando). Dos pedidos iguales comparten el mismo vuelo.
@@ -143,6 +175,7 @@ class PdfPages {
     if (d != null) unawaited(d.then((x) => x?.dispose()));
     _sizes.remove(path);
     _links.removeWhere((k, _) => k.startsWith('$path#'));
+    _texts.removeWhere((k, _) => k.startsWith('$path#'));
     for (final k in _images.keys.where((k) => k.startsWith('$path#')).toList()) {
       final img = _images.remove(k)!;
       _imageBytes -= img.width * img.height * 4;

@@ -14,9 +14,10 @@ class Heading {
   double y; // borde de arriba de lo marcado, LOCAL a la hoja (0 = arriba de la hoja)
   List<String> ids; // elementos marcados
   bool hidden; // lo marcado no está en la hoja (se borró): no aparece en el índice, pero vuelve si reaparece (deshacer)
-  Heading(this.id, {this.level = 1, this.title = '', this.y = 0, List<String>? ids, this.hidden = false}) : ids = ids ?? [];
+  Rect? box; // zona marcada (ej. un renglón de una página de PDF), RELATIVA a la esquina (x, y) del elemento ancla
+  Heading(this.id, {this.level = 1, this.title = '', this.y = 0, List<String>? ids, this.hidden = false, this.box}) : ids = ids ?? [];
 
-  Heading copy() => Heading(id, level: level, title: title, y: y, ids: List.of(ids), hidden: hidden);
+  Heading copy() => Heading(id, level: level, title: title, y: y, ids: List.of(ids), hidden: hidden, box: box);
 
   factory Heading.fromJson(Map j) => Heading(
         (j['id'] ?? newId('h')) as String,
@@ -25,8 +26,22 @@ class Heading {
         y: jsonDouble(j['y']),
         ids: [for (final e in (j['ids'] as List? ?? const [])) e as String],
         hidden: (j['x'] ?? false) as bool,
+        box: _boxFrom(j['b']),
       );
-  Map<String, dynamic> toJson() => {'id': id, 'l': level, 't': title, 'y': round1(y), 'ids': ids, if (hidden) 'x': true};
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'l': level,
+        't': title,
+        'y': round1(y),
+        'ids': ids,
+        if (hidden) 'x': true,
+        if (box != null) 'b': [round1(box!.left), round1(box!.top), round1(box!.width), round1(box!.height)],
+      };
+
+  static Rect? _boxFrom(Object? b) {
+    if (b is! List || b.length < 4 || b.any((e) => e is! num)) return null;
+    return Rect.fromLTWH(jsonDouble(b[0]), jsonDouble(b[1]), jsonDouble(b[2]), jsonDouble(b[3]));
+  }
 }
 
 /// Una línea del índice del cuaderno.
@@ -101,8 +116,11 @@ bool syncHeadings(NotebookDoc doc) {
     if (m.heads.isEmpty || !doc.isLoaded(m.id)) continue;
     for (final h in List.of(m.heads)) {
       double? top;
+      final box = h.box;
       for (final id in h.ids) {
-        final double? t = doc.strokes[id]?.bounds.top ?? doc.texts[id]?.y ?? doc.items[id]?.y;
+        final double? t = box != null && doc.items[id] != null
+            ? doc.items[id]!.y + box.top
+            : doc.strokes[id]?.bounds.top ?? doc.texts[id]?.y ?? doc.items[id]?.y;
         if (t != null && (top == null || t < top)) top = t;
       }
       if (top == null) {
@@ -141,6 +159,6 @@ Rect? headingBounds(NotebookDoc doc, Heading h, Rect Function(TextBlock) textBox
       for (final id in h.ids) ...[
         if (doc.strokes[id] case final s?) s.bounds,
         if (doc.texts[id] case final t?) textBox(t),
-        if (doc.items[id] case final it?) it.rect,
+        if (doc.items[id] case final it?) h.box?.shift(Offset(it.x, it.y)) ?? it.rect,
       ]
     ]);
