@@ -4,7 +4,13 @@
 # así que al desinstalarse al final no afecta a los cuadernos de OpenNote.
 # Antes y después se verifica que la app real y sus datos sigan iguales.
 #   BACKUP=1 ./run_tests.sh   -> además baja un backup de los cuadernos reales a ~/apuntes_app_backup/
+#   NOMBRE='texto' ./run_tests.sh   -> solo los casos cuyo nombre contiene ese texto
+#   FILTRO='regex' ./run_tests.sh   -> solo los casos cuyo nombre encaja con la expresión regular
+#   NUEVOS=1 ./run_tests.sh   -> solo los casos de las funciones de esta tanda (ver NUEVOS_RE más abajo)
 set -e
+# Casos de la tanda actual (fondos #31, plantillas #33, pegar imagen #32, selector de color) y los viejos que tocan lo mismo.
+NUEVOS_RE='issue #3[1-9]\)|issue #23\)|favoritos: Cambiar|estilo de hoja|issue #41\)|issue #42\)'
+[ "${NUEVOS:-0}" = 1 ] && FILTRO=${FILTRO:-$NUEVOS_RE}
 export PATH=~/flutter/bin:$PATH JAVA_HOME=~/Android/jdk21 ANDROID_HOME=~/Android/Sdk
 cd "$(dirname "$0")"
 DEV=${DEV:-$(adb devices | awk 'NR==2{print $1}')}
@@ -58,7 +64,7 @@ if [ "${BACKUP:-0}" = 1 ]; then
 fi
 
 set +e
-flutter test integration_test/app_test.dart -d "$DEV" -r expanded --no-uninstall ${NOMBRE:+--plain-name "$NOMBRE"}
+flutter test integration_test/app_test.dart -d "$DEV" -r expanded --no-uninstall ${NOMBRE:+--plain-name "$NOMBRE"} ${FILTRO:+--name "$FILTRO"}
 R=$?
 set -e
 

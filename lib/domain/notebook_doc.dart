@@ -140,6 +140,14 @@ class NotebookDoc {
   List<SheetMeta> get sheets => nb.sheets;
   int get sheetCount => sheets.length;
 
+  /// Ancho del contenido: el de una hoja, o el del lienzo infinito (que crece a la derecha).
+  double get width => nb.canvas ? nb.canvasW : kW;
+
+  /// Zona de la hoja [k] dentro de la tira. En un lienzo la franja es todo el ancho y llega hasta la de abajo
+  /// (incluye el hueco, así nada queda en tierra de nadie).
+  Rect bandRect(int k) =>
+      nb.canvas ? Rect.fromLTWH(0, k * kSheetStep, width, kSheetStep) : Rect.fromLTWH(0, k * kSheetStep, kW, kSheetH);
+
   /// Alto de toda la tira.
   double get h => heightFor(sheets.length);
 

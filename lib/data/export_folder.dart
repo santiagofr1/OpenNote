@@ -50,6 +50,7 @@ List<({Notebook nb, String path})> folderExportEntries(NotesIndex idx, Folder ro
 Future<File?> buildFolderZip(Storage store, NotesIndex idx, Folder root, FolderExportFormat fmt,
     {void Function(int done, int total, String name)? onProgress, bool Function()? cancelled, Directory? tmp}) async {
   final entries = folderExportEntries(idx, root);
+  final bg = await exportBackgroundPref(store);
   final base = tmp ?? await getTemporaryDirectory();
   final dir = Directory('${base.path}/opennote-export');
   if (await dir.exists()) await dir.delete(recursive: true);
@@ -73,10 +74,10 @@ Future<File?> buildFolderZip(Storage store, NotesIndex idx, Folder root, FolderE
       switch (fmt) {
         case FolderExportFormat.pdf:
           final doc = await store.openNotebook(e.nb, radius: 0);
-          enc.addArchiveFile(ArchiveFile.bytes('${e.path}.pdf', await buildNotebookPdf(store, doc)));
+          enc.addArchiveFile(ArchiveFile.bytes('${e.path}.pdf', await buildNotebookPdf(store, doc, background: bg)));
         case FolderExportFormat.png:
           final doc = await store.openNotebook(e.nb, radius: 0);
-          await for (final p in notebookPngs(store, doc, cancelled: cancelled)) {
+          await for (final p in notebookPngs(store, doc, cancelled: cancelled, background: bg)) {
             enc.addArchiveFile(ArchiveFile.bytes('${e.path}/${p.name}', p.png));
           }
           if (cancelled?.call() ?? false) return await abort();

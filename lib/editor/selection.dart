@@ -19,6 +19,10 @@ Rect? clipboardBounds(SelectionClipboard c) => contentBounds(c.strokes, c.texts,
 /// Qué se agarró de la selección: el interior (mover), una esquina (escalar), el medio de un lado (estirar) o la manija de arriba (rotar).
 enum Handle { move, tl, tr, br, bl, top, right, bottom, left, rotate }
 
+/// Si el elemento se puede seleccionar. La página de un PDF importado es el fondo de la hoja: no se elige,
+/// ni se mueve, copia o borra con las herramientas de selección.
+bool selectable(Item it) => it.type != 'pdf';
+
 /// Las manijas del medio de cada lado (estiran sin mantener la proporción).
 bool isSideHandle(Handle h) => h == Handle.top || h == Handle.right || h == Handle.bottom || h == Handle.left;
 
@@ -96,7 +100,7 @@ class Selection {
     replace(
       strokes: [for (final s in p.strokes.values) if (inSheet(s)) s.id],
       texts: [for (final t in p.texts.values) if (inSheet(t)) t.id],
-      items: [for (final i in p.items.values) if (inSheet(i)) i.id],
+      items: [for (final i in p.items.values) if (selectable(i) && inSheet(i)) i.id],
     );
   }
 
@@ -276,7 +280,7 @@ class Selection {
     bool hit(Layered e) => switch (e) {
           Stroke s => s.hitBy(pt, tol),
           TextBlock t => textHit(t, pt, tol, doc.lineAt(t.y)),
-          Item it => it.rect.inflate(tol).contains(pt),
+          Item it => selectable(it) && it.rect.inflate(tol).contains(pt),
           _ => false,
         };
     return [for (final e in seen.reversed) if (hit(e)) e];
@@ -301,7 +305,7 @@ class Selection {
         if (r.overlaps(textBounds(t, doc.lineAt(t.y)))) texts.add(t.id);
       }
       for (final it in doc.items.values) {
-        if (r.overlaps(it.rect)) items.add(it.id);
+        if (selectable(it) && r.overlaps(it.rect)) items.add(it.id);
       }
       return;
     }
@@ -317,7 +321,7 @@ class Selection {
       if (r.contains(textBounds(t, doc.lineAt(t.y)).center)) texts.add(t.id);
     }
     for (final it in doc.items.values) {
-      if (r.contains(it.rect.center)) items.add(it.id);
+      if (selectable(it) && r.contains(it.rect.center)) items.add(it.id);
     }
   }
 }

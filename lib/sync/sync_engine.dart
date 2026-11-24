@@ -116,9 +116,10 @@ class SyncEngine {
       final paths = <String>{..._st.base.keys, ..._st.remote.keys, ...await _localPaths()}.where(isSyncPath).toList();
       int order(String p) => switch (syncKind(p)!) {
             SyncKind.media => 0,
-            SyncKind.sheet => 1,
-            SyncKind.notebook => 2,
-            SyncKind.indexFile => 3,
+            SyncKind.template => 1, // después de la media: la imagen llega antes que la plantilla que la usa
+            SyncKind.sheet => 2,
+            SyncKind.notebook => 3,
+            SyncKind.indexFile => 4,
           };
       paths.sort((a, b) => order(a) != order(b) ? order(a).compareTo(order(b)) : a.compareTo(b));
       for (final p in paths) {
@@ -128,6 +129,7 @@ class SyncEngine {
         try {
           switch (syncKind(p)!) {
             case SyncKind.media:
+            case SyncKind.template:
             case SyncKind.sheet:
               await _opaque(p);
             case SyncKind.notebook:

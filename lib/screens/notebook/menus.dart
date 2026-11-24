@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../data/export_folder.dart';
+import '../../data/storage.dart';
 import '../../domain/domain.dart';
 import '../../widgets/menu_row.dart';
 
@@ -9,18 +10,18 @@ import '../../widgets/menu_row.dart';
 // NotebookScreenState.runInsert / runMore) o null.
 
 /// Menú "+" anclado en [at] (esquina inferior derecha del botón).
-Future<String?> showInsertMenu(BuildContext context, Offset at) => showMenu<String>(
+Future<String?> showInsertMenu(BuildContext context, Offset at, {bool canvas = false}) => showMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(at.dx - 200, at.dy, at.dx, at.dy),
-      items: const [
-        PopupMenuItem(value: 'pdf', child: MenuRow(Symbols.picture_as_pdf, 'PDF')),
-        PopupMenuItem(value: 'voice', child: MenuRow(Symbols.mic, 'Grabación de voz')),
-        PopupMenuDivider(),
-        PopupMenuItem(value: 'image', child: MenuRow(Symbols.image, 'Imagen')),
-        PopupMenuItem(value: 'camera', child: MenuRow(Symbols.photo_camera, 'Cámara')),
-        PopupMenuItem(value: 'audio', child: MenuRow(Symbols.music_note, 'Archivo de audio')),
-        PopupMenuItem(value: 'sticky', child: MenuRow(Symbols.sticky_note_2, 'Nota adhesiva')),
-        PopupMenuItem(value: 'sheet', child: MenuRow(Symbols.note_add, 'Hoja nueva')),
+      items: [
+        const PopupMenuItem(value: 'pdf', child: MenuRow(Symbols.picture_as_pdf, 'PDF')),
+        const PopupMenuItem(value: 'voice', child: MenuRow(Symbols.mic, 'Grabación de voz')),
+        const PopupMenuDivider(),
+        const PopupMenuItem(value: 'image', child: MenuRow(Symbols.image, 'Imagen')),
+        const PopupMenuItem(value: 'camera', child: MenuRow(Symbols.photo_camera, 'Cámara')),
+        const PopupMenuItem(value: 'audio', child: MenuRow(Symbols.music_note, 'Archivo de audio')),
+        const PopupMenuItem(value: 'sticky', child: MenuRow(Symbols.sticky_note_2, 'Nota adhesiva')),
+        if (!canvas) const PopupMenuItem(value: 'sheet', child: MenuRow(Symbols.note_add, 'Hoja nueva')),
       ],
     );
 
@@ -30,7 +31,7 @@ Future<String?> showMoreMenu(BuildContext context, Offset at, Notebook nb) => sh
       position: RelativeRect.fromLTRB(at.dx - 260, at.dy, at.dx, at.dy),
       items: [
         const PopupMenuItem(value: 'search', child: MenuRow(Symbols.search, 'Buscar')),
-        const PopupMenuItem(value: 'style', child: MenuRow(Symbols.palette, 'Estilo de hoja')),
+        PopupMenuItem(value: 'style', child: MenuRow(Symbols.palette, nb.canvas ? 'Color del papel' : 'Estilo de hoja')),
         const PopupMenuItem(value: 'shortcuts', child: MenuRow(Symbols.keyboard, 'Atajos de teclado')),
         const PopupMenuDivider(),
         const PopupMenuItem(value: 'export', child: MenuRow(Symbols.ios_share, 'Exportar')),
@@ -114,7 +115,10 @@ Future<FolderExportFormat?> showFolderExportSheet(BuildContext context) {
 
 /// "Exportar": una sola hoja con todo. Devuelve 'pdf' y 'png' (cuaderno entero), 'opennote', y solo si hay [sheetName]
 /// (dentro del cuaderno) 'sheet' (PDF de la hoja que se ve) y 'sheetpng' (su imagen). Keys `export-<valor>`.
-Future<String?> showExportSheet(BuildContext context, {String? sheetName}) {
+///
+/// Arriba va el interruptor "Incluir el fondo de la hoja": la elección queda en [tools] y en prefs.json enseguida,
+/// y los flujos de exportar la leen de ahí.
+Future<String?> showExportSheet(BuildContext context, Storage store, ToolState tools, {String? sheetName}) {
   final cs = Theme.of(context).colorScheme;
   Widget tile(IconData i, String t, String sub, String v) => ListTile(
         key: Key('export-$v'),
@@ -135,6 +139,18 @@ Future<String?> showExportSheet(BuildContext context, {String? sheetName}) {
           Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
               child: Text('Exportar', style: Theme.of(ctx).textTheme.titleLarge)),
+          StatefulBuilder(
+            builder: (ctx, setS) => SwitchListTile(
+              key: const Key('exportBg'),
+              title: const Text('Incluir el fondo de la hoja'),
+              subtitle: const Text('Apagado: solo lo escrito, sobre blanco'),
+              value: tools.exportBackground,
+              onChanged: (v) {
+                setS(() => tools.exportBackground = v);
+                store.savePrefs({'exportBg': v});
+              },
+            ),
+          ),
           tile(Symbols.picture_as_pdf, 'PDF', 'Todo el cuaderno', 'pdf'),
           tile(Symbols.photo_library, 'Imágenes (PNG)', 'Todas las hojas, en un .zip', 'png'),
           tile(Symbols.archive, 'Cuaderno de OpenNote (.opennote)', 'Para pasarlo a otro dispositivo o hacer copia',

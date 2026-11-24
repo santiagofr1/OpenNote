@@ -7,12 +7,21 @@ import 'folders.dart';
 import 'outline.dart';
 import 'values.dart';
 
+/// Ancho inicial (y mínimo) de un lienzo infinito, en unidades lógicas.
+const kCanvasW0 = 2000.0;
+
+/// Ancho nuevo del lienzo de ancho [canvasW] si el contenido llega hasta [right]: crece de a 500 cuando el borde queda a
+/// menos de 400 del final, dejando 800 de aire. Nunca achica.
+double grownCanvasW(double canvasW, double right) =>
+    right > canvasW - 400 ? ((right + 800) / 500).ceil() * 500.0 : canvasW;
+
 /// Una hoja del cuaderno: lo que se guarda en `notebook.json` (el contenido está en su `.sheet`).
 class SheetMeta {
   final String id;
   String title; // opcional, vacío si no tiene
   bool bookmark;
-  String bg; // lined | grid | dots | blank
+  String bg; // lined | grid | dots | mm | axes | blank | plantillas de la app | image (ver backgrounds.dart)
+  String? image; // archivo de media/ del fondo (solo con bg == 'image')
   String paper; // color del papel
   double spacing; // interlineado / paso de la cuadrícula en mm (ver paper_layout.dart)
   String size; // a4 | a3 | a5 (ver paper_layout.dart)
@@ -24,6 +33,7 @@ class SheetMeta {
       {this.title = '',
       this.bookmark = false,
       this.bg = 'lined',
+      this.image,
       this.paper = '#fffefb',
       double? spacing,
       this.size = 'a4',
@@ -37,6 +47,7 @@ class SheetMeta {
   /// Cambia el fondo; el espaciado vuelve al por defecto si el actual no existe en el fondo nuevo.
   void setBg(String v) {
     bg = v;
+    if (v != 'image') image = null;
     spacing = validSpacing(v, spacing);
   }
 
@@ -45,6 +56,7 @@ class SheetMeta {
       title: title ?? this.title,
       bookmark: bookmark ?? this.bookmark,
       bg: bg,
+      image: image,
       paper: paper,
       spacing: spacing,
       size: size,
@@ -58,6 +70,7 @@ class SheetMeta {
         title: (j['title'] ?? '') as String,
         bookmark: (j['bookmark'] ?? false) as bool,
         bg: (j['bg'] ?? 'lined') as String,
+        image: j['image'] as String?,
         paper: (j['paper'] ?? '#fffefb') as String,
         spacing: (j['spacing'] as num?)?.toDouble(), // los archivos viejos no lo tienen: el por defecto del fondo
         size: validPaperSize(j['size']), // los archivos viejos no lo tienen: A4
@@ -71,6 +84,7 @@ class SheetMeta {
         if (title.isNotEmpty) 'title': title,
         if (bookmark) 'bookmark': true,
         'bg': bg,
+        if (image != null) 'image': image,
         'paper': paper,
         'spacing': spacing,
         if (size != 'a4') 'size': size,
@@ -117,6 +131,7 @@ class Notebook {
   final List<Section> sections; // en orden; nunca vacía
   String active; // id de la sección abierta
   String bg, paper; // estilo de las hojas nuevas
+  String? image; // fondo de imagen de las hojas nuevas (con bg == 'image')
   double spacing; // espaciado (mm) de las hojas nuevas
   String size; // tamaño de las hojas nuevas
   int updated; // última edición (ms)
@@ -124,11 +139,14 @@ class Notebook {
   bool favorite;
   String? pin; // hash del PIN (ver hashPin), si está bloqueado
   String? folder; // id de la carpeta donde está (null = inicio)
+  bool canvas; // lienzo infinito: sin cortes, crece hacia abajo y a la derecha (fijo desde que se crea)
+  double canvasW; // ancho del lienzo en unidades lógicas (solo crece); kW es el ancho de una hoja A4
   Notebook(this.id, this.name,
       {List<SheetMeta>? sheets,
       List<Section>? sections,
       String? active,
       this.bg = 'lined',
+      this.image,
       this.paper = '#fffefb',
       double? spacing,
       this.size = 'a4',
@@ -136,22 +154,25 @@ class Notebook {
       this.last = 0,
       this.favorite = false,
       this.pin,
-      this.folder})
+      this.folder,
+      this.canvas = false,
+      this.canvasW = kCanvasW0})
       : sheets = sheets ?? [],
         sections = sections == null || sections.isEmpty ? [Section(kGeneralSection, 'General')] : sections,
         active = active ?? (sections == null || sections.isEmpty ? kGeneralSection : sections.first.id),
         spacing = spacing ?? defaultSpacing(bg);
 
   /// Cuaderno nuevo con una hoja en blanco.
-  factory Notebook.create(String name) {
-    final nb = Notebook(newId('n'), name);
+  factory Notebook.create(String name, {bool canvas = false}) {
+    final nb = Notebook(newId('n'), name, canvas: canvas, bg: canvas ? 'blank' : 'lined');
     nb.sheets.add(nb.newSheet());
     return nb;
   }
 
   /// Hoja nueva con el estilo del cuaderno, de la sección [section] (o la activa). No la agrega.
   SheetMeta newSheet({String? section}) =>
-      SheetMeta(newId('h'), bg: bg, paper: paper, spacing: spacing, size: size, section: section ?? active);
+      SheetMeta(newId('h'),
+          bg: canvas ? 'blank' : bg, image: canvas ? null : image, paper: paper, spacing: spacing, size: size, section: section ?? active);
 
   // ---------- secciones ----------
   Section get activeSection => sectionById(active) ?? sections.first;
@@ -291,6 +312,7 @@ class Notebook {
         n['id'] as String,
         n['name'] as String,
         bg: (n['bg'] ?? 'lined') as String,
+        image: n['image'] as String?,
         paper: (n['paper'] ?? '#fffefb') as String,
         spacing: (n['spacing'] as num?)?.toDouble(),
         size: validPaperSize(n['size']),
@@ -299,6 +321,8 @@ class Notebook {
         favorite: (n['favorite'] ?? false) as bool,
         pin: n['pin'] as String?,
         folder: n['folder'] as String?,
+        canvas: (n['canvas'] ?? false) as bool,
+        canvasW: ((n['canvasW'] as num?)?.toDouble() ?? kCanvasW0).clamp(kCanvasW0, 1e6).toDouble(),
       );
 
   /// Entrada del índice (sin las hojas).
@@ -307,6 +331,7 @@ class Notebook {
         'name': name,
         'updated': updated,
         'bg': bg,
+        if (image != null) 'image': image,
         'paper': paper,
         'spacing': spacing,
         if (size != 'a4') 'size': size,
@@ -314,6 +339,8 @@ class Notebook {
         if (favorite) 'favorite': true,
         if (pin != null) 'pin': pin,
         if (folder != null) 'folder': folder,
+        if (canvas) 'canvas': true,
+        if (canvas) 'canvasW': canvasW,
       };
 
   /// Lo que va en `notebook.json`: las secciones en orden, la activa y TODAS las hojas (de todas las secciones),

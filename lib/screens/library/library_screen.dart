@@ -292,6 +292,16 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     setState(() {});
     final t = await store.loadSheetDoc(nb, 0);
     if (mounted && t != null) setState(() => thumbs[nb.id] = t);
+    // un link llevó a otro cuaderno: se abre como si se hubiera tocado su tarjeta (con su PIN si está bloqueado)
+    if (result is String && result.startsWith('open:') && mounted) {
+      final id = result.substring(5);
+      final target = index!.notebooks.where((n) => n.id == id).firstOrNull;
+      if (target == null) {
+        snack(context, 'El cuaderno ya no existe');
+      } else {
+        return _open(target);
+      }
+    }
   }
 
   /// "+": cuaderno o carpeta nuevos, en la carpeta actual
@@ -364,9 +374,10 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
   }
 
   Future<void> _createNotebook() async {
-    final name = (await askText(context, 'Nuevo cuaderno', hint: 'Ej: Análisis II', ok: 'Crear'))?.trim();
-    if (name == null || name.isEmpty) return;
-    final nb = Notebook.create(name)
+    final pick = await askNewNotebook(context);
+    final name = pick?.name.trim();
+    if (pick == null || name == null || name.isEmpty) return;
+    final nb = Notebook.create(name, canvas: pick.canvas)
       ..folder = current
       ..touch();
     final doc = NotebookDoc(nb);
@@ -386,7 +397,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
 
   Future<void> _duplicate(Notebook nb) async {
     // se copian los archivos de las hojas: no se carga ni se decodifica nada del cuaderno
-    final copy = Notebook(newId('n'), '${nb.name} (copia)', bg: nb.bg, paper: nb.paper, spacing: nb.spacing, size: nb.size, folder: nb.folder)
+    final copy = Notebook(newId('n'), '${nb.name} (copia)', bg: nb.bg, image: nb.image, paper: nb.paper, spacing: nb.spacing, size: nb.size, folder: nb.folder, canvas: nb.canvas, canvasW: nb.canvasW)
       ..copySectionsFrom(nb) // las secciones y las hojas de TODAS (los archivos se copian todos)
       ..touch();
     await store.copyNotebookFiles(nb, copy);
@@ -400,7 +411,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
 
   /// "Exportar" de la biblioteca: la misma hoja que el cuaderno, sin "PDF de esta hoja".
   Future<void> _export(Notebook nb) async {
-    final v = await showExportSheet(context);
+    final v = await showExportSheet(context, store, tools);
     if (v == null || !mounted) return;
     switch (v) {
       case 'pdf':

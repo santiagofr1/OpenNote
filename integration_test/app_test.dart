@@ -14,9 +14,12 @@ import 'package:apuntes/data/export_folder.dart';
 import 'package:apuntes/data/media_import.dart';
 import 'package:apuntes/data/sheet_codec.dart';
 import 'package:apuntes/data/storage.dart';
+import 'package:apuntes/data/templates.dart';
+import 'package:apuntes/data/system_clipboard.dart';
 import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/editor/fake_audio_source.dart';
 import 'package:apuntes/editor/handwriting.dart';
+import 'package:apuntes/editor/link_open.dart';
 import 'package:apuntes/editor/page_editor.dart';
 import 'package:apuntes/editor/pdf_page_image.dart';
 import 'package:apuntes/editor/voice_recorder.dart';
@@ -28,11 +31,13 @@ import 'package:apuntes/sync/fake_backend.dart';
 import 'package:apuntes/sync/fake_remote_store.dart';
 import 'package:apuntes/sync/sync_engine.dart';
 import 'package:archive/archive.dart';
+import 'package:image/image.dart' as img;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as pimg;
 import 'package:integration_test/integration_test.dart';
 import 'package:pdf/pdf.dart' show PdfColor;
 import 'package:pdf/widgets.dart' as pw;
@@ -59,6 +64,19 @@ void main() {
     }
     await g.up();
     await t.pump();
+  }
+
+  /// Una muestra de 30 dp de la paleta del panel (el primer color que no es favorito).
+  Finder panelSwatch(String c) => find.byWidgetPredicate((w) => w is Container && w.constraints?.maxWidth == 30 && (w.decoration as BoxDecoration?)?.color == parseColor(c)).first;
+
+  /// Toca [f] esperando a que aparezca (hasta 3 s) y llevándolo a la vista (diálogos más altos que la pantalla).
+  Future<void> tapV(WidgetTester t, Finder f) async {
+    for (var i = 0; i < 60 && f.evaluate().isEmpty; i++) {
+      await t.pump(const Duration(milliseconds: 50));
+    }
+    await t.ensureVisible(f);
+    await t.pump(const Duration(milliseconds: 100));
+    await t.tap(f);
   }
 
   Future<void> settle(WidgetTester t, [int ms = 400]) async {
@@ -193,7 +211,7 @@ void main() {
     await settle(t, 1200);
   });
 
-  testWidgets('barra: 4 colores favoritos fijos; tocar elige sin reordenar y mantener apretado guarda el color actual (issue #23)', (t) async {
+  testWidgets('barra: 4 colores favoritos fijos; tocar elige sin reordenar y mantener apretado abre el panel editando ese favorito (issue #23)', (t) async {
     await start(t);
     await createNotebook(t, 'Favoritos');
     final ts = editor(t).ts;
@@ -204,7 +222,17 @@ void main() {
     expect(ts.favorites, antes, reason: 'elegir un favorito no los reordena');
     await t.longPress(find.byKey(const ValueKey('fav-0')));
     await settle(t);
-    expect(ts.favorites, [antes[2], antes[1], antes[2], antes[3]]);
+    expect(find.byKey(const Key('colorSquare')), findsOneWidget, reason: 'mantener apretado abre el panel editando');
+    expect(find.text('Listo'), findsOneWidget);
+    final nuevo = palette.firstWhere((c) => !antes.contains(c));
+    await t.ensureVisible(panelSwatch(nuevo));
+    await t.tap(panelSwatch(nuevo));
+    await settle(t);
+    expect(ts.favorites, [nuevo, antes[1], antes[2], antes[3]]);
+    // cerrar el panel
+    await t.tapAt(const Offset(4, 600));
+    await settle(t);
+    expect(find.byKey(const Key('colorSquare')), findsNothing);
     // dejar los favoritos como estaban
     ts.setFavorite(0, antes[0]);
     editor(t).widget.onPrefsChanged();
@@ -737,21 +765,21 @@ void main() {
   testWidgets('estilo de hoja: esta hoja y todo el cuaderno', (t) async {
     await start(t);
     await createNotebook(t, 'Estilo');
-    await t.tap(find.byKey(const Key('pagesBtn')));
+    await tapV(t, find.byKey(const Key('pagesBtn')));
     await settle(t, 600);
-    await t.tap(find.byKey(const Key('addPage')));
+    await tapV(t, find.byKey(const Key('addPage')));
     await settle(t, 800);
 
     // solo la hoja que se ve (la 2, que acaba de agregarse)
     await openMore(t, 'Estilo de hoja');
-    await t.tap(find.byKey(const Key('applySheet')));
-    await t.tap(find.byKey(const Key('size-a3')));
-    await t.tap(find.text('Cuadriculado'));
+    await tapV(t, find.byKey(const Key('applySheet')));
+    await tapV(t, find.byKey(const Key('size-a3')));
+    await tapV(t, find.text('Cuadriculado'));
     await settle(t, 300);
-    await t.tap(find.byKey(const Key('spacing-7')));
-    await t.tap(find.byTooltip('Crema'));
+    await tapV(t, find.byKey(const Key('spacing-7')));
+    await tapV(t, find.byTooltip('Crema'));
     await settle(t);
-    await t.tap(find.byKey(const Key('styleOk')));
+    await tapV(t, find.byKey(const Key('styleOk')));
     await settle(t, 1200);
 
     await t.tap(find.byKey(const Key('back')));
@@ -764,17 +792,17 @@ void main() {
     expect(textLine('grid', 7, size: 'a3'), lessThan(textLine('grid', 7)), reason: 'en A3 el renglón es más chico en unidades');
 
     // todo el cuaderno (es lo que viene marcado), y también las hojas nuevas
-    await t.tap(find.byKey(const Key('nb-Estilo')));
+    await tapV(t, find.byKey(const Key('nb-Estilo')));
     await settle(t, 1200);
     await openMore(t, 'Estilo de hoja');
-    await t.tap(find.byKey(const Key('applyAll')));
-    await t.tap(find.byKey(const Key('size-a4'))); // se vuelve a A4 para todo el cuaderno
-    await t.tap(find.text('Rayado'));
+    await tapV(t, find.byKey(const Key('applyAll')));
+    await tapV(t, find.byKey(const Key('size-a4'))); // se vuelve a A4 para todo el cuaderno
+    await tapV(t, find.text('Rayado'));
     await settle(t, 300);
-    await t.tap(find.byKey(const Key('spacing-10')));
-    await t.tap(find.byTooltip('Celeste'));
+    await tapV(t, find.byKey(const Key('spacing-10')));
+    await tapV(t, find.byTooltip('Celeste'));
     await settle(t);
-    await t.tap(find.byKey(const Key('styleOk')));
+    await tapV(t, find.byKey(const Key('styleOk')));
     await settle(t, 1200);
 
     await t.tap(find.byKey(const Key('back')));
@@ -1220,6 +1248,95 @@ void main() {
     expect(px[1], closeTo((want >> 8) & 0xFF, 6));
     expect(px[2], closeTo(want & 0xFF, 6));
     expect((px[0] - 0xFF).abs() + (px[2] - 0xFF).abs(), greaterThan(30), reason: 'no es blanco: es el fondo del PDF');
+  });
+
+  testWidgets('índice: la herramienta Título marca un renglón impreso de una página de PDF y lo sugiere del texto (issue #41)', (t) async {
+    final pdfBytes = (await t.runAsync(() async {
+      final d = pw.Document();
+      d.addPage(pw.Page(
+        margin: const pw.EdgeInsets.all(40),
+        build: (_) => pw.Text('Capitulo Uno', style: pw.TextStyle(fontSize: 40)),
+      ));
+      return Uint8List.fromList(await d.save());
+    }))!;
+    final savedPick = Pickers.pdf;
+    addTearDown(() => Pickers.pdf = savedPick);
+    Pickers.pdf = () async => (pdfBytes, 'Libro');
+    await start(t);
+    await createNotebook(t, 'Indice PDF');
+    final ed = editor(t);
+    await t.tap(find.byKey(const Key('insert')));
+    await settle(t);
+    await t.tap(find.text('PDF'));
+    await settle(t, 1500);
+    final pdf = ed.doc.items.values.firstWhere((i) => i.type == 'pdf');
+    await settle(t, 800);
+
+    // recuadro sobre el renglón impreso (arriba de la página A4: 595 x 842 pt, texto entre los 40 y los 90 pt)
+    await t.tap(find.byTooltip('Título para el índice'));
+    await settle(t);
+    final toScreen = docToScreen(t);
+    await stylusDrag(t, toScreen(Offset(pdf.x + pdf.w * .03, pdf.y + pdf.h * .03)),
+        toScreen(Offset(pdf.x + pdf.w * .9, pdf.y + pdf.h * .12)));
+    await settle(t, 800);
+    expect(find.byKey(const Key('headingName')), findsOneWidget);
+    expect(t.widget<TextField>(find.byKey(const Key('headingName'))).controller!.text, 'Capitulo Uno');
+    await t.tap(find.byKey(const Key('headingOk')));
+    await settle(t, 600);
+
+    final h = ed.doc.sheets[ed.doc.sheetOfY(pdf.y)].heads.single;
+    expect(h.ids, [pdf.id]);
+    expect(h.box, isNotNull);
+    expect(h.y, lessThan(pdf.h * .12), reason: 'la marca queda en el renglón, no arriba de toda la página');
+
+    await t.tap(find.byKey(const Key('indexBtn')));
+    await settle(t, 600);
+    expect(find.byKey(Key('indexEntry-${h.id}')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(Key('indexEntry-${h.id}')), matching: find.text('Capitulo Uno')), findsOneWidget);
+  });
+
+  testWidgets('la página de un PDF no se selecciona ni se mueve con el dedo (issue #42)', (t) async {
+    final pdfBytes = (await t.runAsync(() async {
+      final d = pw.Document();
+      d.addPage(pw.Page(build: (_) => pw.Text('Hola', style: pw.TextStyle(fontSize: 40))));
+      return Uint8List.fromList(await d.save());
+    }))!;
+    final savedPick = Pickers.pdf;
+    addTearDown(() => Pickers.pdf = savedPick);
+    Pickers.pdf = () async => (pdfBytes, 'Libro');
+    await start(t);
+    await createNotebook(t, 'Mover PDF');
+    final ed = editor(t);
+    await t.tap(find.byKey(const Key('insert')));
+    await settle(t);
+    await t.tap(find.text('PDF'));
+    await settle(t, 1500);
+    final pdf = ed.doc.items.values.firstWhere((i) => i.type == 'pdf');
+    final x0 = pdf.x, y0 = pdf.y;
+    final p = docToScreen(t);
+    final c = p(Offset(pdf.x + pdf.w / 2, pdf.y + pdf.h / 2));
+
+    // mantener con el dedo y arrastrar: la página no se mueve ni queda elegida
+    final g = await t.startGesture(c, kind: PointerDeviceKind.touch);
+    await t.pump(const Duration(milliseconds: 700));
+    for (var i = 1; i <= 10; i++) {
+      await g.moveTo(c + Offset(12.0 * i, 0));
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    await g.up();
+    await settle(t, 400);
+    expect((pdf.x, pdf.y), (x0, y0));
+    expect(ed.selI, isEmpty);
+
+    // con la herramienta seleccionar, un toque sobre el PDF tampoco lo elige
+    await t.tap(find.byKey(const ValueKey('tool-select')));
+    await settle(t);
+    final g2 = await t.startGesture(c, kind: PointerDeviceKind.stylus);
+    await t.pump(const Duration(milliseconds: 50));
+    await g2.up();
+    await settle(t, 300);
+    expect(ed.selI, isEmpty);
+    expect((pdf.x, pdf.y), (x0, y0));
   });
 
   Future<void> createFolder(WidgetTester t, String name) async {
@@ -2663,6 +2780,603 @@ void main() {
     await t.tap(find.byKey(const Key('back')));
     await settle(t, 1200);
   });
+  // ---------------- fondos y plantillas (#31, #33) ----------------
+  testWidgets('fondos nuevos: milimetrado y ejes cartesianos (issue #31)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Fondos');
+    await openMore(t, 'Estilo de hoja');
+    await tapV(t, find.byKey(const Key('bg-mm')));
+    await tapV(t, find.byKey(const Key('applySheet')));
+    await settle(t);
+    await tapV(t, find.byKey(const Key('styleOk')));
+    await settle(t, 800);
+    expect(editor(t).doc.sheets[0].bg, 'mm');
+
+    await openMore(t, 'Estilo de hoja');
+    await tapV(t, find.byKey(const Key('bg-axes')));
+    await tapV(t, find.byKey(const Key('applySheet')));
+    await settle(t);
+    await tapV(t, find.byKey(const Key('spacing-7')));
+    await settle(t);
+    await tapV(t, find.byKey(const Key('styleOk')));
+    await settle(t, 800);
+    expect([editor(t).doc.sheets[0].bg, editor(t).doc.sheets[0].spacing], ['axes', 7.0]);
+  });
+
+  testWidgets('plantillas incluidas: aplicar una a la hoja y crear una hoja nueva con otra (issue #33)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Plantillas');
+    await openMore(t, 'Estilo de hoja');
+    await tapV(t, find.byKey(const Key('bg-cornell')));
+    await tapV(t, find.byKey(const Key('applySheet')));
+    await settle(t);
+    await tapV(t, find.byKey(const Key('styleOk')));
+    await settle(t, 800);
+    expect(editor(t).doc.sheets[0].bg, 'cornell');
+
+    await tapV(t, find.byKey(const Key('pagesBtn')));
+    await settle(t, 600);
+    await holdOn(t, find.byKey(const Key('thumb-1')));
+    await settle(t, 500);
+    await tapV(t, find.text('Hoja nueva con plantilla…'));
+    await settle(t, 800);
+    expect(find.text('Hoja nueva'), findsOneWidget);
+    expect(find.byKey(const Key('applySheet')), findsNothing, reason: 'una hoja nueva no tiene "Aplicar a"');
+    await tapV(t, find.byKey(const Key('bg-staff')));
+    await settle(t);
+    await tapV(t, find.byKey(const Key('styleOk')));
+    await settle(t, 900);
+    expect(editor(t).doc.sheetCount, 2);
+    expect([editor(t).doc.sheets[0].bg, editor(t).doc.sheets[1].bg], ['cornell', 'staff']);
+  });
+
+  testWidgets('plantillas propias: guardar una hoja como plantilla y usarla de fondo (issue #33)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Propias');
+    final c = sheetCenter(t);
+    await stylusLine(t, c, c + const Offset(200, 0));
+    await tapV(t, find.byKey(const Key('pagesBtn')));
+    await settle(t, 600);
+    await holdOn(t, find.byKey(const Key('thumb-1')));
+    await settle(t, 500);
+    await tapV(t, find.text('Guardar como plantilla'));
+    await settle(t, 600);
+    await tapV(t, find.byKey(const Key('tplSave')));
+    await settle(t, 2000);
+
+    final st = Storage(root: root);
+    await st.init();
+    final list = await readTemplates(st);
+    expect(list.length, 1);
+    final tpl = list.single;
+    expect(File('${root.path}/templates/${tpl.id}.json').existsSync(), isTrue);
+    expect(st.media(tpl.file).existsSync(), isTrue);
+
+    await openMore(t, 'Estilo de hoja');
+    await tapV(t, find.byKey(Key('tpl-${tpl.id}')));
+    await tapV(t, find.byKey(const Key('applySheet')));
+    await settle(t);
+    await tapV(t, find.byKey(const Key('styleOk')));
+    await settle(t, 1000);
+    final m = editor(t).doc.sheets[0];
+    expect([m.bg, m.image], ['image', tpl.file]);
+    expect(find.byKey(ValueKey('bgImage-${m.id}')), findsOneWidget);
+  });
+
+  testWidgets('plantilla desde una imagen de la tablet: todo el cuaderno y hojas nuevas (issue #33)', (t) async {
+    final saved = Pickers.bgImage;
+    addTearDown(() => Pickers.bgImage = saved);
+    final png = File('${root.path}/fondo.png')..writeAsBytesSync(img.encodePng(img.Image(width: 300, height: 400)));
+    Pickers.bgImage = () async => png;
+    await start(t);
+    await createNotebook(t, 'Imagen');
+    await openMore(t, 'Estilo de hoja');
+    await tapV(t, find.byKey(const Key('tplFromImage')));
+    await settle(t, 1500);
+    await tapV(t, find.byKey(const Key('applyAll')));
+    await settle(t);
+    await tapV(t, find.byKey(const Key('styleOk')));
+    await settle(t, 1000);
+    final ed = editor(t);
+    final file = ed.doc.nb.image;
+    expect(file, isNotNull);
+    expect(ed.doc.nb.bg, 'image');
+    for (final m in ed.doc.sheets) {
+      expect([m.bg, m.image], ['image', file]);
+    }
+    await tapV(t, find.byKey(const Key('pagesBtn')));
+    await settle(t, 600);
+    await tapV(t, find.byKey(const Key('addPage')));
+    await settle(t, 900);
+    expect(ed.doc.sheetCount, 2);
+    expect([ed.doc.sheets[1].bg, ed.doc.sheets[1].image], ['image', file], reason: 'la hoja nueva sale con la imagen');
+  });
+
+  // ---- pegar imagen del sistema (issue #32) ----
+  Future<void> mantenerVacio(WidgetTester t) async {
+    final g = await t.startGesture(sheetCenter(t) + const Offset(0, 250));
+    final end = DateTime.now().add(const Duration(milliseconds: 750));
+    while (DateTime.now().isBefore(end)) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await t.pump();
+    }
+    await g.up();
+    await settle(t, 500);
+  }
+
+  void fakeClipboard(bool has, Uint8List? bytes) {
+    final h = SystemClipboard.hasImage, r = SystemClipboard.readImage;
+    SystemClipboard.hasImage = () async => has;
+    SystemClipboard.readImage = () async => bytes;
+    addTearDown(() {
+      SystemClipboard.hasImage = h;
+      SystemClipboard.readImage = r;
+    });
+  }
+
+  testWidgets('pegar imagen del sistema desde el menú de la hoja (issue #32)', (t) async {
+    final png = Uint8List.fromList(pimg.encodePng(pimg.Image(width: 300, height: 200)));
+    fakeClipboard(true, png);
+    await start(t);
+    await createNotebook(t, 'PegarImg');
+    final ed = editor(t);
+    final antes = ed.doc.items.length;
+
+    await mantenerVacio(t);
+    expect(find.text('Pegar acá'), findsOneWidget, reason: 'con una imagen en el sistema hay menú aunque no se copió nada');
+    await t.tap(find.text('Pegar acá'));
+    await settle(t, 1200);
+    expect(ed.doc.items.length, antes + 1);
+    final it = ed.doc.items.values.firstWhere((i) => i.type == 'image');
+    expect(it.w, 560);
+    expect(it.h, closeTo(373.3, 1));
+    expect(ed.widget.store.media(it.file!).existsSync(), isTrue, reason: 'la imagen quedó en media/');
+
+    ed.undo();
+    await settle(t, 600);
+    expect(ed.doc.items.length, antes, reason: 'deshacer saca la imagen');
+  });
+
+  testWidgets('sin imagen en el sistema ni nada copiado no hay menú de pegar (issue #32)', (t) async {
+    fakeClipboard(false, null);
+    await start(t);
+    await createNotebook(t, 'SinNada');
+    await mantenerVacio(t);
+    expect(find.text('Pegar acá'), findsNothing);
+  });
+
+  testWidgets('sin imagen en el sistema, "Pegar acá" pega lo copiado en la app (issue #32)', (t) async {
+    fakeClipboard(false, null);
+    await start(t);
+    await createNotebook(t, 'PegarApp');
+    final ed = editor(t);
+    final st = Stroke('st0', 'pen', '#22211e', 2.6, [100, 200, .5, 500, 200, .5]);
+    ed.doc.strokes[st.id] = st;
+    ed.doc.markDirtyElement(st);
+    // ignore: invalid_use_of_protected_member
+    ed.setState(() {});
+    await settle(t, 800);
+    ed.ts.clipboard.strokes = [st];
+
+    await mantenerVacio(t);
+    expect(find.text('Pegar acá'), findsOneWidget);
+    await t.tap(find.text('Pegar acá'));
+    await settle(t, 1000);
+    expect(ed.doc.strokes.length, 2, reason: 'pegó una copia del trazo');
+    expect(ed.doc.items.values.where((i) => i.type == 'image'), isEmpty);
+  });
+
+  testWidgets('favoritos: Cambiar en el panel del lápiz y arrastrar en el cuadrado deja el color nuevo en el favorito 0 de la barra', (t) async {
+    await start(t);
+    await createNotebook(t, 'Selector');
+    final ts = editor(t).ts;
+    final antes = ts.favorites[0];
+    await t.tap(find.byTooltip('Lápiz · tocá de nuevo para opciones'));
+    await settle(t);
+    await t.tap(find.byKey(const Key('favEdit')));
+    await settle(t);
+    final sq = find.byKey(const Key('colorSquare'));
+    await t.ensureVisible(sq);
+    await settle(t);
+    await t.dragFrom(t.getTopLeft(sq) + const Offset(60, 40), const Offset(50, 60));
+    await settle(t);
+    final nuevo = ts.favorites[0];
+    expect(nuevo, isNot(antes));
+    expect(nuevo, ts.pen.color);
+    await t.tapAt(const Offset(4, 600)); // cierra el panel
+    await settle(t);
+    expect(find.byKey(const Key('colorSquare')), findsNothing);
+    expect(ts.favorites[0], nuevo);
+    final dot = find.descendant(of: find.byKey(const ValueKey('fav-0')), matching: find.byWidgetPredicate((w) => w is Container && (w.decoration as BoxDecoration?)?.color == parseColor(nuevo)));
+    expect(dot, findsOneWidget, reason: 'la barra muestra el color nuevo');
+    // dejar el favorito como estaba
+    ts.setFavorite(0, antes);
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+  });
+
+  // ---------------- links (issue #34) ----------------
+  /// Una raya de tinta, elegida con el lazo, y el diálogo de "Link" abierto con la barrita. Devuelve la raya.
+  Future<Stroke> selectInkForLink(WidgetTester t, Offset Function(Offset) p) async {
+    await stylusLine(t, p(const Offset(200, 200)), p(const Offset(500, 200)));
+    final ed = editor(t);
+    final ink = ed.doc.strokes.values.single;
+    await t.tap(find.byTooltip('Seleccionar'));
+    await settle(t);
+    await stylusDrag(t, p(const Offset(150, 150)), p(const Offset(550, 250)));
+    expect(ed.sel.strokes, {ink.id});
+    await t.tap(find.text('Link'));
+    await settle(t);
+    return ink;
+  }
+
+  testWidgets('link a una web: el dedo lo abre, el lápiz sigue escribiendo y deshacer saca el trazo y después el link (issue #34)', (t) async {
+    final opened = <Uri>[];
+    final prev = linkLauncher;
+    linkLauncher = (u) async {
+      opened.add(u);
+      return true;
+    };
+    addTearDown(() => linkLauncher = prev);
+    await start(t);
+    await createNotebook(t, 'Links');
+    final p = docToScreen(t);
+    final ed = editor(t);
+    await selectInkForLink(t, p);
+    await t.tap(find.byKey(const Key('linkKindWeb')));
+    await settle(t);
+    await t.enterText(find.byKey(const Key('linkUrl')), 'ejemplo.com');
+    await t.pump();
+    await t.tap(find.byKey(const Key('linkOk')));
+    await settle(t);
+    final link = ed.doc.items.values.singleWhere((i) => i.type == 'link');
+    expect(link.text, 'https://ejemplo.com');
+    expect(find.byKey(ValueKey('link-${link.id}')), findsOneWidget, reason: 'la zona se marca en el editor');
+
+    // con la herramienta del lápiz: el dedo abre
+    await t.tap(find.byTooltip('Lápiz · tocá de nuevo para opciones'));
+    await settle(t);
+    expect(ed.sel.isEmpty, isTrue);
+    await t.tapAt(p(link.rect.center));
+    await settle(t);
+    expect(opened, [Uri.parse('https://ejemplo.com')]);
+
+    // el lápiz escribe encima y no abre
+    await stylusLine(t, p(link.rect.center + const Offset(-80, 6)), p(link.rect.center + const Offset(80, 6)));
+    expect(opened.length, 1);
+    expect(ed.doc.strokes.length, 2, reason: 'el lápiz dibujó un trazo sobre el link');
+
+    // deshacer: primero el trazo, después el link
+    await t.tap(find.byTooltip('Deshacer'));
+    await settle(t);
+    expect(ed.doc.strokes.length, 1);
+    expect(ed.doc.items.values.where((i) => i.type == 'link'), isNotEmpty);
+    await t.tap(find.byTooltip('Deshacer'));
+    await settle(t);
+    expect(ed.doc.items.values.where((i) => i.type == 'link'), isEmpty);
+  });
+
+  testWidgets('link a otra hoja: tocarlo con el dedo lleva a esa hoja (issue #34)', (t) async {
+    await start(t);
+    await createNotebook(t, 'LinkHoja');
+    final ed = editor(t);
+    ed.doc.addSheet();
+    ed.doc.addSheet();
+    // ignore: invalid_use_of_protected_member
+    ed.setState(() {});
+    await settle(t, 600);
+    expect(ed.doc.sheetCount, 3);
+    final p = docToScreen(t);
+    await selectInkForLink(t, p);
+    await t.tap(find.byKey(const Key('linkKindSheet')));
+    await settle(t);
+    await t.tap(find.byKey(Key('linkSheet-${ed.doc.sheets[2].id}')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('linkOk')));
+    await settle(t);
+    final link = ed.doc.items.values.singleWhere((i) => i.type == 'link');
+    expect(link.text, 'sheet:${ed.doc.sheets[2].id}');
+    await t.tap(find.byTooltip('Lápiz · tocá de nuevo para opciones'));
+    await settle(t);
+    expect(ed.mostVisibleSheet, 0);
+    await t.tapAt(p(link.rect.center));
+    await settle(t, 1500);
+    expect(ed.mostVisibleSheet, 2, reason: 'el link lleva a la hoja 3');
+  });
+
+  testWidgets('quitar y editar un link (issue #34)', (t) async {
+    await start(t);
+    await createNotebook(t, 'LinkQuitar');
+    final p = docToScreen(t);
+    final ed = editor(t);
+    await selectInkForLink(t, p);
+    await t.enterText(find.byKey(const Key('linkUrl')), 'ejemplo.com');
+    await t.pump();
+    await t.tap(find.byKey(const Key('linkOk')));
+    await settle(t);
+    final link = ed.doc.items.values.singleWhere((i) => i.type == 'link');
+
+    // con la selección de herramienta, tocar el link con el dedo lo elige (no lo abre)
+    await t.tap(find.byTooltip('Deseleccionar'));
+    await settle(t);
+    await t.tapAt(p(link.rect.center));
+    await settle(t);
+    expect(ed.sel.items, {link.id});
+    expect(find.text('Link'), findsNothing, reason: 'un link no se vuelve a convertir en link');
+
+    // editar: cambia el destino con un paso de deshacer
+    await t.tap(find.text('Editar link'));
+    await settle(t);
+    await t.enterText(find.byKey(const Key('linkUrl')), 'otro.org/x');
+    await t.pump();
+    await t.tap(find.byKey(const Key('linkOk')));
+    await settle(t);
+    expect(ed.doc.items[link.id]!.text, 'https://otro.org/x');
+    ed.undo();
+    await settle(t);
+    expect(ed.doc.items[link.id]!.text, 'https://ejemplo.com');
+
+    // quitar
+    if (ed.sel.items.isEmpty) {
+      await t.tapAt(p(link.rect.center));
+      await settle(t);
+    }
+    await t.tap(find.text('Quitar link'));
+    await settle(t);
+    expect(ed.doc.items.values.where((i) => i.type == 'link'), isEmpty);
+    ed.undo();
+    await settle(t);
+    expect(ed.doc.items.values.where((i) => i.type == 'link'), isNotEmpty, reason: 'quitar se deshace');
+  });
+
+  // ---------------- formas exactas (#38) ----------------
+  testWidgets('formas: rectángulo con relleno pegado a la cuadrícula, con medida, manija y deshacer (issue #38)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Formas');
+    final ed = editor(t);
+    ed.doc.sheets[0].setBg('grid');
+    // ignore: invalid_use_of_protected_member
+    ed.setState(() {});
+    await settle(t, 600);
+
+    await t.tap(find.byKey(const ValueKey('tool-shape')));
+    await settle(t);
+    await t.tap(find.byKey(const ValueKey('tool-shape'))); // de nuevo: abre las opciones
+    await settle(t);
+    await t.tap(find.byKey(const Key('shapeKind-rect')));
+    await t.tap(find.byKey(const Key('shapeFillSwitch')));
+    await settle(t);
+    expect(ed.ts.shapeKind, 'rect');
+    expect(ed.ts.shapeFill, isTrue);
+    await t.tapAt(const Offset(4, 600)); // cierra el panel
+    await settle(t);
+
+    final p = docToScreen(t);
+    await stylusDrag(t, p(const Offset(203, 307)), p(const Offset(498, 512)));
+    expect(ed.doc.strokes.length, 1);
+    final s = ed.doc.strokes.values.single;
+    expect(s.fill, ed.ts.shapeFillColor);
+    // las esquinas caen en la cuadrícula de 5 mm
+    final xs = gridXs(5), ys = gridYs(5);
+    bool onGrid(double x, double y) => xs.any((v) => (v - x).abs() < .5) && ys.any((v) => (v - y).abs() < .5);
+    expect(onGrid(s.pts[0], s.pts[1]), isTrue, reason: 'primera esquina');
+    final b = s.bounds.deflate(s.w * 1.6);
+    expect(onGrid(b.right, b.bottom), isTrue, reason: 'esquina opuesta');
+    expect(find.byKey(const Key('shapeMeasure')), findsOneWidget);
+    expect(find.textContaining('×'), findsOneWidget);
+
+    // una manija cambia la medida
+    final texto = (t.widget(find.descendant(of: find.byKey(const Key('shapeMeasure')), matching: find.byType(Text))) as Text).data;
+    final c = t.getCenter(find.byKey(const ValueKey('shapeHandle-2')));
+    await stylusDrag(t, c, c + const Offset(90, 70));
+    final texto2 = (t.widget(find.descendant(of: find.byKey(const Key('shapeMeasure')), matching: find.byType(Text))) as Text).data;
+    expect(texto2, isNot(texto));
+    expect(ed.doc.strokes.length, 1);
+
+    // deshacer: vuelve al antes de la manija; otra vez, y la forma desaparece
+    ed.undo();
+    await settle(t);
+    expect(ed.doc.strokes.values.single.pts, s.pts);
+    ed.undo();
+    await settle(t);
+    expect(ed.doc.strokes, isEmpty);
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+  });
+
+  testWidgets('formas: la recta con el dedo dibuja una recta y no scrollea (issue #38)', (t) async {
+    await start(t);
+    await createNotebook(t, 'FormasDedo');
+    final ed = editor(t);
+    await t.tap(find.byKey(const ValueKey('tool-shape')));
+    await settle(t);
+    await t.tap(find.byKey(const ValueKey('tool-shape')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('shapeKind-line')));
+    await settle(t);
+    await t.tapAt(const Offset(4, 600));
+    await settle(t);
+    expect(ed.ts.shapeKind, 'line');
+
+    final y0 = ed.scroll.offset;
+    final p = docToScreen(t);
+    final a = p(const Offset(200, 400)), b = p(const Offset(600, 480));
+    final g = await t.startGesture(a, kind: PointerDeviceKind.touch);
+    for (var i = 1; i <= 10; i++) {
+      await g.moveTo(Offset.lerp(a, b, i / 10)!);
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    await g.up();
+    await settle(t, 400);
+    expect(ed.doc.strokes.length, 1);
+    expect(ed.scroll.offset, y0, reason: 'un dedo no scrollea con las formas');
+    expect(find.textContaining('mm ·'), findsOneWidget, reason: 'largo y ángulo');
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+  });
+
+  testWidgets('marcadores: marcar la hoja que se ve con nombre, lista en el panel y volver a ella (issue #35)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Marcadores');
+    await t.tap(find.byKey(const Key('insert')));
+    await settle(t);
+    await t.tap(find.text('Hoja nueva'));
+    await settle(t, 800);
+    expect(find.text('2 / 2'), findsOneWidget);
+    await t.tap(find.byKey(const Key('bookmarkSheet')));
+    await settle(t);
+    await t.enterText(find.byKey(const Key('bookmarkName')), 'Parcial');
+    await t.tap(find.byKey(const Key('bookmarkSave')));
+    await settle(t, 800);
+    final d = editor(t).doc;
+    expect([d.sheets[1].bookmark, d.sheets[1].title], [true, 'Parcial']);
+    final id = d.sheets[1].id;
+    await t.tap(find.byKey(const Key('pagesBtn')));
+    await settle(t, 600);
+    await t.tap(find.byTooltip('Solo marcadas'));
+    await settle(t);
+    expect(find.descendant(of: find.byKey(Key('bookmarkItem-$id')), matching: find.text('Parcial')), findsOneWidget);
+    // a la hoja 1 (sin filtro) y de vuelta con el ítem de la lista
+    await t.tap(find.byTooltip('Ver todas'));
+    await settle(t);
+    await t.tap(find.byKey(const Key('thumb-1')));
+    await settle(t, 800);
+    expect(editor(t).visibleSheet, 0);
+    await t.tap(find.byTooltip('Solo marcadas'));
+    await settle(t);
+    await t.tap(find.byKey(Key('bookmarkItem-$id')));
+    await settle(t, 800);
+    expect(find.text('Parcial · 2 / 2'), findsOneWidget);
+    // desmarcar con el botón de arriba
+    await t.tap(find.byKey(const Key('bookmarkSheet')));
+    await settle(t, 600);
+    expect(editor(t).doc.sheets[1].bookmark, isFalse);
+    expect(find.byKey(Key('bookmarkItem-$id')), findsNothing);
+    expect(find.byKey(const Key('noBookmarks')), findsOneWidget);
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+  });
+
+  testWidgets('exportar sin el fondo de la hoja: PNG sobre blanco; con fondo, papel y cuadrícula (issue #39)', (t) async {
+    await start(t);
+    await createNotebook(t, 'SinFondo');
+    final d = editor(t).doc;
+    d.sheets[0]
+      ..bg = 'grid'
+      ..paper = '#fbf3e0';
+    d.strokes['trazo'] = Stroke('trazo', 'pen', '#22211e', 3, [300, 400, .5, 500, 450, .5, 700, 400, .5]);
+    await settle(t, 800);
+    final savedImages = saveImages;
+    addTearDown(() => saveImages = savedImages);
+    final ts = editor(t).ts;
+    final antes = ts.exportBackground;
+
+    Future<img.Image> exportar(bool fondo) async {
+      await t.tap(find.byKey(const Key('more')));
+      await settle(t);
+      await t.tap(find.text('Exportar'));
+      await settle(t, 600);
+      final sw = t.widget<SwitchListTile>(find.byKey(const Key('exportBg')));
+      if (sw.value != fondo) {
+        await t.tap(find.byKey(const Key('exportBg')));
+        await settle(t);
+      }
+      Uint8List? out;
+      saveImages = (bytes, name, zip) async {
+        out = bytes;
+        return true;
+      };
+      await t.tap(find.byKey(const Key('export-png')));
+      for (var i = 0; i < 100 && out == null; i++) {
+        await settle(t, 100);
+      }
+      expect(out, isNotNull);
+      return img.decodePng(out!)!;
+    }
+
+    bool blanco(img.Pixel p) => p.r == 255 && p.g == 255 && p.b == 255;
+    final sin = await exportar(false);
+    expect(blanco(sin.getPixel(8, 8)), isTrue, reason: 'sin fondo: blanco lejos del trazo');
+    expect(ts.exportBackground, isFalse, reason: 'la elección quedó recordada');
+    final con = await exportar(true);
+    expect(blanco(con.getPixel(8, 8)), isFalse, reason: 'con fondo: papel crema');
+    // restaurar la preferencia
+    if (ts.exportBackground != antes) {
+      await t.tap(find.byKey(const Key('more')));
+      await settle(t);
+      await t.tap(find.text('Exportar'));
+      await settle(t, 600);
+      await t.tap(find.byKey(const Key('exportBg')));
+      await settle(t);
+      await t.tapAt(const Offset(10, 10));
+      await settle(t, 600);
+    }
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+  });
+
+  // ---------------- lienzo infinito (issue #36) ----------------
+  /// Como [createNotebook] pero elige el tipo (por defecto Hojas, como el helper de siempre).
+  Future<void> createKindNotebook(WidgetTester t, String name, {required bool canvas}) async {
+    await t.tap(find.byKey(const Key('new')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('newNotebook')));
+    await settle(t);
+    await t.enterText(find.byKey(const Key('askText')), name);
+    await t.tap(find.byKey(Key(canvas ? 'nbKindCanvas' : 'nbKindSheets')));
+    await settle(t, 200);
+    await t.tap(find.byKey(const Key('askOk')));
+    await settle(t, 1500);
+  }
+
+  testWidgets('lienzo infinito: crece a la derecha y hacia abajo, sin botón de hojas, y se conserva (issue #36)', (t) async {
+    await start(t);
+    await createKindNotebook(t, 'Mapa', canvas: true);
+    expect(find.byKey(const Key('pagesBtn')), findsNothing);
+    final ed = editor(t);
+    expect(ed.doc.nb.canvas, isTrue);
+    expect(ed.doc.nb.canvasW, 2000);
+    final antes = ed.hscroll.position.maxScrollExtent;
+    expect(antes, greaterThan(0), reason: 'el lienzo es más ancho que la pantalla');
+
+    // derecha: se va al borde y se escribe pegado a él
+    ed.hscroll.jumpTo(ed.hscroll.position.maxScrollExtent);
+    await settle(t, 300);
+    final box = t.getRect(find.byType(PageEditor));
+    final y = box.top + 300;
+    await stylusDrag(t, Offset(box.right - 120, y), Offset(box.right - 40, y + 30));
+    expect(ed.doc.strokes.length, 1);
+    expect(ed.doc.nb.canvasW, greaterThan(2000));
+    expect(ed.hscroll.position.maxScrollExtent, greaterThan(antes), reason: 'se puede scrollear más a la derecha');
+
+    // abajo: se va al final y se escribe cerca del borde de abajo
+    ed.scroll.jumpTo(ed.scroll.position.maxScrollExtent);
+    await settle(t, 300);
+    final sheets = ed.doc.sheetCount;
+    await stylusDrag(t, Offset(box.left + 300, box.bottom - 80), Offset(box.left + 400, box.bottom - 60));
+    expect(ed.doc.sheetCount, greaterThan(sheets));
+
+    final w = ed.doc.nb.canvasW;
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+    final nb = await savedNotebook('Mapa');
+    expect(nb.canvas, isTrue);
+    expect(nb.canvasW, w);
+    await t.tap(find.byKey(const Key('nb-Mapa')));
+    await settle(t, 1500);
+    expect(editor(t).doc.nb.canvasW, w);
+    expect(editor(t).doc.strokes.length, 2, reason: 'los trazos quedaron guardados');
+    expect(find.byKey(const Key('pagesBtn')), findsNothing);
+  });
+
+  testWidgets('cuaderno de hojas con el tipo por defecto: sigue igual (issue #36)', (t) async {
+    await start(t);
+    await createKindNotebook(t, 'Hojas', canvas: false);
+    expect(find.byKey(const Key('pagesBtn')), findsOneWidget);
+    expect(editor(t).doc.nb.canvas, isFalse);
+    expect(editor(t).doc.width, kW);
+  });
+
 }
 
 /// Reconocimiento de letra de mentira: siempre lee [text].

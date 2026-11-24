@@ -3,33 +3,11 @@ description: Proponer una función nueva o un cambio en OpenNote
 title: "[Idea] "
 labels: ["idea"]
 body:
-  - type: markdown
-    attributes:
-      value: |
-        Gracias por la idea. Antes de proponer una solución, contame qué problema
-        te gustaría resolver: muchas veces hay más de una forma de hacerlo.
-
   - type: textarea
-    id: problema
+    id: idea
     attributes:
-      label: ¿Qué problema querés resolver?
-      description: Describí la situación en la que te falta algo o te molesta algo.
-      placeholder: Cuando tengo muchas hojas, no encuentro rápido la que busco.
+      label: ¿Qué se te ocurrió?
+      description: Contá la idea o qué te falta. Con una línea alcanza.
+      placeholder: Poder buscar una hoja por su título cuando tengo muchas.
     validations:
       required: true
-
-  - type: textarea
-    id: propuesta
-    attributes:
-      label: Idea propuesta
-      description: ¿Cómo imaginás la solución? Podés describir cómo se usaría.
-    validations:
-      required: true
-
-  - type: textarea
-    id: alternativas
-    attributes:
-      label: Alternativas consideradas
-      description: ¿Hay otras formas de resolverlo que pensaste? Si no, dejalo en blanco.
-    validations:
-      required: false

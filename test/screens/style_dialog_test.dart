@@ -37,16 +37,18 @@ void main() {
 
   group('diálogo suelto', () {
     Future<StyleChoice?> open(WidgetTester t, NotebookDoc doc, Future<void> Function() body) async {
-      t.view.physicalSize = const Size(1200, 1000);
+      t.view.physicalSize = const Size(1200, 2200);
       t.view.devicePixelRatio = 1;
       addTearDown(t.view.reset);
       StyleChoice? result;
       var done = false;
+      final store = Storage(root: root);
+      await t.runAsync(store.init);
       await t.pumpWidget(MaterialApp(
         home: Builder(
           builder: (ctx) => TextButton(
             onPressed: () async {
-              result = await showStyleDialog(ctx, doc, sheet: 0);
+              result = await showStyleDialog(ctx, doc, store: store, sheet: 0);
               done = true;
             },
             child: const Text('abrir'),
@@ -54,6 +56,7 @@ void main() {
         ),
       ));
       await t.tap(find.text('abrir'));
+      await until(t, find.byType(AlertDialog)); // el diálogo lee las plantillas de disco antes de abrirse
       await t.pumpAndSettle();
       await body();
       expect(done, isTrue);
@@ -128,7 +131,7 @@ void main() {
   });
 
   testWidgets('en el cuaderno: esta hoja y todo el cuaderno, sin romper el deshacer', (t) async {
-    t.view.physicalSize = const Size(1600, 1000);
+    t.view.physicalSize = const Size(1600, 2200);
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.reset);
     final prev = FlutterError.onError;
@@ -157,6 +160,7 @@ void main() {
       await t.tap(find.byKey(const Key('more')));
       await settle(t);
       await t.tap(find.text('Estilo de hoja'));
+      await until(t, find.byType(AlertDialog)); // lee las plantillas de disco antes de abrirse
       await settle(t);
     }
 

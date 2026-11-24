@@ -10,16 +10,32 @@ import 'text_layout.dart';
 
 /// Dibuja la hoja [sheet] del cuaderno [doc], completa (papel, renglones, elementos, tinta y texto),
 /// en coordenadas lógicas con origen en la esquina de esa hoja. Para miniaturas, PNG y PDF.
-void paintSheet(Canvas c, NotebookDoc doc, int sheet, double pxPerUnit, {Map<String, ui.Image>? images}) {
-  final top = sheet * kSheetStep;
-  final meta = doc.sheets[sheet];
+/// [region] (coordenadas del documento): si viene, dibuja ese rectángulo (papel liso y lo que lo toca) con origen en su
+/// esquina, en vez de la hoja [sheet]. Es la página de un lienzo infinito al exportar.
+/// Con [background] falso no hay fondo: sobre blanco, sin papel de color, patrón ni imagen de fondo.
+void paintSheet(Canvas c, NotebookDoc doc, int sheet, double pxPerUnit,
+    {Map<String, ui.Image>? images, Rect? region, bool background = true}) {
+  final top = region?.top ?? sheet * kSheetStep;
+  final meta = doc.sheets[region == null ? sheet : doc.sheetOfY(region.top)];
+  final page = region == null ? const Rect.fromLTWH(0, 0, kW, kSheetH) : Rect.fromLTWH(0, 0, region.width, region.height);
   c.save();
-  c.clipRect(const Rect.fromLTWH(0, 0, kW, kSheetH));
-  c.drawRect(const Rect.fromLTWH(0, 0, kW, kSheetH), Paint()..color = parseColor(meta.paper));
-  // en miniaturas chicas las líneas no pueden ser más finas que esto o desaparecen
-  paintPaperPattern(c, meta.bg, meta.spacing, size: meta.size, ruleWidth: max(.6, 1 / pxPerUnit), marginWidth: max(.8, 1.2 / pxPerUnit));
-  c.translate(0, -top);
-  final visible = Rect.fromLTWH(0, top, kW, kSheetH);
+  c.clipRect(page);
+  c.drawRect(page, Paint()..color = background ? parseColor(meta.paper) : const Color(0xFFFFFFFF));
+  if (!background || region != null) {
+    // sin fondo, o lienzo: papel liso, sin patrón
+  } else if (meta.bg == 'image') {
+    // fondo de imagen: entra completa en la hoja, sin patrón
+    final img = meta.image == null ? null : images?[bgImageKey(meta.image!)];
+    if (img != null) {
+      c.drawImageRect(img, Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+          containRect(img.width.toDouble(), img.height.toDouble()), Paint()..filterQuality = FilterQuality.medium);
+    }
+  } else {
+    // en miniaturas chicas las líneas no pueden ser más finas que esto o desaparecen
+    paintPaperPattern(c, meta.bg, meta.spacing, size: meta.size, ruleWidth: max(.6, 1 / pxPerUnit), marginWidth: max(.8, 1.2 / pxPerUnit));
+  }
+  c.translate(-(region?.left ?? 0), -top);
+  final visible = region ?? Rect.fromLTWH(0, top, kW, kSheetH);
   // un solo orden de dibujo para todo; de cada tanda de trazos seguidos, los resaltadores van primero
   for (final run in zRuns(doc.drawOrder())) {
     final e = run.single;
@@ -30,11 +46,21 @@ void paintSheet(Canvas c, NotebookDoc doc, int sheet, double pxPerUnit, {Map<Str
     } else if (e is TextBlock) {
       final t = e;
       // kLine * 40: tope generoso del alto de un texto, para no medirlos todos
-      if (t.text.trim().isEmpty || t.y > top + kSheetH || t.y + kLine * 40 * t.scale + (t.angle == 0 ? 0 : kLine * 40 * t.scale) < top) continue;
+      if (t.text.trim().isEmpty || t.y > visible.bottom || t.y + kLine * 40 * t.scale + (t.angle == 0 ? 0 : kLine * 40 * t.scale) < top) continue;
+      if (region != null && t.x > region.right) continue;
       paintTextBlock(c, t, doc.lineAt(t.y));
     }
   }
   c.restore();
+}
+
+/// Clave, en el mapa de imágenes de [paintSheet], del fondo de imagen [file].
+String bgImageKey(String file) => 'bg:$file';
+
+/// Rectángulo donde entra una imagen de [imgW] x [imgH] completa en la hoja (0, 0, kW, kSheetH), centrada y sin deformar.
+Rect containRect(double imgW, double imgH) {
+  final k = min(kW / imgW, kSheetH / imgH), w = imgW * k, h = imgH * k;
+  return Rect.fromLTWH((kW - w) / 2, (kSheetH - h) / 2, w, h);
 }
 
 /// Miniatura de la hoja [sheet] (por defecto la primera)
@@ -60,7 +86,7 @@ const _stickyText = Color(0xFF2B2A27);
 /// Clave, en el mapa de imágenes de [paintSheet], de la página de PDF de [it].
 String pdfImageKey(Item it) => '${it.file}#${it.page}';
 
-/// Elemento insertado (para miniaturas y PDF; en el editor son widgets).
+/// Elemento insertado (para miniaturas y PDF; en el editor son widgets). Un 'link' no dibuja nada (es solo una zona).
 void paintItem(Canvas c, Item it, ui.Image? img) {
   final r = it.rect;
   switch (it.type) {

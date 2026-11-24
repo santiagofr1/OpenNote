@@ -36,7 +36,7 @@ void main() {
                 onToolTap: (_) {},
                 onToolLongPress: (_) {},
                 onPickColor: (_) {},
-                onSetFavorite: (_) {},
+                onEditFavorite: (_) {},
                 onOpenPanel: () {},
                 onUndo: () {},
                 onRedo: () {},
@@ -62,11 +62,11 @@ void main() {
     await pump(t, 1400);
     expect(find.byTooltip('Pegar'), findsNothing);
     expect(find.byTooltip('Fondo de la hoja'), findsNothing);
-    // ancho útil = _fixedWidth (584) + 12 de padding: justo entra, sin colores y sin desplazarse
-    await pump(t, 596);
+    // ancho útil = _fixedWidth (632) + 12 de padding: justo entra, sin colores y sin desplazarse
+    await pump(t, 644);
     expect(t.takeException(), isNull);
     expect(t.state<ScrollableState>(find.byType(Scrollable)).position.maxScrollExtent, 0);
-    await pump(t, 560);
+    await pump(t, 600);
     expect(t.state<ScrollableState>(find.byType(Scrollable)).position.maxScrollExtent, greaterThan(0));
   });
 
