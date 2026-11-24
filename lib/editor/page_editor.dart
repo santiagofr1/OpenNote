@@ -20,6 +20,7 @@ import '../rendering/pdf_cover.dart';
 import '../rendering/pdf_pages.dart';
 import '../rendering/sheet_image_cache.dart';
 import '../rendering/text_layout.dart';
+import '../theme/colors.dart';
 import '../widgets/auto_scroller.dart';
 import '../widgets/dialogs.dart';
 import 'context_menu.dart';
@@ -170,6 +171,13 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     _snapFit = _snapBase = _snapGrab = _holdAnchor = null;
   }
 
+  // formas exactas (herramienta Formas): la que se está arrastrando, la recién hecha (con manijas y medidas) y el
+  // arrastre de una manija o de la forma entera (el trazo de trabajo se ve en la capa en vivo y se oculta el fijo)
+  _ShapeDraft? _draft;
+  _ActiveShape? _shape;
+  _ShapeDrag? _shapeDrag;
+  Stroke? _shapeEdit;
+
   Offset? eraserAt;
   List<Stroke>? erased;
 
@@ -207,7 +215,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     doc.addLoadListener(_onSheetLoaded);
     scroll.addListener(_onScroll);
     _imgs.still = true; // abierto y sin mover: lo que falte de las visibles se genera ya
-    _imgs.busy = () => pointer != null || live != null || _cover != null || erased != null || touch.pinching; // no generar con el lápiz en uso
+    _imgs.busy = () => pointer != null || live != null || _shapeEdit != null || _cover != null || erased != null || touch.pinching; // no generar con el lápiz en uso
     WidgetsBinding.instance.addPostFrameCallback((_) => scrollToSheet(widget.initialSheet, animate: false));
   }
 
@@ -233,6 +241,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       _outline = null;
       pointer = null;
       live = null;
+      _draft = _shape = _shapeDrag = _shapeEdit = null;
       _endShapeHold();
       _endCover();
       erased = null;
@@ -618,6 +627,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       return;
     }
     pointer = e.pointer;
+    if (_shape != null && (action != PenAction.draw || ts.tool != Tool.shape)) _endShape();
     switch (action) {
       case PenAction.erase:
         _startErase(p);
@@ -629,6 +639,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         sel.titleBand = true;
         liveTick.value++;
       case PenAction.draw:
+        if (ts.tool == Tool.shape) {
+          _shapeDown(e, p);
+          return;
+        }
         final pr = ts.current;
         live = Stroke(newId('s'), ts.tool == Tool.hl ? 'hl' : pr.tip, pr.color,
             pr.width * kMm / unitsPerMm(doc.sizeAt(p.dy)), // mismo grosor en papel: en A3 las unidades son más chicas
@@ -689,6 +703,14 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     if (lc != null && lc.pointer == e.pointer && (e.position - lc.global).distance > kTouchSlop) _linkCand = null;
     if (e.pointer != pointer) return;
     final p = _toPage(e.localPosition);
+    if (_shapeDrag != null) {
+      _shapeDragMove(p);
+      return;
+    }
+    if (_draft != null) {
+      _shapeMove(p);
+      return;
+    }
     if (sel.moving) {
       _selDrag(p);
       if (sel.drag?.handle == Handle.move) _edgeMoved(e.position);
@@ -738,6 +760,14 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     }
     if (e.pointer != pointer) return;
     pointer = null;
+    if (_shapeDrag != null) {
+      _shapeDragEnd();
+      return;
+    }
+    if (_draft != null) {
+      _shapeEnd(cancel: e is PointerCancelEvent);
+      return;
+    }
     if (sel.moving) {
       _selDrop();
       return;
@@ -792,6 +822,233 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     // cancelado por el sistema (ej. lo tomó como palma) apenas empezó: se descarta
     if (s == null || (e is PointerCancelEvent && s.n < 3)) return;
     _commitStroke(s, smooth: !snapped);
+  }
+
+  // ---------------- formas exactas ----------------
+  /// ¿Se pega a la cuadrícula de la hoja [k]? (prendido en las opciones y el fondo tiene cuadrícula)
+  bool _gridded(int k) => ts.shapeGrid && const {'grid', 'dots', 'axes', 'mm'}.contains(doc.sheets[k].bg);
+
+  /// El punto [p] de la página llevado a la intersección más cercana de la hoja [k].
+  Offset _gridPt(Offset p, int k) {
+    final m = doc.sheets[k], top = k * kSheetStep;
+    final q = snapToGrid(Offset(p.dx, p.dy - top), m.bg, m.spacing, m.size);
+    return Offset(q.dx, q.dy + top);
+  }
+
+  /// Imanes de un punto: la cuadrícula si la hoja la tiene; si no, en recta y flecha el ángulo de 15 grados respecto de [from].
+  Offset _magnet(String kind, Offset? from, Offset p, int k) {
+    if (_gridded(k)) return _gridPt(p, k);
+    if (from != null && (kind == 'line' || kind == 'arrow')) return snapAngle15(from, p);
+    return p;
+  }
+
+  /// ¿[p] está a menos de 14 dp del contorno del trazo [s]?
+  bool _nearOutline(Stroke s, Offset p) {
+    final lim = 14 / scale, q = s.pts;
+    if (!s.bounds.inflate(lim).contains(p)) return false;
+    for (var i = 3; i < q.length; i += 3) {
+      if (distToSegment(p, Offset(q[i - 3], q[i - 2]), Offset(q[i], q[i + 1])) < lim) return true;
+    }
+    return false;
+  }
+
+  void _endShape() {
+    _shape = null;
+    liveTick.value++;
+  }
+
+  void _shapeDown(PointerDownEvent e, Offset p) {
+    final sh = _shape, old = sh == null ? null : doc.strokes[sh.id];
+    if (sh != null && old != null && _nearOutline(old, p)) {
+      _shapeDragStart(-1, p); // sobre el contorno de la forma activa: la mueve entera
+      return;
+    }
+    _shape = null;
+    final kind = ts.shapeKind, k = doc.sheetOfY(p.dy), a = _magnet(kind, null, p, k);
+    _draft = _ShapeDraft(kind, k, a, e.kind == PointerDeviceKind.touch);
+    final pr = ts.pen;
+    live = Stroke(newId('s'), 'fine', pr.color, pr.width * kMm / unitsPerMm(doc.sizeAt(p.dy)), [], pr.opacity, null,
+        shapeFillable(kind) && ts.shapeFill ? ts.shapeFillColor : null);
+    liveTick.value++;
+  }
+
+  void _shapeMove(Offset p) {
+    final d = _draft!, s = live;
+    if (s == null) return;
+    d.b = _magnet(d.kind, d.a, p, d.sheet);
+    s.pts
+      ..clear()
+      ..addAll(exactShapePoints(d.kind, d.a, d.b));
+    s.invalidate();
+    liveTick.value++;
+  }
+
+  /// Soltó (o se canceló) la forma: si el arrastre fue de 6 unidades o más, entra con su paso de deshacer y queda activa.
+  void _shapeEnd({bool cancel = false}) {
+    final d = _draft!, s = live;
+    _draft = null;
+    live = null;
+    liveTick.value++;
+    if (cancel || s == null || (d.b - d.a).distance < 6) return;
+    _commitStroke(s, smooth: false);
+    _shape = _ActiveShape(d.kind, d.a, d.b, s.id, d.sheet);
+    liveTick.value++;
+  }
+
+  /// Un dedo apoyó con otro: es zoom, no una forma.
+  void _cancelTouchShape() {
+    final d = _draft;
+    if (d == null || !d.touch) return;
+    pointer = null;
+    _draft = null;
+    live = null;
+    liveTick.value++;
+  }
+
+  /// Empieza a arrastrar la manija [handle] de la forma activa (-1: la forma entera) con el puntero en [p].
+  void _shapeDragStart(int handle, Offset p) {
+    final sh = _shape, old = sh == null ? null : doc.strokes[sh.id];
+    if (sh == null || old == null) {
+      pointer = null;
+      return;
+    }
+    final off = handle < 0 ? Offset.zero : shapeHandlePoints(sh.kind, sh.a, sh.b)[handle] - p;
+    _shapeEdit = Stroke(old.id, old.k, old.c, old.w, List<double>.of(old.pts), old.o, null, old.fill)..z = old.z;
+    _shapeDrag = _ShapeDrag(handle, old, sh.a, sh.b, p, off);
+    _touchStrokes([old]); // el fijo deja de dibujarlo: se ve el de trabajo en la capa en vivo
+    liveTick.value++;
+  }
+
+  void _shapeDragMove(Offset p) {
+    final sh = _shape, d = _shapeDrag, w = _shapeEdit;
+    if (sh == null || d == null || w == null) return;
+    final k = sh.sheet;
+    Offset a, b;
+    if (d.handle < 0) {
+      var na = d.a0 + (p - d.grab);
+      if (_gridded(k)) na = _gridPt(na, k);
+      a = na;
+      b = d.b0 + (na - d.a0);
+    } else {
+      final line = sh.kind == 'line' || sh.kind == 'arrow';
+      final q = _magnet(sh.kind, line ? (d.handle == 0 ? d.b0 : d.a0) : null, p + d.off, k);
+      (a, b) = dragShapeHandle(sh.kind, d.a0, d.b0, d.handle, q);
+    }
+    sh.a = a;
+    sh.b = b;
+    w.pts
+      ..clear()
+      ..addAll(exactShapePoints(sh.kind, a, b));
+    w.invalidate();
+    liveTick.value++;
+  }
+
+  /// Soltó la manija: el trazo (mismo id) pasa a sus puntos nuevos con UN paso de deshacer (antes / después).
+  void _shapeDragEnd() {
+    final sh = _shape, d = _shapeDrag, w = _shapeEdit;
+    _shapeDrag = null;
+    _shapeEdit = null;
+    if (sh == null || d == null || w == null) return;
+    final moved = sh.a != d.a0 || sh.b != d.b0;
+    if (!moved || !_loadedAt(w.bounds.top) || !_loadedAt(w.bounds.bottom)) {
+      if (moved) _requestSync(); // caería en una hoja sin cargar: queda como estaba
+      sh.a = d.a0;
+      sh.b = d.b0;
+      _touchStrokes([d.before]);
+      liveTick.value++;
+      return;
+    }
+    doc.strokes.remove(d.before.id);
+    doc.strokes[w.id] = w;
+    _pushUndo(EditAction(removed: [d.before], added: [w]));
+    _growIfNeeded(w.bounds.bottom);
+    _changed();
+    liveTick.value++;
+  }
+
+  /// Manijas y medidas de la forma en curso o activa, sobre la hoja (se redibujan con la capa en vivo, sin setState).
+  Widget _shapeOverlay() => Positioned.fill(
+        child: ValueListenableBuilder<int>(
+          valueListenable: liveTick,
+          builder: (context, _, _) {
+            final dr = _draft, sh = _shape != null && doc.strokes[_shape!.id] != null ? _shape : null;
+            final String kind;
+            final Offset a, b;
+            if (dr != null) {
+              (kind, a, b) = (dr.kind, dr.a, dr.b);
+              if (live?.pts.isEmpty ?? true) return const SizedBox.shrink();
+            } else if (sh != null) {
+              (kind, a, b) = (sh.kind, sh.a, sh.b);
+            } else {
+              return const SizedBox.shrink();
+            }
+            final k = doc.sheetOfY(a.dy), top = k * kSheetStep * scale, width = kW * scale;
+            final box = shapeBox(kind, a, b);
+            final text = shapeMeasure(kind, a, b, unitsPerMm(doc.sizeAt(a.dy)));
+            const bw = 300.0, bh = 28.0;
+            final left = (box.center.dx * scale - bw / 2).clamp(0.0, max(0.0, width - bw)).toDouble();
+            final above = box.top * scale - 8 - bh >= top;
+            final bubble = Positioned(
+              left: left,
+              width: bw,
+              top: above ? box.top * scale - 8 - bh : box.bottom * scale + 8,
+              height: bh,
+              child: IgnorePointer(
+                child: Center(
+                  child: Container(
+                    key: const Key('shapeMeasure'),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(color: const Color(0xE6222222), borderRadius: BorderRadius.circular(12)),
+                    child: Text(text,
+                        style: const TextStyle(
+                            color: Colors.white, fontSize: 12, fontFeatures: [FontFeature.tabularFigures()])),
+                  ),
+                ),
+              ),
+            );
+            return Stack(clipBehavior: Clip.none, children: [
+              bubble,
+              if (dr == null)
+                for (final (i, h) in shapeHandlePoints(kind, a, b).indexed)
+                  Positioned(
+                    left: h.dx * scale - 22,
+                    top: h.dy * scale - 22,
+                    width: 44,
+                    height: 44,
+                    child: Listener(
+                      key: ValueKey('shapeHandle-$i'),
+                      behavior: HitTestBehavior.opaque,
+                      onPointerDown: (e) => _handleDown(i, e),
+                      onPointerMove: (e) {
+                        if (e.pointer == pointer && _shapeDrag != null) _shapeDragMove(_pageOfGlobal(e.position));
+                      },
+                      onPointerUp: _handleUp,
+                      onPointerCancel: _handleUp,
+                      child: Center(
+                        child: Container(
+                          width: 22,
+                          height: 22,
+                          decoration: BoxDecoration(
+                              color: Colors.white, shape: BoxShape.circle, border: Border.all(color: kAccent, width: 2)),
+                        ),
+                      ),
+                    ),
+                  ),
+            ]);
+          },
+        ),
+      );
+
+  void _handleDown(int i, PointerDownEvent e) {
+    if (widget.readOnly || pointer != null || _shape == null) return;
+    pointer = e.pointer;
+    _shapeDragStart(i, _pageOfGlobal(e.position));
+  }
+
+  void _handleUp(PointerEvent e) {
+    if (e.pointer != pointer) return;
+    pointer = null;
+    if (_shapeDrag != null) _shapeDragEnd();
   }
 
   /// El trazo terminado pasa a la página (suavizado), con su deshacer.
@@ -857,7 +1114,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   }
 
   /// Mismo corrector con otro color (el color de un trazo es final).
-  Stroke _recolored(Stroke s, String hex) => Stroke(s.id, s.k, hex, s.w, s.pts, s.o)..z = s.z;
+  Stroke _recolored(Stroke s, String hex) => Stroke(s.id, s.k, hex, s.w, s.pts, s.o, null, s.fill)..z = s.z;
 
   void _coverColorArrived(String id, int argb) {
     if (!mounted) return;
@@ -924,6 +1181,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final a = undo ? history.undo() : history.redo();
     if (a == null) return;
     a.apply(doc, undo: undo, putText: texts.put);
+    _shape = null; // deshacer / rehacer: la forma ya no es "la recién hecha"
+    liveTick.value++;
     if (a.sheetOps.isNotEmpty) {
       _afterSheetOps();
       widget.onSheetsChanged?.call(a.sheetFocus(doc, undo: undo));
@@ -1589,6 +1848,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   // ---------------- herramientas ----------------
   void _setTool(Tool t) {
     if (t != Tool.select) _clearSel();
+    if (t != Tool.shape) _shape = null;
     setState(() => ts.tool = t);
     if (t != Tool.text) FocusScope.of(context).unfocus();
     // por si al abrir la app no había internet: reintenta la bajada del modelo de la letra, en silencio
@@ -1602,7 +1862,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   void undo() => _undoRedo(undo: true);
   void redo() => _undoRedo(undo: false);
 
-  /// Elegir una herramienta con una tecla suelta (P, H, T, S). Texto abre un bloque, como el botón.
+  /// Elegir una herramienta con una tecla suelta (P, H, F, T, S). Texto abre un bloque, como el botón.
   void pickTool(Tool t) {
     if (widget.readOnly) return;
     if (t != Tool.text && ts.tool == t) return;
@@ -1724,6 +1984,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   void _touchDown(PointerDownEvent e) {
     if (e.kind != PointerDeviceKind.touch) return;
     touch.down(e.pointer, e.position);
+    if (touch.length == 2) _cancelTouchShape();
     final onSelUi = _selUiPointers.remove(e.pointer);
     _linkCand = touch.length == 1 && pointer == null && !onSelUi ? (pointer: e.pointer, global: e.position, t: e.timeStamp) : null;
     if (touch.length == 1 && pointer == null) {
@@ -2366,6 +2627,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final body = !widget.readOnly && !sel.isEmpty && (idle || (drag != null && drag.handle == Handle.move)) ? sel.bounds(doc) : null;
     return Stack(clipBehavior: Clip.none, children: [
       _layers(textMode),
+      if (ts.tool == Tool.shape && !widget.readOnly) _shapeOverlay(),
       if (body != null)
         Positioned.fromRect(
           key: const ValueKey('selBody'),
@@ -2607,7 +2869,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         child: IgnorePointer(
           child: RepaintBoundary(
             child: CustomPaint(
-                painter: InkPainter(doc, strokes, r, scale, _verOf(id), () => sel.moving ? sel.strokes : const {},
+                painter: InkPainter(doc, strokes, r, scale, _verOf(id), () => sel.moving ? sel.strokes : (_shapeEdit != null ? {_shapeEdit!.id} : const {}),
                     cache: _imgs, cacheKey: 'ink-$id-$i', sheetId: id, dpr: _dpr, maxPx: 2 * _viewW * _dpr),
                 isComplex: true),
           ),
@@ -2640,7 +2902,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       doc: doc,
       scale: scale,
       sel: sel,
-      live: _cover ?? live,
+      live: _cover ?? live ?? _shapeEdit,
       eraserAt: eraserAt,
       eraserRadius: ts.eraserRadius,
       visible: _visiblePage(),
@@ -2685,4 +2947,29 @@ class _MenuLayout extends SingleChildLayoutDelegate {
   Offset getPositionForChild(Size size, Size child) => Offset(x.clamp(0.0, max(0.0, size.width - child.width)), top - child.height >= 0 ? top - child.height : bottom);
   @override
   bool shouldRelayout(_MenuLayout o) => o.x != x || o.top != top || o.bottom != bottom;
+}
+
+/// Forma que se está arrastrando: de A (en [sheet], donde empezó) a B. [touch]: la dibuja un dedo.
+class _ShapeDraft {
+  final String kind;
+  final int sheet;
+  final bool touch;
+  Offset a, b;
+  _ShapeDraft(this.kind, this.sheet, this.a, this.touch) : b = a;
+}
+
+/// La forma recién hecha: con manijas y medidas hasta que se empieza otra, se cambia de herramienta o se deshace.
+class _ActiveShape {
+  final String kind, id;
+  final int sheet;
+  Offset a, b;
+  _ActiveShape(this.kind, this.a, this.b, this.id, this.sheet);
+}
+
+/// Arrastre de una manija ([handle] -1: la forma entera) con el trazo de antes y los extremos de partida.
+class _ShapeDrag {
+  final int handle;
+  final Stroke before;
+  final Offset a0, b0, grab, off; // [off]: de donde apoyó el puntero al centro de la manija
+  _ShapeDrag(this.handle, this.before, this.a0, this.b0, this.grab, this.off);
 }

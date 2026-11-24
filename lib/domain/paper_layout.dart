@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:ui' show Offset;
 
 import 'geometry.dart';
 
@@ -136,4 +137,21 @@ double snapTextY(double localY, String bg, double spacing, {bool floor = false, 
   final minN = ((-(o + inset)) / line).ceil();
   final n = max(minN, (floor ? r.floorToDouble() : r.roundToDouble()).toInt());
   return o + n * line + inset;
+}
+
+/// Lleva [localPoint] (unidades, local a la hoja) a la intersección más cercana de la cuadrícula del fondo [bg]:
+/// cuadriculado, puntos y ejes con su paso [spacing] (mm); milimetrado cada 5 mm. Otros fondos: el mismo punto.
+Offset snapToGrid(Offset localPoint, String bg, double spacing, String size) {
+  double nearest(List<double> l, double t) => l.reduce((a, b) => (a - t).abs() <= (b - t).abs() ? a : b);
+  switch (bg) {
+    case 'grid' || 'dots' || 'axes':
+      return Offset(nearest(gridXs(spacing, size: size), localPoint.dx), nearest(gridYs(spacing, size: size), localPoint.dy));
+    case 'mm':
+      final u = unitsPerMm(size), o = gridOriginMm('mm', 10, size: size), step = 5 * u;
+      final x = (localPoint.dx / step).round() * step;
+      final y = (o * u) + ((localPoint.dy - o * u) / step).round() * step;
+      return Offset(x.clamp(0.0, paperWidthMm(size) * u), y.clamp(0.0, paperHeightMm(size) * u));
+    default:
+      return localPoint;
+  }
 }

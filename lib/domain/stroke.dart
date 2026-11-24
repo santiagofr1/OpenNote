@@ -99,10 +99,20 @@ class Stroke extends Layered {
   final double w, o; // grosor y opacidad (0..1)
   final List<double> pts;
   final PaintParams? pp; // ajustes de la pintura (null en los demás trazos)
+  final String? fill; // relleno de una forma exacta ('#rrggbb'); null: sin relleno
   late final Color color = parseColor(c);
   Rect? _bounds;
+  Path? _fillPath;
 
-  Stroke(this.id, this.k, this.c, this.w, this.pts, [this.o = 1, this.pp]);
+  Stroke(this.id, this.k, this.c, this.w, this.pts, [this.o = 1, this.pp, this.fill]);
+
+  /// Polígono cerrado de los puntos (para el relleno), cacheado hasta [invalidate].
+  Path get fillPath {
+    final cached = _fillPath;
+    if (cached != null) return cached;
+    return _fillPath = Path()
+      ..addPolygon([for (var i = 0; i + 1 < pts.length; i += 3) Offset(pts[i], pts[i + 1])], true);
+  }
 
   /// Malla de triángulos del trazo (ver stroke_mesh.dart): se arma una vez (en el isolate al cargar la hoja, o al
   /// primer dibujo) y se descarta en [invalidate]. [batchCache] es el lote de trazos que el painter arma con éste
@@ -131,6 +141,7 @@ class Stroke extends Layered {
   /// Hay que llamarlo después de tocar [pts] (el rectángulo y la malla se cachean).
   void invalidate() {
     _bounds = null;
+    _fillPath = null;
     meshGen++;
     releaseMesh();
   }
@@ -157,7 +168,7 @@ class Stroke extends Layered {
       p[i] += d.dx;
       p[i + 1] += d.dy;
     }
-    return Stroke(id ?? this.id, k, c, w, p, o, pp)..z = z;
+    return Stroke(id ?? this.id, k, c, w, p, o, pp, fill)..z = z;
   }
 
   /// Copia transformada por [t] (con otro [id] si hace falta): todos los puntos, y el grosor se multiplica por la escala.
@@ -169,7 +180,7 @@ class Stroke extends Layered {
       p[i] = q.dx;
       p[i + 1] = q.dy;
     }
-    return Stroke(id ?? this.id, k, c, w * t.scale, p, o, pp)..z = z;
+    return Stroke(id ?? this.id, k, c, w * t.scale, p, o, pp, fill)..z = z;
   }
 
   /// Cuánto se aleja la tinta de la línea central: la mitad del grosor (un poco más en la pintura, por el desflecado).
@@ -240,6 +251,7 @@ class Stroke extends Layered {
         ],
         jsonDouble(j['o'], 1),
         j['pp'] is Map ? PaintParams.fromJson(j['pp'] as Map) : null,
+        j['f'] is String ? j['f'] as String : null,
       );
 
   Map<String, dynamic> toJson() => {
@@ -249,6 +261,7 @@ class Stroke extends Layered {
         'w': w,
         if (o < 1) 'o': round2(o),
         if (pp != null) 'pp': pp!.toJson(),
+        if (fill != null) 'f': fill,
         'pts': [
           for (var i = 0; i < pts.length; i += 3) [round1(pts[i]), round1(pts[i + 1]), round2(pts[i + 2])]
         ],

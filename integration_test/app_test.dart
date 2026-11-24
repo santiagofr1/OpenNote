@@ -2986,6 +2986,155 @@ void main() {
     await settle(t);
     expect(ed.doc.items.values.where((i) => i.type == 'link'), isNotEmpty, reason: 'quitar se deshace');
   });
+
+  // ---------------- formas exactas (#38) ----------------
+  testWidgets('formas: rectángulo con relleno pegado a la cuadrícula, con medida, manija y deshacer (issue #38)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Formas');
+    final ed = editor(t);
+    ed.doc.sheets[0].setBg('grid');
+    // ignore: invalid_use_of_protected_member
+    ed.setState(() {});
+    await settle(t, 600);
+
+    await t.tap(find.byKey(const ValueKey('tool-shape')));
+    await settle(t);
+    await t.tap(find.byKey(const ValueKey('tool-shape'))); // de nuevo: abre las opciones
+    await settle(t);
+    await t.tap(find.byKey(const Key('shapeKind-rect')));
+    await t.tap(find.byKey(const Key('shapeFillSwitch')));
+    await settle(t);
+    expect(ed.ts.shapeKind, 'rect');
+    expect(ed.ts.shapeFill, isTrue);
+    await t.tapAt(const Offset(4, 600)); // cierra el panel
+    await settle(t);
+
+    final p = docToScreen(t);
+    await stylusDrag(t, p(const Offset(203, 307)), p(const Offset(498, 512)));
+    expect(ed.doc.strokes.length, 1);
+    final s = ed.doc.strokes.values.single;
+    expect(s.fill, ed.ts.shapeFillColor);
+    // las esquinas caen en la cuadrícula de 5 mm
+    final xs = gridXs(5), ys = gridYs(5);
+    bool onGrid(double x, double y) => xs.any((v) => (v - x).abs() < .5) && ys.any((v) => (v - y).abs() < .5);
+    expect(onGrid(s.pts[0], s.pts[1]), isTrue, reason: 'primera esquina');
+    final b = s.bounds.deflate(s.w * 1.6);
+    expect(onGrid(b.right, b.bottom), isTrue, reason: 'esquina opuesta');
+    expect(find.byKey(const Key('shapeMeasure')), findsOneWidget);
+    expect(find.textContaining('×'), findsOneWidget);
+
+    // una manija cambia la medida
+    final texto = (t.widget(find.descendant(of: find.byKey(const Key('shapeMeasure')), matching: find.byType(Text))) as Text).data;
+    final c = t.getCenter(find.byKey(const ValueKey('shapeHandle-2')));
+    await stylusDrag(t, c, c + const Offset(90, 70));
+    final texto2 = (t.widget(find.descendant(of: find.byKey(const Key('shapeMeasure')), matching: find.byType(Text))) as Text).data;
+    expect(texto2, isNot(texto));
+    expect(ed.doc.strokes.length, 1);
+
+    // deshacer: vuelve al antes de la manija; otra vez, y la forma desaparece
+    ed.undo();
+    await settle(t);
+    expect(ed.doc.strokes.values.single.pts, s.pts);
+    ed.undo();
+    await settle(t);
+    expect(ed.doc.strokes, isEmpty);
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+  });
+
+  testWidgets('formas: la recta con el dedo dibuja una recta y no scrollea (issue #38)', (t) async {
+    await start(t);
+    await createNotebook(t, 'FormasDedo');
+    final ed = editor(t);
+    await t.tap(find.byKey(const ValueKey('tool-shape')));
+    await settle(t);
+    await t.tap(find.byKey(const ValueKey('tool-shape')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('shapeKind-line')));
+    await settle(t);
+    await t.tapAt(const Offset(4, 600));
+    await settle(t);
+    expect(ed.ts.shapeKind, 'line');
+
+    final y0 = ed.scroll.offset;
+    final p = docToScreen(t);
+    final a = p(const Offset(200, 400)), b = p(const Offset(600, 480));
+    final g = await t.startGesture(a, kind: PointerDeviceKind.touch);
+    for (var i = 1; i <= 10; i++) {
+      await g.moveTo(Offset.lerp(a, b, i / 10)!);
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    await g.up();
+    await settle(t, 400);
+    expect(ed.doc.strokes.length, 1);
+    expect(ed.scroll.offset, y0, reason: 'un dedo no scrollea con las formas');
+    expect(find.textContaining('mm ·'), findsOneWidget, reason: 'largo y ángulo');
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+  });
+
+  // ---------------- lienzo infinito (issue #36) ----------------
+  /// Como [createNotebook] pero elige el tipo (por defecto Hojas, como el helper de siempre).
+  Future<void> createKindNotebook(WidgetTester t, String name, {required bool canvas}) async {
+    await t.tap(find.byKey(const Key('new')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('newNotebook')));
+    await settle(t);
+    await t.enterText(find.byKey(const Key('askText')), name);
+    await t.tap(find.byKey(Key(canvas ? 'nbKindCanvas' : 'nbKindSheets')));
+    await settle(t, 200);
+    await t.tap(find.byKey(const Key('askOk')));
+    await settle(t, 1500);
+  }
+
+  testWidgets('lienzo infinito: crece a la derecha y hacia abajo, sin botón de hojas, y se conserva (issue #36)', (t) async {
+    await start(t);
+    await createKindNotebook(t, 'Mapa', canvas: true);
+    expect(find.byKey(const Key('pagesBtn')), findsNothing);
+    final ed = editor(t);
+    expect(ed.doc.nb.canvas, isTrue);
+    expect(ed.doc.nb.canvasW, 2000);
+    final antes = ed.hscroll.position.maxScrollExtent;
+    expect(antes, greaterThan(0), reason: 'el lienzo es más ancho que la pantalla');
+
+    // derecha: se va al borde y se escribe pegado a él
+    ed.hscroll.jumpTo(ed.hscroll.position.maxScrollExtent);
+    await settle(t, 300);
+    final box = t.getRect(find.byType(PageEditor));
+    final y = box.top + 300;
+    await stylusDrag(t, Offset(box.right - 120, y), Offset(box.right - 40, y + 30));
+    expect(ed.doc.strokes.length, 1);
+    expect(ed.doc.nb.canvasW, greaterThan(2000));
+    expect(ed.hscroll.position.maxScrollExtent, greaterThan(antes), reason: 'se puede scrollear más a la derecha');
+
+    // abajo: se va al final y se escribe cerca del borde de abajo
+    ed.scroll.jumpTo(ed.scroll.position.maxScrollExtent);
+    await settle(t, 300);
+    final sheets = ed.doc.sheetCount;
+    await stylusDrag(t, Offset(box.left + 300, box.bottom - 80), Offset(box.left + 400, box.bottom - 60));
+    expect(ed.doc.sheetCount, greaterThan(sheets));
+
+    final w = ed.doc.nb.canvasW;
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+    final nb = await savedNotebook('Mapa');
+    expect(nb.canvas, isTrue);
+    expect(nb.canvasW, w);
+    await t.tap(find.byKey(const Key('nb-Mapa')));
+    await settle(t, 1500);
+    expect(editor(t).doc.nb.canvasW, w);
+    expect(editor(t).doc.strokes.length, 2, reason: 'los trazos quedaron guardados');
+    expect(find.byKey(const Key('pagesBtn')), findsNothing);
+  });
+
+  testWidgets('cuaderno de hojas con el tipo por defecto: sigue igual (issue #36)', (t) async {
+    await start(t);
+    await createKindNotebook(t, 'Hojas', canvas: false);
+    expect(find.byKey(const Key('pagesBtn')), findsOneWidget);
+    expect(editor(t).doc.nb.canvas, isFalse);
+    expect(editor(t).doc.width, kW);
+  });
+
 }
 
 /// Reconocimiento de letra de mentira: siempre lee [text].
