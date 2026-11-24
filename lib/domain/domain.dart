@@ -6,6 +6,7 @@ export 'folders.dart';
 export 'format.dart';
 export 'elements.dart';
 export 'geometry.dart';
+export 'links.dart';
 export 'notebook.dart';
 export 'paint_shapes.dart';
 export 'notebook_doc.dart';

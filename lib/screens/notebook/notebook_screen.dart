@@ -13,6 +13,7 @@ import '../../data/storage.dart';
 import '../../data/templates.dart';
 import '../../domain/domain.dart';
 import '../../editor/history.dart';
+import '../../editor/link_open.dart';
 import '../../editor/page_editor.dart';
 import '../../editor/voice_recorder.dart';
 import '../../sync/sync_controller.dart';
@@ -887,6 +888,8 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
                             onHeadingsChanged: () => _headings.value++,
                             recorder: recorder,
                             onStopRecording: stopVoice,
+                            onOpenLink: _openLink,
+                            linkNotebooks: [for (final n in widget.index.notebooks) if (n.id != nb.id) n],
                           ),
                   ),
                   AnimatedSize(
@@ -1005,6 +1008,45 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
           onOpen: _openEntry,
           onAction: _entryAction,
         );
+
+  /// Abre el destino de un link: la web en el navegador, otra hoja (de esta o de otra sección) o otro cuaderno
+  /// (se cierra este y la biblioteca abre el otro).
+  Future<void> _openLink(LinkTarget t) async {
+    switch (t) {
+      case LinkWeb(:final uri):
+        var ok = false;
+        try {
+          ok = await linkLauncher(uri);
+        } catch (_) {}
+        if (!ok && mounted) snack(context, 'No se pudo abrir el link');
+      case LinkSheet(:final id):
+        await _goToSheetId(id);
+      case LinkNotebook(:final id):
+        if (!widget.index.notebooks.any((n) => n.id == id)) {
+          snack(context, 'El cuaderno ya no existe');
+          return;
+        }
+        await leave('open:$id');
+    }
+  }
+
+  /// Lleva la vista a la hoja de id [id], cambiando de sección si es de otra.
+  Future<void> _goToSheetId(String id) async {
+    final k = nb.sheets.indexWhere((m) => m.id == id);
+    if (k >= 0) return _goTo(k);
+    final other = nb.otherSheets.where((m) => m.id == id).firstOrNull;
+    if (other == null) {
+      snack(context, 'La hoja ya no existe');
+      return;
+    }
+    final sec = other.section.isEmpty ? nb.sections.first.id : other.section;
+    await _switchSection(sec);
+    if (!mounted || doc == null || nb.activeSection.id != sec) return;
+    await WidgetsBinding.instance.endOfFrame; // que el editor nuevo ya esté armado
+    if (!mounted) return;
+    final j = nb.sheets.indexWhere((m) => m.id == id);
+    if (j >= 0) _goTo(j);
+  }
 
   /// Lleva la vista al título [e] (cambiando de sección si es de otra).
   Future<void> _openEntry(OutlineEntry e) async {

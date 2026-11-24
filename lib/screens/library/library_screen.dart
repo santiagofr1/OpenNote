@@ -292,6 +292,16 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     setState(() {});
     final t = await store.loadSheetDoc(nb, 0);
     if (mounted && t != null) setState(() => thumbs[nb.id] = t);
+    // un link llevó a otro cuaderno: se abre como si se hubiera tocado su tarjeta (con su PIN si está bloqueado)
+    if (result is String && result.startsWith('open:') && mounted) {
+      final id = result.substring(5);
+      final target = index!.notebooks.where((n) => n.id == id).firstOrNull;
+      if (target == null) {
+        snack(context, 'El cuaderno ya no existe');
+      } else {
+        return _open(target);
+      }
+    }
   }
 
   /// "+": cuaderno o carpeta nuevos, en la carpeta actual

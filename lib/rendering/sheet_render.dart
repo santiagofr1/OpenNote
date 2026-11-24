@@ -78,7 +78,7 @@ const _stickyText = Color(0xFF2B2A27);
 /// Clave, en el mapa de imágenes de [paintSheet], de la página de PDF de [it].
 String pdfImageKey(Item it) => '${it.file}#${it.page}';
 
-/// Elemento insertado (para miniaturas y PDF; en el editor son widgets).
+/// Elemento insertado (para miniaturas y PDF; en el editor son widgets). Un 'link' no dibuja nada (es solo una zona).
 void paintItem(Canvas c, Item it, ui.Image? img) {
   final r = it.rect;
   switch (it.type) {

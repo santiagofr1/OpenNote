@@ -19,6 +19,7 @@ import 'package:apuntes/data/system_clipboard.dart';
 import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/editor/fake_audio_source.dart';
 import 'package:apuntes/editor/handwriting.dart';
+import 'package:apuntes/editor/link_open.dart';
 import 'package:apuntes/editor/page_editor.dart';
 import 'package:apuntes/editor/pdf_page_image.dart';
 import 'package:apuntes/editor/voice_recorder.dart';
@@ -2850,6 +2851,140 @@ void main() {
     ts.setFavorite(0, antes);
     await t.tap(find.byKey(const Key('back')));
     await settle(t, 1200);
+  });
+
+  // ---------------- links (issue #34) ----------------
+  /// Una raya de tinta, elegida con el lazo, y el diálogo de "Link" abierto con la barrita. Devuelve la raya.
+  Future<Stroke> selectInkForLink(WidgetTester t, Offset Function(Offset) p) async {
+    await stylusLine(t, p(const Offset(200, 200)), p(const Offset(500, 200)));
+    final ed = editor(t);
+    final ink = ed.doc.strokes.values.single;
+    await t.tap(find.byTooltip('Seleccionar'));
+    await settle(t);
+    await stylusDrag(t, p(const Offset(150, 150)), p(const Offset(550, 250)));
+    expect(ed.sel.strokes, {ink.id});
+    await t.tap(find.text('Link'));
+    await settle(t);
+    return ink;
+  }
+
+  testWidgets('link a una web: el dedo lo abre, el lápiz sigue escribiendo y deshacer saca el trazo y después el link (issue #34)', (t) async {
+    final opened = <Uri>[];
+    final prev = linkLauncher;
+    linkLauncher = (u) async {
+      opened.add(u);
+      return true;
+    };
+    addTearDown(() => linkLauncher = prev);
+    await start(t);
+    await createNotebook(t, 'Links');
+    final p = docToScreen(t);
+    final ed = editor(t);
+    await selectInkForLink(t, p);
+    await t.tap(find.byKey(const Key('linkKindWeb')));
+    await settle(t);
+    await t.enterText(find.byKey(const Key('linkUrl')), 'ejemplo.com');
+    await t.pump();
+    await t.tap(find.byKey(const Key('linkOk')));
+    await settle(t);
+    final link = ed.doc.items.values.singleWhere((i) => i.type == 'link');
+    expect(link.text, 'https://ejemplo.com');
+    expect(find.byKey(ValueKey('link-${link.id}')), findsOneWidget, reason: 'la zona se marca en el editor');
+
+    // con la herramienta del lápiz: el dedo abre
+    await t.tap(find.byTooltip('Lápiz · tocá de nuevo para opciones'));
+    await settle(t);
+    expect(ed.sel.isEmpty, isTrue);
+    await t.tapAt(p(link.rect.center));
+    await settle(t);
+    expect(opened, [Uri.parse('https://ejemplo.com')]);
+
+    // el lápiz escribe encima y no abre
+    await stylusLine(t, p(link.rect.center + const Offset(-80, 6)), p(link.rect.center + const Offset(80, 6)));
+    expect(opened.length, 1);
+    expect(ed.doc.strokes.length, 2, reason: 'el lápiz dibujó un trazo sobre el link');
+
+    // deshacer: primero el trazo, después el link
+    await t.tap(find.byTooltip('Deshacer'));
+    await settle(t);
+    expect(ed.doc.strokes.length, 1);
+    expect(ed.doc.items.values.where((i) => i.type == 'link'), isNotEmpty);
+    await t.tap(find.byTooltip('Deshacer'));
+    await settle(t);
+    expect(ed.doc.items.values.where((i) => i.type == 'link'), isEmpty);
+  });
+
+  testWidgets('link a otra hoja: tocarlo con el dedo lleva a esa hoja (issue #34)', (t) async {
+    await start(t);
+    await createNotebook(t, 'LinkHoja');
+    final ed = editor(t);
+    ed.doc.addSheet();
+    ed.doc.addSheet();
+    // ignore: invalid_use_of_protected_member
+    ed.setState(() {});
+    await settle(t, 600);
+    expect(ed.doc.sheetCount, 3);
+    final p = docToScreen(t);
+    await selectInkForLink(t, p);
+    await t.tap(find.byKey(const Key('linkKindSheet')));
+    await settle(t);
+    await t.tap(find.byKey(Key('linkSheet-${ed.doc.sheets[2].id}')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('linkOk')));
+    await settle(t);
+    final link = ed.doc.items.values.singleWhere((i) => i.type == 'link');
+    expect(link.text, 'sheet:${ed.doc.sheets[2].id}');
+    await t.tap(find.byTooltip('Lápiz · tocá de nuevo para opciones'));
+    await settle(t);
+    expect(ed.mostVisibleSheet, 0);
+    await t.tapAt(p(link.rect.center));
+    await settle(t, 1500);
+    expect(ed.mostVisibleSheet, 2, reason: 'el link lleva a la hoja 3');
+  });
+
+  testWidgets('quitar y editar un link (issue #34)', (t) async {
+    await start(t);
+    await createNotebook(t, 'LinkQuitar');
+    final p = docToScreen(t);
+    final ed = editor(t);
+    await selectInkForLink(t, p);
+    await t.enterText(find.byKey(const Key('linkUrl')), 'ejemplo.com');
+    await t.pump();
+    await t.tap(find.byKey(const Key('linkOk')));
+    await settle(t);
+    final link = ed.doc.items.values.singleWhere((i) => i.type == 'link');
+
+    // con la selección de herramienta, tocar el link con el dedo lo elige (no lo abre)
+    await t.tap(find.byTooltip('Deseleccionar'));
+    await settle(t);
+    await t.tapAt(p(link.rect.center));
+    await settle(t);
+    expect(ed.sel.items, {link.id});
+    expect(find.text('Link'), findsNothing, reason: 'un link no se vuelve a convertir en link');
+
+    // editar: cambia el destino con un paso de deshacer
+    await t.tap(find.text('Editar link'));
+    await settle(t);
+    await t.enterText(find.byKey(const Key('linkUrl')), 'otro.org/x');
+    await t.pump();
+    await t.tap(find.byKey(const Key('linkOk')));
+    await settle(t);
+    expect(ed.doc.items[link.id]!.text, 'https://otro.org/x');
+    ed.undo();
+    await settle(t);
+    expect(ed.doc.items[link.id]!.text, 'https://ejemplo.com');
+
+    // quitar
+    if (ed.sel.items.isEmpty) {
+      await t.tapAt(p(link.rect.center));
+      await settle(t);
+    }
+    await t.tap(find.text('Quitar link'));
+    await settle(t);
+    expect(ed.doc.items.values.where((i) => i.type == 'link'), isEmpty);
+    ed.undo();
+    await settle(t);
+    expect(ed.doc.items.values.where((i) => i.type == 'link'), isNotEmpty, reason: 'quitar se deshace');
   });
 }
 

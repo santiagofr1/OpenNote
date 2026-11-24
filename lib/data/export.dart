@@ -31,13 +31,66 @@ List<ExportSheet> exportSheets(Notebook nb, {Set<String>? sections, List<int>? o
   ];
 }
 
+/// Un link de una hoja exportada, en unidades de la hoja (origen arriba a la izquierda de ESA hoja). Lleva a una web
+/// ([url]), a una hoja del PDF ([sheetId]) o a una página de un PDF importado ([pdfKey], `archivo#página`: se
+/// resuelve a una hoja cuando ya se sabe cuáles hojas hay).
+typedef _PdfLink = ({ui.Rect rect, String? url, String? sheetId, String? pdfKey});
+
+/// Los links de la hoja [sheet] de [doc]: los de OpenNote y los que traen las páginas de PDF importadas que hay en ella.
+/// Los links a otro cuaderno no se exportan.
+Future<List<_PdfLink>> _sheetLinks(Storage store, NotebookDoc doc, int sheet) async {
+  final out = <_PdfLink>[];
+  final top = sheet * kSheetStep, area = ui.Rect.fromLTWH(0, top, kW, kSheetH), shift = ui.Offset(0, -top);
+  for (final it in doc.items.values) {
+    if (!area.contains(it.rect.center) && it.type != 'pdf') continue;
+    if (it.type == 'link') {
+      switch (parseLink(it.text)) {
+        case LinkWeb(:final uri):
+          out.add((rect: it.rect.shift(shift), url: uri.toString(), sheetId: null, pdfKey: null));
+        case LinkSheet(:final id):
+          out.add((rect: it.rect.shift(shift), url: null, sheetId: id, pdfKey: null));
+        case _:
+          break;
+      }
+    } else if (it.type == 'pdf' && it.file != null && it.rect.overlaps(area)) {
+      try {
+        final f = store.media(it.file!);
+        if (!await f.exists()) continue;
+        final sizes = await pdfPages.pageSizes(f);
+        if (it.page >= sizes.length) continue;
+        for (final l in await pdfPages.links(f, it.page)) {
+          final url = l.url, dest = l.dest;
+          final isWeb = url != null && (url.scheme == 'http' || url.scheme == 'https' || url.scheme == 'mailto');
+          if (!isWeb && dest == null) continue;
+          for (final r in l.rects) {
+            final rr = itemRectForPdfRect(it, r.left, r.top, r.right, r.bottom, sizes[it.page]).shift(shift);
+            if (isWeb) {
+              out.add((rect: rr, url: url.toString(), sheetId: null, pdfKey: null));
+            } else {
+              out.add((rect: rr, url: null, sheetId: null, pdfKey: '${it.file}#${dest!.pageNumber - 1}'));
+            }
+          }
+        }
+      } catch (_) {
+        // los links de un PDF roto no impiden exportar
+      }
+    }
+  }
+  return out;
+}
+
+/// Lo que se sabe de una hoja ya dibujada, para armar su página del PDF.
+typedef _PagePlan = ({String id, SheetMeta meta, Uint8List png, List<_PdfLink> links, List<String> pdfKeys});
+
 /// Arma el PDF del cuaderno: una página del tamaño de cada hoja, cada una con su fondo y su papel. Las secciones elegidas
-/// ([sections], todas si es null) van una atrás de la otra, en su orden.
+/// ([sections], todas si es null) van una atrás de la otra, en su orden. Los links (de OpenNote y de los PDF importados)
+/// siguen andando: a una web, o a otra hoja que esté en el PDF.
 /// [only]: índices de las hojas de la sección abierta a incluir. [onProgress] recibe (hechas, total).
 Future<Uint8List> buildNotebookPdf(Storage store, NotebookDoc nb,
     {void Function(int, int)? onProgress, List<int>? only, Set<String>? sections}) async {
   final sheets = exportSheets(nb.nb, sections: sections, only: only);
   final pdf = pw.Document(title: nb.nb.name, creator: 'OpenNote');
+  final plans = <_PagePlan>[];
   var done = 0;
   for (final e in sheets) {
     // las hojas sin cargar se leen de disco de a una y se sueltan: el PDF no necesita todo el cuaderno en memoria
@@ -51,13 +104,47 @@ Future<Uint8List> buildNotebookPdf(Storage store, NotebookDoc nb,
         img.dispose();
       }
     }
+    final links = await _sheetLinks(store, src, i);
+    final area = ui.Rect.fromLTWH(0, i * kSheetStep, kW, kSheetH);
+    final pdfKeys = [
+      for (final it in src.items.values)
+        if (it.type == 'pdf' && it.file != null && area.contains(it.rect.center)) '${it.file}#${it.page}'
+    ];
     final m = src.sheets[i];
-    pdf.addPage(pw.Page(
-      pageFormat: PdfPageFormat(paperWidthMm(m.size) * PdfPageFormat.mm, paperHeightMm(m.size) * PdfPageFormat.mm),
-      margin: pw.EdgeInsets.zero,
-      build: (_) => pw.Image(pw.MemoryImage(png), fit: pw.BoxFit.fill),
-    ));
+    plans.add((id: m.id, meta: m, png: png, links: links, pdfKeys: pdfKeys));
     onProgress?.call(++done, sheets.length);
+  }
+  // a qué hoja del PDF va cada página de un PDF importado, y cuáles hojas hay (un link solo va a una que esté)
+  final sheetOfPdfPage = <String, String>{};
+  for (final p in plans) {
+    for (final k in p.pdfKeys) {
+      sheetOfPdfPage.putIfAbsent(k, () => p.id);
+    }
+  }
+  final present = {for (final p in plans) p.id};
+  for (final p in plans) {
+    final m = p.meta;
+    final w = paperWidthMm(m.size) * PdfPageFormat.mm, h = paperHeightMm(m.size) * PdfPageFormat.mm;
+    final kx = w / kW, ky = h / kSheetH;
+    final over = <pw.Widget>[];
+    for (final l in p.links) {
+      final r = l.rect.intersect(const ui.Rect.fromLTWH(0, 0, kW, kSheetH));
+      if (r.width < 1 || r.height < 1) continue;
+      final box = pw.SizedBox(width: r.width * kx, height: r.height * ky);
+      final dest = l.sheetId ?? (l.pdfKey == null ? null : sheetOfPdfPage[l.pdfKey]);
+      final pw.Widget? link = l.url != null
+          ? pw.UrlLink(destination: l.url!, child: box)
+          : (dest != null && present.contains(dest) ? pw.Link(destination: 'sheet-$dest', child: box) : null);
+      if (link != null) over.add(pw.Positioned(left: r.left * kx, top: r.top * ky, child: link));
+    }
+    pdf.addPage(pw.Page(
+      pageFormat: PdfPageFormat(w, h),
+      margin: pw.EdgeInsets.zero,
+      build: (_) => pw.Anchor(
+        name: 'sheet-${p.id}',
+        child: pw.Stack(fit: pw.StackFit.expand, children: [pw.Image(pw.MemoryImage(p.png), fit: pw.BoxFit.fill), ...over]),
+      ),
+    ));
   }
   return pdf.save();
 }

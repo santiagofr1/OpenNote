@@ -11,7 +11,7 @@ import 'voice_recorder.dart';
 
 const _stickyInk = Color(0xFF2B2A27);
 
-/// Elemento insertado en la hoja (imagen, página de PDF, nota adhesiva o audio), en su lugar y tamaño.
+/// Elemento insertado en la hoja (imagen, página de PDF, nota adhesiva, audio o zona de link), en su lugar y tamaño.
 class ItemView extends StatelessWidget {
   final Item item;
   final File file; // imagen o audio en media/ (puede no existir)
@@ -69,6 +69,22 @@ class ItemView extends StatelessWidget {
                 onChanged: onStickyChanged,
                 onFocus: onStickyFocus),
           ),
+        ),
+      'link' => IgnorePointer(
+          // el toque lo maneja el editor; acá solo se marca la zona: subrayado abajo y una chapita arriba a la derecha
+          child: Stack(key: ValueKey('link-${it.id}'), clipBehavior: Clip.none, children: [
+            const Positioned(left: 0, right: 0, bottom: 0, height: 2, child: ColoredBox(color: Color(0x993B82F6))),
+            Positioned(
+              right: -9,
+              top: -9,
+              width: 18,
+              height: 18,
+              child: DecoratedBox(
+                decoration: const BoxDecoration(color: Color(0xFF3B82F6), shape: BoxShape.circle),
+                child: const Icon(Icons.link, size: 12, color: Colors.white),
+              ),
+            ),
+          ]),
         ),
       _ => recorder == null
           ? AudioChip(file: file, dur: it.dur, scale: s, name: it.text)

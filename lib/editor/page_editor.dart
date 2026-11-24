@@ -7,6 +7,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:pdfrx/pdfrx.dart' show PdfLink;
 
 import '../data/export.dart' show decodeImage;
 import '../data/storage.dart';
@@ -16,6 +17,7 @@ import '../domain/domain.dart';
 import '../rendering/ink_layers.dart';
 import '../rendering/paper.dart';
 import '../rendering/pdf_cover.dart';
+import '../rendering/pdf_pages.dart';
 import '../rendering/sheet_image_cache.dart';
 import '../rendering/text_layout.dart';
 import '../widgets/auto_scroller.dart';
@@ -28,6 +30,7 @@ import 'heading_dialog.dart';
 import 'history.dart';
 import 'ink.dart';
 import 'items_layer.dart';
+import 'link_dialog.dart';
 import 'live_layer.dart';
 import 'pen_panel.dart';
 import 'pull_to_add.dart';
@@ -75,7 +78,15 @@ class PageEditor extends StatefulWidget {
   /// La grabación de voz en curso (el audio que se graba se dibuja como etiqueta "Grabando") y qué hacer al tocar parar.
   final VoiceRecorder? recorder;
   final VoidCallback? onStopRecording;
+
+  /// Se tocó un link (de OpenNote o de un PDF importado): quien lo muestra lo abre (web, otra hoja u otro cuaderno).
+  final ValueChanged<LinkTarget>? onOpenLink;
+
+  /// Los otros cuadernos a los que se puede apuntar con un link.
+  final List<Notebook> linkNotebooks;
   const PageEditor({
+    this.onOpenLink,
+    this.linkNotebooks = const [],
     this.onSheetsChanged,
     this.onHeadingsChanged,
     this.recorder,
@@ -125,6 +136,12 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   Offset _panMid0 = Offset.zero;
   double _panY0 = 0, _panX0 = 0;
   VelocityTracker? _panVel;
+
+  /// Dedo (o clic del mouse) apoyado que todavía puede ser un toque corto para abrir un link.
+  ({int pointer, Offset global, Duration t})? _linkCand;
+
+  /// Un toque más largo que esto no abre links (es un apoyo, no un toque).
+  static const kLinkTapMax = Duration(milliseconds: 350);
 
   /// Punteros apoyados sobre la barrita o las manijas de la selección: no cuentan como un toque sobre la hoja.
   final _selUiPointers = <int>{};
@@ -591,6 +608,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   // ---------------- lápiz: dibujar, borrar, seleccionar ----------------
   void _down(PointerDownEvent e) {
+    _linkCand = e.kind == PointerDeviceKind.mouse && e.buttons == kPrimaryMouseButton ? (pointer: e.pointer, global: e.position, t: e.timeStamp) : _linkCand;
     if (widget.readOnly || pointer != null || sel.moving) return;
     final action = penActionFor(e, ts.tool);
     if (action == null) return;
@@ -667,6 +685,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   }
 
   void _move(PointerMoveEvent e) {
+    final lc = _linkCand;
+    if (lc != null && lc.pointer == e.pointer && (e.position - lc.global).distance > kTouchSlop) _linkCand = null;
     if (e.pointer != pointer) return;
     final p = _toPage(e.localPosition);
     if (sel.moving) {
@@ -710,6 +730,12 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   }
 
   void _up(PointerEvent e) {
+    final lc = _linkCand;
+    if (lc != null && lc.pointer == e.pointer) {
+      _linkCand = null;
+      // clic corto del mouse sobre un link: lo abre (el lápiz y el dedo no pasan por acá)
+      if (e is PointerUpEvent && e.timeStamp - lc.t < kLinkTapMax) _linkTapAt(_toPage(e.localPosition));
+    }
     if (e.pointer != pointer) return;
     pointer = null;
     if (sel.moving) {
@@ -1151,6 +1177,162 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     _changed();
   }
 
+  // ---------------- links ----------------
+  /// El link elegido si lo único elegido es un link.
+  Item? get _singleLink {
+    if (sel.strokes.isNotEmpty || sel.texts.isNotEmpty || sel.items.length != 1) return null;
+    final it = doc.items[sel.items.first];
+    return it != null && it.type == 'link' ? it : null;
+  }
+
+  List<({String id, String label})> get _sheetChoices => [
+        for (var k = 0; k < doc.sheetCount; k++)
+          (id: doc.sheets[k].id, label: 'Hoja ${k + 1}${doc.sheets[k].title.isEmpty ? '' : ' · ${doc.sheets[k].title}'}')
+      ];
+
+  Future<String?> _askLink([String initial = '']) => showLinkDialog(context,
+      initial: initial,
+      sheets: _sheetChoices,
+      notebooks: [for (final n in widget.linkNotebooks) (id: n.id, label: n.name)]);
+
+  /// "Link" del menú de la selección: una zona de link sobre lo elegido (arriba de todo, con deshacer).
+  Future<void> _linkSel() async {
+    final r0 = sel.contentRect(doc);
+    if (r0 == null) return;
+    final dest = await _askLink();
+    final r = sel.contentRect(doc) ?? r0;
+    if (dest == null || !mounted) return;
+    final pad = _loadedAt(r.top - 4) && _loadedAt(r.bottom + 4) ? 4.0 : 0.0;
+    final it = Item(newId('i'), 'link', r.left - pad, r.top - pad, r.width + 2 * pad, r.height + 2 * pad, text: dest)..z = doc.nextZ();
+    doc.items[it.id] = it;
+    _pushUndo(EditAction(itemBefore: absent([it.id]), itemAfter: {it.id: it.copy()}));
+    _changed();
+    liveTick.value++;
+  }
+
+  /// "Editar link": cambia a dónde lleva el link elegido (con deshacer).
+  Future<void> _editLinkSel() async {
+    final it = _singleLink;
+    if (it == null) return;
+    final before = it.copy();
+    final dest = await _askLink(it.text);
+    if (dest == null || !mounted || dest == before.text || !doc.items.containsKey(it.id)) return;
+    it.text = dest;
+    doc.markDirtyElement(it);
+    _pushUndo(EditAction(itemBefore: {it.id: before}, itemAfter: {it.id: it.copy()}));
+    _changed();
+    liveTick.value++;
+  }
+
+  /// El Item (link o PDF) de z más alta bajo [p] si es un link; null si no hay o lo de arriba es otra cosa.
+  Item? _topItemAt(Offset p) {
+    Item? best;
+    for (final it in doc.items.values) {
+      if (it.rect.contains(p) && (best == null || it.z > best.z)) best = it;
+    }
+    return best;
+  }
+
+  Item? _linkItemAt(Offset p) {
+    final it = _topItemAt(p);
+    return it != null && it.type == 'link' && parseLink(it.text) != null ? it : null;
+  }
+
+  /// Toque corto del dedo en [global]: abre el link que haya ahí. true si lo tomó (el toque no elige nada).
+  /// [fallback]: qué hacer si era un PDF y no había link en ese punto (se sabe recién al leer sus links).
+  bool _linkTapGlobal(Offset global, {VoidCallback? fallback}) {
+    if (!mounted) return false;
+    final box = _sheetKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return false;
+    final local = box.globalToLocal(global);
+    if (!(Offset.zero & box.size).contains(local)) return false;
+    return _linkTapAt(_toPage(local), fallback: fallback);
+  }
+
+  bool _linkTapAt(Offset p, {VoidCallback? fallback}) {
+    if (ts.tool == Tool.select || (ts.tool == Tool.text && texts.anyFocused) || !_loadedAt(p.dy)) return false;
+    final it = _topItemAt(p);
+    if (it == null) return false;
+    if (it.type == 'link') {
+      final t = parseLink(it.text);
+      if (t == null) return false;
+      widget.onOpenLink?.call(t);
+      return true;
+    }
+    if (it.type == 'pdf' && it.file != null && widget.onOpenLink != null) {
+      unawaited(_pdfLinkTap(it, p, fallback));
+      return true;
+    }
+    return false;
+  }
+
+  /// Toque sobre una página de PDF importada: abre el link del PDF que haya en ese punto (si no, [fallback]).
+  Future<void> _pdfLinkTap(Item it, Offset p, VoidCallback? fallback) async {
+    final f = widget.store.media(it.file!);
+    LinkTarget? target;
+    var missing = false;
+    try {
+      final sizes = await pdfPages.pageSizes(f);
+      if (it.page < sizes.length) {
+        final pt = pdfPointFor(it, p, sizes[it.page]);
+        final links = pt == null ? const <PdfLink>[] : await pdfPages.links(f, it.page);
+        PdfLink? hit;
+        for (final l in links) {
+          if (l.rects.any((r) => r.containsXy(pt!.dx, pt.dy, margin: 4))) {
+            hit = l;
+            break;
+          }
+        }
+        final dest = hit?.dest, url = hit?.url;
+        if (url != null && (url.scheme == 'http' || url.scheme == 'https' || url.scheme == 'mailto')) {
+          target = LinkWeb(url);
+        } else if (dest != null) {
+          final id = await _sheetOfPdfPage(it.file!, dest.pageNumber - 1);
+          if (id == null) {
+            missing = true;
+          } else {
+            target = LinkSheet(id);
+          }
+        }
+      }
+    } catch (e) {
+      developer.log('no se pudo leer el link del PDF: $e', name: 'editor', level: 900);
+    }
+    if (!mounted) return;
+    if (target != null) {
+      widget.onOpenLink?.call(target);
+    } else if (missing) {
+      snack(context, 'Esa página no está en el cuaderno');
+    } else {
+      fallback?.call();
+    }
+  }
+
+  /// El id de la hoja de la sección abierta que muestra la página [page] (desde 0) del PDF [file]; null si no está.
+  /// Mira las hojas cargadas; si no, prueba la que le toca según otra página del mismo PDF; si no, lee las demás de disco.
+  Future<String?> _sheetOfPdfPage(String file, int page) async {
+    bool match(Item i) => i.type == 'pdf' && i.file == file && i.page == page;
+    Item? anchor;
+    for (final it in doc.items.values) {
+      if (match(it)) return doc.sheets[doc.sheetOfElement(it)].id;
+      if (anchor == null && it.type == 'pdf' && it.file == file) anchor = it;
+    }
+    Future<bool> has(SheetMeta m) async =>
+        !doc.isLoaded(m.id) && (await widget.store.readSheetContent(doc.nb, m)).items.any(match);
+    final tried = <String>{};
+    if (anchor != null) {
+      final k = doc.sheetOfElement(anchor) + page - anchor.page;
+      if (k >= 0 && k < doc.sheetCount) {
+        tried.add(doc.sheets[k].id);
+        if (await has(doc.sheets[k])) return doc.sheets[k].id;
+      }
+    }
+    for (final m in doc.sheets) {
+      if (!tried.contains(m.id) && await has(m)) return m.id;
+    }
+    return null;
+  }
+
   /// Pega copias (con ids nuevos) corridas [d] y las deja seleccionadas.
   void _insert(List<Stroke> strokes, List<TextBlock> textBlocks, Offset d, List<Item> items) {
     // el destino tiene que estar cargado: si no, se carga y se vuelve a intentar
@@ -1287,6 +1469,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       FocusScope.of(context).unfocus(); // primer toque afuera: solo cierra el texto
       return;
     }
+    if (d.kind != PointerDeviceKind.stylus && _linkItemAt(_toPage(d.localPosition)) != null) return; // eso abrió el link
     _createTextAt(_toPage(d.localPosition));
   }
 
@@ -1542,6 +1725,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     if (e.kind != PointerDeviceKind.touch) return;
     touch.down(e.pointer, e.position);
     final onSelUi = _selUiPointers.remove(e.pointer);
+    _linkCand = touch.length == 1 && pointer == null && !onSelUi ? (pointer: e.pointer, global: e.position, t: e.timeStamp) : null;
     if (touch.length == 1 && pointer == null) {
       stillPress.start(e.position);
       _pressScrollY = scroll.hasClients ? scroll.offset : 0;
@@ -1574,6 +1758,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     stillPress.moved(e.position);
     final c = _tapCand;
     if (c != null && c.pointer == e.pointer && (e.position - c.global).distance > 10) _tapCand = null; // arrastra: no es un toque
+    final lc = _linkCand;
+    if (lc != null && lc.pointer == e.pointer && (e.position - lc.global).distance > kTouchSlop) _linkCand = null;
     if (touch.panning) {
       final mid = touch.midpoint;
       if (mid == null) return;
@@ -1595,12 +1781,19 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   void _touchUp(PointerEvent e) {
     if (e.kind != PointerDeviceKind.touch) return;
-    final cand = _tapCand;
+    final cand = _tapCand, lcand = _linkCand;
     _tapCand = null;
+    _linkCand = null;
     final wasAlone = touch.length == 1 && touch.tracks(e.pointer) && !touch.pinching;
     touch.up(e.pointer);
     stillPress.cancel();
-    if (cand != null && cand.pointer == e.pointer && e is PointerUpEvent && wasAlone && (!scroll.hasClients || (scroll.offset - cand.scrollY).abs() < 1)) {
+    // un toque corto y quieto sobre un link lo abre; si no, es el toque de siempre (elegir un elemento)
+    var opened = false;
+    if (lcand != null && lcand.pointer == e.pointer && e is PointerUpEvent && wasAlone && e.timeStamp - lcand.t < kLinkTapMax &&
+        (!scroll.hasClients || (scroll.offset - _pressScrollY).abs() < 1)) {
+      opened = _linkTapGlobal(lcand.global, fallback: cand == null ? null : () => _fingerTap(cand.global));
+    }
+    if (!opened && cand != null && cand.pointer == e.pointer && e is PointerUpEvent && wasAlone && (!scroll.hasClients || (scroll.offset - cand.scrollY).abs() < 1)) {
       _fingerTap(cand.global);
     }
     if (touch.pinching && touch.length < 2) {
@@ -1644,6 +1837,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   /// Un dedo quieto sobre la hoja: menú contextual (si no se está scrolleando ni escribiendo).
   void _onStillPress(Offset g) {
     _tapCand = null; // mantener quieto abre el menú: al levantar no es un toque que elige
+    _linkCand = null;
     if (!mounted || touch.pinching || touch.length != 1 || pointer != null) return;
     // Ojo: `isScrollingNotifier` no sirve acá: con un solo scroll posible (zoom 1, sin scroll horizontal) el dedo
     // gana la arena apenas toca y el scroll figura "en curso" aunque no se mueva. Se mira si la hoja se movió.
@@ -2211,6 +2405,9 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
                 ? _renameSel
                 : null,
             onStraighten: sel.textsOf(doc).any((t) => t.transformed) ? _straightenSel : null,
+            onLink: sel.itemsOf(doc).any((i) => i.type == 'link') ? null : _linkSel,
+            onEditLink: _singleLink != null ? _editLinkSel : null,
+            onRemoveLink: _singleLink != null ? _deleteSel : null,
             onClose: _clearSel,
             onOrder: _reorderSel,
           ))),
