@@ -1524,8 +1524,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       final mid = touch.midpoint;
       if (mid == null) return;
       final d = mid - _panMid0;
-      if (scroll.hasClients && scroll.position.maxScrollExtent > 0) {
-        scroll.jumpTo((_panY0 - d.dy).clamp(0.0, scroll.position.maxScrollExtent));
+      if (scroll.hasClients) {
+        final want = _panY0 - d.dy, end = scroll.position.maxScrollExtent;
+        if (end > 0) scroll.jumpTo(want.clamp(0.0, end));
+        pull.pulledPastEnd(want - end); // tirar más allá del final: hoja nueva (como con un dedo sin el zoom fijado)
       }
       if (hscroll.hasClients && hscroll.position.maxScrollExtent > 0) {
         hscroll.jumpTo((_panX0 - d.dx).clamp(0.0, hscroll.position.maxScrollExtent));

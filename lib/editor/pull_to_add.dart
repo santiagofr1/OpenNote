@@ -35,6 +35,20 @@ class PullToAddSheet {
     return false;
   }
 
+  /// Con el zoom fijado se arrastra con dos dedos a mano (sin scroll que avise que se pasó del final): [over] es cuánto
+  /// (px) quiso pasarse del final en este gesto; si vuelve atrás, se cancela.
+  void pulledPastEnd(double over) {
+    if (justAdded.value) return;
+    if (over > 28) {
+      if (!progress.isAnimating && progress.value == 0) {
+        HapticFeedback.selectionClick();
+        progress.forward();
+      }
+    } else if (over <= 4 && progress.value > 0) {
+      cancel();
+    }
+  }
+
   /// Soltó (o empezó un pellizco) antes de completar: el círculo vuelve.
   void cancel() {
     _pulled = 0;

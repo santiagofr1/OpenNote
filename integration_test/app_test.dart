@@ -909,6 +909,45 @@ void main() {
     expect(ed.widget.tools.zoomLocked, isFalse);
   });
 
+  testWidgets('candado del zoom: al final, tirar con dos dedos y mantener agrega una hoja', (t) async {
+    await start(t);
+    await createNotebook(t, 'CandadoHoja');
+    final ed = editor(t);
+    ed.widget.tools.zoomLocked = false;
+    await t.tap(find.byTooltip('Fijar el zoom'));
+    await settle(t);
+    expect(ed.widget.tools.zoomLocked, isTrue);
+    ed.scroll.jumpTo(ed.scroll.position.maxScrollExtent); // al final de la última hoja
+    await settle(t);
+    final n0 = ed.doc.sheetCount, c = sheetCenter(t);
+
+    final a = await t.createGesture(kind: PointerDeviceKind.touch);
+    final b = await t.createGesture(kind: PointerDeviceKind.touch);
+    await a.down(c + const Offset(-60, 200));
+    await t.pump(const Duration(milliseconds: 30));
+    await b.down(c + const Offset(60, 200));
+    await t.pump(const Duration(milliseconds: 30));
+    for (var s = 1; s <= 12; s++) {
+      await a.moveTo(c + Offset(-60, 200 - s * 25.0));
+      await b.moveTo(c + Offset(60, 200 - s * 25.0));
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    // mantener ~1,2 s (tiempo real) hasta que se llene el círculo
+    final end = DateTime.now().add(const Duration(milliseconds: 1200));
+    while (DateTime.now().isBefore(end)) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await t.pump();
+    }
+    await a.up();
+    await b.up();
+    await settle(t, 1200);
+    expect(ed.doc.sheetCount, n0 + 1, reason: 'se agregó una hoja');
+
+    await t.tap(find.byWidgetPredicate((w) => w is Tooltip && (w.message ?? '').startsWith('Zoom fijo')));
+    await settle(t);
+    expect(ed.widget.tools.zoomLocked, isFalse);
+  });
+
   testWidgets('pellizco después de poner y sacar el candado: el zoom crece parejo y la hoja no tiembla (#27)', (t) async {
     await start(t);
     await createNotebook(t, 'Pellizco');
