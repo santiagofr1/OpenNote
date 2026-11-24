@@ -789,7 +789,23 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       if (band.longestSide * scale < 6) return; // un toque: nada
       // en modo ventana (no captura): solo lo que está adentro del recuadro, para no arrastrar renglones ni letras vecinas
       final hit = Selection()..selectIn(doc, band, capture: false);
-      if (!hit.isEmpty) unawaited(_markHeading(hit.strokesOf(doc), hit.textsOf(doc), hit.itemsOf(doc)));
+      if (!hit.isEmpty) {
+        unawaited(_markHeading(hit.strokesOf(doc), hit.textsOf(doc), hit.itemsOf(doc)));
+        return;
+      }
+      // sin nada entero adentro: un renglón impreso de una página de PDF (la más superpuesta con el recuadro)
+      Item? pdf;
+      var best = 0.0;
+      for (final it in doc.items.values) {
+        if (it.type != 'pdf') continue;
+        final c = band.intersect(it.rect);
+        final a = c.width > 0 && c.height > 0 ? c.width * c.height : 0.0;
+        if (a > best) {
+          best = a;
+          pdf = it;
+        }
+      }
+      if (pdf != null) unawaited(_markPdfHeading(pdf, band));
       return;
     }
     if (band != null) {
@@ -2429,9 +2445,6 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   Future<void> _markHeading(List<Stroke> strokes, List<TextBlock> texts, List<Item> items) async {
     final tops = [for (final s in strokes) s.bounds.top, for (final t in texts) t.y, for (final i in items) i.y];
     if (tops.isEmpty) return;
-    final top = tops.reduce(min), k = doc.sheetOfY(top);
-    if (!doc.isLoadedAt(k)) return;
-    final sheetId = doc.sheets[k].id, local = top - k * kSheetStep;
     var initial = '';
     Future<String?>? recognizing;
     var downloading = false;
@@ -2445,6 +2458,36 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       if (!mounted) return;
       recognizing = hw.recognize(strokes);
     }
+    await _addHeading(tops.reduce(min), [for (final s in strokes) s.id, for (final t in texts) t.id, for (final it in items) it.id],
+        initial: initial, recognizing: recognizing, downloading: downloading);
+  }
+
+  /// Marca un renglón impreso de la página de PDF [it] (el recuadro [band]): el título sugerido es el texto del PDF ahí.
+  Future<void> _markPdfHeading(Item it, Rect band) async {
+    final zone = band.intersect(it.rect);
+    if (zone.right <= zone.left || zone.bottom <= zone.top) return;
+    if (it.file == null) return;
+    var initial = '';
+    final f = widget.store.media(it.file!);
+    final sizes = await pdfPages.pageSizes(f);
+    if (!mounted) return;
+    if (it.page >= 0 && it.page < sizes.length) {
+      final r = pdfRectFor(it, zone, sizes[it.page]);
+      if (r != null) {
+        initial = await pdfPages.textIn(f, it.page, r.left, r.top, r.right, r.bottom);
+        if (!mounted) return;
+        if (initial.length > 120) initial = initial.substring(0, 120);
+      }
+    }
+    await _addHeading(zone.top, [it.id], initial: initial, box: zone.shift(-it.rect.topLeft));
+  }
+
+  /// Pregunta nombre y nivel de un título cuyo borde de arriba está en [top] (global) y lo agrega a su hoja.
+  Future<void> _addHeading(double top, List<String> ids,
+      {String initial = '', Future<String?>? recognizing, bool downloading = false, Rect? box}) async {
+    final k = doc.sheetOfY(top);
+    if (!doc.isLoadedAt(k)) return;
+    final sheetId = doc.sheets[k].id, local = top - k * kSheetStep;
     // nivel del título anterior (en la misma sección)
     var level = 1;
     for (final e in buildOutline(doc.nb)) {
@@ -2457,8 +2500,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final i = doc.indexOfSheet(sheetId); // pudo moverse mientras se escribía
     if (i < 0) return;
     final m = doc.sheets[i];
-    m.heads.add(Heading(newId('h'),
-        level: r.level, title: r.title, y: local, ids: [for (final s in strokes) s.id, for (final t in texts) t.id, for (final it in items) it.id]));
+    m.heads.add(Heading(newId('h'), level: r.level, title: r.title, y: local, ids: ids, box: box));
     m.updated = DateTime.now().millisecondsSinceEpoch;
     syncHeadings(doc);
     _outline = null;

@@ -57,6 +57,35 @@ void main() {
     });
   });
 
+  group('página de PDF (fondo de la hoja)', () {
+    NotebookDoc conPdf() {
+      final p = NotebookDoc(Notebook.create('t'));
+      p.items['pdf'] = Item('pdf', 'pdf', 0, 0, 500, 700, file: 'a.pdf', page: 0);
+      p.items['s'] = Item('s', 'sticky', 100, 100, 100, 100);
+      p.strokes['a'] = Stroke('a', 'pen', '#000000', 2, [100, 300, .5, 200, 300, .5]);
+      return p;
+    }
+
+    test('hitStack no devuelve el PDF, pero sí lo que hay encima', () {
+      final p = conPdf(), sel = Selection();
+      expect(sel.hitStack(p, const Offset(300, 500), 6), isEmpty);
+      final hit = sel.hitStack(p, const Offset(150, 300), 6);
+      expect(hit.map((e) => e.id), ['a']);
+    });
+
+    test('selectIn (ventana y captura) y selectAll no lo incluyen', () {
+      final p = conPdf(), sel = Selection();
+      const r = Rect.fromLTRB(-10, -10, 600, 800);
+      sel.selectIn(p, r);
+      expect(sel.items, {'s'});
+      sel.selectIn(p, r, capture: true);
+      expect(sel.items, {'s'});
+      sel.selectAll(p);
+      expect(sel.items, {'s'});
+      expect(sel.strokes, {'a'});
+    });
+  });
+
   group('selectIn', () {
     test('trazos con la mitad o más de los puntos adentro', () {
       final p = page(), sel = Selection();

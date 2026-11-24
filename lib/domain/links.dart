@@ -84,3 +84,18 @@ Rect itemRectForPdfRect(Item it, double left, double top, double right, double b
   return Rect.fromLTRB(it.x + left * kx, it.y + (pageSize.height - top) * ky, it.x + right * kx,
       it.y + (pageSize.height - bottom) * ky);
 }
+
+/// Inversa de [itemRectForPdfRect]: el rectángulo [r] de la hoja (recortado al elemento PDF [it]) en puntos del PDF
+/// (origen abajo, [top] >= [bottom]). null si [r] no toca al elemento.
+({double left, double top, double right, double bottom})? pdfRectFor(Item it, Rect r, Size pageSize) {
+  if (it.w <= 0 || it.h <= 0) return null;
+  final c = r.intersect(it.rect);
+  if (c.right <= c.left || c.bottom <= c.top) return null;
+  final kx = pageSize.width / it.w, ky = pageSize.height / it.h;
+  return (
+    left: (c.left - it.x) * kx,
+    top: pageSize.height - (c.top - it.y) * ky,
+    right: (c.right - it.x) * kx,
+    bottom: pageSize.height - (c.bottom - it.y) * ky,
+  );
+}
