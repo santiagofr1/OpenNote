@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/screens/library/library_drag.dart';
+import 'package:apuntes/widgets/auto_scroller.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

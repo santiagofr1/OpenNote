@@ -542,7 +542,9 @@ void main() {
               name = 'pegar';
               if (ed.ts.clipboard.isEmpty) continue;
               await unfocus();
-              final f = find.byTooltip('Pegar');
+              await t.longPressAt(map(Offset(100 + r.nextDouble() * 500, 100 + r.nextDouble() * 1500)));
+              await pump();
+              final f = find.text('Pegar acá');
               if (f.evaluate().isEmpty) continue;
               await t.tap(f);
               await pump();

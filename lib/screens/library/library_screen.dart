@@ -19,6 +19,7 @@ import '../../sync/sync_backend.dart';
 import '../../sync/sync_controller.dart';
 import '../../sync/sync_lock.dart';
 import '../../sync/sync_crypto.dart';
+import '../../widgets/auto_scroller.dart';
 import '../../widgets/dialogs.dart';
 import '../../widgets/pdf_progress.dart';
 import '../../widgets/update_dialog.dart';

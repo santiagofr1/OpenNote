@@ -5,6 +5,7 @@ import 'package:apuntes/data/export_folder.dart';
 import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/screens/library/library_drag.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -317,6 +318,18 @@ void main() {
       await step('confirmar borrar todo');
     });
   }
+
+  testWidgets('clic derecho sobre un cuaderno o una carpeta abre su menú (issue #26)', (t) async {
+    await start(t);
+    for (final key in ['nb-Suelto', 'folder-Facultad']) {
+      await t.tap(find.byKey(Key(key)), buttons: kSecondaryMouseButton);
+      await settle(t, 600);
+      expect(find.text('Renombrar'), findsOneWidget, reason: key);
+      await t.tapAt(const Offset(2, 2)); // fuera del menú: lo cierra
+      await settle(t, 600);
+      expect(find.text('Renombrar'), findsNothing, reason: key);
+    }
+  });
 
   group('mover arrastrando', () {
     /// Mantener apretado [from] y llevarlo (de a pasos) hasta [to]; si [drop], lo suelta ahí.

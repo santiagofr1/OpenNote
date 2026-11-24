@@ -33,17 +33,14 @@ void main() {
                 ),
                 canUndo: true,
                 canRedo: false,
-                bg: 'plain',
                 onToolTap: (_) {},
                 onToolLongPress: (_) {},
                 onPickColor: (_) {},
                 onSetFavorite: (_) {},
-                onBg: (_) {},
                 onOpenPanel: () {},
                 onUndo: () {},
                 onRedo: () {},
                 onToggleZoomLock: () {},
-                onPaste: () {},
               ),
             ),
           ),
@@ -59,6 +56,18 @@ void main() {
       await pump(t, w);
       expect(t.takeException(), isNull, reason: 'ancho $w');
     }
+  });
+
+  testWidgets('sin botones de Pegar ni de fondo (issue #29); sin colores no desborda con el ancho fijo', (t) async {
+    await pump(t, 1400);
+    expect(find.byTooltip('Pegar'), findsNothing);
+    expect(find.byTooltip('Fondo de la hoja'), findsNothing);
+    // ancho útil = _fixedWidth (584) + 12 de padding: justo entra, sin colores y sin desplazarse
+    await pump(t, 596);
+    expect(t.takeException(), isNull);
+    expect(t.state<ScrollableState>(find.byType(Scrollable)).position.maxScrollExtent, 0);
+    await pump(t, 560);
+    expect(t.state<ScrollableState>(find.byType(Scrollable)).position.maxScrollExtent, greaterThan(0));
   });
 
   testWidgets('barra al costado: sin desbordes con alturas cortas', (t) async {
@@ -78,7 +87,7 @@ void main() {
     },
   );
 
-  testWidgets('con portapapeles y los 6 botones de herramienta, a 676 dp entra sin desplazarse', (t) async {
+  testWidgets('con los 6 botones de herramienta, a 676 dp entra sin desplazarse', (t) async {
     await pump(t, 676, clip: true);
     expect(t.takeException(), isNull);
     final scroll = t.state<ScrollableState>(find.byType(Scrollable));
