@@ -440,7 +440,7 @@ void main() {
           },
         );
 
-        test('los dos agregan un título distinto a la misma hoja: gana la hoja con updated mayor entera (se pierde el otro título)', () async {
+        test('los dos agregan un título distinto a la misma hoja: quedan los dos, con su zona', () async {
           final a = await device(), b = await device();
           final nb = await create(a, 'Choque', n: 1);
           await roundTrip(a, b);
@@ -474,26 +474,11 @@ void main() {
           );
           await roundTrip(a, b);
           await roundTrip(a, b);
-          // Comportamiento real (decidido en mergeNotebookJson, ver sync_indice_test.dart): los títulos son parte de la
-          // hoja y la de `updated` mayor se queda entera. Los dos dispositivos convergen en lo mismo, sin hojas de más,
-          // pero el título del que perdió se pierde. Es un choque raro (los dos marcan en la misma hoja sin sincronizar).
-          final ta = [
-            for (final h in (await nbOf(a, nb.id)).sheets[0].heads) h.title,
-          ];
-          final tb = [
-            for (final h in (await nbOf(b, nb.id)).sheets[0].heads) h.title,
-          ];
-          expect(ta, tb);
-          expect(ta, hasLength(1));
-          expect(['De A', 'De B'], contains(ta.single));
-          expect((await nbOf(a, nb.id)).sheets, hasLength(1));
-          final h = (await nbOf(a, nb.id)).sheets[0].heads.single;
-          expect(
-            h.box,
-            ta.single == 'De A'
-                ? const Rect.fromLTWH(1, 1, 5, 5)
-                : const Rect.fromLTWH(2, 2, 6, 6),
-          );
+          final na = await nbOf(a, nb.id), nbB = await nbOf(b, nb.id);
+          Map<String, Rect?> boxes(Notebook n) => {for (final h in n.sheets[0].heads) h.title: h.box};
+          expect(boxes(na), {'De A': const Rect.fromLTWH(1, 1, 5, 5), 'De B': const Rect.fromLTWH(2, 2, 6, 6)});
+          expect(boxes(nbB), boxes(na));
+          expect(na.sheets, hasLength(1));
         });
       });
 

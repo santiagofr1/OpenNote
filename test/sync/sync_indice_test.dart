@@ -208,15 +208,37 @@ void main() {
       sheet('a', 100, [hd('h1', 'Base', 1, ['x'])])
     ]);
 
-    test('la hoja con updated mayor se queda entera, con todos sus títulos', () {
+    test('cambió en los dos lados: el mismo título queda el de la hoja con updated mayor y los nuevos de cada lado se suman', () {
       final local = nbJson([
         sheet('a', 200, [hd('h1', 'Local', 1, ['x']), hd('h2', 'Extra', 2, ['y'], y: 50)])
       ]);
       final remote = nbJson([
         sheet('a', 300, [hd('h1', 'Remoto', 3, ['z'], y: 7)])
       ]);
-      expect(headsOf(mergeNotebookJson(base, local, remote), 'a'), [hd('h1', 'Remoto', 3, ['z'], y: 7)]);
-      expect(headsOf(mergeNotebookJson(base, remote, local), 'a'), [hd('h1', 'Remoto', 3, ['z'], y: 7)]);
+      final want = [hd('h1', 'Remoto', 3, ['z'], y: 7), hd('h2', 'Extra', 2, ['y'], y: 50)];
+      expect(headsOf(mergeNotebookJson(base, local, remote), 'a'), want);
+      expect(headsOf(mergeNotebookJson(base, remote, local), 'a'), want);
+    });
+
+    test('los dos marcan un título distinto en la misma hoja: quedan los dos', () {
+      final local = nbJson([
+        sheet('a', 200, [hd('h1', 'Base', 1, ['x']), hd('hA', 'De A', 1, ['p'], y: 30)])
+      ]);
+      final remote = nbJson([
+        sheet('a', 300, [hd('h1', 'Base', 1, ['x']), hd('hB', 'De B', 2, ['q'], y: 60)])
+      ]);
+      for (final m in [mergeNotebookJson(base, local, remote), mergeNotebookJson(base, remote, local)]) {
+        expect({for (final h in headsOf(m, 'a')) h['id']}, {'h1', 'hA', 'hB'});
+      }
+    });
+
+    test('un lado borra un título y el otro marca uno nuevo: el borrado se respeta y el nuevo queda', () {
+      final local = nbJson([sheet('a', 200, [])]);
+      final remote = nbJson([
+        sheet('a', 300, [hd('h1', 'Base', 1, ['x']), hd('hB', 'De B', 1, ['q'], y: 60)])
+      ]);
+      expect([for (final h in headsOf(mergeNotebookJson(base, local, remote), 'a')) h['id']], ['hB']);
+      expect([for (final h in headsOf(mergeNotebookJson(base, remote, local), 'a')) h['id']], ['hB']);
     });
 
     test('con updated mayor en el local, gana el local entero', () {

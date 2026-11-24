@@ -54,12 +54,33 @@ List<Map> _list(Map j, String k) => [for (final e in (j[k] as List? ?? const [])
 
 String mergeNotebookJson(String base, String local, String remote) {
   final b = _parse(base), l = _parse(local), r = _parse(remote);
-  final sheets = mergeById(_list(b, 'sheets'), _list(l, 'sheets'), _list(r, 'sheets'));
+  final sheets = _mergeHeads(mergeById(_list(b, 'sheets'), _list(l, 'sheets'), _list(r, 'sheets')), b, l, r);
   // las secciones se fusionan igual que las hojas; `active` (y el resto) queda el local. El `section` de cada hoja ya
   // viaja dentro de su objeto.
   final sections = mergeById(_list(b, 'sections'), _list(l, 'sections'), _list(r, 'sections'));
   return jsonEncode({...l, if (sections.isNotEmpty) 'sections': sections, 'sheets': sheets});
 }
+
+/// Títulos del índice de una hoja que cambió en los dos lados: la hoja que ganó se queda con sus datos, pero sus títulos
+/// se fusionan por id con los del otro lado (si los dos marcaron un título distinto en la misma hoja, quedan los dos; si
+/// tocaron el mismo, queda el de la hoja que ganó).
+List<Map> _mergeHeads(List<Map> merged, Map b, Map l, Map r) {
+  Map<String, Map> byId(Map j) => {for (final e in _list(j, 'sheets')) e['id'] as String: e};
+  final bm = byId(b), lm = byId(l), rm = byId(r);
+  return [
+    for (final e in merged)
+      if ((lm[e['id']], rm[e['id']]) case (final Map ls?, final Map rs?) when _enc(ls) != _enc(rs))
+        _withHeads(e, mergeById(_list(bm[e['id']] ?? const {}, 'heads'), _list(e, 'heads'), _list(identical(e, rs) ? ls : rs, 'heads')))
+      else
+        e
+  ];
+}
+
+Map _withHeads(Map sheet, List<Map> heads) => {
+      for (final MapEntry(:key, :value) in sheet.entries)
+        if (key != 'heads') key: value,
+      if (heads.isNotEmpty) 'heads': heads,
+    };
 
 /// Lienzos: `canvas` es fijo desde que se crea y `canvasW` solo crece, así que queda el mayor de los dos lados
 /// (la fusión se queda con la entrada entera de un lado).
