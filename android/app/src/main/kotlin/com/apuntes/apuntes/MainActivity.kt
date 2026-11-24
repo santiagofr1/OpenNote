@@ -1,5 +1,6 @@
 package com.apuntes.apuntes
 
+import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -41,6 +42,34 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+
+        // Portapapeles del sistema: solo imágenes (capturas, imágenes copiadas de otra app)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "opennote/clipboard")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "hasImage" -> result.success(try { clipImageUri() != null } catch (e: Exception) { false })
+                    "readImage" -> Thread {
+                        val bytes = try {
+                            clipImageUri()?.let { contentResolver.openInputStream(it)?.use { s -> s.readBytes() } }
+                        } catch (e: Exception) {
+                            null
+                        }
+                        runOnUiThread { result.success(bytes) }
+                    }.start()
+                    else -> result.notImplemented()
+                }
+            }
+    }
+
+    // Uri de la imagen que hay en el portapapeles (primer item), o null si no hay imagen
+    private fun clipImageUri(): Uri? {
+        val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = cm.primaryClip ?: return null
+        if (clip.itemCount == 0) return null
+        val uri = clip.getItemAt(0).uri ?: return null
+        val d = cm.primaryClipDescription
+        val byDesc = d?.let { x -> (0 until x.mimeTypeCount).any { x.getMimeType(it).startsWith("image/") } } ?: false
+        return if (byDesc || contentResolver.getType(uri)?.startsWith("image/") == true) uri else null
     }
 
     // Lápiz sin esperar al cuadro: Android entrega sus movimientos apenas pasan en vez de juntarlos hasta el

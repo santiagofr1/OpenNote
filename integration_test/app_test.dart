@@ -14,6 +14,7 @@ import 'package:apuntes/data/export_folder.dart';
 import 'package:apuntes/data/media_import.dart';
 import 'package:apuntes/data/sheet_codec.dart';
 import 'package:apuntes/data/storage.dart';
+import 'package:apuntes/data/system_clipboard.dart';
 import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/editor/fake_audio_source.dart';
 import 'package:apuntes/editor/handwriting.dart';
@@ -33,6 +34,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as pimg;
 import 'package:integration_test/integration_test.dart';
 import 'package:pdf/pdf.dart' show PdfColor;
 import 'package:pdf/widgets.dart' as pw;
@@ -2619,6 +2621,79 @@ void main() {
 
     await t.tap(find.byKey(const Key('back')));
     await settle(t, 1200);
+  });
+  // ---- pegar imagen del sistema (issue #32) ----
+  Future<void> mantenerVacio(WidgetTester t) async {
+    final g = await t.startGesture(sheetCenter(t) + const Offset(0, 250));
+    final end = DateTime.now().add(const Duration(milliseconds: 750));
+    while (DateTime.now().isBefore(end)) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await t.pump();
+    }
+    await g.up();
+    await settle(t, 500);
+  }
+
+  void fakeClipboard(bool has, Uint8List? bytes) {
+    final h = SystemClipboard.hasImage, r = SystemClipboard.readImage;
+    SystemClipboard.hasImage = () async => has;
+    SystemClipboard.readImage = () async => bytes;
+    addTearDown(() {
+      SystemClipboard.hasImage = h;
+      SystemClipboard.readImage = r;
+    });
+  }
+
+  testWidgets('pegar imagen del sistema desde el menú de la hoja (issue #32)', (t) async {
+    final png = Uint8List.fromList(pimg.encodePng(pimg.Image(width: 300, height: 200)));
+    fakeClipboard(true, png);
+    await start(t);
+    await createNotebook(t, 'PegarImg');
+    final ed = editor(t);
+    final antes = ed.doc.items.length;
+
+    await mantenerVacio(t);
+    expect(find.text('Pegar acá'), findsOneWidget, reason: 'con una imagen en el sistema hay menú aunque no se copió nada');
+    await t.tap(find.text('Pegar acá'));
+    await settle(t, 1200);
+    expect(ed.doc.items.length, antes + 1);
+    final it = ed.doc.items.values.firstWhere((i) => i.type == 'image');
+    expect(it.w, 560);
+    expect(it.h, closeTo(373.3, 1));
+    expect(ed.widget.store.media(it.file!).existsSync(), isTrue, reason: 'la imagen quedó en media/');
+
+    ed.undo();
+    await settle(t, 600);
+    expect(ed.doc.items.length, antes, reason: 'deshacer saca la imagen');
+  });
+
+  testWidgets('sin imagen en el sistema ni nada copiado no hay menú de pegar (issue #32)', (t) async {
+    fakeClipboard(false, null);
+    await start(t);
+    await createNotebook(t, 'SinNada');
+    await mantenerVacio(t);
+    expect(find.text('Pegar acá'), findsNothing);
+  });
+
+  testWidgets('sin imagen en el sistema, "Pegar acá" pega lo copiado en la app (issue #32)', (t) async {
+    fakeClipboard(false, null);
+    await start(t);
+    await createNotebook(t, 'PegarApp');
+    final ed = editor(t);
+    final st = Stroke('st0', 'pen', '#22211e', 2.6, [100, 200, .5, 500, 200, .5]);
+    ed.doc.strokes[st.id] = st;
+    ed.doc.markDirtyElement(st);
+    // ignore: invalid_use_of_protected_member
+    ed.setState(() {});
+    await settle(t, 800);
+    ed.ts.clipboard.strokes = [st];
+
+    await mantenerVacio(t);
+    expect(find.text('Pegar acá'), findsOneWidget);
+    await t.tap(find.text('Pegar acá'));
+    await settle(t, 1000);
+    expect(ed.doc.strokes.length, 2, reason: 'pegó una copia del trazo');
+    expect(ed.doc.items.values.where((i) => i.type == 'image'), isEmpty);
   });
 }
 

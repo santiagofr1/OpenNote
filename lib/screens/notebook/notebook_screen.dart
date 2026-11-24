@@ -756,6 +756,10 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         ed.redo();
         return true;
       }
+      if (k == LogicalKeyboardKey.keyV && !hw.isShiftPressed) {
+        unawaited(ed.pasteFromKeyboard());
+        return true;
+      }
       return false;
     }
     if (reading || hw.isAltPressed || hw.isShiftPressed) return false;
