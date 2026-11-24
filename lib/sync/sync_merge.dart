@@ -61,6 +61,26 @@ String mergeNotebookJson(String base, String local, String remote) {
   return jsonEncode({...l, if (sections.isNotEmpty) 'sections': sections, 'sheets': sheets});
 }
 
+/// Lienzos: `canvas` es fijo desde que se crea y `canvasW` solo crece, así que queda el mayor de los dos lados
+/// (la fusión se queda con la entrada entera de un lado).
+List<Map> _keepCanvas(List<Map> merged, List<Map> local, List<Map> remote) {
+  final others = <String, List<Map>>{};
+  for (final e in [...local, ...remote]) {
+    if (e['canvas'] == true) others.putIfAbsent(e['id'] as String, () => []).add(e);
+  }
+  return [
+    for (final e in merged)
+      if (others[e['id']] case final List<Map> l)
+        {
+          ...e,
+          'canvas': true,
+          'canvasW': l.map((x) => (x['canvasW'] as num?)?.toDouble() ?? 0.0).reduce((a, c) => a > c ? a : c),
+        }
+      else
+        e
+  ];
+}
+
 /// [keep]: ids de cuadernos que no se pueden borrar en esta pasada (se editaron en un lado y se borraron en el otro).
 String mergeIndexJson(String base, String local, String remote, {Set<String> keep = const {}}) {
   final b = _parse(base), l = _parse(local), r = _parse(remote);
@@ -70,7 +90,7 @@ String mergeIndexJson(String base, String local, String remote, {Set<String> kee
     'format': l['format'] ?? r['format'] ?? 3,
     'rev': [(l['rev'] ?? 0) as int, (r['rev'] ?? 0) as int].reduce((a, c) => a > c ? a : c),
     'last': l['last'] ?? r['last'],
-    'notebooks': mergeById(_list(b, 'notebooks'), _list(l, 'notebooks'), _list(r, 'notebooks'), keep: keep),
+    'notebooks': _keepCanvas(mergeById(_list(b, 'notebooks'), _list(l, 'notebooks'), _list(r, 'notebooks'), keep: keep), _list(l, 'notebooks'), _list(r, 'notebooks')),
   };
   out.remove('folders');
   if (folders.isNotEmpty) out['folders'] = folders;

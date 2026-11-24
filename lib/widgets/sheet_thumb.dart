@@ -40,6 +40,8 @@ class _SheetThumbState extends State<SheetThumb> {
       for (final it in w.doc.items.values)
         if (it.file != null && (it.type == 'pdf' || it.type == 'image') && it.rect.overlaps(r))
           '${it.type == 'pdf' ? pdfImageKey(it) : it.file}@${it.w.round()}',
+      if (w.doc.sheets[w.sheet].bg == 'image' && w.doc.sheets[w.sheet].image != null)
+        bgImageKey(w.doc.sheets[w.sheet].image!),
     ]..sort();
     return ks.join('|');
   }

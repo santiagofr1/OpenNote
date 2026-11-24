@@ -40,14 +40,14 @@ class TextBlock extends Layered {
       {'id': id, 'x': x, 'y': y, 'w': w, 'text': text, if (!body.isPlain) 'rich': body.toJson(), if (scale != 1) 's': scale, if (angle != 0) 'a': angle};
 }
 
-/// Elemento insertado en una hoja: imagen, nota adhesiva o audio.
+/// Elemento insertado en una hoja: imagen, nota adhesiva, audio, página de PDF o zona de link.
 class Item extends Layered {
   @override
   final String id;
-  final String type; // image | sticky | audio | pdf
+  final String type; // image | sticky | audio | pdf | link
   double x, y, w, h;
   String? file; // nombre del archivo en media/ (imagen, audio o PDF)
-  String text; // nota adhesiva
+  String text; // nota adhesiva; en un link, el destino (ver links.dart)
   String color; // nota adhesiva
   int dur; // audio, en ms
   int page; // pdf: índice (desde 0) de la página del PDF `file`

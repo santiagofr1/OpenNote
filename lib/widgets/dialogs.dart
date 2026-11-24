@@ -43,6 +43,66 @@ Future<String?> askText(BuildContext context, String title, {String initial = ''
   );
 }
 
+/// Nombre y tipo de un cuaderno nuevo: hojas (por defecto) o lienzo infinito. null si se cancela.
+Future<({String name, bool canvas})?> askNewNotebook(BuildContext context, {String hint = 'Ej: Análisis II'}) {
+  final c = TextEditingController();
+  var canvas = false;
+  return showDialog<({String name, bool canvas})>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(builder: (ctx, set) {
+      final cs = Theme.of(ctx).colorScheme;
+      Widget kind(Key key, IconData icon, String title, String sub, bool value) => Expanded(
+            child: InkWell(
+              key: key,
+              borderRadius: BorderRadius.circular(14),
+              onTap: () => set(() => canvas = value),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: canvas == value ? cs.primary : cs.outlineVariant, width: canvas == value ? 2.5 : 1),
+                ),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Icon(icon, weight: 300, color: canvas == value ? cs.primary : cs.onSurfaceVariant),
+                  const SizedBox(height: 6),
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
+                  if (sub.isNotEmpty) Text(sub, style: TextStyle(fontSize: 12.5, color: cs.onSurfaceVariant)),
+                ]),
+              ),
+            ),
+          );
+      return AlertDialog(
+        scrollable: true,
+        title: const Text('Nuevo cuaderno'),
+        content: SizedBox(
+          width: 420,
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            TextField(
+              key: const Key('askText'),
+              controller: c,
+              autofocus: true,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: InputDecoration(hintText: hint),
+              onSubmitted: (v) => Navigator.pop(ctx, (name: v, canvas: canvas)),
+            ),
+            const SizedBox(height: 16),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              kind(const Key('nbKindSheets'), Symbols.description, 'Hojas', '', false),
+              const SizedBox(width: 10),
+              kind(const Key('nbKindCanvas'), Symbols.gesture, 'Lienzo infinito',
+                  'Sin cortes, crece mientras escribís. Para mapas conceptuales y diagramas', true),
+            ]),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          FilledButton(key: const Key('askOk'), onPressed: () => Navigator.pop(ctx, (name: c.text, canvas: canvas)), child: const Text('Crear')),
+        ],
+      );
+    }),
+  );
+}
+
 Future<bool> confirmDelete(BuildContext context, String title, String msg) async =>
     await showDialog<bool>(
       context: context,

@@ -1,20 +1,26 @@
 import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:math';
+import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:pdfrx/pdfrx.dart' show PdfLink;
 
+import '../data/export.dart' show decodeImage;
 import '../data/storage.dart';
+import '../data/system_clipboard.dart';
 import '../data/updates.dart' show CancelFlag;
 import '../domain/domain.dart';
 import '../rendering/ink_layers.dart';
 import '../rendering/paper.dart';
 import '../rendering/pdf_cover.dart';
+import '../rendering/pdf_pages.dart';
 import '../rendering/sheet_image_cache.dart';
 import '../rendering/text_layout.dart';
+import '../theme/colors.dart';
 import '../widgets/auto_scroller.dart';
 import '../widgets/dialogs.dart';
 import 'context_menu.dart';
@@ -25,6 +31,7 @@ import 'heading_dialog.dart';
 import 'history.dart';
 import 'ink.dart';
 import 'items_layer.dart';
+import 'link_dialog.dart';
 import 'live_layer.dart';
 import 'pen_panel.dart';
 import 'pull_to_add.dart';
@@ -72,7 +79,15 @@ class PageEditor extends StatefulWidget {
   /// La grabación de voz en curso (el audio que se graba se dibuja como etiqueta "Grabando") y qué hacer al tocar parar.
   final VoiceRecorder? recorder;
   final VoidCallback? onStopRecording;
+
+  /// Se tocó un link (de OpenNote o de un PDF importado): quien lo muestra lo abre (web, otra hoja u otro cuaderno).
+  final ValueChanged<LinkTarget>? onOpenLink;
+
+  /// Los otros cuadernos a los que se puede apuntar con un link.
+  final List<Notebook> linkNotebooks;
   const PageEditor({
+    this.onOpenLink,
+    this.linkNotebooks = const [],
     this.onSheetsChanged,
     this.onHeadingsChanged,
     this.recorder,
@@ -123,6 +138,12 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   double _panY0 = 0, _panX0 = 0;
   VelocityTracker? _panVel;
 
+  /// Dedo (o clic del mouse) apoyado que todavía puede ser un toque corto para abrir un link.
+  ({int pointer, Offset global, Duration t})? _linkCand;
+
+  /// Un toque más largo que esto no abre links (es un apoyo, no un toque).
+  static const kLinkTapMax = Duration(milliseconds: 350);
+
   /// Punteros apoyados sobre la barrita o las manijas de la selección: no cuentan como un toque sobre la hoja.
   final _selUiPointers = <int>{};
   SheetLayout layout = SheetLayout.initial;
@@ -149,6 +170,13 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     _shapeHold = null;
     _snapFit = _snapBase = _snapGrab = _holdAnchor = null;
   }
+
+  // formas exactas (herramienta Formas): la que se está arrastrando, la recién hecha (con manijas y medidas) y el
+  // arrastre de una manija o de la forma entera (el trazo de trabajo se ve en la capa en vivo y se oculta el fijo)
+  _ShapeDraft? _draft;
+  _ActiveShape? _shape;
+  _ShapeDrag? _shapeDrag;
+  Stroke? _shapeEdit;
 
   Offset? eraserAt;
   List<Stroke>? erased;
@@ -187,7 +215,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     doc.addLoadListener(_onSheetLoaded);
     scroll.addListener(_onScroll);
     _imgs.still = true; // abierto y sin mover: lo que falte de las visibles se genera ya
-    _imgs.busy = () => pointer != null || live != null || _cover != null || erased != null || touch.pinching; // no generar con el lápiz en uso
+    _imgs.busy = () => pointer != null || live != null || _shapeEdit != null || _cover != null || erased != null || touch.pinching; // no generar con el lápiz en uso
     WidgetsBinding.instance.addPostFrameCallback((_) => scrollToSheet(widget.initialSheet, animate: false));
   }
 
@@ -213,6 +241,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       _outline = null;
       pointer = null;
       live = null;
+      _draft = _shape = _shapeDrag = _shapeEdit = null;
       _endShapeHold();
       _endCover();
       erased = null;
@@ -578,13 +607,26 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   Offset _toPage(Offset local) => local / scale;
 
+  /// Última posición del mouse sobre la hoja, en coordenadas de la página (null si nunca pasó). Para Ctrl+V.
+  Offset? _hover;
+
   /// Agrega hojas si [y] quedó cerca del final del cuaderno.
-  void _growIfNeeded(double y) {
-    if (y > doc.h - 250) setState(() => doc.growFor(y));
+  /// En un lienzo, [right] (borde derecho de lo nuevo) también hace crecer el ancho (ver [grownCanvasW]); se guarda
+  /// con el índice, que `_changed` ya manda a guardar.
+  void _growIfNeeded(double y, {double? right}) {
+    final nb = doc.nb;
+    final w = right != null && nb.canvas ? grownCanvasW(nb.canvasW, right) : nb.canvasW;
+    if (y > doc.h - 250 || w != nb.canvasW) {
+      setState(() {
+        doc.growFor(y);
+        nb.canvasW = w;
+      });
+    }
   }
 
   // ---------------- lápiz: dibujar, borrar, seleccionar ----------------
   void _down(PointerDownEvent e) {
+    _linkCand = e.kind == PointerDeviceKind.mouse && e.buttons == kPrimaryMouseButton ? (pointer: e.pointer, global: e.position, t: e.timeStamp) : _linkCand;
     if (widget.readOnly || pointer != null || sel.moving) return;
     final action = penActionFor(e, ts.tool);
     if (action == null) return;
@@ -594,6 +636,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       return;
     }
     pointer = e.pointer;
+    if (_shape != null && (action != PenAction.draw || ts.tool != Tool.shape)) _endShape();
     switch (action) {
       case PenAction.erase:
         _startErase(p);
@@ -605,6 +648,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         sel.titleBand = true;
         liveTick.value++;
       case PenAction.draw:
+        if (ts.tool == Tool.shape) {
+          _shapeDown(e, p);
+          return;
+        }
         final pr = ts.current;
         live = Stroke(newId('s'), ts.tool == Tool.hl ? 'hl' : pr.tip, pr.color,
             pr.width * kMm / unitsPerMm(doc.sizeAt(p.dy)), // mismo grosor en papel: en A3 las unidades son más chicas
@@ -661,8 +708,18 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   }
 
   void _move(PointerMoveEvent e) {
+    final lc = _linkCand;
+    if (lc != null && lc.pointer == e.pointer && (e.position - lc.global).distance > kTouchSlop) _linkCand = null;
     if (e.pointer != pointer) return;
     final p = _toPage(e.localPosition);
+    if (_shapeDrag != null) {
+      _shapeDragMove(p);
+      return;
+    }
+    if (_draft != null) {
+      _shapeMove(p);
+      return;
+    }
     if (sel.moving) {
       _selDrag(p);
       if (sel.drag?.handle == Handle.move) _edgeMoved(e.position);
@@ -704,8 +761,22 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   }
 
   void _up(PointerEvent e) {
+    final lc = _linkCand;
+    if (lc != null && lc.pointer == e.pointer) {
+      _linkCand = null;
+      // clic corto del mouse sobre un link: lo abre (el lápiz y el dedo no pasan por acá)
+      if (e is PointerUpEvent && e.timeStamp - lc.t < kLinkTapMax) _linkTapAt(_toPage(e.localPosition));
+    }
     if (e.pointer != pointer) return;
     pointer = null;
+    if (_shapeDrag != null) {
+      _shapeDragEnd();
+      return;
+    }
+    if (_draft != null) {
+      _shapeEnd(cancel: e is PointerCancelEvent);
+      return;
+    }
     if (sel.moving) {
       _selDrop();
       return;
@@ -762,6 +833,233 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     _commitStroke(s, smooth: !snapped);
   }
 
+  // ---------------- formas exactas ----------------
+  /// ¿Se pega a la cuadrícula de la hoja [k]? (prendido en las opciones y el fondo tiene cuadrícula)
+  bool _gridded(int k) => ts.shapeGrid && const {'grid', 'dots', 'axes', 'mm'}.contains(doc.sheets[k].bg);
+
+  /// El punto [p] de la página llevado a la intersección más cercana de la hoja [k].
+  Offset _gridPt(Offset p, int k) {
+    final m = doc.sheets[k], top = k * kSheetStep;
+    final q = snapToGrid(Offset(p.dx, p.dy - top), m.bg, m.spacing, m.size);
+    return Offset(q.dx, q.dy + top);
+  }
+
+  /// Imanes de un punto: la cuadrícula si la hoja la tiene; si no, en recta y flecha el ángulo de 15 grados respecto de [from].
+  Offset _magnet(String kind, Offset? from, Offset p, int k) {
+    if (_gridded(k)) return _gridPt(p, k);
+    if (from != null && (kind == 'line' || kind == 'arrow')) return snapAngle15(from, p);
+    return p;
+  }
+
+  /// ¿[p] está a menos de 14 dp del contorno del trazo [s]?
+  bool _nearOutline(Stroke s, Offset p) {
+    final lim = 14 / scale, q = s.pts;
+    if (!s.bounds.inflate(lim).contains(p)) return false;
+    for (var i = 3; i < q.length; i += 3) {
+      if (distToSegment(p, Offset(q[i - 3], q[i - 2]), Offset(q[i], q[i + 1])) < lim) return true;
+    }
+    return false;
+  }
+
+  void _endShape() {
+    _shape = null;
+    liveTick.value++;
+  }
+
+  void _shapeDown(PointerDownEvent e, Offset p) {
+    final sh = _shape, old = sh == null ? null : doc.strokes[sh.id];
+    if (sh != null && old != null && _nearOutline(old, p)) {
+      _shapeDragStart(-1, p); // sobre el contorno de la forma activa: la mueve entera
+      return;
+    }
+    _shape = null;
+    final kind = ts.shapeKind, k = doc.sheetOfY(p.dy), a = _magnet(kind, null, p, k);
+    _draft = _ShapeDraft(kind, k, a, e.kind == PointerDeviceKind.touch);
+    final pr = ts.pen;
+    live = Stroke(newId('s'), 'fine', pr.color, pr.width * kMm / unitsPerMm(doc.sizeAt(p.dy)), [], pr.opacity, null,
+        shapeFillable(kind) && ts.shapeFill ? ts.shapeFillColor : null);
+    liveTick.value++;
+  }
+
+  void _shapeMove(Offset p) {
+    final d = _draft!, s = live;
+    if (s == null) return;
+    d.b = _magnet(d.kind, d.a, p, d.sheet);
+    s.pts
+      ..clear()
+      ..addAll(exactShapePoints(d.kind, d.a, d.b));
+    s.invalidate();
+    liveTick.value++;
+  }
+
+  /// Soltó (o se canceló) la forma: si el arrastre fue de 6 unidades o más, entra con su paso de deshacer y queda activa.
+  void _shapeEnd({bool cancel = false}) {
+    final d = _draft!, s = live;
+    _draft = null;
+    live = null;
+    liveTick.value++;
+    if (cancel || s == null || (d.b - d.a).distance < 6) return;
+    _commitStroke(s, smooth: false);
+    _shape = _ActiveShape(d.kind, d.a, d.b, s.id, d.sheet);
+    liveTick.value++;
+  }
+
+  /// Un dedo apoyó con otro: es zoom, no una forma.
+  void _cancelTouchShape() {
+    final d = _draft;
+    if (d == null || !d.touch) return;
+    pointer = null;
+    _draft = null;
+    live = null;
+    liveTick.value++;
+  }
+
+  /// Empieza a arrastrar la manija [handle] de la forma activa (-1: la forma entera) con el puntero en [p].
+  void _shapeDragStart(int handle, Offset p) {
+    final sh = _shape, old = sh == null ? null : doc.strokes[sh.id];
+    if (sh == null || old == null) {
+      pointer = null;
+      return;
+    }
+    final off = handle < 0 ? Offset.zero : shapeHandlePoints(sh.kind, sh.a, sh.b)[handle] - p;
+    _shapeEdit = Stroke(old.id, old.k, old.c, old.w, List<double>.of(old.pts), old.o, null, old.fill)..z = old.z;
+    _shapeDrag = _ShapeDrag(handle, old, sh.a, sh.b, p, off);
+    _touchStrokes([old]); // el fijo deja de dibujarlo: se ve el de trabajo en la capa en vivo
+    liveTick.value++;
+  }
+
+  void _shapeDragMove(Offset p) {
+    final sh = _shape, d = _shapeDrag, w = _shapeEdit;
+    if (sh == null || d == null || w == null) return;
+    final k = sh.sheet;
+    Offset a, b;
+    if (d.handle < 0) {
+      var na = d.a0 + (p - d.grab);
+      if (_gridded(k)) na = _gridPt(na, k);
+      a = na;
+      b = d.b0 + (na - d.a0);
+    } else {
+      final line = sh.kind == 'line' || sh.kind == 'arrow';
+      final q = _magnet(sh.kind, line ? (d.handle == 0 ? d.b0 : d.a0) : null, p + d.off, k);
+      (a, b) = dragShapeHandle(sh.kind, d.a0, d.b0, d.handle, q);
+    }
+    sh.a = a;
+    sh.b = b;
+    w.pts
+      ..clear()
+      ..addAll(exactShapePoints(sh.kind, a, b));
+    w.invalidate();
+    liveTick.value++;
+  }
+
+  /// Soltó la manija: el trazo (mismo id) pasa a sus puntos nuevos con UN paso de deshacer (antes / después).
+  void _shapeDragEnd() {
+    final sh = _shape, d = _shapeDrag, w = _shapeEdit;
+    _shapeDrag = null;
+    _shapeEdit = null;
+    if (sh == null || d == null || w == null) return;
+    final moved = sh.a != d.a0 || sh.b != d.b0;
+    if (!moved || !_loadedAt(w.bounds.top) || !_loadedAt(w.bounds.bottom)) {
+      if (moved) _requestSync(); // caería en una hoja sin cargar: queda como estaba
+      sh.a = d.a0;
+      sh.b = d.b0;
+      _touchStrokes([d.before]);
+      liveTick.value++;
+      return;
+    }
+    doc.strokes.remove(d.before.id);
+    doc.strokes[w.id] = w;
+    _pushUndo(EditAction(removed: [d.before], added: [w]));
+    _growIfNeeded(w.bounds.bottom);
+    _changed();
+    liveTick.value++;
+  }
+
+  /// Manijas y medidas de la forma en curso o activa, sobre la hoja (se redibujan con la capa en vivo, sin setState).
+  Widget _shapeOverlay() => Positioned.fill(
+        child: ValueListenableBuilder<int>(
+          valueListenable: liveTick,
+          builder: (context, _, _) {
+            final dr = _draft, sh = _shape != null && doc.strokes[_shape!.id] != null ? _shape : null;
+            final String kind;
+            final Offset a, b;
+            if (dr != null) {
+              (kind, a, b) = (dr.kind, dr.a, dr.b);
+              if (live?.pts.isEmpty ?? true) return const SizedBox.shrink();
+            } else if (sh != null) {
+              (kind, a, b) = (sh.kind, sh.a, sh.b);
+            } else {
+              return const SizedBox.shrink();
+            }
+            final k = doc.sheetOfY(a.dy), top = k * kSheetStep * scale, width = kW * scale;
+            final box = shapeBox(kind, a, b);
+            final text = shapeMeasure(kind, a, b, unitsPerMm(doc.sizeAt(a.dy)));
+            const bw = 300.0, bh = 28.0;
+            final left = (box.center.dx * scale - bw / 2).clamp(0.0, max(0.0, width - bw)).toDouble();
+            final above = box.top * scale - 8 - bh >= top;
+            final bubble = Positioned(
+              left: left,
+              width: bw,
+              top: above ? box.top * scale - 8 - bh : box.bottom * scale + 8,
+              height: bh,
+              child: IgnorePointer(
+                child: Center(
+                  child: Container(
+                    key: const Key('shapeMeasure'),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(color: const Color(0xE6222222), borderRadius: BorderRadius.circular(12)),
+                    child: Text(text,
+                        style: const TextStyle(
+                            color: Colors.white, fontSize: 12, fontFeatures: [FontFeature.tabularFigures()])),
+                  ),
+                ),
+              ),
+            );
+            return Stack(clipBehavior: Clip.none, children: [
+              bubble,
+              if (dr == null)
+                for (final (i, h) in shapeHandlePoints(kind, a, b).indexed)
+                  Positioned(
+                    left: h.dx * scale - 22,
+                    top: h.dy * scale - 22,
+                    width: 44,
+                    height: 44,
+                    child: Listener(
+                      key: ValueKey('shapeHandle-$i'),
+                      behavior: HitTestBehavior.opaque,
+                      onPointerDown: (e) => _handleDown(i, e),
+                      onPointerMove: (e) {
+                        if (e.pointer == pointer && _shapeDrag != null) _shapeDragMove(_pageOfGlobal(e.position));
+                      },
+                      onPointerUp: _handleUp,
+                      onPointerCancel: _handleUp,
+                      child: Center(
+                        child: Container(
+                          width: 22,
+                          height: 22,
+                          decoration: BoxDecoration(
+                              color: Colors.white, shape: BoxShape.circle, border: Border.all(color: kAccent, width: 2)),
+                        ),
+                      ),
+                    ),
+                  ),
+            ]);
+          },
+        ),
+      );
+
+  void _handleDown(int i, PointerDownEvent e) {
+    if (widget.readOnly || pointer != null || _shape == null) return;
+    pointer = e.pointer;
+    _shapeDragStart(i, _pageOfGlobal(e.position));
+  }
+
+  void _handleUp(PointerEvent e) {
+    if (e.pointer != pointer) return;
+    pointer = null;
+    if (_shapeDrag != null) _shapeDragEnd();
+  }
+
   /// El trazo terminado pasa a la página (suavizado), con su deshacer.
   void _commitStroke(Stroke s, {bool smooth = true}) {
     if (s.n < 2) return;
@@ -769,7 +1067,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     s.z = doc.nextZ(); // arriba de todo
     doc.strokes[s.id] = s; // avisa a las hojas que toca
     _pushUndo(EditAction(added: [s]));
-    _growIfNeeded(s.bounds.bottom);
+    _growIfNeeded(s.bounds.bottom, right: s.bounds.right);
     _changed();
   }
 
@@ -825,7 +1123,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   }
 
   /// Mismo corrector con otro color (el color de un trazo es final).
-  Stroke _recolored(Stroke s, String hex) => Stroke(s.id, s.k, hex, s.w, s.pts, s.o)..z = s.z;
+  Stroke _recolored(Stroke s, String hex) => Stroke(s.id, s.k, hex, s.w, s.pts, s.o, null, s.fill)..z = s.z;
 
   void _coverColorArrived(String id, int argb) {
     if (!mounted) return;
@@ -860,7 +1158,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final act = EditAction(added: [s], removed: removed);
     if (!colored) _pendingCovers[s.id] = act;
     _pushUndo(act);
-    _growIfNeeded(s.bounds.bottom);
+    _growIfNeeded(s.bounds.bottom, right: s.bounds.right);
     _changed();
   }
 
@@ -892,6 +1190,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final a = undo ? history.undo() : history.redo();
     if (a == null) return;
     a.apply(doc, undo: undo, putText: texts.put);
+    _shape = null; // deshacer / rehacer: la forma ya no es "la recién hecha"
+    liveTick.value++;
     if (a.sheetOps.isNotEmpty) {
       _afterSheetOps();
       widget.onSheetsChanged?.call(a.sheetFocus(doc, undo: undo));
@@ -1059,7 +1359,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         t.y = max(0.0, t.y); // con escala o giro queda libre donde se lo dejó
       } else {
         t.y = max(0.0, doc.snapTextY(t.y)); // que caiga sobre el renglón de su hoja
-        t.x = t.x.clamp(0.0, kW - 60);
+        t.x = t.x.clamp(0.0, doc.width - 60);
       }
       doc.markDirtyElement(t);
       final st = drag.textState[id] ?? (t.scale, t.angle, t.w);
@@ -1084,7 +1384,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         itemBefore: itemBefore,
         itemAfter: itemAfter));
     final r = sel.bounds(doc);
-    if (r != null) _growIfNeeded(r.bottom);
+    if (r != null) _growIfNeeded(r.bottom, right: r.right);
     _changed();
     setState(() {});
   }
@@ -1094,6 +1394,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     c.strokes = sel.strokesOf(doc);
     c.texts = [for (final t in sel.textsOf(doc)) t.copy()];
     c.items = [for (final it in sel.itemsOf(doc)) it.copy()];
+    // lo último que se copió gana: el portapapeles del sistema pasa a tener el texto copiado (y ya no una imagen vieja)
+    unawaited(Clipboard.setData(ClipboardData(text: c.texts.map((t) => t.text).join('\n'))).catchError((_) {}));
     setState(() {});
   }
 
@@ -1108,7 +1410,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       t.scale = 1;
       t.angle = 0;
       t.y = max(0.0, doc.snapTextY(t.y));
-      t.x = t.x.clamp(0.0, kW - 60);
+      t.x = t.x.clamp(0.0, doc.width - 60);
       doc.markDirtyElement(t);
       after[t.id] = t.copy();
     }
@@ -1143,6 +1445,162 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     _changed();
   }
 
+  // ---------------- links ----------------
+  /// El link elegido si lo único elegido es un link.
+  Item? get _singleLink {
+    if (sel.strokes.isNotEmpty || sel.texts.isNotEmpty || sel.items.length != 1) return null;
+    final it = doc.items[sel.items.first];
+    return it != null && it.type == 'link' ? it : null;
+  }
+
+  List<({String id, String label})> get _sheetChoices => [
+        for (var k = 0; k < doc.sheetCount; k++)
+          (id: doc.sheets[k].id, label: 'Hoja ${k + 1}${doc.sheets[k].title.isEmpty ? '' : ' · ${doc.sheets[k].title}'}')
+      ];
+
+  Future<String?> _askLink([String initial = '']) => showLinkDialog(context,
+      initial: initial,
+      sheets: _sheetChoices,
+      notebooks: [for (final n in widget.linkNotebooks) (id: n.id, label: n.name)]);
+
+  /// "Link" del menú de la selección: una zona de link sobre lo elegido (arriba de todo, con deshacer).
+  Future<void> _linkSel() async {
+    final r0 = sel.contentRect(doc);
+    if (r0 == null) return;
+    final dest = await _askLink();
+    final r = sel.contentRect(doc) ?? r0;
+    if (dest == null || !mounted) return;
+    final pad = _loadedAt(r.top - 4) && _loadedAt(r.bottom + 4) ? 4.0 : 0.0;
+    final it = Item(newId('i'), 'link', r.left - pad, r.top - pad, r.width + 2 * pad, r.height + 2 * pad, text: dest)..z = doc.nextZ();
+    doc.items[it.id] = it;
+    _pushUndo(EditAction(itemBefore: absent([it.id]), itemAfter: {it.id: it.copy()}));
+    _changed();
+    liveTick.value++;
+  }
+
+  /// "Editar link": cambia a dónde lleva el link elegido (con deshacer).
+  Future<void> _editLinkSel() async {
+    final it = _singleLink;
+    if (it == null) return;
+    final before = it.copy();
+    final dest = await _askLink(it.text);
+    if (dest == null || !mounted || dest == before.text || !doc.items.containsKey(it.id)) return;
+    it.text = dest;
+    doc.markDirtyElement(it);
+    _pushUndo(EditAction(itemBefore: {it.id: before}, itemAfter: {it.id: it.copy()}));
+    _changed();
+    liveTick.value++;
+  }
+
+  /// El Item (link o PDF) de z más alta bajo [p] si es un link; null si no hay o lo de arriba es otra cosa.
+  Item? _topItemAt(Offset p) {
+    Item? best;
+    for (final it in doc.items.values) {
+      if (it.rect.contains(p) && (best == null || it.z > best.z)) best = it;
+    }
+    return best;
+  }
+
+  Item? _linkItemAt(Offset p) {
+    final it = _topItemAt(p);
+    return it != null && it.type == 'link' && parseLink(it.text) != null ? it : null;
+  }
+
+  /// Toque corto del dedo en [global]: abre el link que haya ahí. true si lo tomó (el toque no elige nada).
+  /// [fallback]: qué hacer si era un PDF y no había link en ese punto (se sabe recién al leer sus links).
+  bool _linkTapGlobal(Offset global, {VoidCallback? fallback}) {
+    if (!mounted) return false;
+    final box = _sheetKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return false;
+    final local = box.globalToLocal(global);
+    if (!(Offset.zero & box.size).contains(local)) return false;
+    return _linkTapAt(_toPage(local), fallback: fallback);
+  }
+
+  bool _linkTapAt(Offset p, {VoidCallback? fallback}) {
+    if (ts.tool == Tool.select || (ts.tool == Tool.text && texts.anyFocused) || !_loadedAt(p.dy)) return false;
+    final it = _topItemAt(p);
+    if (it == null) return false;
+    if (it.type == 'link') {
+      final t = parseLink(it.text);
+      if (t == null) return false;
+      widget.onOpenLink?.call(t);
+      return true;
+    }
+    if (it.type == 'pdf' && it.file != null && widget.onOpenLink != null) {
+      unawaited(_pdfLinkTap(it, p, fallback));
+      return true;
+    }
+    return false;
+  }
+
+  /// Toque sobre una página de PDF importada: abre el link del PDF que haya en ese punto (si no, [fallback]).
+  Future<void> _pdfLinkTap(Item it, Offset p, VoidCallback? fallback) async {
+    final f = widget.store.media(it.file!);
+    LinkTarget? target;
+    var missing = false;
+    try {
+      final sizes = await pdfPages.pageSizes(f);
+      if (it.page < sizes.length) {
+        final pt = pdfPointFor(it, p, sizes[it.page]);
+        final links = pt == null ? const <PdfLink>[] : await pdfPages.links(f, it.page);
+        PdfLink? hit;
+        for (final l in links) {
+          if (l.rects.any((r) => r.containsXy(pt!.dx, pt.dy, margin: 4))) {
+            hit = l;
+            break;
+          }
+        }
+        final dest = hit?.dest, url = hit?.url;
+        if (url != null && (url.scheme == 'http' || url.scheme == 'https' || url.scheme == 'mailto')) {
+          target = LinkWeb(url);
+        } else if (dest != null) {
+          final id = await _sheetOfPdfPage(it.file!, dest.pageNumber - 1);
+          if (id == null) {
+            missing = true;
+          } else {
+            target = LinkSheet(id);
+          }
+        }
+      }
+    } catch (e) {
+      developer.log('no se pudo leer el link del PDF: $e', name: 'editor', level: 900);
+    }
+    if (!mounted) return;
+    if (target != null) {
+      widget.onOpenLink?.call(target);
+    } else if (missing) {
+      snack(context, 'Esa página no está en el cuaderno');
+    } else {
+      fallback?.call();
+    }
+  }
+
+  /// El id de la hoja de la sección abierta que muestra la página [page] (desde 0) del PDF [file]; null si no está.
+  /// Mira las hojas cargadas; si no, prueba la que le toca según otra página del mismo PDF; si no, lee las demás de disco.
+  Future<String?> _sheetOfPdfPage(String file, int page) async {
+    bool match(Item i) => i.type == 'pdf' && i.file == file && i.page == page;
+    Item? anchor;
+    for (final it in doc.items.values) {
+      if (match(it)) return doc.sheets[doc.sheetOfElement(it)].id;
+      if (anchor == null && it.type == 'pdf' && it.file == file) anchor = it;
+    }
+    Future<bool> has(SheetMeta m) async =>
+        !doc.isLoaded(m.id) && (await widget.store.readSheetContent(doc.nb, m)).items.any(match);
+    final tried = <String>{};
+    if (anchor != null) {
+      final k = doc.sheetOfElement(anchor) + page - anchor.page;
+      if (k >= 0 && k < doc.sheetCount) {
+        tried.add(doc.sheets[k].id);
+        if (await has(doc.sheets[k])) return doc.sheets[k].id;
+      }
+    }
+    for (final m in doc.sheets) {
+      if (!tried.contains(m.id) && await has(m)) return m.id;
+    }
+    return null;
+  }
+
   /// Pega copias (con ids nuevos) corridas [d] y las deja seleccionadas.
   void _insert(List<Stroke> strokes, List<TextBlock> textBlocks, Offset d, List<Item> items) {
     // el destino tiene que estar cargado: si no, se carga y se vuelve a intentar
@@ -1158,7 +1616,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final newStrokes = [for (final s in strokes) s.moved(d, id: newId('s'))];
     final newItems = [for (final it in items) it.copy(id: newId('i'), d: d)];
     final newTexts = [
-      for (final t in textBlocks) t.copy(id: newId('t'), d: Offset((t.x + d.dx).clamp(0.0, kW - 60) - t.x, max(0.0, t.y + d.dy) - t.y))
+      for (final t in textBlocks) t.copy(id: newId('t'), d: Offset((t.x + d.dx).clamp(0.0, doc.width - 60) - t.x, max(0.0, t.y + d.dy) - t.y))
     ];
     // las copias quedan arriba de todo, en el mismo orden que tenían entre sí
     doc.stackOnTop([...newStrokes, ...newTexts, ...newItems]);
@@ -1185,7 +1643,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       items: newItems.map((it) => it.id),
     );
     final r = sel.bounds(doc);
-    if (r != null) _growIfNeeded(r.bottom);
+    if (r != null) _growIfNeeded(r.bottom, right: r.right);
     _changed();
     setState(() {});
   }
@@ -1216,6 +1674,56 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     _insert(c.strokes, c.texts, p - r.topLeft, c.items);
   }
 
+  /// Pega la imagen del portapapeles del sistema en [p] (con [center], el centro de la imagen va a [p]; si no, su esquina).
+  Future<void> _pasteImageAt(Offset p, {bool center = false}) async {
+    var bytes = await SystemClipboard.readImage();
+    if (bytes == null || !mounted) return;
+    ui.Image img;
+    try {
+      img = await decodeImage(bytes);
+    } catch (_) {
+      return;
+    }
+    var ext = imageExt(bytes);
+    if (img.width > 2400 || ext == null) {
+      // muy ancha u otro formato: se recodifica a PNG (con tope de 2400 de ancho)
+      final big = img.width > 2400;
+      final codec = await ui.instantiateImageCodec(bytes, targetWidth: big ? 2400 : null);
+      final f = (await codec.getNextFrame()).image;
+      codec.dispose();
+      final data = await f.toByteData(format: ui.ImageByteFormat.png);
+      img.dispose();
+      img = f;
+      if (data == null) {
+        img.dispose();
+        return;
+      }
+      bytes = data.buffer.asUint8List();
+      ext = 'png';
+    }
+    final w = min(560.0, doc.width - 40), h = w * img.height / img.width;
+    img.dispose();
+    final name = await widget.store.addMedia(bytes, ext);
+    if (!mounted) return;
+    final x = max(0.0, min(center ? p.dx - w / 2 : p.dx, doc.width - w));
+    final y = max(0.0, center ? p.dy - h / 2 : p.dy);
+    _insert([], [], Offset(x, y), [Item(newId('i'), 'image', 0, 0, w, h, file: name)]);
+  }
+
+  @visibleForTesting
+  Future<void> pasteImageAt(Offset p) => _pasteImageAt(p);
+
+  /// Ctrl+V: la imagen del sistema si hay; si no, lo copiado en la app. Va al puntero (si está sobre la hoja) o al centro de lo visible.
+  Future<void> pasteFromKeyboard() async {
+    if (widget.readOnly) return;
+    final img = await SystemClipboard.hasImage();
+    if (!mounted) return;
+    final h = _hover;
+    final p = h != null && _viewRect.contains(h) ? h : viewCenter; // mouse que quedó fuera de lo visible: al centro
+    if (img) return _pasteImageAt(p, center: true);
+    if (!ts.clipboard.isEmpty) _pasteAt(p);
+  }
+
   // ---------------- texto ----------------
   void _removeText(String id) {
     if (!mounted) return;
@@ -1229,6 +1737,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       FocusScope.of(context).unfocus(); // primer toque afuera: solo cierra el texto
       return;
     }
+    if (d.kind != PointerDeviceKind.stylus && _linkItemAt(_toPage(d.localPosition)) != null) return; // eso abrió el link
     _createTextAt(_toPage(d.localPosition));
   }
 
@@ -1241,10 +1750,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       _requestSync();
       return;
     }
-    final x = p.dx.clamp(4.0, kW - 40);
+    final x = p.dx.clamp(4.0, doc.width - 40);
     var y = doc.snapTextY(p.dy, floor: true); // el renglón de esa hoja (puede ser uno virtual, arriba del primero)
     // pasa a la hoja siguiente solo si el renglón no entra en esta (o cae en el espacio entre hojas)
-    if (y % kSheetStep + doc.lineAt(y) > kSheetH && y ~/ kSheetStep < doc.sheetCount - 1) {
+    if (!doc.nb.canvas && y % kSheetStep + doc.lineAt(y) > kSheetH && y ~/ kSheetStep < doc.sheetCount - 1) {
       y = doc.snapTextY((y ~/ kSheetStep + 1) * kSheetStep, floor: true);
     }
     if (_followBlockAbove(p)) return;
@@ -1278,11 +1787,11 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   /// Un bloque nuevo y vacío en ([x], [y]) (y ya sobre el renglón), con el foco y el teclado.
   void _placeText(double x, double y) {
-    final t = TextBlock(newId('t'), x.roundToDouble(), y, (kW - x - 30).roundToDouble(), '')..z = doc.nextZ();
+    final t = TextBlock(newId('t'), x.roundToDouble(), y, (doc.nb.canvas ? min(doc.width - x - 30, kW - 60) : kW - x - 30).roundToDouble(), '')..z = doc.nextZ();
     setState(() => texts.put(t.id, t));
     texts.editor(t.id)?.focusAt(0, 0);
     showKeyboard();
-    _growIfNeeded(y + doc.lineAt(y));
+    _growIfNeeded(y + doc.lineAt(y), right: x + t.w);
     _changed();
   }
 
@@ -1296,7 +1805,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     }
     final vh = scroll.hasClients ? scroll.position.viewportDimension / scale : 600 / scale;
     final top = scroll.hasClients ? max(0.0, (scroll.offset - kTopPad) / scale) : sheetTop;
-    final region = Rect.fromLTRB(0, max(top, sheetTop), kW, min(top + vh, sheetTop + kSheetH));
+    final region = Rect.fromLTRB(0, max(top, sheetTop), doc.width, min(top + vh, sheetTop + (doc.nb.canvas ? kSheetStep : kSheetH)));
     double? bottom;
     void see(Rect r) {
       if (r.overlaps(region)) bottom = max(bottom ?? r.bottom, r.bottom);
@@ -1315,7 +1824,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     var y = bottom != null
         ? doc.snapTextY(bottom! + line - 0.01, floor: true)
         : doc.snapTextY(max(region.top + line * .5, sheetTop + topMarginUnits(doc.sheets[k].size) - line) + line - 0.01, floor: true);
-    if (y - sheetTop > kSheetH - line && k < doc.sheetCount - 1) {
+    if (!doc.nb.canvas && y - sheetTop > kSheetH - line && k < doc.sheetCount - 1) {
       y = doc.snapTextY((k + 1) * kSheetStep + 1, floor: false); // no entra: a la hoja siguiente
     }
     _placeText(marginUnits(doc.sheets[k].size) + 10, y);
@@ -1341,13 +1850,14 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     for (final p in t.body.paras) {
       lines += 1 + p.length ~/ 70;
     }
-    _growIfNeeded(t.y + lines * doc.lineAt(t.y));
+    _growIfNeeded(t.y + lines * doc.lineAt(t.y), right: t.x + t.w);
     _saveSoon(t.id, const Duration(milliseconds: 300));
   }
 
   // ---------------- herramientas ----------------
   void _setTool(Tool t) {
     if (t != Tool.select) _clearSel();
+    if (t != Tool.shape) _shape = null;
     setState(() => ts.tool = t);
     if (t != Tool.text) FocusScope.of(context).unfocus();
     // por si al abrir la app no había internet: reintenta la bajada del modelo de la letra, en silencio
@@ -1361,7 +1871,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   void undo() => _undoRedo(undo: true);
   void redo() => _undoRedo(undo: false);
 
-  /// Elegir una herramienta con una tecla suelta (P, H, T, S). Texto abre un bloque, como el botón.
+  /// Elegir una herramienta con una tecla suelta (P, H, F, T, S). Texto abre un bloque, como el botón.
   void pickTool(Tool t) {
     if (widget.readOnly) return;
     if (t != Tool.text && ts.tool == t) return;
@@ -1387,7 +1897,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     widget.onPrefsChanged();
   }
 
-  Future<void> _openPanel() async {
+  Future<void> _openPanel({int? editFav}) async {
     final align = switch (ts.dock) {
       'left' => Alignment.centerLeft,
       'right' => Alignment.centerRight,
@@ -1397,7 +1907,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       if (!mounted) return; // el panel se cierra (dispose) después del editor: ya no hay a quién avisar
       setState(() {});
       widget.onPrefsChanged();
-    }, align);
+    }, align: align, editFav: editFav);
     if (mounted) setState(() {});
   }
 
@@ -1407,12 +1917,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     _openPanel();
   }
 
-  /// Mantener un favorito de la barra: guarda ahí el color actual de la herramienta.
-  void _setFavorite(int slot) {
+  /// Mantener un favorito de la barra: abre el panel editando ese favorito.
+  void _editFavorite(int slot) {
     if (!ts.drawing) _setTool(Tool.pen);
-    setState(() => ts.setFavorite(slot, ts.current.color));
-    widget.onPrefsChanged();
-    snack(context, 'Favorito guardado', duration: const Duration(milliseconds: 1200), width: 260);
+    _openPanel(editFav: slot);
   }
 
   void _pickQuick(String c) {
@@ -1460,7 +1968,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     _flashZoom();
     // el scroll se corrige en el layout de este mismo cuadro (ver _applyZoomScroll); si no, se pinta un cuadro con el
     // zoom nuevo y el scroll viejo y la hoja tiembla
-    _zoomScrollTo = SheetLayout(_viewW, z).scrollFor(anchor, f);
+    _zoomScrollTo = SheetLayout(_viewW, z, units: doc.width).scrollFor(anchor, f);
   }
 
   /// Aplica el scroll pendiente del zoom antes de que el visor arme su layout (mismo cuadro, sin notificar).
@@ -1485,7 +1993,9 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   void _touchDown(PointerDownEvent e) {
     if (e.kind != PointerDeviceKind.touch) return;
     touch.down(e.pointer, e.position);
+    if (touch.length == 2) _cancelTouchShape();
     final onSelUi = _selUiPointers.remove(e.pointer);
+    _linkCand = touch.length == 1 && pointer == null && !onSelUi ? (pointer: e.pointer, global: e.position, t: e.timeStamp) : null;
     if (touch.length == 1 && pointer == null) {
       stillPress.start(e.position);
       _pressScrollY = scroll.hasClients ? scroll.offset : 0;
@@ -1518,6 +2028,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     stillPress.moved(e.position);
     final c = _tapCand;
     if (c != null && c.pointer == e.pointer && (e.position - c.global).distance > 10) _tapCand = null; // arrastra: no es un toque
+    final lc = _linkCand;
+    if (lc != null && lc.pointer == e.pointer && (e.position - lc.global).distance > kTouchSlop) _linkCand = null;
     if (touch.panning) {
       final mid = touch.midpoint;
       if (mid == null) return;
@@ -1539,12 +2051,19 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   void _touchUp(PointerEvent e) {
     if (e.kind != PointerDeviceKind.touch) return;
-    final cand = _tapCand;
+    final cand = _tapCand, lcand = _linkCand;
     _tapCand = null;
+    _linkCand = null;
     final wasAlone = touch.length == 1 && touch.tracks(e.pointer) && !touch.pinching;
     touch.up(e.pointer);
     stillPress.cancel();
-    if (cand != null && cand.pointer == e.pointer && e is PointerUpEvent && wasAlone && (!scroll.hasClients || (scroll.offset - cand.scrollY).abs() < 1)) {
+    // un toque corto y quieto sobre un link lo abre; si no, es el toque de siempre (elegir un elemento)
+    var opened = false;
+    if (lcand != null && lcand.pointer == e.pointer && e is PointerUpEvent && wasAlone && e.timeStamp - lcand.t < kLinkTapMax &&
+        (!scroll.hasClients || (scroll.offset - _pressScrollY).abs() < 1)) {
+      opened = _linkTapGlobal(lcand.global, fallback: cand == null ? null : () => _fingerTap(cand.global));
+    }
+    if (!opened && cand != null && cand.pointer == e.pointer && e is PointerUpEvent && wasAlone && (!scroll.hasClients || (scroll.offset - cand.scrollY).abs() < 1)) {
       _fingerTap(cand.global);
     }
     if (touch.pinching && touch.length < 2) {
@@ -1588,6 +2107,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   /// Un dedo quieto sobre la hoja: menú contextual (si no se está scrolleando ni escribiendo).
   void _onStillPress(Offset g) {
     _tapCand = null; // mantener quieto abre el menú: al levantar no es un toque que elige
+    _linkCand = null;
     if (!mounted || touch.pinching || touch.length != 1 || pointer != null) return;
     // Ojo: `isScrollingNotifier` no sirve acá: con un solo scroll posible (zoom 1, sin scroll horizontal) el dedo
     // gana la arena apenas toca y el scroll figura "en curso" aunque no se mueva. Se mira si la hoja se movió.
@@ -1669,11 +2189,13 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   }
 
   Future<void> _sheetMenu(Offset global, Offset p) async {
-    if (ts.clipboard.isEmpty) return; // sin nada copiado no hay menú (ni vibra)
+    final img = await SystemClipboard.hasImage();
+    if (!mounted) return;
+    if (ts.clipboard.isEmpty && !img) return; // sin nada copiado no hay menú (ni vibra)
     HapticFeedback.mediumImpact();
     final v = await showSheetMenu(context, global);
     if (!mounted) return;
-    if (v == SheetMenuAction.paste) _pasteAt(p);
+    if (v == SheetMenuAction.paste) img ? unawaited(_pasteImageAt(p)) : _pasteAt(p);
   }
 
   /// Hojas que se piden juntas al cargar para "Seleccionar todo el cuaderno" (entre tanda y tanda se puede cancelar).
@@ -1713,7 +2235,14 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final vw = hscroll.hasClients ? hscroll.position.viewportDimension : kW * scale;
     final vh = scroll.hasClients ? scroll.position.viewportDimension : 600.0;
     final c = layout.toPage(Offset(vw / 2, vh / 2), _scrollOffset);
-    return Offset(c.dx.clamp(0, kW), c.dy.clamp(0, doc.h));
+    return Offset(c.dx.clamp(0, doc.width), c.dy.clamp(0, doc.h));
+  }
+
+  /// Lo que se está viendo, en coordenadas de la página.
+  Rect get _viewRect {
+    final vw = hscroll.hasClients ? hscroll.position.viewportDimension : kW * scale;
+    final vh = scroll.hasClients ? scroll.position.viewportDimension : 600.0;
+    return Rect.fromPoints(layout.toPage(Offset.zero, _scrollOffset), layout.toPage(Offset(vw, vh), _scrollOffset));
   }
 
   /// Hoja que se está viendo (0, 1, 2...).
@@ -1801,14 +2330,14 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       _whenLoaded([doc.sheets[doc.sheetOfY(y)].id], () => insertItem(it, onInserted: onInserted));
       return;
     }
-    it.x = (c.dx - it.w / 2).clamp(10.0, max(10.0, kW - it.w - 10));
+    it.x = (c.dx - it.w / 2).clamp(10.0, max(10.0, doc.width - it.w - 10));
     it.y = y;
     it.z = doc.nextZ();
     doc.items[it.id] = it;
     _pushUndo(EditAction(itemBefore: {it.id: null}, itemAfter: {it.id: it.copy()}));
     _setTool(Tool.select);
     sel.replace(items: [it.id]);
-    _growIfNeeded(it.y + it.h);
+    _growIfNeeded(it.y + it.h, right: it.x + it.w);
     onInserted?.call();
     _changed();
     setState(() {});
@@ -1978,7 +2507,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             _openPanel();
           },
           onPickColor: _pickQuick,
-          onSetFavorite: _setFavorite,
+          onEditFavorite: _editFavorite,
           onOpenPanel: _openPanelForDrawing,
           onUndo: () => _undoRedo(undo: true),
           onRedo: () => _undoRedo(undo: false),
@@ -1996,7 +2525,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     return Container(
       color: cs.surfaceContainerLow,
       child: LayoutBuilder(builder: (context, box) {
-        layout = SheetLayout(box.maxWidth, ts.zoom);
+        layout = SheetLayout(box.maxWidth, ts.zoom, units: doc.width);
         _viewH = box.maxHeight;
         _viewW = box.maxWidth;
         _applyZoomScroll();
@@ -2017,7 +2546,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             onPointerUp: _touchUp,
             onPointerCancel: _touchUp,
             child: NotificationListener<ScrollNotification>(
-              onNotification: (n) => pull.onScroll(n, touching: touch.count > 0),
+              onNotification: (n) => doc.nb.canvas ? false : pull.onScroll(n, touching: touch.count > 0),
               child: ScrollConfiguration(
                 // el lápiz NO scrollea: solo dedo y touchpad
                 // con el zoom fijado el dedo solo NO mueve la hoja (así la palma no la corre al escribir): se mueve con
@@ -2042,17 +2571,20 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
                           padding: EdgeInsets.only(left: layout.sheetLeft),
                           child: SizedBox.fromSize(key: _sheetKey, size: sheetSize, child: _sheet()),
                         ),
-                        SizedBox(
-                          width: layout.contentWidth,
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 22, 16, 70),
-                            child: Text(
-                              'Al final, deslizá hacia arriba y mantené para agregar una hoja',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: cs.onSurfaceVariant.withValues(alpha: .7), fontSize: 13),
+                        if (doc.nb.canvas)
+                          const SizedBox(height: 70) // el lienzo crece solo: no hay que agregar hojas
+                        else
+                          SizedBox(
+                            width: layout.contentWidth,
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 22, 16, 70),
+                              child: Text(
+                                'Al final, deslizá hacia arriba y mantené para agregar una hoja',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: cs.onSurfaceVariant.withValues(alpha: .7), fontSize: 13),
+                              ),
                             ),
                           ),
-                        ),
                       ]),
                     ),
                   ),
@@ -2107,6 +2639,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final body = !widget.readOnly && !sel.isEmpty && (idle || (drag != null && drag.handle == Handle.move)) ? sel.bounds(doc) : null;
     return Stack(clipBehavior: Clip.none, children: [
       _layers(textMode),
+      if (ts.tool == Tool.shape && !widget.readOnly) _shapeOverlay(),
       if (body != null)
         Positioned.fromRect(
           key: const ValueKey('selBody'),
@@ -2146,6 +2679,9 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
                 ? _renameSel
                 : null,
             onStraighten: sel.textsOf(doc).any((t) => t.transformed) ? _straightenSel : null,
+            onLink: sel.itemsOf(doc).any((i) => i.type == 'link') ? null : _linkSel,
+            onEditLink: _singleLink != null ? _editLinkSel : null,
+            onRemoveLink: _singleLink != null ? _deleteSel : null,
             onClose: _clearSel,
             onOrder: _reorderSel,
           ))),
@@ -2228,6 +2764,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       if (fixed.contains(t.id) || (k < first && t.y + _textExtent(t) > rangeTop)) extras.add(t);
     }
     return Listener(
+      onPointerHover: (e) => _hover = _toPage(e.localPosition),
       onPointerDown: _down,
       onPointerMove: _move,
       onPointerUp: _up,
@@ -2237,8 +2774,29 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         onTapUp: textMode ? _tapPage : null,
         child: Stack(clipBehavior: Clip.none, children: [
           Positioned.fill(
-            child: RepaintBoundary(child: CustomPaint(painter: SheetPainter(doc.sheets, scale, first, last))),
+            child: RepaintBoundary(child: CustomPaint(
+                painter: doc.nb.canvas
+                    ? CanvasPainter(doc.sheets.isEmpty ? '#fffefb' : doc.sheets.first.paper, doc.h, doc.width, scale)
+                    : SheetPainter(doc.sheets, scale, first, last))),
           ),
+          // fondos de imagen: la imagen que no está todavía (sin sincronizar) no muestra nada
+          for (var k = first; k <= last; k++)
+            if (!doc.nb.canvas && doc.sheets[k].bg == 'image' && doc.sheets[k].image != null)
+              Positioned(
+                key: ValueKey('bgImage-${doc.sheets[k].id}'),
+                left: 0,
+                top: k * kSheetStep * scale,
+                width: kW * scale,
+                height: kSheetH * scale,
+                child: IgnorePointer(
+                  child: Image.file(widget.store.media(doc.sheets[k].image!),
+                      fit: BoxFit.contain,
+                      cacheWidth: 1600,
+                      gaplessPlayback: true,
+                      filterQuality: FilterQuality.medium,
+                      errorBuilder: (_, _, _) => const SizedBox()),
+                ),
+              ),
           for (var k = first; k <= last; k++) ...[
             if (!doc.isLoadedAt(k)) _loadingMark(k),
             for (final (i, run) in _sheetRuns[doc.sheets[k].id]!.indexed) _run(run, i, textMode, k),
@@ -2274,7 +2832,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     for (final s in doc.strokes.values) {
       final b = s.bounds;
       for (var k = max(lo, doc.sheetOfY(b.top)); k <= min(hi, doc.sheetOfY(b.bottom)); k++) {
-        if (b.overlaps(Rect.fromLTWH(0, k * kSheetStep, kW, kSheetH))) buckets[k]?.add(s);
+        if (b.overlaps(doc.bandRect(k))) buckets[k]?.add(s);
       }
     }
     for (final it in doc.items.values) {
@@ -2291,7 +2849,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         key: ValueKey('loading-${doc.sheets[k].id}'),
         left: 0,
         top: k * kSheetStep * scale,
-        width: kW * scale,
+        width: doc.width * scale,
         height: 120 * scale,
         child: IgnorePointer(
           child: Center(
@@ -2315,18 +2873,18 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   Widget _run(ZRun run, int i, bool textMode, int sheet) {
     final strokes = run.strokes;
     if (strokes != null) {
-      final r = Rect.fromLTWH(0, sheet * kSheetStep, kW, kSheetH);
+      final r = doc.bandRect(sheet);
       final id = doc.sheets[sheet].id;
       return Positioned(
         key: ValueKey('ink-$id-$i'),
         left: 0,
         top: r.top * scale,
-        width: kW * scale,
-        height: kSheetH * scale,
+        width: r.width * scale,
+        height: r.height * scale,
         child: IgnorePointer(
           child: RepaintBoundary(
             child: CustomPaint(
-                painter: InkPainter(doc, strokes, r, scale, _verOf(id), () => sel.moving ? sel.strokes : const {},
+                painter: InkPainter(doc, strokes, r, scale, _verOf(id), () => sel.moving ? sel.strokes : (_shapeEdit != null ? {_shapeEdit!.id} : const {}),
                     cache: _imgs, cacheKey: 'ink-$id-$i', sheetId: id, dpr: _dpr, maxPx: 2 * _viewW * _dpr),
                 isComplex: true),
           ),
@@ -2359,7 +2917,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       doc: doc,
       scale: scale,
       sel: sel,
-      live: _cover ?? live,
+      live: _cover ?? live ?? _shapeEdit,
       eraserAt: eraserAt,
       eraserRadius: ts.eraserRadius,
       visible: _visiblePage(),
@@ -2378,15 +2936,16 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       selected: sel.texts.contains(t.id),
       onHandleDrag: (delta) => setState(() {
         doc.markDirtyElement(t);
-        t.x = (t.x + delta.dx / scale).clamp(0.0, kW - 60);
+        t.x = (t.x + delta.dx / scale).clamp(0.0, doc.width - 60);
         t.y = max(0.0, t.y + delta.dy / scale);
-        if (!t.transformed) t.w = min(t.w, kW - t.x - 10).clamp(120.0, kW);
+        if (!t.transformed) t.w = min(t.w, doc.width - t.x - 10).clamp(120.0, doc.width);
         doc.markDirtyElement(t);
       }),
       onHandleDragEnd: () => setState(() {
         doc.markDirtyElement(t);
         if (!t.transformed) t.y = doc.snapTextY(t.y);
         doc.markDirtyElement(t);
+        _growIfNeeded(t.y, right: t.x + t.w);
         _changed();
       }),
     );
@@ -2404,4 +2963,29 @@ class _MenuLayout extends SingleChildLayoutDelegate {
   Offset getPositionForChild(Size size, Size child) => Offset(x.clamp(0.0, max(0.0, size.width - child.width)), top - child.height >= 0 ? top - child.height : bottom);
   @override
   bool shouldRelayout(_MenuLayout o) => o.x != x || o.top != top || o.bottom != bottom;
+}
+
+/// Forma que se está arrastrando: de A (en [sheet], donde empezó) a B. [touch]: la dibuja un dedo.
+class _ShapeDraft {
+  final String kind;
+  final int sheet;
+  final bool touch;
+  Offset a, b;
+  _ShapeDraft(this.kind, this.sheet, this.a, this.touch) : b = a;
+}
+
+/// La forma recién hecha: con manijas y medidas hasta que se empieza otra, se cambia de herramienta o se deshace.
+class _ActiveShape {
+  final String kind, id;
+  final int sheet;
+  Offset a, b;
+  _ActiveShape(this.kind, this.a, this.b, this.id, this.sheet);
+}
+
+/// Arrastre de una manija ([handle] -1: la forma entera) con el trazo de antes y los extremos de partida.
+class _ShapeDrag {
+  final int handle;
+  final Stroke before;
+  final Offset a0, b0, grab, off; // [off]: de donde apoyó el puntero al centro de la manija
+  _ShapeDrag(this.handle, this.before, this.a0, this.b0, this.grab, this.off);
 }

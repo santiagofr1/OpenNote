@@ -10,8 +10,10 @@ import '../../data/export.dart';
 import '../../data/media_import.dart';
 import '../../data/opennote_file.dart';
 import '../../data/storage.dart';
+import '../../data/templates.dart';
 import '../../domain/domain.dart';
 import '../../editor/history.dart';
+import '../../editor/link_open.dart';
 import '../../editor/page_editor.dart';
 import '../../editor/voice_recorder.dart';
 import '../../sync/sync_controller.dart';
@@ -218,6 +220,60 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
   void _addSheetAfter(int k) =>
       _sheetOp((d) => [SheetPresenceOp.added(d, d.insertSheet(k + 1))], goTo: k + 1);
 
+  /// Hoja nueva después de [k] con el fondo que se elija (incluidas las plantillas).
+  Future<void> _addSheetWithTemplate(int k) async {
+    final d = doc;
+    if (d == null) return;
+    final r = await showStyleDialog(context, d, store: store, sheet: k, forNew: true);
+    if (r == null || !mounted) return;
+    final meta = nb.newSheet()
+      ..bg = r.bg
+      ..image = r.bg == 'image' ? r.image : null
+      ..paper = r.paper
+      ..spacing = r.spacing
+      ..size = r.size;
+    _sheetOp((d) => [SheetPresenceOp.added(d, d.insertSheet(k + 1, meta: meta))], goTo: k + 1);
+  }
+
+  /// Guarda la hoja [k] como plantilla propia (imagen de la hoja tal como se ve), pidiendo el nombre.
+  Future<void> _saveTemplate(int k) async {
+    final d = doc;
+    if (d == null) return;
+    final n = (await readTemplates(store)).length + 1;
+    if (!mounted) return;
+    final title = d.sheets[k].title;
+    final name = await _askTemplateName(title.isEmpty ? 'Plantilla $n' : title);
+    if (name == null || !mounted) return;
+    try {
+      await templateFromSheet(store, d, k, name.trim().isEmpty ? 'Plantilla $n' : name.trim());
+    } catch (e) {
+      if (mounted) snack(context, 'No se pudo guardar la plantilla: $e');
+      return;
+    }
+    if (mounted) snack(context, 'Plantilla guardada');
+  }
+
+  Future<String?> _askTemplateName(String initial) {
+    final ctl = TextEditingController(text: initial);
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Guardar como plantilla'),
+        content: TextField(
+          key: const Key('tplName'),
+          controller: ctl,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Nombre'),
+          onSubmitted: (v) => Navigator.pop(ctx, v),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          FilledButton(key: const Key('tplSave'), onPressed: () => Navigator.pop(ctx, ctl.text), child: const Text('Guardar')),
+        ],
+      ),
+    );
+  }
+
   Future<void> _renameSheet(int k) async {
     final m = doc!.sheets[k];
     final n = await askText(context, 'Nombre de la hoja ${k + 1}', initial: m.title, hint: 'Opcional');
@@ -263,11 +319,42 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
   /// Lleva la hoja [from] a la posición [to] (menú del panel o arrastrando la miniatura).
   void _moveSheet(int from, int to) => _sheetOp((d) => [?SheetMoveOp.run(d, from, to)], goTo: to);
 
-  void _toggleBookmark(int k) {
+  void _toggleBookmark(int k, {String? title}) {
     final m = doc!.sheets[k];
     m.bookmark = !m.bookmark;
+    if (m.bookmark && title != null) m.title = title.trim();
     HapticFeedback.selectionClick();
     _metaChanged();
+  }
+
+  /// Botón de arriba: marca la hoja que se ve (pidiendo un nombre opcional) o le quita el marcador.
+  Future<void> _bookmarkCurrent() async {
+    final d = doc;
+    if (d == null) return;
+    final k = curSheet;
+    if (d.sheets[k].bookmark) return _toggleBookmark(k);
+    final ctl = TextEditingController(text: d.sheets[k].title);
+    // null = cancelado; '' en el valor = "Sin nombre"
+    final r = await showDialog<({String? name})>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Marcador'),
+        content: TextField(
+          key: const Key('bookmarkName'),
+          controller: ctl,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Nombre (opcional)'),
+          onSubmitted: (_) => Navigator.pop(ctx, (name: ctl.text)),
+        ),
+        actions: [
+          TextButton(key: const Key('bookmarkNoName'), onPressed: () => Navigator.pop(ctx, (name: null)), child: const Text('Sin nombre')),
+          FilledButton(key: const Key('bookmarkSave'), onPressed: () => Navigator.pop(ctx, (name: ctl.text)), child: const Text('Guardar')),
+        ],
+      ),
+    );
+    // el controlador no se libera acá: el diálogo todavía se está cerrando y lo usa
+    if (r == null || !mounted || k >= d.sheetCount || d.sheets[k].bookmark) return;
+    _toggleBookmark(k, title: r.name);
   }
 
   void _sheetAction(int k, SheetAction a) {
@@ -276,8 +363,12 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         _renameSheet(k);
       case SheetAction.addAfter:
         _addSheetAfter(k);
+      case SheetAction.addWithTemplate:
+        _addSheetWithTemplate(k);
       case SheetAction.duplicate:
         _duplicateSheet(k);
+      case SheetAction.saveTemplate:
+        _saveTemplate(k);
       case SheetAction.moveUp:
         _moveSheet(k, k - 1);
       case SheetAction.moveDown:
@@ -580,7 +671,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
       case 'print':
         final d = doc;
         if (d == null) return;
-        await Printing.layoutPdf(name: nb.name, onLayout: (_) => buildNotebookPdf(store, d));
+        await Printing.layoutPdf(name: nb.name, onLayout: (_) async => buildNotebookPdf(store, d, background: await exportBackgroundPref(store)));
       case 'delete':
         if (!await confirmDeleteNotebook(context, nb)) return;
         _deleted = true;
@@ -638,7 +729,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     if (d == null) return;
     final k = curSheet, meta = d.sheets[k];
     final sheetName = 'Hoja ${k + 1}${meta.title.isEmpty ? '' : ' · ${meta.title}'}';
-    final v = await showExportSheet(context, sheetName: sheetName);
+    final v = await showExportSheet(context, store, widget.tools, sheetName: nb.canvas ? null : sheetName);
     if (v == null || !mounted) return;
     switch (v) {
       case 'pdf':
@@ -650,7 +741,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         final secs = await askExportSections(context, nb);
         if (secs != null && mounted) await exportPngFlow(context, store, d, sections: secs);
       case 'sheetpng':
-        final ok = await saveSheetPng(store, d, k, '${nb.name} - hoja ${k + 1}');
+        final ok = await saveSheetPng(store, d, k, '${nb.name} - hoja ${k + 1}', background: await exportBackgroundPref(store));
         if (ok && mounted) snack(context, 'Imagen guardada');
       case 'opennote':
         await _exportOpennote();
@@ -663,16 +754,25 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     final d = doc;
     if (d == null) return;
     final k = curSheet;
-    final r = await showStyleDialog(context, d, sheet: k);
+    final r = await showStyleDialog(context, d, store: store, sheet: k);
     if (r == null || !mounted) return;
     void apply(SheetMeta m) {
       m.bg = r.bg;
+      m.image = r.bg == 'image' ? r.image : null;
       m.paper = r.paper;
       m.spacing = r.spacing;
       m.size = r.size;
     }
-    if (r.all) {
+    if (nb.canvas) {
+      // lienzo: solo el color del papel, en todas las franjas (y en las que se agreguen)
+      nb.paper = r.paper;
+      _indexDirty = true;
+      for (final m in d.sheets) {
+        m.paper = r.paper;
+      }
+    } else if (r.all) {
       nb.bg = r.bg;
+      nb.image = r.bg == 'image' ? r.image : null;
       nb.paper = r.paper;
       nb.spacing = r.spacing;
       nb.size = r.size;
@@ -756,6 +856,10 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         ed.redo();
         return true;
       }
+      if (k == LogicalKeyboardKey.keyV && !hw.isShiftPressed) {
+        unawaited(ed.pasteFromKeyboard());
+        return true;
+      }
       return false;
     }
     if (reading || hw.isAltPressed || hw.isShiftPressed) return false;
@@ -763,11 +867,13 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         ? Tool.pen
         : k == LogicalKeyboardKey.keyH
             ? Tool.hl
-            : k == LogicalKeyboardKey.keyT
-                ? Tool.text
-                : k == LogicalKeyboardKey.keyS
-                    ? Tool.select
-                    : null;
+            : k == LogicalKeyboardKey.keyF
+                ? Tool.shape
+                : k == LogicalKeyboardKey.keyT
+                    ? Tool.text
+                    : k == LogicalKeyboardKey.keyS
+                        ? Tool.select
+                        : null;
     if (t == null) return false;
     ed.pickTool(t);
     return true;
@@ -803,7 +909,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
                   AnimatedSize(
                     duration: const Duration(milliseconds: 240),
                     curve: Curves.easeOutQuart,
-                    child: panel && !fullscreen ? _pagesPanel() : const SizedBox(width: 0),
+                    child: panel && !fullscreen && !nb.canvas ? _pagesPanel() : const SizedBox(width: 0),
                   ),
                   Expanded(
                     child: doc == null
@@ -822,6 +928,8 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
                             onHeadingsChanged: () => _headings.value++,
                             recorder: recorder,
                             onStopRecording: stopVoice,
+                            onOpenLink: _openLink,
+                            linkNotebooks: [for (final n in widget.index.notebooks) if (n.id != nb.id) n],
                           ),
                   ),
                   AnimatedSize(
@@ -941,6 +1049,45 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
           onAction: _entryAction,
         );
 
+  /// Abre el destino de un link: la web en el navegador, otra hoja (de esta o de otra sección) o otro cuaderno
+  /// (se cierra este y la biblioteca abre el otro).
+  Future<void> _openLink(LinkTarget t) async {
+    switch (t) {
+      case LinkWeb(:final uri):
+        var ok = false;
+        try {
+          ok = await linkLauncher(uri);
+        } catch (_) {}
+        if (!ok && mounted) snack(context, 'No se pudo abrir el link');
+      case LinkSheet(:final id):
+        await _goToSheetId(id);
+      case LinkNotebook(:final id):
+        if (!widget.index.notebooks.any((n) => n.id == id)) {
+          snack(context, 'El cuaderno ya no existe');
+          return;
+        }
+        await leave('open:$id');
+    }
+  }
+
+  /// Lleva la vista a la hoja de id [id], cambiando de sección si es de otra.
+  Future<void> _goToSheetId(String id) async {
+    final k = nb.sheets.indexWhere((m) => m.id == id);
+    if (k >= 0) return _goTo(k);
+    final other = nb.otherSheets.where((m) => m.id == id).firstOrNull;
+    if (other == null) {
+      snack(context, 'La hoja ya no existe');
+      return;
+    }
+    final sec = other.section.isEmpty ? nb.sections.first.id : other.section;
+    await _switchSection(sec);
+    if (!mounted || doc == null || nb.activeSection.id != sec) return;
+    await WidgetsBinding.instance.endOfFrame; // que el editor nuevo ya esté armado
+    if (!mounted) return;
+    final j = nb.sheets.indexWhere((m) => m.id == id);
+    if (j >= 0) _goTo(j);
+  }
+
   /// Lleva la vista al título [e] (cambiando de sección si es de otra).
   Future<void> _openEntry(OutlineEntry e) async {
     if (e.sectionId != nb.activeSection.id) {
@@ -1019,12 +1166,32 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
           act(Symbols.menu_book, reading ? 'Salir del modo lectura' : 'Modo lectura', () => setState(() => reading = !reading),
               on: reading, key: const Key('reading')),
           menuBtn(Symbols.add, 'Insertar', const Key('insert'), (at) async {
-            final v = await showInsertMenu(context, at);
+            final v = await showInsertMenu(context, at, canvas: nb.canvas);
             if (v != null && mounted) await runInsert(v);
           }),
           act(Symbols.toc, 'Índice', () => setState(() => indexOpen = !indexOpen), on: indexOpen, key: const Key('indexBtn')),
-          act(Symbols.view_sidebar, 'Hojas', () => setState(() => panel = !panel), on: panel, key: const Key('pagesBtn')),
+          if (nb.canvas)
+            // sin panel de hojas: las secciones (cada una es otro lienzo) se abren desde acá
+            menuBtn(Symbols.layers, 'Secciones', const Key('sectionsBtn'), (at) => _sectionsList(Rect.fromLTWH(at.dx - 40, at.dy - 40, 40, 40)))
+          else
+            act(Symbols.view_sidebar, 'Hojas', () => setState(() => panel = !panel), on: panel, key: const Key('pagesBtn')),
           act(Symbols.open_in_full, 'Pantalla completa', _toggleFullscreen),
+          ListenableBuilder(
+            listenable: Listenable.merge([sheetNotifier, _structure]),
+            builder: (_, _) {
+              final on = doc != null && doc!.sheets[curSheet].bookmark;
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 1),
+                child: IconButton(
+                  key: const Key('bookmarkSheet'),
+                  tooltip: on ? 'Quitar marcador' : 'Marcar esta hoja',
+                  onPressed: doc == null ? null : _bookmarkCurrent,
+                  style: IconButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                  icon: Icon(Symbols.bookmark, size: 22, weight: on ? 400 : 300, fill: on ? 1 : 0, color: on ? cs.primary : cs.onSurfaceVariant),
+                ),
+              );
+            },
+          ),
           menuBtn(Symbols.more_vert, 'Más opciones', const Key('more'), (at) async {
             final v = await showMoreMenu(context, at, nb);
             if (v != null && mounted) await runMore(v);
@@ -1089,7 +1256,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
                 padding: const EdgeInsets.only(left: 4),
                 child: Icon(Symbols.lock, size: 16, weight: 400, color: cs.onSurfaceVariant)),
         ]),
-        if (doc != null)
+        if (doc != null && !nb.canvas)
           ListenableBuilder(
             listenable: Listenable.merge([sheetNotifier, _structure]),
             builder: (_, _) {

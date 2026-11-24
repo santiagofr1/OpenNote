@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:ui' show Offset;
 
 import 'geometry.dart';
 
@@ -35,14 +36,14 @@ const double kBlankLineMm = 8;
 
 /// Opciones de [spacing] (mm) según el fondo; vacío si no tiene (liso).
 List<double> spacingsFor(String bg) => switch (bg) {
-      'lined' => kLinedSpacings,
-      'grid' || 'dots' => kGridSpacings,
+      'lined' || 'cornell' || 'todo' => kLinedSpacings,
+      'grid' || 'dots' || 'axes' => kGridSpacings,
       _ => const [],
     };
 
 /// Espaciado por defecto del fondo: rayado 8 mm, cuadriculado y puntos 5 mm.
 double defaultSpacing(String bg) => switch (bg) {
-      'grid' || 'dots' => 5,
+      'grid' || 'dots' || 'axes' => 5,
       _ => 8,
     };
 
@@ -55,7 +56,8 @@ String fmtMm(double mm) => mm == mm.roundToDouble() ? mm.round().toString() : mm
 /// Altura (mm, desde el borde de arriba de la hoja) de la primera línea horizontal del fondo.
 /// Rayado: múltiplo del interlineado cercano a 25 mm. Cuadriculado y puntos: centrada, sobra lo mismo arriba y abajo.
 double gridOriginMm(String bg, double spacing, {String size = 'a4'}) => switch (bg) {
-      'grid' || 'dots' => (paperHeightMm(size) % spacing) / 2,
+      'grid' || 'dots' || 'axes' => (paperHeightMm(size) % spacing) / 2,
+      'mm' => (paperHeightMm(size) % 10) / 2,
       _ => 0,
     };
 
@@ -75,11 +77,36 @@ List<double> gridYs(double spacing, {String size = 'a4'}) {
 List<double> gridXs(double spacing, {String size = 'a4'}) =>
     [for (var n = 1; n * spacing < paperWidthMm(size) - 0.01; n++) n * spacing * unitsPerMm(size)];
 
+/// Líneas horizontales del milimetrado: (altura en unidades, peso) cada 1 mm desde [gridOriginMm] hacia arriba y abajo.
+/// Peso 2 cada 10 mm contados desde el origen, 1 cada 5, 0 el resto.
+List<(double, int)> mmYs({String size = 'a4'}) {
+  final o = gridOriginMm('mm', 10, size: size), h = paperHeightMm(size), u = unitsPerMm(size);
+  final n0 = -o.floor(); // primera línea con y >= 0
+  final out = <(double, int)>[];
+  for (var n = n0; o + n <= h + 0.001; n++) {
+    out.add(((o + n) * u, n % 10 == 0 ? 2 : (n % 5 == 0 ? 1 : 0)));
+  }
+  return out;
+}
+
+/// Líneas verticales del milimetrado (sin los bordes): (x en unidades, peso). Peso 2 cada 10 mm desde el borde izquierdo.
+List<(double, int)> mmXs({String size = 'a4'}) {
+  final w = paperWidthMm(size), u = unitsPerMm(size);
+  return [for (var n = 1; n < w - 0.001; n++) (n * u, n % 10 == 0 ? 2 : (n % 5 == 0 ? 1 : 0))];
+}
+
+/// Punto (unidades, local a la hoja) donde se cruzan los ejes: sobre la cuadrícula, lo más cerca del centro.
+(double, double) axesOrigin(double spacing, {String size = 'a4'}) {
+  double nearest(List<double> l, double t) => l.reduce((a, b) => (a - t).abs() <= (b - t).abs() ? a : b);
+  return (nearest(gridXs(spacing, size: size), kW / 2), nearest(gridYs(spacing, size: size), kSheetH / 2));
+}
+
 /// Alto de un renglón de texto en mm: el interlineado del rayado; en cuadrícula y puntos,
 /// la cantidad de cuadritos que más se acerque a 8 mm (así cae sobre las líneas); liso, 8 mm.
 double textLineMm(String bg, double spacing) => switch (bg) {
-      'lined' => spacing,
-      'grid' || 'dots' => max(1, (kBlankLineMm / spacing).round()) * spacing,
+      'lined' || 'cornell' || 'todo' => spacing,
+      'grid' || 'dots' || 'axes' => max(1, (kBlankLineMm / spacing).round()) * spacing,
+      'mm' => 10,
       _ => kBlankLineMm,
     };
 
@@ -110,4 +137,21 @@ double snapTextY(double localY, String bg, double spacing, {bool floor = false, 
   final minN = ((-(o + inset)) / line).ceil();
   final n = max(minN, (floor ? r.floorToDouble() : r.roundToDouble()).toInt());
   return o + n * line + inset;
+}
+
+/// Lleva [localPoint] (unidades, local a la hoja) a la intersección más cercana de la cuadrícula del fondo [bg]:
+/// cuadriculado, puntos y ejes con su paso [spacing] (mm); milimetrado cada 5 mm. Otros fondos: el mismo punto.
+Offset snapToGrid(Offset localPoint, String bg, double spacing, String size) {
+  double nearest(List<double> l, double t) => l.reduce((a, b) => (a - t).abs() <= (b - t).abs() ? a : b);
+  switch (bg) {
+    case 'grid' || 'dots' || 'axes':
+      return Offset(nearest(gridXs(spacing, size: size), localPoint.dx), nearest(gridYs(spacing, size: size), localPoint.dy));
+    case 'mm':
+      final u = unitsPerMm(size), o = gridOriginMm('mm', 10, size: size), step = 5 * u;
+      final x = (localPoint.dx / step).round() * step;
+      final y = (o * u) + ((localPoint.dy - o * u) / step).round() * step;
+      return Offset(x.clamp(0.0, paperWidthMm(size) * u), y.clamp(0.0, paperHeightMm(size) * u));
+    default:
+      return localPoint;
+  }
 }

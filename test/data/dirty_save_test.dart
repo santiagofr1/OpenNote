@@ -380,6 +380,7 @@ void main() {
         Tool.pen => 'Lápiz · tocá de nuevo para opciones',
         Tool.hl => 'Resaltador · tocá de nuevo para opciones',
         Tool.paint => 'Decorador · tocá de nuevo para opciones',
+        Tool.shape => 'Formas · tocá de nuevo para opciones',
         Tool.text => 'Texto con teclado',
         Tool.select => 'Seleccionar',
         Tool.title => 'Título para el índice',

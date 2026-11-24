@@ -1,7 +1,7 @@
 import 'elements.dart';
 import 'stroke.dart';
 
-enum Tool { pen, hl, paint, text, select, title }
+enum Tool { pen, hl, paint, shape, text, select, title }
 
 /// Puntas del lápiz (id guardado en el trazo, nombre en pantalla).
 const tips = [
@@ -37,6 +37,19 @@ const paintShapes = [
   ('paint-flowers', 'Flores'),
   ('paint-notes', 'Notas'),
 ];
+
+/// Formas exactas (id guardado en prefs, nombre en pantalla).
+const shapeKinds = [
+  ('line', 'Recta'),
+  ('arrow', 'Flecha'),
+  ('rect', 'Rectángulo'),
+  ('circle', 'Círculo'),
+  ('ellipse', 'Elipse'),
+  ('triangle', 'Triángulo'),
+];
+
+/// Colores claros de relleno de las formas (se suman a los favoritos del lápiz).
+const shapeFillColors = ['#93c5fd', '#86efac', '#fde68a', '#fca5a5', '#c4b5fd', '#e5e7eb'];
 
 /// Radio de la goma: chica, mediana, grande.
 const eraserSizes = [8.0, 16.0, 30.0];
@@ -104,9 +117,15 @@ class ToolState {
   double zoom = 1; // 1 = la hoja entra justa a lo ancho
   bool zoomLocked = false;
   bool shapeSnap = true; // figuras inteligentes: lápiz quieto al final del trazo lo vuelve figura limpia
+  // herramienta de formas: el borde usa el color, grosor y opacidad del lápiz
+  String shapeKind = 'line'; // ver [shapeKinds]
+  bool shapeFill = false; // relleno con color (solo formas cerradas)
+  String shapeFillColor = '#93c5fd';
+  bool shapeGrid = true; // pegar a la cuadrícula del fondo
+  bool exportBackground = true; // exportar con el fondo de la hoja (papel, rayado, imagen) o solo lo escrito
   final clipboard = SelectionClipboard(); // no se guarda
 
-  bool get drawing => tool == Tool.pen || tool == Tool.hl || tool == Tool.paint;
+  bool get drawing => tool == Tool.pen || tool == Tool.hl || tool == Tool.paint || tool == Tool.shape;
   PenPreset get current => switch (tool) { Tool.hl => hl, Tool.paint => paint, _ => pen };
   List<String> get recent => switch (tool) { Tool.hl => hlRecent, Tool.paint => paintRecent, _ => penRecent };
   List<String> get favorites => switch (tool) { Tool.hl => hlFav, Tool.paint => paintFav, _ => penFav };
@@ -158,6 +177,11 @@ class ToolState {
         'zoom': zoom,
         'zoomLocked': zoomLocked,
         'shapeSnap': shapeSnap,
+        'shapeKind': shapeKind,
+        'shapeFill': shapeFill,
+        'shapeFillColor': shapeFillColor,
+        'shapeGrid': shapeGrid,
+        'exportBg': exportBackground,
       };
 
   void load(Map? j) {
@@ -184,5 +208,11 @@ class ToolState {
     zoom = ((j['zoom'] ?? 1) as num).toDouble().clamp(.5, 4.0);
     zoomLocked = (j['zoomLocked'] ?? false) as bool;
     shapeSnap = j['shapeSnap'] is bool ? j['shapeSnap'] as bool : true;
+    if (shapeKinds.any((k) => k.$1 == j['shapeKind'])) shapeKind = j['shapeKind'] as String;
+    shapeFill = j['shapeFill'] is bool ? j['shapeFill'] as bool : false;
+    final fc = j['shapeFillColor'];
+    if (fc is String && RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(fc)) shapeFillColor = fc;
+    shapeGrid = j['shapeGrid'] is bool ? j['shapeGrid'] as bool : true;
+    exportBackground = j['exportBg'] is bool ? j['exportBg'] as bool : true;
   }
 }

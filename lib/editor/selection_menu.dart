@@ -14,6 +14,9 @@ class SelectionMenu extends StatelessWidget {
   /// "Renombrar": solo aparece con un único audio elegido.
   final VoidCallback? onRename;
 
+  /// "Link": convierte lo elegido en un link (si no hay ninguno). "Editar link" / "Quitar link": con un único link elegido.
+  final VoidCallback? onLink, onEditLink, onRemoveLink;
+
   const SelectionMenu({
     super.key,
     required this.onCopy,
@@ -24,6 +27,9 @@ class SelectionMenu extends StatelessWidget {
     required this.onOrder,
     this.onStraighten,
     this.onRename,
+    this.onLink,
+    this.onEditLink,
+    this.onRemoveLink,
   });
 
   @override
@@ -82,6 +88,9 @@ class SelectionMenu extends StatelessWidget {
             b(Symbols.control_point_duplicate, 'Duplicar', onDuplicate),
             order(),
             if (onRename != null) b(Symbols.edit, 'Renombrar', onRename!),
+            if (onLink != null) b(Symbols.link, 'Link', onLink!),
+            if (onEditLink != null) b(Symbols.edit, 'Editar link', onEditLink!),
+            if (onRemoveLink != null) b(Symbols.link_off, 'Quitar link', onRemoveLink!),
             if (onStraighten != null) b(Symbols.format_align_left, 'Enderezar', onStraighten!),
             b(Symbols.delete, 'Eliminar', onDelete),
             IconButton(

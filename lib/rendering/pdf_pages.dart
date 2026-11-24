@@ -21,6 +21,7 @@ class PdfPages {
   final _images = <String, ui.Image>{}; // idem
   final _flights = <String, Future<ui.Image?>>{};
   final _sizes = <String, List<ui.Size>>{};
+  final _links = <String, List<PdfLink>>{}; // '<archivo>#<página>' (la más vieja primero)
   int _imageBytes = 0;
 
   Future<void> _ready() => _init ??= pdfrxFlutterInitialize();
@@ -60,6 +61,30 @@ class PdfPages {
       return r;
     } catch (e) {
       debugPrint('PdfPages: no se pudieron leer los tamaños de ${f.path}: $e');
+      return const [];
+    }
+  }
+
+  /// Los links (web y a otras páginas) de la página [page] (desde 0) de [f], con sus zonas en puntos del PDF (origen abajo).
+  /// Se leen la primera vez que se piden y quedan en una caché chica; vacía si el archivo falta o está roto.
+  Future<List<PdfLink>> links(File f, int page) async {
+    final key = '${f.path}#$page';
+    final hit = _links.remove(key);
+    if (hit != null) {
+      _links[key] = hit;
+      return hit;
+    }
+    final d = await _open(f.path);
+    if (d == null || page < 0 || page >= d.pages.length) return const [];
+    try {
+      final r = await d.pages[page].loadLinks(compact: true);
+      _links[key] = r;
+      while (_links.length > 64) {
+        _links.remove(_links.keys.first);
+      }
+      return r;
+    } catch (e) {
+      debugPrint('PdfPages: no se pudieron leer los links de ${f.path} página $page: $e');
       return const [];
     }
   }
@@ -117,6 +142,7 @@ class PdfPages {
     final d = _docs.remove(path);
     if (d != null) unawaited(d.then((x) => x?.dispose()));
     _sizes.remove(path);
+    _links.removeWhere((k, _) => k.startsWith('$path#'));
     for (final k in _images.keys.where((k) => k.startsWith('$path#')).toList()) {
       final img = _images.remove(k)!;
       _imageBytes -= img.width * img.height * 4;

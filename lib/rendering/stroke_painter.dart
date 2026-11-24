@@ -56,12 +56,18 @@ void _drawParts(Canvas c, Iterable<MeshPart> parts, Color color, bool colored) {
 
 bool _layered(Stroke s) => s.o < .999 && s.k != 'pencil' && !isPaint(s.k); // lápiz y pintura llevan el alfa en los vértices
 
+/// Relleno de una forma exacta: el polígono de sus puntos a 35 % de opacidad (por la opacidad del trazo), debajo del borde.
+void _paintFill(Canvas c, Stroke s) {
+  c.drawPath(s.fillPath, Paint()..color = parseColor(s.fill!).withValues(alpha: .35 * s.o));
+}
+
 /// Dibuja un trazo según su punta (ver [tips]; 'hl' es el resaltador) con su malla de triángulos
 /// (un `drawVertices` por trazo). Los trazos con opacidad menor a 1 van en una capa para que no se
 /// oscurezcan sus propias uniones (el lápiz lleva el alfa en los colores de los vértices).
 void paintStroke(Canvas c, Stroke s) {
   final m = s.ensureMesh();
   if (m == null) return;
+  if (s.fill != null) _paintFill(c, s);
   final layered = _layered(s);
   if (layered) c.saveLayer(s.bounds, Paint()..color = Color.fromRGBO(0, 0, 0, s.o));
   _drawParts(c, m.parts, s.color, m.colored);
@@ -92,7 +98,8 @@ void _pass(Canvas c, List<Stroke> list, Rect? cull, bool hl) {
 
   for (final s in list) {
     if (isUnderInk(s.k) != hl || s.n == 0) continue;
-    if (_layered(s)) {
+    if (s.fill != null || _layered(s)) {
+      // con relleno va solo (no entra en lotes): el relleno va antes del borde
       flush();
       if (cull == null || s.bounds.overlaps(cull)) paintStroke(c, s);
       continue;

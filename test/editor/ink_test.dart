@@ -8,10 +8,11 @@ void main() {
       PointerDownEvent(kind: kind, buttons: buttons, pressure: .8, pressureMin: 0, pressureMax: 1);
 
   group('a quién le hace caso la hoja', () {
-    test('el dedo nunca dibuja (scrollea; así se ignora la palma)', () {
-      for (final t in Tool.values) {
+    test('el dedo nunca dibuja (scrollea; así se ignora la palma), salvo con las formas', () {
+      for (final t in Tool.values.where((t) => t != Tool.shape)) {
         expect(penActionFor(down(PointerDeviceKind.touch), t), isNull);
       }
+      expect(penActionFor(down(PointerDeviceKind.touch), Tool.shape), PenAction.draw);
     });
 
     test('lápiz según la herramienta', () {

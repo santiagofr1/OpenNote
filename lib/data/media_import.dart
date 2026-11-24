@@ -33,6 +33,13 @@ class Pickers {
     return p == null ? null : File(p).readAsBytes();
   };
 
+  /// Una imagen (PNG / JPG) de la tablet para usar de fondo de hoja; null si se canceló.
+  static Future<File?> Function() bgImage = () async {
+    final r = await FilePicker.pickFiles(type: FileType.image);
+    final p = r.isEmpty ? null : r.first.path;
+    return p == null ? null : File(p);
+  };
+
   /// Cuánto dura un audio (ms); variable para que los tests no necesiten el plugin de audio.
   static Future<int> Function(File) audioLength = (f) => audioDuration(f);
 
