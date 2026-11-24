@@ -10,6 +10,7 @@ import 'package:pdf/widgets.dart' as pw;
 import '../domain/domain.dart';
 import '../rendering/pdf_pages.dart';
 import '../rendering/sheet_render.dart';
+import '../rendering/text_layout.dart';
 import 'storage.dart';
 
 /// Resolución de cada hoja exportada (ancho en píxeles): ~200 ppp en A4.
@@ -88,8 +89,19 @@ typedef _PagePlan = ({String id, SheetMeta meta, Uint8List png, List<_PdfLink> l
 /// [only]: índices de las hojas de la sección abierta a incluir. [onProgress] recibe (hechas, total).
 Future<Uint8List> buildNotebookPdf(Storage store, NotebookDoc nb,
     {void Function(int, int)? onProgress, List<int>? only, Set<String>? sections}) async {
-  final sheets = exportSheets(nb.nb, sections: sections, only: only);
   final pdf = pw.Document(title: nb.nb.name, creator: 'OpenNote');
+  if (nb.nb.canvas) {
+    // lienzo infinito: se parte en páginas de ancho A4 (solo las que tienen algo)
+    await for (final p in canvasPagePngs(store, nb, sections: sections, onProgress: onProgress)) {
+      pdf.addPage(pw.Page(
+        pageFormat: PdfPageFormat(kA4WidthMm * PdfPageFormat.mm, kA4WidthMm * kSheetStep / kW * PdfPageFormat.mm),
+        margin: pw.EdgeInsets.zero,
+        build: (_) => pw.Image(pw.MemoryImage(p.png), fit: pw.BoxFit.fill),
+      ));
+    }
+    return pdf.save();
+  }
+  final sheets = exportSheets(nb.nb, sections: sections, only: only);
   final plans = <_PagePlan>[];
   var done = 0;
   for (final e in sheets) {
@@ -149,6 +161,65 @@ Future<Uint8List> buildNotebookPdf(Storage store, NotebookDoc nb,
   return pdf.save();
 }
 
+/// Páginas en que se parte un lienzo al exportar: celdas de [kW] x [kSheetStep] (ancho A4) recorridas por filas, y solo
+/// las que tienen algo (algún trazo, texto o elemento que las toque). Si todo está vacío, una página (la primera).
+List<ui.Rect> canvasPages(NotebookDoc doc) {
+  final cols = max(1, (doc.width / kW).ceil());
+  final rects = <ui.Rect>[
+    for (var k = 0; k < doc.sheetCount; k++)
+      for (var c = 0; c < cols; c++) ui.Rect.fromLTWH(c * kW, k * kSheetStep, kW, kSheetStep)
+  ];
+  final used = <ui.Rect>[
+    for (final r in rects)
+      if (doc.strokes.values.any((s) => s.bounds.overlaps(r)) ||
+          doc.items.values.any((i) => i.rect.overlaps(r)) ||
+          doc.texts.values.any((t) => t.text.trim().isNotEmpty && textBounds(t, doc.lineAt(t.y)).overlaps(r)))
+        r
+  ];
+  return used.isEmpty ? [rects.first] : used;
+}
+
+/// El documento completo de la sección [section] de un lienzo (las hojas sin cargar se leen de disco), para partirlo
+/// en páginas. Es del mismo cuaderno pero suelto: no toca el documento abierto.
+Future<NotebookDoc> canvasSectionDoc(Storage store, NotebookDoc doc, Section section) async {
+  final metas = doc.nb.sheetsOf(section.id);
+  final active = section.id == doc.nb.activeSection.id;
+  final contents = <SheetContent>[];
+  for (final m in metas) {
+    contents.add(active && doc.isLoaded(m.id) ? (doc.splitSheets({m.id})[m.id] ?? SheetContent()) : await store.readSheetContent(doc.nb, m));
+  }
+  return NotebookDoc.fromSheets(Notebook('', '', sheets: metas, canvas: true, canvasW: doc.nb.canvasW), contents);
+}
+
+/// Cada página (con contenido) de las secciones elegidas de un lienzo, ya dibujada como PNG, de a una.
+/// [onProgress] recibe (hechas, total).
+Stream<({Section section, int n, Uint8List png})> canvasPagePngs(Storage store, NotebookDoc doc,
+    {Set<String>? sections, void Function(int, int)? onProgress, bool Function()? cancelled}) async* {
+  final secs = [for (final s in doc.nb.sections) if (sections == null || sections.contains(s.id)) s];
+  var total = 0, done = 0;
+  for (final s in secs) {
+    total += canvasPages(await canvasSectionDoc(store, doc, s)).length;
+  }
+  for (final s in secs) {
+    final sdoc = await canvasSectionDoc(store, doc, s);
+    final pages = canvasPages(sdoc);
+    for (var i = 0; i < pages.length; i++) {
+      if (cancelled?.call() ?? false) return;
+      onProgress?.call(done, total);
+      final images = await loadImages(store, sdoc, region: pages[i]);
+      try {
+        yield (section: s, n: i, png: await renderSheetPng(sdoc, 0, images: images, region: pages[i]));
+      } finally {
+        for (final img in images.values) {
+          img.dispose();
+        }
+      }
+      done++;
+    }
+  }
+  onProgress?.call(total, total);
+}
+
 /// De dónde dibujar la hoja [k] de [nb]: el propio documento si está cargada; si no, un documento chico con la hoja
 /// de arriba (de memoria o de disco: lo que se le pasa de largo cae en esta) y esta, leída de disco. Devuelve el
 /// documento y el índice de la hoja en él. Lo que esté sin guardar de una hoja cargada se ve igual.
@@ -173,15 +244,16 @@ Future<(NotebookDoc, int)> exportSource(Storage store, NotebookDoc doc, ExportSh
 
 /// Imágenes insertadas en [doc] (solo las de la hoja [sheet] si se da), decodificadas, por nombre de archivo
 /// (las que faltan se saltean). Las páginas de PDF van por [pdfImageKey], dibujadas al ancho de la salida.
-Future<Map<String, ui.Image>> loadImages(Storage store, NotebookDoc doc, {int? sheet}) async {
+Future<Map<String, ui.Image>> loadImages(Storage store, NotebookDoc doc, {int? sheet, ui.Rect? region}) async {
   final images = <String, ui.Image>{};
-  for (final m in sheet != null ? [doc.sheets[sheet]] : doc.sheets) {
+  for (final m in region != null ? const <SheetMeta>[] : sheet != null ? [doc.sheets[sheet]] : doc.sheets) {
     if (m.bg != 'image' || m.image == null) continue;
     final key = bgImageKey(m.image!), f = store.media(m.image!);
     if (!images.containsKey(key) && await f.exists()) images[key] = await decodeImage(await f.readAsBytes());
   }
   for (final it in doc.items.values) {
-    if (sheet != null && !it.rect.overlaps(ui.Rect.fromLTWH(0, sheet * kSheetStep, kW, kSheetH))) continue;
+    if (region != null && !it.rect.overlaps(region)) continue;
+    if (sheet != null && !it.rect.overlaps(doc.bandRect(sheet))) continue;
     if (it.type == 'pdf' && it.file != null) {
       final key = pdfImageKey(it);
       final f = store.media(it.file!);
@@ -202,7 +274,7 @@ Future<Map<String, ui.Image>> loadImages(Storage store, NotebookDoc doc, {int? s
 /// hoja devuelve `{}` sin tocar el disco.
 Future<Map<String, ui.Image>> loadThumbImages(Storage store, NotebookDoc doc, int sheet, double pxWidth) async {
   final images = <String, ui.Image>{};
-  final sheetRect = ui.Rect.fromLTWH(0, sheet * kSheetStep, kW, kSheetH);
+  final sheetRect = ui.Rect.fromLTWH(0, sheet * kSheetStep, kW, kSheetH); // la miniatura es siempre de la hoja (o franja) tal cual
   final bgm = doc.sheets[sheet];
   if (bgm.bg == 'image' && bgm.image != null) {
     try {
@@ -244,13 +316,14 @@ Future<ui.Image> decodeImage(Uint8List bytes) async {
   return (await codec.getNextFrame()).image;
 }
 
-Future<Uint8List> renderSheetPng(NotebookDoc doc, int sheet, {Map<String, ui.Image>? images}) async {
+/// [region]: página de un lienzo (ver [paintSheet]); el PNG tiene el mismo ancho y el alto proporcional.
+Future<Uint8List> renderSheetPng(NotebookDoc doc, int sheet, {Map<String, ui.Image>? images, ui.Rect? region}) async {
   const k = _pxWidth / kW;
   final rec = ui.PictureRecorder();
   final c = ui.Canvas(rec);
   c.scale(k);
-  paintSheet(c, doc, sheet, k, images: images);
-  final img = await rec.endRecording().toImage(_pxWidth.round(), (kSheetH * k).round());
+  paintSheet(c, doc, sheet, k, images: images, region: region);
+  final img = await rec.endRecording().toImage(_pxWidth.round(), ((region?.height ?? kSheetH) * k).round());
   final data = await img.toByteData(format: ui.ImageByteFormat.png);
   img.dispose();
   return data!.buffer.asUint8List();
@@ -292,10 +365,24 @@ Future<bool> saveSheetPng(Storage store, NotebookDoc doc, int sheet, String name
 /// Si [cancelled] da true entre hoja y hoja, el flujo termina sin dar las que faltan.
 Stream<({String name, Uint8List png})> notebookPngs(Storage store, NotebookDoc doc,
     {Set<String>? sections, void Function(int, int)? onProgress, bool Function()? cancelled}) async* {
-  final refs = exportSheets(doc.nb, sections: sections);
-  final n = refs.length;
   final safe = safeFileName(doc.nb.name).trim();
   final name = safe.isEmpty ? 'Cuaderno' : safe;
+  if (doc.nb.canvas) {
+    // lienzo infinito: una imagen por página con contenido
+    final multi = doc.nb.sections.length > 1, used = <String>{};
+    await for (final p in canvasPagePngs(store, doc, sections: sections, onProgress: onProgress, cancelled: cancelled)) {
+      final sec = safeFileName(p.section.name).trim();
+      final base = '$name - ${multi ? '${sec.isEmpty ? 'Sección' : sec} - ' : ''}página ${'${p.n + 1}'.padLeft(2, '0')}';
+      var file = base;
+      for (var c = 2; !used.add(file); c++) {
+        file = '$base ($c)';
+      }
+      yield (name: '$file.png', png: p.png);
+    }
+    return;
+  }
+  final refs = exportSheets(doc.nb, sections: sections);
+  final n = refs.length;
   final most = refs.fold<int>(1, (m, e) => e.list.length > m ? e.list.length : m);
   final width = '$most'.length < 2 ? 2 : '$most'.length;
   final multi = doc.nb.sections.length > 1;
@@ -329,15 +416,16 @@ Stream<({String name, Uint8List png})> notebookPngs(Storage store, NotebookDoc d
 /// [onProgress] recibe (hechas, total). Si [cancelled] da true entre hoja y hoja, devuelve null.
 Future<({Uint8List bytes, bool zip})?> buildNotebookPngs(Storage store, NotebookDoc doc,
     {void Function(int, int)? onProgress, bool Function()? cancelled, Set<String>? sections}) async {
-  final n = exportSheets(doc.nb, sections: sections).length;
+  final n = doc.nb.canvas ? -1 : exportSheets(doc.nb, sections: sections).length;
   final zip = Archive();
   Uint8List? single;
   await for (final p in notebookPngs(store, doc, sections: sections, onProgress: onProgress, cancelled: cancelled)) {
-    if (n == 1) single = p.png;
+    single = p.png;
     zip.add(ArchiveFile.bytes(p.name, p.png));
   }
-  if (zip.length < n) return null; // se canceló
-  if (single != null) return (bytes: single, zip: false);
+  if (n >= 0 && zip.length < n) return null; // se canceló
+  if (n < 0 && (cancelled?.call() ?? false)) return null;
+  if (zip.length == 1 && single != null) return (bytes: single, zip: false);
   return (bytes: Uint8List.fromList(ZipEncoder().encode(zip)), zip: true);
 }
 

@@ -611,8 +611,17 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   Offset? _hover;
 
   /// Agrega hojas si [y] quedó cerca del final del cuaderno.
-  void _growIfNeeded(double y) {
-    if (y > doc.h - 250) setState(() => doc.growFor(y));
+  /// En un lienzo, [right] (borde derecho de lo nuevo) también hace crecer el ancho (ver [grownCanvasW]); se guarda
+  /// con el índice, que `_changed` ya manda a guardar.
+  void _growIfNeeded(double y, {double? right}) {
+    final nb = doc.nb;
+    final w = right != null && nb.canvas ? grownCanvasW(nb.canvasW, right) : nb.canvasW;
+    if (y > doc.h - 250 || w != nb.canvasW) {
+      setState(() {
+        doc.growFor(y);
+        nb.canvasW = w;
+      });
+    }
   }
 
   // ---------------- lápiz: dibujar, borrar, seleccionar ----------------
@@ -1058,7 +1067,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     s.z = doc.nextZ(); // arriba de todo
     doc.strokes[s.id] = s; // avisa a las hojas que toca
     _pushUndo(EditAction(added: [s]));
-    _growIfNeeded(s.bounds.bottom);
+    _growIfNeeded(s.bounds.bottom, right: s.bounds.right);
     _changed();
   }
 
@@ -1149,7 +1158,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final act = EditAction(added: [s], removed: removed);
     if (!colored) _pendingCovers[s.id] = act;
     _pushUndo(act);
-    _growIfNeeded(s.bounds.bottom);
+    _growIfNeeded(s.bounds.bottom, right: s.bounds.right);
     _changed();
   }
 
@@ -1350,7 +1359,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         t.y = max(0.0, t.y); // con escala o giro queda libre donde se lo dejó
       } else {
         t.y = max(0.0, doc.snapTextY(t.y)); // que caiga sobre el renglón de su hoja
-        t.x = t.x.clamp(0.0, kW - 60);
+        t.x = t.x.clamp(0.0, doc.width - 60);
       }
       doc.markDirtyElement(t);
       final st = drag.textState[id] ?? (t.scale, t.angle, t.w);
@@ -1375,7 +1384,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         itemBefore: itemBefore,
         itemAfter: itemAfter));
     final r = sel.bounds(doc);
-    if (r != null) _growIfNeeded(r.bottom);
+    if (r != null) _growIfNeeded(r.bottom, right: r.right);
     _changed();
     setState(() {});
   }
@@ -1401,7 +1410,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       t.scale = 1;
       t.angle = 0;
       t.y = max(0.0, doc.snapTextY(t.y));
-      t.x = t.x.clamp(0.0, kW - 60);
+      t.x = t.x.clamp(0.0, doc.width - 60);
       doc.markDirtyElement(t);
       after[t.id] = t.copy();
     }
@@ -1607,7 +1616,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final newStrokes = [for (final s in strokes) s.moved(d, id: newId('s'))];
     final newItems = [for (final it in items) it.copy(id: newId('i'), d: d)];
     final newTexts = [
-      for (final t in textBlocks) t.copy(id: newId('t'), d: Offset((t.x + d.dx).clamp(0.0, kW - 60) - t.x, max(0.0, t.y + d.dy) - t.y))
+      for (final t in textBlocks) t.copy(id: newId('t'), d: Offset((t.x + d.dx).clamp(0.0, doc.width - 60) - t.x, max(0.0, t.y + d.dy) - t.y))
     ];
     // las copias quedan arriba de todo, en el mismo orden que tenían entre sí
     doc.stackOnTop([...newStrokes, ...newTexts, ...newItems]);
@@ -1634,7 +1643,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       items: newItems.map((it) => it.id),
     );
     final r = sel.bounds(doc);
-    if (r != null) _growIfNeeded(r.bottom);
+    if (r != null) _growIfNeeded(r.bottom, right: r.right);
     _changed();
     setState(() {});
   }
@@ -1692,11 +1701,11 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       bytes = data.buffer.asUint8List();
       ext = 'png';
     }
-    final w = min(560.0, kW - 40), h = w * img.height / img.width;
+    final w = min(560.0, doc.width - 40), h = w * img.height / img.width;
     img.dispose();
     final name = await widget.store.addMedia(bytes, ext);
     if (!mounted) return;
-    final x = max(0.0, min(center ? p.dx - w / 2 : p.dx, kW - w));
+    final x = max(0.0, min(center ? p.dx - w / 2 : p.dx, doc.width - w));
     final y = max(0.0, center ? p.dy - h / 2 : p.dy);
     _insert([], [], Offset(x, y), [Item(newId('i'), 'image', 0, 0, w, h, file: name)]);
   }
@@ -1741,10 +1750,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       _requestSync();
       return;
     }
-    final x = p.dx.clamp(4.0, kW - 40);
+    final x = p.dx.clamp(4.0, doc.width - 40);
     var y = doc.snapTextY(p.dy, floor: true); // el renglón de esa hoja (puede ser uno virtual, arriba del primero)
     // pasa a la hoja siguiente solo si el renglón no entra en esta (o cae en el espacio entre hojas)
-    if (y % kSheetStep + doc.lineAt(y) > kSheetH && y ~/ kSheetStep < doc.sheetCount - 1) {
+    if (!doc.nb.canvas && y % kSheetStep + doc.lineAt(y) > kSheetH && y ~/ kSheetStep < doc.sheetCount - 1) {
       y = doc.snapTextY((y ~/ kSheetStep + 1) * kSheetStep, floor: true);
     }
     if (_followBlockAbove(p)) return;
@@ -1778,11 +1787,11 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   /// Un bloque nuevo y vacío en ([x], [y]) (y ya sobre el renglón), con el foco y el teclado.
   void _placeText(double x, double y) {
-    final t = TextBlock(newId('t'), x.roundToDouble(), y, (kW - x - 30).roundToDouble(), '')..z = doc.nextZ();
+    final t = TextBlock(newId('t'), x.roundToDouble(), y, (doc.nb.canvas ? min(doc.width - x - 30, kW - 60) : kW - x - 30).roundToDouble(), '')..z = doc.nextZ();
     setState(() => texts.put(t.id, t));
     texts.editor(t.id)?.focusAt(0, 0);
     showKeyboard();
-    _growIfNeeded(y + doc.lineAt(y));
+    _growIfNeeded(y + doc.lineAt(y), right: x + t.w);
     _changed();
   }
 
@@ -1796,7 +1805,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     }
     final vh = scroll.hasClients ? scroll.position.viewportDimension / scale : 600 / scale;
     final top = scroll.hasClients ? max(0.0, (scroll.offset - kTopPad) / scale) : sheetTop;
-    final region = Rect.fromLTRB(0, max(top, sheetTop), kW, min(top + vh, sheetTop + kSheetH));
+    final region = Rect.fromLTRB(0, max(top, sheetTop), doc.width, min(top + vh, sheetTop + (doc.nb.canvas ? kSheetStep : kSheetH)));
     double? bottom;
     void see(Rect r) {
       if (r.overlaps(region)) bottom = max(bottom ?? r.bottom, r.bottom);
@@ -1815,7 +1824,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     var y = bottom != null
         ? doc.snapTextY(bottom! + line - 0.01, floor: true)
         : doc.snapTextY(max(region.top + line * .5, sheetTop + topMarginUnits(doc.sheets[k].size) - line) + line - 0.01, floor: true);
-    if (y - sheetTop > kSheetH - line && k < doc.sheetCount - 1) {
+    if (!doc.nb.canvas && y - sheetTop > kSheetH - line && k < doc.sheetCount - 1) {
       y = doc.snapTextY((k + 1) * kSheetStep + 1, floor: false); // no entra: a la hoja siguiente
     }
     _placeText(marginUnits(doc.sheets[k].size) + 10, y);
@@ -1841,7 +1850,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     for (final p in t.body.paras) {
       lines += 1 + p.length ~/ 70;
     }
-    _growIfNeeded(t.y + lines * doc.lineAt(t.y));
+    _growIfNeeded(t.y + lines * doc.lineAt(t.y), right: t.x + t.w);
     _saveSoon(t.id, const Duration(milliseconds: 300));
   }
 
@@ -1959,7 +1968,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     _flashZoom();
     // el scroll se corrige en el layout de este mismo cuadro (ver _applyZoomScroll); si no, se pinta un cuadro con el
     // zoom nuevo y el scroll viejo y la hoja tiembla
-    _zoomScrollTo = SheetLayout(_viewW, z).scrollFor(anchor, f);
+    _zoomScrollTo = SheetLayout(_viewW, z, units: doc.width).scrollFor(anchor, f);
   }
 
   /// Aplica el scroll pendiente del zoom antes de que el visor arme su layout (mismo cuadro, sin notificar).
@@ -2226,7 +2235,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final vw = hscroll.hasClients ? hscroll.position.viewportDimension : kW * scale;
     final vh = scroll.hasClients ? scroll.position.viewportDimension : 600.0;
     final c = layout.toPage(Offset(vw / 2, vh / 2), _scrollOffset);
-    return Offset(c.dx.clamp(0, kW), c.dy.clamp(0, doc.h));
+    return Offset(c.dx.clamp(0, doc.width), c.dy.clamp(0, doc.h));
   }
 
   /// Lo que se está viendo, en coordenadas de la página.
@@ -2321,14 +2330,14 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       _whenLoaded([doc.sheets[doc.sheetOfY(y)].id], () => insertItem(it, onInserted: onInserted));
       return;
     }
-    it.x = (c.dx - it.w / 2).clamp(10.0, max(10.0, kW - it.w - 10));
+    it.x = (c.dx - it.w / 2).clamp(10.0, max(10.0, doc.width - it.w - 10));
     it.y = y;
     it.z = doc.nextZ();
     doc.items[it.id] = it;
     _pushUndo(EditAction(itemBefore: {it.id: null}, itemAfter: {it.id: it.copy()}));
     _setTool(Tool.select);
     sel.replace(items: [it.id]);
-    _growIfNeeded(it.y + it.h);
+    _growIfNeeded(it.y + it.h, right: it.x + it.w);
     onInserted?.call();
     _changed();
     setState(() {});
@@ -2516,7 +2525,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     return Container(
       color: cs.surfaceContainerLow,
       child: LayoutBuilder(builder: (context, box) {
-        layout = SheetLayout(box.maxWidth, ts.zoom);
+        layout = SheetLayout(box.maxWidth, ts.zoom, units: doc.width);
         _viewH = box.maxHeight;
         _viewW = box.maxWidth;
         _applyZoomScroll();
@@ -2537,7 +2546,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             onPointerUp: _touchUp,
             onPointerCancel: _touchUp,
             child: NotificationListener<ScrollNotification>(
-              onNotification: (n) => pull.onScroll(n, touching: touch.count > 0),
+              onNotification: (n) => doc.nb.canvas ? false : pull.onScroll(n, touching: touch.count > 0),
               child: ScrollConfiguration(
                 // el lápiz NO scrollea: solo dedo y touchpad
                 // con el zoom fijado el dedo solo NO mueve la hoja (así la palma no la corre al escribir): se mueve con
@@ -2562,17 +2571,20 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
                           padding: EdgeInsets.only(left: layout.sheetLeft),
                           child: SizedBox.fromSize(key: _sheetKey, size: sheetSize, child: _sheet()),
                         ),
-                        SizedBox(
-                          width: layout.contentWidth,
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 22, 16, 70),
-                            child: Text(
-                              'Al final, deslizá hacia arriba y mantené para agregar una hoja',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: cs.onSurfaceVariant.withValues(alpha: .7), fontSize: 13),
+                        if (doc.nb.canvas)
+                          const SizedBox(height: 70) // el lienzo crece solo: no hay que agregar hojas
+                        else
+                          SizedBox(
+                            width: layout.contentWidth,
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 22, 16, 70),
+                              child: Text(
+                                'Al final, deslizá hacia arriba y mantené para agregar una hoja',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: cs.onSurfaceVariant.withValues(alpha: .7), fontSize: 13),
+                              ),
                             ),
                           ),
-                        ),
                       ]),
                     ),
                   ),
@@ -2762,11 +2774,14 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         onTapUp: textMode ? _tapPage : null,
         child: Stack(clipBehavior: Clip.none, children: [
           Positioned.fill(
-            child: RepaintBoundary(child: CustomPaint(painter: SheetPainter(doc.sheets, scale, first, last))),
+            child: RepaintBoundary(child: CustomPaint(
+                painter: doc.nb.canvas
+                    ? CanvasPainter(doc.sheets.isEmpty ? '#fffefb' : doc.sheets.first.paper, doc.h, doc.width, scale)
+                    : SheetPainter(doc.sheets, scale, first, last))),
           ),
           // fondos de imagen: la imagen que no está todavía (sin sincronizar) no muestra nada
           for (var k = first; k <= last; k++)
-            if (doc.sheets[k].bg == 'image' && doc.sheets[k].image != null)
+            if (!doc.nb.canvas && doc.sheets[k].bg == 'image' && doc.sheets[k].image != null)
               Positioned(
                 key: ValueKey('bgImage-${doc.sheets[k].id}'),
                 left: 0,
@@ -2817,7 +2832,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     for (final s in doc.strokes.values) {
       final b = s.bounds;
       for (var k = max(lo, doc.sheetOfY(b.top)); k <= min(hi, doc.sheetOfY(b.bottom)); k++) {
-        if (b.overlaps(Rect.fromLTWH(0, k * kSheetStep, kW, kSheetH))) buckets[k]?.add(s);
+        if (b.overlaps(doc.bandRect(k))) buckets[k]?.add(s);
       }
     }
     for (final it in doc.items.values) {
@@ -2834,7 +2849,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         key: ValueKey('loading-${doc.sheets[k].id}'),
         left: 0,
         top: k * kSheetStep * scale,
-        width: kW * scale,
+        width: doc.width * scale,
         height: 120 * scale,
         child: IgnorePointer(
           child: Center(
@@ -2858,14 +2873,14 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   Widget _run(ZRun run, int i, bool textMode, int sheet) {
     final strokes = run.strokes;
     if (strokes != null) {
-      final r = Rect.fromLTWH(0, sheet * kSheetStep, kW, kSheetH);
+      final r = doc.bandRect(sheet);
       final id = doc.sheets[sheet].id;
       return Positioned(
         key: ValueKey('ink-$id-$i'),
         left: 0,
         top: r.top * scale,
-        width: kW * scale,
-        height: kSheetH * scale,
+        width: r.width * scale,
+        height: r.height * scale,
         child: IgnorePointer(
           child: RepaintBoundary(
             child: CustomPaint(
@@ -2921,15 +2936,16 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       selected: sel.texts.contains(t.id),
       onHandleDrag: (delta) => setState(() {
         doc.markDirtyElement(t);
-        t.x = (t.x + delta.dx / scale).clamp(0.0, kW - 60);
+        t.x = (t.x + delta.dx / scale).clamp(0.0, doc.width - 60);
         t.y = max(0.0, t.y + delta.dy / scale);
-        if (!t.transformed) t.w = min(t.w, kW - t.x - 10).clamp(120.0, kW);
+        if (!t.transformed) t.w = min(t.w, doc.width - t.x - 10).clamp(120.0, doc.width);
         doc.markDirtyElement(t);
       }),
       onHandleDragEnd: () => setState(() {
         doc.markDirtyElement(t);
         if (!t.transformed) t.y = doc.snapTextY(t.y);
         doc.markDirtyElement(t);
+        _growIfNeeded(t.y, right: t.x + t.w);
         _changed();
       }),
     );

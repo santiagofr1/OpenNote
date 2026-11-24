@@ -698,7 +698,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     if (d == null) return;
     final k = curSheet, meta = d.sheets[k];
     final sheetName = 'Hoja ${k + 1}${meta.title.isEmpty ? '' : ' · ${meta.title}'}';
-    final v = await showExportSheet(context, sheetName: sheetName);
+    final v = await showExportSheet(context, sheetName: nb.canvas ? null : sheetName);
     if (v == null || !mounted) return;
     switch (v) {
       case 'pdf':
@@ -732,7 +732,14 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
       m.spacing = r.spacing;
       m.size = r.size;
     }
-    if (r.all) {
+    if (nb.canvas) {
+      // lienzo: solo el color del papel, en todas las franjas (y en las que se agreguen)
+      nb.paper = r.paper;
+      _indexDirty = true;
+      for (final m in d.sheets) {
+        m.paper = r.paper;
+      }
+    } else if (r.all) {
       nb.bg = r.bg;
       nb.image = r.bg == 'image' ? r.image : null;
       nb.paper = r.paper;
@@ -871,7 +878,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
                   AnimatedSize(
                     duration: const Duration(milliseconds: 240),
                     curve: Curves.easeOutQuart,
-                    child: panel && !fullscreen ? _pagesPanel() : const SizedBox(width: 0),
+                    child: panel && !fullscreen && !nb.canvas ? _pagesPanel() : const SizedBox(width: 0),
                   ),
                   Expanded(
                     child: doc == null
@@ -1128,11 +1135,15 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
           act(Symbols.menu_book, reading ? 'Salir del modo lectura' : 'Modo lectura', () => setState(() => reading = !reading),
               on: reading, key: const Key('reading')),
           menuBtn(Symbols.add, 'Insertar', const Key('insert'), (at) async {
-            final v = await showInsertMenu(context, at);
+            final v = await showInsertMenu(context, at, canvas: nb.canvas);
             if (v != null && mounted) await runInsert(v);
           }),
           act(Symbols.toc, 'Índice', () => setState(() => indexOpen = !indexOpen), on: indexOpen, key: const Key('indexBtn')),
-          act(Symbols.view_sidebar, 'Hojas', () => setState(() => panel = !panel), on: panel, key: const Key('pagesBtn')),
+          if (nb.canvas)
+            // sin panel de hojas: las secciones (cada una es otro lienzo) se abren desde acá
+            menuBtn(Symbols.layers, 'Secciones', const Key('sectionsBtn'), (at) => _sectionsList(Rect.fromLTWH(at.dx - 40, at.dy - 40, 40, 40)))
+          else
+            act(Symbols.view_sidebar, 'Hojas', () => setState(() => panel = !panel), on: panel, key: const Key('pagesBtn')),
           act(Symbols.open_in_full, 'Pantalla completa', _toggleFullscreen),
           menuBtn(Symbols.more_vert, 'Más opciones', const Key('more'), (at) async {
             final v = await showMoreMenu(context, at, nb);
@@ -1198,7 +1209,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
                 padding: const EdgeInsets.only(left: 4),
                 child: Icon(Symbols.lock, size: 16, weight: 400, color: cs.onSurfaceVariant)),
         ]),
-        if (doc != null)
+        if (doc != null && !nb.canvas)
           ListenableBuilder(
             listenable: Listenable.merge([sheetNotifier, _structure]),
             builder: (_, _) {
