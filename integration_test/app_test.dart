@@ -3377,6 +3377,44 @@ void main() {
     expect(editor(t).doc.width, kW);
   });
 
+  testWidgets('scroll rápido: el pulgar del costado aparece al scrollear, lleva a la última hoja arrastrándolo y se esconde solo',
+      (t) async {
+    await start(t);
+    await createNotebook(t, 'Scroll rápido');
+    final ed = editor(t);
+    while (ed.doc.sheetCount < 12) {
+      ed.doc.addSheet();
+    }
+    // ignore: invalid_use_of_protected_member
+    ed.setState(() {});
+    await settle(t, 600);
+    final thumb = find.byKey(const Key('fastScrollThumb'));
+    bool tocable() => !t.widget<IgnorePointer>(find.ancestor(of: thumb, matching: find.byType(IgnorePointer)).first).ignoring;
+
+    // un fling con el dedo: el pulgar aparece
+    await t.fling(find.byType(PageEditor), const Offset(0, -400), 1500);
+    await settle(t, 200);
+    expect(thumb, findsOneWidget);
+    expect(tocable(), isTrue);
+
+    // se arrastra hasta abajo: la burbuja dice en qué hoja va
+    final g = await t.startGesture(t.getCenter(thumb));
+    var vistaBurbuja = false;
+    for (var i = 0; i < 12; i++) {
+      await g.moveBy(const Offset(0, 80));
+      await t.pump(const Duration(milliseconds: 50));
+      if (find.textContaining('de 12').evaluate().isNotEmpty) vistaBurbuja = true;
+    }
+    expect(vistaBurbuja, isTrue);
+    await g.up();
+    await settle(t, 300);
+    expect(ed.mostVisibleSheet, anyOf(11, 10));
+
+    // sin tocar nada, se esconde solo
+    await settle(t, 2000);
+    expect(tocable(), isFalse);
+  });
+
 }
 
 /// Reconocimiento de letra de mentira: siempre lee [text].

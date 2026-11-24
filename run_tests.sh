@@ -9,7 +9,7 @@
 #   NUEVOS=1 ./run_tests.sh   -> solo los casos de las funciones de esta tanda (ver NUEVOS_RE más abajo)
 set -e
 # Casos de la tanda actual (fondos #31, plantillas #33, pegar imagen #32, selector de color) y los viejos que tocan lo mismo.
-NUEVOS_RE='issue #3[1-9]\)|issue #23\)|favoritos: Cambiar|estilo de hoja|issue #41\)|issue #42\)'
+NUEVOS_RE='issue #3[1-9]\)|issue #23\)|favoritos: Cambiar|estilo de hoja|issue #41\)|issue #42\)|scroll rápido'
 [ "${NUEVOS:-0}" = 1 ] && FILTRO=${FILTRO:-$NUEVOS_RE}
 export PATH=~/flutter/bin:$PATH JAVA_HOME=~/Android/jdk21 ANDROID_HOME=~/Android/Sdk
 cd "$(dirname "$0")"
