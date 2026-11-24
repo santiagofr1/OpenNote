@@ -3,72 +3,27 @@ description: Algo no funciona como debería en OpenNote
 title: "[Bug] "
 labels: ["bug"]
 body:
-  - type: markdown
-    attributes:
-      value: |
-        Gracias por reportar el error. Completá lo más detallado que puedas:
-        cuanta más info, más fácil es arreglarlo.
-
   - type: textarea
     id: descripcion
     attributes:
-      label: Descripción
-      description: ¿Qué pasó? Contalo con tus palabras.
+      label: ¿Qué pasó?
+      description: Contalo con tus palabras. Si sabés cómo repetirlo, mejor.
       placeholder: Al cerrar un cuaderno con texto, la última línea desaparece.
-    validations:
-      required: true
-
-  - type: textarea
-    id: pasos
-    attributes:
-      label: Pasos para reproducir
-      description: Lo más concreto posible, paso a paso.
-      placeholder: |
-        1. Abrir un cuaderno
-        2. Escribir con el teclado
-        3. Tocar la flecha para volver a la biblioteca
-        4. ...
-    validations:
-      required: true
-
-  - type: textarea
-    id: esperado
-    attributes:
-      label: Comportamiento esperado
-      description: ¿Qué debería haber pasado?
-    validations:
-      required: true
-
-  - type: textarea
-    id: actual
-    attributes:
-      label: Comportamiento actual
-      description: ¿Qué pasó realmente? Si hubo un mensaje de error, pegalo acá.
     validations:
       required: true
 
   - type: input
     id: dispositivo
     attributes:
-      label: Dispositivo (modelo y Android)
-      description: Modelo exacto de la tablet o PC y versión de Android (o distro de Linux).
-      placeholder: Galaxy Tab S6 Lite SM-P620, Android 16
+      label: Dispositivo y versión de la app
+      placeholder: Galaxy Tab S6 Lite, Android 16, OpenNote 1.0.0
     validations:
-      required: true
-
-  - type: input
-    id: version
-    attributes:
-      label: Versión de la app
-      description: La podés ver en Configuración o en el nombre del APK que instalaste.
-      placeholder: 1.0.0+1
-    validations:
-      required: true
+      required: false
 
   - type: textarea
     id: capturas
     attributes:
-      label: Capturas de pantalla
-      description: Si ayudan, arrastrá imágenes o un GIF acá. Si es un tema de rendimiento o de lápiz, un video suele servir más.
+      label: Capturas o video
+      description: Opcional. Arrastrá imágenes o un video acá.
     validations:
       required: false
