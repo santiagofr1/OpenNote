@@ -1,13 +1,16 @@
 import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:math';
+import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../data/export.dart' show decodeImage;
 import '../data/storage.dart';
+import '../data/system_clipboard.dart';
 import '../data/updates.dart' show CancelFlag;
 import '../domain/domain.dart';
 import '../rendering/ink_layers.dart';
@@ -578,6 +581,9 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   Offset _toPage(Offset local) => local / scale;
 
+  /// Última posición del mouse sobre la hoja, en coordenadas de la página (null si nunca pasó). Para Ctrl+V.
+  Offset? _hover;
+
   /// Agrega hojas si [y] quedó cerca del final del cuaderno.
   void _growIfNeeded(double y) {
     if (y > doc.h - 250) setState(() => doc.growFor(y));
@@ -1094,6 +1100,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     c.strokes = sel.strokesOf(doc);
     c.texts = [for (final t in sel.textsOf(doc)) t.copy()];
     c.items = [for (final it in sel.itemsOf(doc)) it.copy()];
+    // lo último que se copió gana: el portapapeles del sistema pasa a tener el texto copiado (y ya no una imagen vieja)
+    unawaited(Clipboard.setData(ClipboardData(text: c.texts.map((t) => t.text).join('\n'))).catchError((_) {}));
     setState(() {});
   }
 
@@ -1214,6 +1222,56 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final r = clipboardBounds(c);
     if (r == null) return;
     _insert(c.strokes, c.texts, p - r.topLeft, c.items);
+  }
+
+  /// Pega la imagen del portapapeles del sistema en [p] (con [center], el centro de la imagen va a [p]; si no, su esquina).
+  Future<void> _pasteImageAt(Offset p, {bool center = false}) async {
+    var bytes = await SystemClipboard.readImage();
+    if (bytes == null || !mounted) return;
+    ui.Image img;
+    try {
+      img = await decodeImage(bytes);
+    } catch (_) {
+      return;
+    }
+    var ext = imageExt(bytes);
+    if (img.width > 2400 || ext == null) {
+      // muy ancha u otro formato: se recodifica a PNG (con tope de 2400 de ancho)
+      final big = img.width > 2400;
+      final codec = await ui.instantiateImageCodec(bytes, targetWidth: big ? 2400 : null);
+      final f = (await codec.getNextFrame()).image;
+      codec.dispose();
+      final data = await f.toByteData(format: ui.ImageByteFormat.png);
+      img.dispose();
+      img = f;
+      if (data == null) {
+        img.dispose();
+        return;
+      }
+      bytes = data.buffer.asUint8List();
+      ext = 'png';
+    }
+    final w = min(560.0, kW - 40), h = w * img.height / img.width;
+    img.dispose();
+    final name = await widget.store.addMedia(bytes, ext);
+    if (!mounted) return;
+    final x = max(0.0, min(center ? p.dx - w / 2 : p.dx, kW - w));
+    final y = max(0.0, center ? p.dy - h / 2 : p.dy);
+    _insert([], [], Offset(x, y), [Item(newId('i'), 'image', 0, 0, w, h, file: name)]);
+  }
+
+  @visibleForTesting
+  Future<void> pasteImageAt(Offset p) => _pasteImageAt(p);
+
+  /// Ctrl+V: la imagen del sistema si hay; si no, lo copiado en la app. Va al puntero (si está sobre la hoja) o al centro de lo visible.
+  Future<void> pasteFromKeyboard() async {
+    if (widget.readOnly) return;
+    final img = await SystemClipboard.hasImage();
+    if (!mounted) return;
+    final h = _hover;
+    final p = h != null && _viewRect.contains(h) ? h : viewCenter; // mouse que quedó fuera de lo visible: al centro
+    if (img) return _pasteImageAt(p, center: true);
+    if (!ts.clipboard.isEmpty) _pasteAt(p);
   }
 
   // ---------------- texto ----------------
@@ -1669,11 +1727,13 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   }
 
   Future<void> _sheetMenu(Offset global, Offset p) async {
-    if (ts.clipboard.isEmpty) return; // sin nada copiado no hay menú (ni vibra)
+    final img = await SystemClipboard.hasImage();
+    if (!mounted) return;
+    if (ts.clipboard.isEmpty && !img) return; // sin nada copiado no hay menú (ni vibra)
     HapticFeedback.mediumImpact();
     final v = await showSheetMenu(context, global);
     if (!mounted) return;
-    if (v == SheetMenuAction.paste) _pasteAt(p);
+    if (v == SheetMenuAction.paste) img ? unawaited(_pasteImageAt(p)) : _pasteAt(p);
   }
 
   /// Hojas que se piden juntas al cargar para "Seleccionar todo el cuaderno" (entre tanda y tanda se puede cancelar).
@@ -1714,6 +1774,13 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final vh = scroll.hasClients ? scroll.position.viewportDimension : 600.0;
     final c = layout.toPage(Offset(vw / 2, vh / 2), _scrollOffset);
     return Offset(c.dx.clamp(0, kW), c.dy.clamp(0, doc.h));
+  }
+
+  /// Lo que se está viendo, en coordenadas de la página.
+  Rect get _viewRect {
+    final vw = hscroll.hasClients ? hscroll.position.viewportDimension : kW * scale;
+    final vh = scroll.hasClients ? scroll.position.viewportDimension : 600.0;
+    return Rect.fromPoints(layout.toPage(Offset.zero, _scrollOffset), layout.toPage(Offset(vw, vh), _scrollOffset));
   }
 
   /// Hoja que se está viendo (0, 1, 2...).
@@ -2228,6 +2295,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       if (fixed.contains(t.id) || (k < first && t.y + _textExtent(t) > rangeTop)) extras.add(t);
     }
     return Listener(
+      onPointerHover: (e) => _hover = _toPage(e.localPosition),
       onPointerDown: _down,
       onPointerMove: _move,
       onPointerUp: _up,
