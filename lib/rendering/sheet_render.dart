@@ -10,13 +10,17 @@ import 'text_layout.dart';
 
 /// Dibuja la hoja [sheet] del cuaderno [doc], completa (papel, renglones, elementos, tinta y texto),
 /// en coordenadas lógicas con origen en la esquina de esa hoja. Para miniaturas, PNG y PDF.
-void paintSheet(Canvas c, NotebookDoc doc, int sheet, double pxPerUnit, {Map<String, ui.Image>? images}) {
+/// Con [background] falso no hay fondo: sobre blanco, sin papel de color, patrón ni imagen de fondo.
+void paintSheet(Canvas c, NotebookDoc doc, int sheet, double pxPerUnit,
+    {Map<String, ui.Image>? images, bool background = true}) {
   final top = sheet * kSheetStep;
   final meta = doc.sheets[sheet];
   c.save();
   c.clipRect(const Rect.fromLTWH(0, 0, kW, kSheetH));
-  c.drawRect(const Rect.fromLTWH(0, 0, kW, kSheetH), Paint()..color = parseColor(meta.paper));
-  if (meta.bg == 'image') {
+  c.drawRect(const Rect.fromLTWH(0, 0, kW, kSheetH), Paint()..color = background ? parseColor(meta.paper) : const Color(0xFFFFFFFF));
+  if (!background) {
+    // sin fondo: nada más que lo escrito
+  } else if (meta.bg == 'image') {
     // fondo de imagen: entra completa en la hoja, sin patrón
     final img = meta.image == null ? null : images?[bgImageKey(meta.image!)];
     if (img != null) {

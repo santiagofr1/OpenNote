@@ -104,6 +104,7 @@ class ToolState {
   double zoom = 1; // 1 = la hoja entra justa a lo ancho
   bool zoomLocked = false;
   bool shapeSnap = true; // figuras inteligentes: lápiz quieto al final del trazo lo vuelve figura limpia
+  bool exportBackground = true; // exportar con el fondo de la hoja (papel, rayado, imagen) o solo lo escrito
   final clipboard = SelectionClipboard(); // no se guarda
 
   bool get drawing => tool == Tool.pen || tool == Tool.hl || tool == Tool.paint;
@@ -158,6 +159,7 @@ class ToolState {
         'zoom': zoom,
         'zoomLocked': zoomLocked,
         'shapeSnap': shapeSnap,
+        'exportBg': exportBackground,
       };
 
   void load(Map? j) {
@@ -184,5 +186,6 @@ class ToolState {
     zoom = ((j['zoom'] ?? 1) as num).toDouble().clamp(.5, 4.0);
     zoomLocked = (j['zoomLocked'] ?? false) as bool;
     shapeSnap = j['shapeSnap'] is bool ? j['shapeSnap'] as bool : true;
+    exportBackground = j['exportBg'] is bool ? j['exportBg'] as bool : true;
   }
 }
