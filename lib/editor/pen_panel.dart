@@ -68,7 +68,9 @@ Future<void> showPenPanel(BuildContext context, ToolState ts, VoidCallback onCha
             constraints: BoxConstraints(maxWidth: 460, maxHeight: MediaQuery.of(ctx).size.height - 90),
             child: ts.tool == Tool.paint
                 ? _PaintPanel(ts: ts, onChange: onChange, editFav: editFav)
-                : _PenPanel(ts: ts, onChange: onChange, editFav: editFav),
+                : ts.tool == Tool.shape
+                    ? _ShapePanel(ts: ts, onChange: onChange)
+                    : _PenPanel(ts: ts, onChange: onChange, editFav: editFav),
           ),
         ),
       ),
@@ -334,6 +336,142 @@ class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
           ),
         ),
       );
+}
+
+/// Opciones de la herramienta Formas: qué forma, relleno con color y pegar a la cuadrícula. El borde usa el lápiz.
+class _ShapePanel extends StatefulWidget {
+  final ToolState ts;
+  final VoidCallback onChange;
+  const _ShapePanel({required this.ts, required this.onChange});
+  @override
+  State<_ShapePanel> createState() => _ShapePanelState();
+}
+
+class _ShapePanelState extends State<_ShapePanel> with _PanelParts<_ShapePanel> {
+  ToolState get ts => widget.ts;
+  bool custom = false;
+
+  void _set(VoidCallback f) {
+    setState(f);
+    widget.onChange();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final sub = TextStyle(fontSize: 12, color: cs.onSurfaceVariant);
+    final fills = [...ts.penFav, ...shapeFillColors.where((c) => !ts.penFav.contains(c))];
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Formas', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 12),
+        Row(children: [for (final (id, name) in shapeKinds) _kindCell(cs, id, name)]),
+        const SizedBox(height: 14),
+        _label('Borde'),
+        Text('El borde usa el color y el grosor del lápiz.', style: sub),
+        const SizedBox(height: 8),
+        Wrap(spacing: 6, runSpacing: 6, children: [for (final c in ts.penFav) _dot(c, c == ts.pen.color, () => _set(() => ts.pickColor(c)), key: Key('shapePen-${c.substring(1)}'))]),
+        const Divider(height: 24),
+        Row(children: [
+          Expanded(child: _label('Relleno')),
+          Switch(key: const Key('shapeFillSwitch'), value: ts.shapeFill, onChanged: (v) => _set(() => ts.shapeFill = v)),
+        ]),
+        if (!shapeFillable(ts.shapeKind)) Text('La recta y la flecha no se rellenan.', style: sub),
+        if (ts.shapeFill) ...[
+          const SizedBox(height: 6),
+          Wrap(spacing: 6, runSpacing: 6, children: [for (final c in fills) _dot(c, c == ts.shapeFillColor, () => _set(() => ts.shapeFillColor = c), key: Key('shapeFill-${c.substring(1)}'))]),
+          TextButton.icon(
+            key: const Key('shapeFillCustom'),
+            onPressed: () => setState(() => custom = !custom),
+            icon: Icon(custom ? Icons.expand_less : Icons.palette_outlined, size: 18),
+            label: const Text('Color personalizado'),
+          ),
+          if (custom) _ColorPicker(color: ts.shapeFillColor, onChanged: (hex) => _set(() => ts.shapeFillColor = hex)),
+        ],
+        const Divider(height: 24),
+        Row(children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              _label('Pegar a la cuadrícula'),
+              Text('En hojas cuadriculadas, milimetradas, de puntos o con ejes', style: sub),
+            ]),
+          ),
+          Switch(key: const Key('shapeGridSwitch'), value: ts.shapeGrid, onChanged: (v) => _set(() => ts.shapeGrid = v)),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _kindCell(ColorScheme cs, String id, String name) {
+    final on = ts.shapeKind == id;
+    return Expanded(
+      child: GestureDetector(
+        key: Key('shapeKind-$id'),
+        onTap: () => _set(() => ts.shapeKind = id),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          margin: const EdgeInsets.symmetric(horizontal: 3),
+          padding: const EdgeInsets.fromLTRB(2, 6, 2, 6),
+          decoration: BoxDecoration(
+            color: on ? cs.surfaceContainerHighest : cs.onSurface.withValues(alpha: .04),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: on ? cs.primary : Colors.transparent, width: 1.5),
+          ),
+          child: Column(children: [
+            SizedBox(height: 30, width: 30, child: CustomPaint(painter: _KindIconPainter(id, on ? cs.primary : cs.onSurface))),
+            const SizedBox(height: 4),
+            Text(name, style: TextStyle(fontSize: 10.5, color: on ? cs.primary : cs.onSurface), maxLines: 1, overflow: TextOverflow.ellipsis),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _dot(String c, bool on, VoidCallback onTap, {Key? key}) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          key: key,
+          width: 30,
+          height: 30,
+          decoration: BoxDecoration(
+            color: parseColor(c),
+            shape: BoxShape.circle,
+            border: Border.all(color: on ? Colors.white : const Color(0x22000000), width: on ? 3 : 1),
+            boxShadow: on ? const [BoxShadow(color: kAccent, spreadRadius: 2)] : null,
+          ),
+        ),
+      );
+}
+
+/// Dibujito de una forma del panel (las mismas que genera [exactShapePoints], en un cuadro de 30 x 30).
+class _KindIconPainter extends CustomPainter {
+  final String kind;
+  final Color color;
+  _KindIconPainter(this.kind, this.color);
+
+  @override
+  void paint(Canvas c, Size size) {
+    final mid = size.center(Offset.zero);
+    final pts = kind == 'circle'
+        ? exactShapePoints(kind, mid, mid + Offset(size.width / 2 - 4, 0))
+        : exactShapePoints(kind, const Offset(4, 4), Offset(size.width - 4, size.height - 4));
+    final path = Path();
+    for (var i = 0; i < pts.length; i += 3) {
+      i == 0 ? path.moveTo(pts[i], pts[i + 1]) : path.lineTo(pts[i], pts[i + 1]);
+    }
+    c.drawPath(
+        path,
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.8
+          ..strokeJoin = StrokeJoin.round
+          ..strokeCap = StrokeCap.round);
+  }
+
+  @override
+  bool shouldRepaint(_KindIconPainter o) => o.kind != kind || o.color != color;
 }
 
 /// Selector de color libre: cuadrado de saturación y brillo, barra de tono y el hex. Mantiene su propio HSV (para que

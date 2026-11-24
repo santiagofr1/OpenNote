@@ -52,6 +52,7 @@ class EditorToolbar extends StatelessWidget {
         _toolBtn(cs, Tool.pen, Symbols.stylus, 'Lápiz · tocá de nuevo para opciones', ts.pen),
         _toolBtn(cs, Tool.hl, Symbols.ink_highlighter, 'Resaltador · tocá de nuevo para opciones', ts.hl),
         _toolBtn(cs, Tool.paint, Symbols.brush, 'Decorador · tocá de nuevo para opciones', ts.paint),
+        _toolBtn(cs, Tool.shape, Symbols.shapes, 'Formas · tocá de nuevo para opciones', ts.pen),
         _toolBtn(cs, Tool.text, Symbols.keyboard, 'Texto con teclado', null),
         _toolBtn(cs, Tool.select, Symbols.highlight_alt, 'Seleccionar', null),
         _toolBtn(cs, Tool.title, Symbols.format_list_numbered, 'Título para el índice', null),
@@ -97,8 +98,8 @@ class EditorToolbar extends StatelessWidget {
     });
   }
 
-  /// Ancho (dp) de la barra horizontal sin los colores favoritos. Medido: 676 con fondo y pegar, menos 44 de Pegar y 48 del fondo.
-  static const _fixedWidth = 584.0;
+  /// Ancho (dp) de la barra horizontal sin los colores favoritos. Medido: 676 con fondo y pegar, menos 44 de Pegar y 48 del fondo, más 46 de Formas.
+  static const _fixedWidth = 632.0;
 
   Widget _lockBtn(ColorScheme cs) {
     final on = ts.zoomLocked;
@@ -143,6 +144,7 @@ class EditorToolbar extends StatelessWidget {
   Widget _toolBtn(ColorScheme cs, Tool t, IconData icon, String tip, PenPreset? preset) {
     final on = ts.tool == t;
     return Tooltip(
+      key: ValueKey('tool-${t.name}'),
       message: tip,
       waitDuration: const Duration(milliseconds: 600),
       child: InkWell(

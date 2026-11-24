@@ -18,14 +18,15 @@ enum PenAction { erase, draw, select, title }
 /// null: nada (el dedo solo scrollea y así la palma se ignora; en modo texto el lápiz toca los campos).
 PenAction? penActionFor(PointerDownEvent e, Tool tool) {
   final mouse = e.kind == PointerDeviceKind.mouse;
-  if (!isStylus(e) && !mouse) return null;
+  // las formas también las dibuja el dedo (un dedo no scrollea con esa herramienta)
+  if (!isStylus(e) && !mouse && !(tool == Tool.shape && e.kind == PointerDeviceKind.touch)) return null;
   if (mouse && e.buttons != kPrimaryMouseButton && e.buttons != kSecondaryMouseButton) return null;
   if (wantsEraser(e)) return PenAction.erase;
   return switch (tool) {
     Tool.text => null,
     Tool.select => PenAction.select,
     Tool.title => PenAction.title,
-    Tool.pen || Tool.hl || Tool.paint => PenAction.draw,
+    Tool.pen || Tool.hl || Tool.paint || Tool.shape => PenAction.draw,
   };
 }
 

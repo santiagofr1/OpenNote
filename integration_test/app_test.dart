@@ -2851,6 +2851,92 @@ void main() {
     await t.tap(find.byKey(const Key('back')));
     await settle(t, 1200);
   });
+
+  // ---------------- formas exactas (#38) ----------------
+  testWidgets('formas: rectángulo con relleno pegado a la cuadrícula, con medida, manija y deshacer (issue #38)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Formas');
+    final ed = editor(t);
+    ed.doc.sheets[0].setBg('grid');
+    // ignore: invalid_use_of_protected_member
+    ed.setState(() {});
+    await settle(t, 600);
+
+    await t.tap(find.byKey(const ValueKey('tool-shape')));
+    await settle(t);
+    await t.tap(find.byKey(const ValueKey('tool-shape'))); // de nuevo: abre las opciones
+    await settle(t);
+    await t.tap(find.byKey(const Key('shapeKind-rect')));
+    await t.tap(find.byKey(const Key('shapeFillSwitch')));
+    await settle(t);
+    expect(ed.ts.shapeKind, 'rect');
+    expect(ed.ts.shapeFill, isTrue);
+    await t.tapAt(const Offset(4, 600)); // cierra el panel
+    await settle(t);
+
+    final p = docToScreen(t);
+    await stylusDrag(t, p(const Offset(203, 307)), p(const Offset(498, 512)));
+    expect(ed.doc.strokes.length, 1);
+    final s = ed.doc.strokes.values.single;
+    expect(s.fill, ed.ts.shapeFillColor);
+    // las esquinas caen en la cuadrícula de 5 mm
+    final xs = gridXs(5), ys = gridYs(5);
+    bool onGrid(double x, double y) => xs.any((v) => (v - x).abs() < .5) && ys.any((v) => (v - y).abs() < .5);
+    expect(onGrid(s.pts[0], s.pts[1]), isTrue, reason: 'primera esquina');
+    final b = s.bounds.deflate(s.w * 1.6);
+    expect(onGrid(b.right, b.bottom), isTrue, reason: 'esquina opuesta');
+    expect(find.byKey(const Key('shapeMeasure')), findsOneWidget);
+    expect(find.textContaining('×'), findsOneWidget);
+
+    // una manija cambia la medida
+    final texto = (t.widget(find.descendant(of: find.byKey(const Key('shapeMeasure')), matching: find.byType(Text))) as Text).data;
+    final c = t.getCenter(find.byKey(const ValueKey('shapeHandle-2')));
+    await stylusDrag(t, c, c + const Offset(90, 70));
+    final texto2 = (t.widget(find.descendant(of: find.byKey(const Key('shapeMeasure')), matching: find.byType(Text))) as Text).data;
+    expect(texto2, isNot(texto));
+    expect(ed.doc.strokes.length, 1);
+
+    // deshacer: vuelve al antes de la manija; otra vez, y la forma desaparece
+    ed.undo();
+    await settle(t);
+    expect(ed.doc.strokes.values.single.pts, s.pts);
+    ed.undo();
+    await settle(t);
+    expect(ed.doc.strokes, isEmpty);
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+  });
+
+  testWidgets('formas: la recta con el dedo dibuja una recta y no scrollea (issue #38)', (t) async {
+    await start(t);
+    await createNotebook(t, 'FormasDedo');
+    final ed = editor(t);
+    await t.tap(find.byKey(const ValueKey('tool-shape')));
+    await settle(t);
+    await t.tap(find.byKey(const ValueKey('tool-shape')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('shapeKind-line')));
+    await settle(t);
+    await t.tapAt(const Offset(4, 600));
+    await settle(t);
+    expect(ed.ts.shapeKind, 'line');
+
+    final y0 = ed.scroll.offset;
+    final p = docToScreen(t);
+    final a = p(const Offset(200, 400)), b = p(const Offset(600, 480));
+    final g = await t.startGesture(a, kind: PointerDeviceKind.touch);
+    for (var i = 1; i <= 10; i++) {
+      await g.moveTo(Offset.lerp(a, b, i / 10)!);
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    await g.up();
+    await settle(t, 400);
+    expect(ed.doc.strokes.length, 1);
+    expect(ed.scroll.offset, y0, reason: 'un dedo no scrollea con las formas');
+    expect(find.textContaining('mm ·'), findsOneWidget, reason: 'largo y ángulo');
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+  });
 }
 
 /// Reconocimiento de letra de mentira: siempre lee [text].

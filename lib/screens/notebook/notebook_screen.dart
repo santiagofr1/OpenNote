@@ -828,11 +828,13 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         ? Tool.pen
         : k == LogicalKeyboardKey.keyH
             ? Tool.hl
-            : k == LogicalKeyboardKey.keyT
-                ? Tool.text
-                : k == LogicalKeyboardKey.keyS
-                    ? Tool.select
-                    : null;
+            : k == LogicalKeyboardKey.keyF
+                ? Tool.shape
+                : k == LogicalKeyboardKey.keyT
+                    ? Tool.text
+                    : k == LogicalKeyboardKey.keyS
+                        ? Tool.select
+                        : null;
     if (t == null) return false;
     ed.pickTool(t);
     return true;

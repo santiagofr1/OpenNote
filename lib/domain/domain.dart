@@ -5,6 +5,7 @@ library;
 export 'folders.dart';
 export 'format.dart';
 export 'elements.dart';
+export 'exact_shapes.dart';
 export 'geometry.dart';
 export 'notebook.dart';
 export 'paint_shapes.dart';
