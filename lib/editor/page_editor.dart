@@ -1445,7 +1445,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     widget.onPrefsChanged();
   }
 
-  Future<void> _openPanel() async {
+  Future<void> _openPanel({int? editFav}) async {
     final align = switch (ts.dock) {
       'left' => Alignment.centerLeft,
       'right' => Alignment.centerRight,
@@ -1455,7 +1455,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       if (!mounted) return; // el panel se cierra (dispose) después del editor: ya no hay a quién avisar
       setState(() {});
       widget.onPrefsChanged();
-    }, align);
+    }, align: align, editFav: editFav);
     if (mounted) setState(() {});
   }
 
@@ -1465,12 +1465,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     _openPanel();
   }
 
-  /// Mantener un favorito de la barra: guarda ahí el color actual de la herramienta.
-  void _setFavorite(int slot) {
+  /// Mantener un favorito de la barra: abre el panel editando ese favorito.
+  void _editFavorite(int slot) {
     if (!ts.drawing) _setTool(Tool.pen);
-    setState(() => ts.setFavorite(slot, ts.current.color));
-    widget.onPrefsChanged();
-    snack(context, 'Favorito guardado', duration: const Duration(milliseconds: 1200), width: 260);
+    _openPanel(editFav: slot);
   }
 
   void _pickQuick(String c) {
@@ -2045,7 +2043,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             _openPanel();
           },
           onPickColor: _pickQuick,
-          onSetFavorite: _setFavorite,
+          onEditFavorite: _editFavorite,
           onOpenPanel: _openPanelForDrawing,
           onUndo: () => _undoRedo(undo: true),
           onRedo: () => _undoRedo(undo: false),

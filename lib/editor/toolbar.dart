@@ -15,7 +15,7 @@ class EditorToolbar extends StatelessWidget {
   final bool canUndo, canRedo;
   final ValueChanged<Tool> onToolTap, onToolLongPress;
   final ValueChanged<String> onPickColor;
-  final ValueChanged<int> onSetFavorite;
+  final ValueChanged<int> onEditFavorite;
   final VoidCallback onOpenPanel, onUndo, onRedo, onToggleZoomLock;
 
   const EditorToolbar({
@@ -28,7 +28,7 @@ class EditorToolbar extends StatelessWidget {
     required this.onToolTap,
     required this.onToolLongPress,
     required this.onPickColor,
-    required this.onSetFavorite,
+    required this.onEditFavorite,
     required this.onOpenPanel,
     required this.onUndo,
     required this.onRedo,
@@ -187,7 +187,7 @@ class EditorToolbar extends StatelessWidget {
         key: slot == null ? null : ValueKey('fav-$slot'),
         customBorder: const CircleBorder(),
         onTap: () => onPickColor(c),
-        onLongPress: slot == null ? null : () => onSetFavorite(slot),
+        onLongPress: slot == null ? null : () => onEditFavorite(slot),
         child: SizedBox.fromSize(
           size: _slot,
           child: Center(
