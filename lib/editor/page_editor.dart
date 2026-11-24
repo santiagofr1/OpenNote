@@ -662,12 +662,14 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   void _move(PointerMoveEvent e) {
     if (e.pointer != pointer) return;
-    final p = _toPage(e.localPosition);
     if (sel.moving) {
-      _selDrag(p);
+      // desde la posición global: el localPosition usa el scroll de cuando se apoyó el lápiz, y con el desplazamiento
+      // al borde la hoja ya se corrió (cada temblor del lápiz devolvía lo seleccionado a la pantalla de arriba)
+      _selDrag(_pageOfGlobal(e.position));
       if (sel.drag?.handle == Handle.move) _edgeMoved(e.position);
       return;
     }
+    final p = _toPage(e.localPosition);
     if (sel.bandA != null) {
       sel.bandB = p;
       liveTick.value++;

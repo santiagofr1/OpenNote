@@ -1639,9 +1639,12 @@ void main() {
       await g.moveTo(Offset.lerp(a, b, i / 10)!);
       await t.pump(const Duration(milliseconds: 16));
     }
-    final end = DateTime.now().add(const Duration(seconds: 1));
+    // quieto ~2,5 s, pero temblando como el lápiz de verdad: cada temblor no lo devuelve a la pantalla de arriba
+    final end = DateTime.now().add(const Duration(milliseconds: 2500));
+    var j = 0;
     while (DateTime.now().isBefore(end)) {
       await Future<void>.delayed(const Duration(milliseconds: 50));
+      await g.moveBy(Offset((j++).isEven ? .5 : -.5, 0));
       await t.pump();
     }
     final y1 = ed.scroll.offset;
@@ -1649,6 +1652,7 @@ void main() {
     await settle(t, 600);
     expect(y1, greaterThan(y0 + 100), reason: 'el cuaderno bajó solo');
     final moved = ed.doc.strokes[st.id]!.bounds;
+    expect(moved.top, greaterThan(kSheetStep), reason: 'pasó a la hoja siguiente');
     expect(moved.top * ed.scale - ed.scroll.offset, greaterThan(0), reason: 'el trazo quedó a la vista');
     expect(moved.top, greaterThan(before.top + (b.dy - a.dy) / ed.scale + 50), reason: 'viajó con la hoja');
     final yEnd = ed.scroll.offset;

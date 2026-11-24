@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/editor/page_editor.dart';
+import 'package:apuntes/editor/viewport.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -94,6 +95,28 @@ void main() {
     expect(h.ed.sel.strokes, {'s'});
     await dragAndHold(t, h.ed, h.at(450, 400), const Offset(800, 980), PointerDeviceKind.stylus,
         scrolls: true, bounds: () => bounds(h));
+  });
+
+  testWidgets('con el lápiz temblando en el borde, lo seleccionado sigue bajando y pasa a la hoja siguiente', (t) async {
+    final h = await open(t);
+    await select(t, h.at(450, 400));
+    final from = h.at(450, 400), to = const Offset(800, 980);
+    final g = await t.startGesture(from, kind: PointerDeviceKind.stylus);
+    for (var i = 1; i <= 8; i++) {
+      await g.moveTo(Offset.lerp(from, to, i / 8)!);
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    // el lápiz de verdad nunca está quieto: cada evento de movimiento traía la posición con el scroll del principio
+    for (var i = 0; i < 40; i++) {
+      await hold(t, 64);
+      await g.moveBy(Offset(i.isEven ? .5 : -.5, 0));
+    }
+    final y = h.ed.scroll.offset, top = bounds(h).top;
+    final screenTop = (top * h.ed.scale + kTopPad - y) / h.ed.scale;
+    expect(top, greaterThan(kSheetStep), reason: 'pasó a la hoja siguiente');
+    expect(screenTop, greaterThan(0), reason: 'sigue a la vista, junto al lápiz');
+    await g.up();
+    await t.pump();
   });
 
   testWidgets('con el dedo sobre lo seleccionado pasa lo mismo', (t) async {
