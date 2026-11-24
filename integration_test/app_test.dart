@@ -3417,8 +3417,49 @@ void main() {
     await t.tap(find.byKey(const ValueKey('tool-hl')));
     await settle(t);
     final toScreen = docToScreen(t);
-    await stylusLine(t, toScreen(Offset(x0, edgeY)), toScreen(Offset(x1, edgeY)));
+    final a = toScreen(Offset(x0, edgeY)), b = toScreen(Offset(x1, edgeY));
+
+    // lo que se ve en pantalla (el boundary que envuelve al editor, 1 px por px lógico) en un punto de la pantalla
+    Future<List<int>> pantalla(Offset onBlack, Offset onWhite) async {
+      final boundary = t.renderObject<RenderRepaintBoundary>(
+          find.ancestor(of: find.byType(PageEditor), matching: find.byType(RepaintBoundary)).first);
+      final res = await t.runAsync(() async {
+        final image = await boundary.toImage();
+        final data = (await image.toByteData())!;
+        List<int> at(Offset g) {
+          final l = boundary.globalToLocal(g);
+          final i = (l.dy.round() * image.width + l.dx.round()) * 4;
+          return [data.getUint8(i), data.getUint8(i + 1), data.getUint8(i + 2)];
+        }
+
+        final out = [...at(onBlack), ...at(onWhite)];
+        image.dispose();
+        return out;
+      });
+      return res!;
+    }
+
+    void amarilloSobreBlanco(List<int> p, String cuando) {
+      expect(p.sublist(0, 3), everyElement(lessThan(60)), reason: 'en pantalla $cuando: el negro del PDF queda por encima');
+      expect(p[3], greaterThan(170), reason: 'en pantalla $cuando: sobre el blanco se ve amarillo');
+      expect(p[4], greaterThan(170));
+      expect(p[5], lessThan(p[3] - 40));
+    }
+
+    // el trazo mide 22: cubre 11 hacia cada lado del borde; se mira en el medio del tramo
+    final mid = Offset.lerp(a, b, .5)!;
+    final up = Offset(0, 5 * ed.scale);
+    final g = await t.startGesture(a, kind: PointerDeviceKind.stylus);
+    for (var i = 1; i <= 12; i++) {
+      await g.moveTo(Offset.lerp(a, b, i / 12)!);
+      await t.pump(const Duration(milliseconds: 8));
+    }
+    await t.pump();
+    // con el trazo en curso (lápiz apoyado) ya se mezcla con el PDF
+    amarilloSobreBlanco(await pantalla(mid - up, mid + up), 'con el trazo en curso');
+    await g.up();
     await settle(t, 600);
+    amarilloSobreBlanco(await pantalla(mid - up, mid + up), 'con el trazo terminado');
 
     // (1) quedó un trazo de resaltador
     final hls = [for (final s in ed.doc.strokes.values) if (s.k == 'hl') s];

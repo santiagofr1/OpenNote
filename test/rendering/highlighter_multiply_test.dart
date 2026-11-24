@@ -3,6 +3,8 @@ import 'dart:ui' as ui;
 
 import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/rendering/stroke_painter.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// El resaltador se compone multiplicando con lo que ya está dibujado: sobre blanco queda el color y sobre negro
@@ -63,4 +65,50 @@ void main() {
     expect([px(d, 50, 20).$1, px(d, 50, 20).$2, px(d, 50, 20).$3], everyElement(lessThan(40)));
     expect(px(d, 50, 5).$1, greaterThan(250));
   });
+
+  testWidgets('un RepaintBoundary entre el trazo y el fondo no corta la mezcla', (t) async {
+    final key = GlobalKey();
+    await t.pumpWidget(Directionality(
+      textDirection: TextDirection.ltr,
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: RepaintBoundary(
+        key: key,
+        child: SizedBox(
+          width: 100,
+          height: 100,
+          child: Stack(children: [
+            Positioned.fill(child: Column(children: [
+              Expanded(child: Container(color: const Color(0xFFFFFFFF))),
+              Expanded(child: Container(color: const Color(0xFF000000))),
+            ])),
+            Positioned.fill(child: RepaintBoundary(child: CustomPaint(painter: _HlPainter(Stroke('h', 'hl', '#f7d22c', 20, [5, 50, .5, 95, 50, .5]))))),
+          ]),
+        ),
+      )),
+    ));
+    final d = (await t.runAsync(() async {
+      final b = t.renderObject<RenderRepaintBoundary>(find.byKey(key));
+      final img = await b.toImage();
+      final d = (await img.toByteData())!;
+      img.dispose();
+      return d;
+    }))!;
+    // blanco 0..50, negro 50..100
+    // el trazo (y = 50, alto 20) cubre 40..60: mitad sobre blanco (amarillo) y mitad sobre negro (sigue negro)
+    final (r, g, b) = px(d, 50, 45);
+    expect(r, greaterThan(180));
+    expect(g, greaterThan(180));
+    expect(b, lessThan(150));
+    expect(px(d, 50, 55), (0, 0, 0));
+  });
+}
+
+class _HlPainter extends CustomPainter {
+  final Stroke s;
+  const _HlPainter(this.s);
+  @override
+  void paint(Canvas c, Size size) => paintStroke(c, s);
+  @override
+  bool shouldRepaint(_HlPainter o) => false;
 }
