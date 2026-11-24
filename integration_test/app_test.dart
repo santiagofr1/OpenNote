@@ -25,6 +25,7 @@ import 'package:apuntes/editor/pdf_page_image.dart';
 import 'package:apuntes/editor/voice_recorder.dart';
 import 'package:apuntes/editor/selection.dart';
 import 'package:apuntes/editor/selection_menu.dart';
+import 'package:apuntes/rendering/ink_layers.dart';
 import 'package:apuntes/rendering/sheet_image_cache.dart';
 import 'package:apuntes/rendering/text_layout.dart';
 import 'package:apuntes/sync/fake_backend.dart';
@@ -3416,6 +3417,127 @@ void main() {
     expect(tocable(), isFalse);
   });
 
+
+
+  testWidgets('resaltador sobre un PDF: el texto queda por encima y en la hoja exportada sigue negro', (t) async {
+    final pdfBytes = (await t.runAsync(() async {
+      final d = pw.Document();
+      d.addPage(pw.Page(
+        margin: const pw.EdgeInsets.all(40),
+        build: (_) => pw.Align(
+          alignment: pw.Alignment.topLeft,
+          child: pw.Container(width: 400, height: 60, color: const PdfColor.fromInt(0xFF000000)),
+        ),
+      ));
+      return Uint8List.fromList(await d.save());
+    }))!;
+    final savedPick = Pickers.pdf;
+    addTearDown(() => Pickers.pdf = savedPick);
+    Pickers.pdf = () async => (pdfBytes, 'Resaltado');
+    await start(t);
+    await createNotebook(t, 'Resaltador en PDF');
+    final ed = editor(t);
+    await t.tap(find.byKey(const Key('insert')));
+    await settle(t);
+    await t.tap(find.text('PDF'));
+    await settle(t, 1500);
+    final pdf = ed.doc.items.values.firstWhere((i) => i.type == 'pdf');
+    final shown = find.descendant(of: find.byType(PdfPageImage), matching: find.byType(RawImage));
+    final sw0 = Stopwatch()..start();
+    while (shown.evaluate().isEmpty && sw0.elapsedMilliseconds < 5000) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await t.pump();
+    }
+    await settle(t, 800);
+
+    // el rectángulo negro va de (40, 40) a (440, 100) puntos de una página A4 (595 x 842); línea horizontal por su borde de abajo
+    final sx = pdf.w / 595, sy = pdf.h / 842;
+    final edgeY = pdf.y + 100 * sy;
+    final x0 = pdf.x + 140 * sx, x1 = pdf.x + 340 * sx;
+    await t.tap(find.byKey(const ValueKey('tool-hl')));
+    await settle(t);
+    final toScreen = docToScreen(t);
+    final a = toScreen(Offset(x0, edgeY)), b = toScreen(Offset(x1, edgeY));
+
+    // lo que se ve en pantalla (el boundary que envuelve al editor, 1 px por px lógico) en un punto de la pantalla
+    Future<List<int>> pantalla(Offset onBlack, Offset onWhite) async {
+      final boundary = t.renderObject<RenderRepaintBoundary>(
+          find.ancestor(of: find.byType(PageEditor), matching: find.byType(RepaintBoundary)).first);
+      final res = await t.runAsync(() async {
+        final image = await boundary.toImage();
+        final data = (await image.toByteData())!;
+        List<int> at(Offset g) {
+          final l = boundary.globalToLocal(g);
+          final i = (l.dy.round() * image.width + l.dx.round()) * 4;
+          return [data.getUint8(i), data.getUint8(i + 1), data.getUint8(i + 2)];
+        }
+
+        final out = [...at(onBlack), ...at(onWhite)];
+        image.dispose();
+        return out;
+      });
+      return res!;
+    }
+
+    void amarilloSobreBlanco(List<int> p, String cuando) {
+      expect(p.sublist(0, 3), everyElement(lessThan(60)), reason: 'en pantalla $cuando: el negro del PDF queda por encima');
+      expect(p[3], greaterThan(170), reason: 'en pantalla $cuando: sobre el blanco se ve amarillo');
+      expect(p[4], greaterThan(170));
+      expect(p[5], lessThan(p[3] - 40));
+    }
+
+    // el trazo mide 22: cubre 11 hacia cada lado del borde; se mira en el medio del tramo
+    final mid = Offset.lerp(a, b, .5)!;
+    final up = Offset(0, 5 * ed.scale);
+    final g = await t.startGesture(a, kind: PointerDeviceKind.stylus);
+    for (var i = 1; i <= 12; i++) {
+      await g.moveTo(Offset.lerp(a, b, i / 12)!);
+      await t.pump(const Duration(milliseconds: 8));
+    }
+    await t.pump();
+    // con el trazo en curso (lápiz apoyado) ya se mezcla con el PDF
+    amarilloSobreBlanco(await pantalla(mid - up, mid + up), 'con el trazo en curso');
+    await g.up();
+    await settle(t, 600);
+    amarilloSobreBlanco(await pantalla(mid - up, mid + up), 'con el trazo terminado');
+
+    // (1) quedó un trazo de resaltador
+    final hls = [for (final s in ed.doc.strokes.values) if (s.k == 'hl') s];
+    expect(hls, hasLength(1), reason: 'el resaltador deja un trazo hl');
+
+    // (2) la tanda de resaltadores se pinta multiplicando
+    final multiplied = find.byWidgetPredicate((w) => w is CustomPaint && w.painter is InkPainter && (w.painter! as InkPainter).multiply);
+    expect(multiplied, findsAtLeastNWidgets(1), reason: 'la tanda de resaltadores se compone multiplicando');
+
+    // (3) exportada la hoja: sobre el negro sigue oscuro y sobre el blanco es amarillento
+    final s = Storage(root: root);
+    await s.init();
+    final sheet = ed.doc.sheetOfY(pdf.y);
+    final px = await t.runAsync(() async {
+      final images = await loadImages(s, ed.doc, sheet: sheet);
+      final png = await renderSheetPng(ed.doc, sheet, images: images);
+      for (final im in images.values) {
+        im.dispose();
+      }
+      final img = await decodeImage(png);
+      final data = (await img.toByteData())!.buffer.asUint8List();
+      final k = img.width / kW;
+      List<int> at(double y) {
+        final cx = (x0 + x1) / 2;
+        final i = (((y - sheet * kSheetStep) * k).round() * img.width + (cx * k).round()) * 4;
+        return [data[i], data[i + 1], data[i + 2]];
+      }
+
+      final out = (at(edgeY - 5), at(edgeY + 5)); // el trazo mide 22: cubre 11 hacia cada lado
+      img.dispose();
+      return out;
+    });
+    final (onBlack, onWhite) = px!;
+    expect(onBlack, everyElement(lessThan(60)), reason: 'el negro del PDF queda por encima del resaltador');
+    expect(onWhite[0], greaterThan(170));
+    expect(onWhite[1], greaterThan(170));
+    expect(onWhite[2], lessThan(onWhite[0] - 40), reason: 'sobre el blanco se ve amarillo');
+  });
 }
 
 /// Reconocimiento de letra de mentira: siempre lee [text].

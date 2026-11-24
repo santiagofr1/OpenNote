@@ -2866,7 +2866,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             if (!doc.isLoadedAt(k)) _loadingMark(k),
             for (final (i, run) in _sheetRuns[doc.sheets[k].id]!.indexed) _run(run, i, textMode, k),
           ],
-          for (final (i, run) in zRuns(sortByZ(extras)).indexed) _run(run, i, textMode, -1),
+          for (final (i, run) in splitHighlighters(zRuns(sortByZ(extras))).indexed) _run(run, i, textMode, -1),
           Positioned.fill(
             child: IgnorePointer(
               child: RepaintBoundary(
@@ -2906,7 +2906,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     for (final t in doc.texts.values) {
       buckets[doc.sheetOfY(t.y)]?.add(t);
     }
-    buckets.forEach((k, els) => _sheetRuns[doc.sheets[k].id] = zRuns(sortByZ(els)));
+    buckets.forEach((k, els) => _sheetRuns[doc.sheets[k].id] = splitHighlighters(zRuns(sortByZ(els))));
   }
 
   /// Aviso (sin animación) en una hoja visible que todavía no se leyó de disco: se ve el papel y nada más.
@@ -2950,8 +2950,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
           child: RepaintBoundary(
             child: CustomPaint(
                 painter: InkPainter(doc, strokes, r, scale, _verOf(id), () => sel.moving ? sel.strokes : (_shapeEdit != null ? {_shapeEdit!.id} : const {}),
-                    cache: _imgs, cacheKey: 'ink-$id-$i', sheetId: id, dpr: _dpr, maxPx: 2 * _viewW * _dpr),
-                isComplex: true),
+                    cache: _imgs, cacheKey: 'ink-$id-$i', sheetId: id, dpr: _dpr, maxPx: 2 * _viewW * _dpr, multiply: run.multiply),
+                // la tanda multiplicada no se rasteriza aparte: perdería la mezcla con el PDF de abajo
+                isComplex: !run.multiply,
+                willChange: run.multiply),
           ),
         ),
       );

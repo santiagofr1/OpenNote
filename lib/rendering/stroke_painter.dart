@@ -64,19 +64,26 @@ void _paintFill(Canvas c, Stroke s) {
 /// Dibuja un trazo según su punta (ver [tips]; 'hl' es el resaltador) con su malla de triángulos
 /// (un `drawVertices` por trazo). Los trazos con opacidad menor a 1 van en una capa para que no se
 /// oscurezcan sus propias uniones (el lápiz lleva el alfa en los colores de los vértices).
+/// El resaltador va siempre en una capa que se compone multiplicando con lo de abajo: blanco × color = color,
+/// negro × color = negro (así el texto de un PDF queda por encima).
 void paintStroke(Canvas c, Stroke s) {
   final m = s.ensureMesh();
   if (m == null) return;
   if (s.fill != null) _paintFill(c, s);
-  final layered = _layered(s);
-  if (layered) c.saveLayer(s.bounds, Paint()..color = Color.fromRGBO(0, 0, 0, s.o));
+  final hl = isHighlighter(s.k);
+  final layered = hl || _layered(s);
+  if (layered) {
+    final lp = Paint()..color = Color.fromRGBO(0, 0, 0, s.o);
+    if (hl) lp.blendMode = BlendMode.multiply;
+    c.saveLayer(s.bounds, lp);
+  }
   _drawParts(c, m.parts, s.color, m.colored);
   if (layered) c.restore();
 }
 
 
 /// Dibuja varios trazos: primero los resaltadores, así quedan debajo de la tinta.
-/// Los trazos seguidos opacos del mismo color se juntan en lotes (un `drawVertices` por ~[kBatchVertices] vértices).
+/// Los trazos seguidos opacos del mismo color se juntan en lotes (los resaltadores, los de capa y los con relleno van solos) (un `drawVertices` por ~[kBatchVertices] vértices).
 /// [cull]: si se pasa, no se dibujan los trazos ni lotes que no tocan ese rectángulo (conviene pasar siempre la
 /// misma lista y recortar con esto: así los lotes no cambian de una franja a otra).
 void paintStrokes(Canvas c, Iterable<Stroke> strokes, {Rect? cull}) {
@@ -98,8 +105,8 @@ void _pass(Canvas c, List<Stroke> list, Rect? cull, bool hl) {
 
   for (final s in list) {
     if (isUnderInk(s.k) != hl || s.n == 0) continue;
-    if (s.fill != null || _layered(s)) {
-      // con relleno va solo (no entra en lotes): el relleno va antes del borde
+    if (s.fill != null || isHighlighter(s.k) || _layered(s)) {
+      // con relleno, resaltador o capa va solo (no entra en lotes): el relleno va antes del borde
       flush();
       if (cull == null || s.bounds.overlaps(cull)) paintStroke(c, s);
       continue;
