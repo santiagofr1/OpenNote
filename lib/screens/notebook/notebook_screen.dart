@@ -319,11 +319,42 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
   /// Lleva la hoja [from] a la posición [to] (menú del panel o arrastrando la miniatura).
   void _moveSheet(int from, int to) => _sheetOp((d) => [?SheetMoveOp.run(d, from, to)], goTo: to);
 
-  void _toggleBookmark(int k) {
+  void _toggleBookmark(int k, {String? title}) {
     final m = doc!.sheets[k];
     m.bookmark = !m.bookmark;
+    if (m.bookmark && title != null) m.title = title.trim();
     HapticFeedback.selectionClick();
     _metaChanged();
+  }
+
+  /// Botón de arriba: marca la hoja que se ve (pidiendo un nombre opcional) o le quita el marcador.
+  Future<void> _bookmarkCurrent() async {
+    final d = doc;
+    if (d == null) return;
+    final k = curSheet;
+    if (d.sheets[k].bookmark) return _toggleBookmark(k);
+    final ctl = TextEditingController(text: d.sheets[k].title);
+    // null = cancelado; '' en el valor = "Sin nombre"
+    final r = await showDialog<({String? name})>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Marcador'),
+        content: TextField(
+          key: const Key('bookmarkName'),
+          controller: ctl,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Nombre (opcional)'),
+          onSubmitted: (_) => Navigator.pop(ctx, (name: ctl.text)),
+        ),
+        actions: [
+          TextButton(key: const Key('bookmarkNoName'), onPressed: () => Navigator.pop(ctx, (name: null)), child: const Text('Sin nombre')),
+          FilledButton(key: const Key('bookmarkSave'), onPressed: () => Navigator.pop(ctx, (name: ctl.text)), child: const Text('Guardar')),
+        ],
+      ),
+    );
+    // el controlador no se libera acá: el diálogo todavía se está cerrando y lo usa
+    if (r == null || !mounted || k >= d.sheetCount || d.sheets[k].bookmark) return;
+    _toggleBookmark(k, title: r.name);
   }
 
   void _sheetAction(int k, SheetAction a) {
@@ -640,7 +671,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
       case 'print':
         final d = doc;
         if (d == null) return;
-        await Printing.layoutPdf(name: nb.name, onLayout: (_) => buildNotebookPdf(store, d));
+        await Printing.layoutPdf(name: nb.name, onLayout: (_) async => buildNotebookPdf(store, d, background: await exportBackgroundPref(store)));
       case 'delete':
         if (!await confirmDeleteNotebook(context, nb)) return;
         _deleted = true;
@@ -698,7 +729,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     if (d == null) return;
     final k = curSheet, meta = d.sheets[k];
     final sheetName = 'Hoja ${k + 1}${meta.title.isEmpty ? '' : ' · ${meta.title}'}';
-    final v = await showExportSheet(context, sheetName: nb.canvas ? null : sheetName);
+    final v = await showExportSheet(context, store, widget.tools, sheetName: nb.canvas ? null : sheetName);
     if (v == null || !mounted) return;
     switch (v) {
       case 'pdf':
@@ -710,7 +741,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         final secs = await askExportSections(context, nb);
         if (secs != null && mounted) await exportPngFlow(context, store, d, sections: secs);
       case 'sheetpng':
-        final ok = await saveSheetPng(store, d, k, '${nb.name} - hoja ${k + 1}');
+        final ok = await saveSheetPng(store, d, k, '${nb.name} - hoja ${k + 1}', background: await exportBackgroundPref(store));
         if (ok && mounted) snack(context, 'Imagen guardada');
       case 'opennote':
         await _exportOpennote();
@@ -1145,6 +1176,22 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
           else
             act(Symbols.view_sidebar, 'Hojas', () => setState(() => panel = !panel), on: panel, key: const Key('pagesBtn')),
           act(Symbols.open_in_full, 'Pantalla completa', _toggleFullscreen),
+          ListenableBuilder(
+            listenable: Listenable.merge([sheetNotifier, _structure]),
+            builder: (_, _) {
+              final on = doc != null && doc!.sheets[curSheet].bookmark;
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 1),
+                child: IconButton(
+                  key: const Key('bookmarkSheet'),
+                  tooltip: on ? 'Quitar marcador' : 'Marcar esta hoja',
+                  onPressed: doc == null ? null : _bookmarkCurrent,
+                  style: IconButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                  icon: Icon(Symbols.bookmark, size: 22, weight: on ? 400 : 300, fill: on ? 1 : 0, color: on ? cs.primary : cs.onSurfaceVariant),
+                ),
+              );
+            },
+          ),
           menuBtn(Symbols.more_vert, 'Más opciones', const Key('more'), (at) async {
             final v = await showMoreMenu(context, at, nb);
             if (v != null && mounted) await runMore(v);

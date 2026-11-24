@@ -3073,6 +3073,106 @@ void main() {
     await settle(t, 1200);
   });
 
+  testWidgets('marcadores: marcar la hoja que se ve con nombre, lista en el panel y volver a ella (issue #35)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Marcadores');
+    await t.tap(find.byKey(const Key('insert')));
+    await settle(t);
+    await t.tap(find.text('Hoja nueva'));
+    await settle(t, 800);
+    expect(find.text('2 / 2'), findsOneWidget);
+    await t.tap(find.byKey(const Key('bookmarkSheet')));
+    await settle(t);
+    await t.enterText(find.byKey(const Key('bookmarkName')), 'Parcial');
+    await t.tap(find.byKey(const Key('bookmarkSave')));
+    await settle(t, 800);
+    final d = editor(t).doc;
+    expect([d.sheets[1].bookmark, d.sheets[1].title], [true, 'Parcial']);
+    final id = d.sheets[1].id;
+    await t.tap(find.byKey(const Key('pagesBtn')));
+    await settle(t, 600);
+    await t.tap(find.byTooltip('Solo marcadas'));
+    await settle(t);
+    expect(find.descendant(of: find.byKey(Key('bookmarkItem-$id')), matching: find.text('Parcial')), findsOneWidget);
+    // a la hoja 1 (sin filtro) y de vuelta con el ítem de la lista
+    await t.tap(find.byTooltip('Ver todas'));
+    await settle(t);
+    await t.tap(find.byKey(const Key('thumb-1')));
+    await settle(t, 800);
+    expect(find.text('1 / 2'), findsOneWidget);
+    await t.tap(find.byTooltip('Solo marcadas'));
+    await settle(t);
+    await t.tap(find.byKey(Key('bookmarkItem-$id')));
+    await settle(t, 800);
+    expect(find.text('Parcial · 2 / 2'), findsOneWidget);
+    // desmarcar con el botón de arriba
+    await t.tap(find.byKey(const Key('bookmarkSheet')));
+    await settle(t, 600);
+    expect(editor(t).doc.sheets[1].bookmark, isFalse);
+    expect(find.byKey(Key('bookmarkItem-$id')), findsNothing);
+    expect(find.byKey(const Key('noBookmarks')), findsOneWidget);
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+  });
+
+  testWidgets('exportar sin el fondo de la hoja: PNG sobre blanco; con fondo, papel y cuadrícula (issue #39)', (t) async {
+    await start(t);
+    await createNotebook(t, 'SinFondo');
+    final d = editor(t).doc;
+    d.sheets[0]
+      ..bg = 'grid'
+      ..paper = '#fbf3e0';
+    d.strokes['trazo'] = Stroke('trazo', 'pen', '#22211e', 3, [300, 400, .5, 500, 450, .5, 700, 400, .5]);
+    await settle(t, 800);
+    final savedImages = saveImages;
+    addTearDown(() => saveImages = savedImages);
+    final ts = editor(t).ts;
+    final antes = ts.exportBackground;
+
+    Future<img.Image> exportar(bool fondo) async {
+      await t.tap(find.byKey(const Key('more')));
+      await settle(t);
+      await t.tap(find.text('Exportar'));
+      await settle(t, 600);
+      final sw = t.widget<SwitchListTile>(find.byKey(const Key('exportBg')));
+      if (sw.value != fondo) {
+        await t.tap(find.byKey(const Key('exportBg')));
+        await settle(t);
+      }
+      Uint8List? out;
+      saveImages = (bytes, name, zip) async {
+        out = bytes;
+        return true;
+      };
+      await t.tap(find.byKey(const Key('export-png')));
+      for (var i = 0; i < 100 && out == null; i++) {
+        await settle(t, 100);
+      }
+      expect(out, isNotNull);
+      return img.decodePng(out!)!;
+    }
+
+    bool blanco(img.Pixel p) => p.r == 255 && p.g == 255 && p.b == 255;
+    final sin = await exportar(false);
+    expect(blanco(sin.getPixel(8, 8)), isTrue, reason: 'sin fondo: blanco lejos del trazo');
+    expect(ts.exportBackground, isFalse, reason: 'la elección quedó recordada');
+    final con = await exportar(true);
+    expect(blanco(con.getPixel(8, 8)), isFalse, reason: 'con fondo: papel crema');
+    // restaurar la preferencia
+    if (ts.exportBackground != antes) {
+      await t.tap(find.byKey(const Key('more')));
+      await settle(t);
+      await t.tap(find.text('Exportar'));
+      await settle(t, 600);
+      await t.tap(find.byKey(const Key('exportBg')));
+      await settle(t);
+      await t.tapAt(const Offset(10, 10));
+      await settle(t, 600);
+    }
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+  });
+
   // ---------------- lienzo infinito (issue #36) ----------------
   /// Como [createNotebook] pero elige el tipo (por defecto Hojas, como el helper de siempre).
   Future<void> createKindNotebook(WidgetTester t, String name, {required bool canvas}) async {

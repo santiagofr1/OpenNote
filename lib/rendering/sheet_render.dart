@@ -12,15 +12,17 @@ import 'text_layout.dart';
 /// en coordenadas lógicas con origen en la esquina de esa hoja. Para miniaturas, PNG y PDF.
 /// [region] (coordenadas del documento): si viene, dibuja ese rectángulo (papel liso y lo que lo toca) con origen en su
 /// esquina, en vez de la hoja [sheet]. Es la página de un lienzo infinito al exportar.
-void paintSheet(Canvas c, NotebookDoc doc, int sheet, double pxPerUnit, {Map<String, ui.Image>? images, Rect? region}) {
+/// Con [background] falso no hay fondo: sobre blanco, sin papel de color, patrón ni imagen de fondo.
+void paintSheet(Canvas c, NotebookDoc doc, int sheet, double pxPerUnit,
+    {Map<String, ui.Image>? images, Rect? region, bool background = true}) {
   final top = region?.top ?? sheet * kSheetStep;
   final meta = doc.sheets[region == null ? sheet : doc.sheetOfY(region.top)];
   final page = region == null ? const Rect.fromLTWH(0, 0, kW, kSheetH) : Rect.fromLTWH(0, 0, region.width, region.height);
   c.save();
   c.clipRect(page);
-  c.drawRect(page, Paint()..color = parseColor(meta.paper));
-  if (region != null) {
-    // lienzo: papel liso, sin patrón
+  c.drawRect(page, Paint()..color = background ? parseColor(meta.paper) : const Color(0xFFFFFFFF));
+  if (!background || region != null) {
+    // sin fondo, o lienzo: papel liso, sin patrón
   } else if (meta.bg == 'image') {
     // fondo de imagen: entra completa en la hoja, sin patrón
     final img = meta.image == null ? null : images?[bgImageKey(meta.image!)];

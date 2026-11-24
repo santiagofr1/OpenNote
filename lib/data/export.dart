@@ -82,17 +82,19 @@ Future<List<_PdfLink>> _sheetLinks(Storage store, NotebookDoc doc, int sheet) as
 
 /// Lo que se sabe de una hoja ya dibujada, para armar su página del PDF.
 typedef _PagePlan = ({String id, SheetMeta meta, Uint8List png, List<_PdfLink> links, List<String> pdfKeys});
+/// La preferencia recordada de exportar con el fondo de la hoja (prefs.json, 'exportBg'); por defecto sí.
+Future<bool> exportBackgroundPref(Storage store) async => (await store.loadPrefs())?['exportBg'] != false;
 
 /// Arma el PDF del cuaderno: una página del tamaño de cada hoja, cada una con su fondo y su papel. Las secciones elegidas
 /// ([sections], todas si es null) van una atrás de la otra, en su orden. Los links (de OpenNote y de los PDF importados)
 /// siguen andando: a una web, o a otra hoja que esté en el PDF.
 /// [only]: índices de las hojas de la sección abierta a incluir. [onProgress] recibe (hechas, total).
 Future<Uint8List> buildNotebookPdf(Storage store, NotebookDoc nb,
-    {void Function(int, int)? onProgress, List<int>? only, Set<String>? sections}) async {
+    {void Function(int, int)? onProgress, List<int>? only, Set<String>? sections, bool background = true}) async {
   final pdf = pw.Document(title: nb.nb.name, creator: 'OpenNote');
   if (nb.nb.canvas) {
     // lienzo infinito: se parte en páginas de ancho A4 (solo las que tienen algo)
-    await for (final p in canvasPagePngs(store, nb, sections: sections, onProgress: onProgress)) {
+    await for (final p in canvasPagePngs(store, nb, sections: sections, onProgress: onProgress, background: background)) {
       pdf.addPage(pw.Page(
         pageFormat: PdfPageFormat(kA4WidthMm * PdfPageFormat.mm, kA4WidthMm * kSheetStep / kW * PdfPageFormat.mm),
         margin: pw.EdgeInsets.zero,
@@ -107,10 +109,10 @@ Future<Uint8List> buildNotebookPdf(Storage store, NotebookDoc nb,
   for (final e in sheets) {
     // las hojas sin cargar se leen de disco de a una y se sueltan: el PDF no necesita todo el cuaderno en memoria
     final (src, i) = await exportSource(store, nb, e);
-    final images = await loadImages(store, src, sheet: i);
+    final images = await loadImages(store, src, sheet: i, background: background);
     final Uint8List png;
     try {
-      png = await renderSheetPng(src, i, images: images);
+      png = await renderSheetPng(src, i, images: images, background: background);
     } finally {
       for (final img in images.values) {
         img.dispose();
@@ -194,7 +196,7 @@ Future<NotebookDoc> canvasSectionDoc(Storage store, NotebookDoc doc, Section sec
 /// Cada página (con contenido) de las secciones elegidas de un lienzo, ya dibujada como PNG, de a una.
 /// [onProgress] recibe (hechas, total).
 Stream<({Section section, int n, Uint8List png})> canvasPagePngs(Storage store, NotebookDoc doc,
-    {Set<String>? sections, void Function(int, int)? onProgress, bool Function()? cancelled}) async* {
+    {Set<String>? sections, void Function(int, int)? onProgress, bool Function()? cancelled, bool background = true}) async* {
   final secs = [for (final s in doc.nb.sections) if (sections == null || sections.contains(s.id)) s];
   var total = 0, done = 0;
   for (final s in secs) {
@@ -206,9 +208,9 @@ Stream<({Section section, int n, Uint8List png})> canvasPagePngs(Storage store, 
     for (var i = 0; i < pages.length; i++) {
       if (cancelled?.call() ?? false) return;
       onProgress?.call(done, total);
-      final images = await loadImages(store, sdoc, region: pages[i]);
+      final images = await loadImages(store, sdoc, region: pages[i], background: background);
       try {
-        yield (section: s, n: i, png: await renderSheetPng(sdoc, 0, images: images, region: pages[i]));
+        yield (section: s, n: i, png: await renderSheetPng(sdoc, 0, images: images, region: pages[i], background: background));
       } finally {
         for (final img in images.values) {
           img.dispose();
@@ -244,10 +246,10 @@ Future<(NotebookDoc, int)> exportSource(Storage store, NotebookDoc doc, ExportSh
 
 /// Imágenes insertadas en [doc] (solo las de la hoja [sheet] si se da), decodificadas, por nombre de archivo
 /// (las que faltan se saltean). Las páginas de PDF van por [pdfImageKey], dibujadas al ancho de la salida.
-Future<Map<String, ui.Image>> loadImages(Storage store, NotebookDoc doc, {int? sheet, ui.Rect? region}) async {
+Future<Map<String, ui.Image>> loadImages(Storage store, NotebookDoc doc, {int? sheet, ui.Rect? region, bool background = true}) async {
   final images = <String, ui.Image>{};
   for (final m in region != null ? const <SheetMeta>[] : sheet != null ? [doc.sheets[sheet]] : doc.sheets) {
-    if (m.bg != 'image' || m.image == null) continue;
+    if (!background || m.bg != 'image' || m.image == null) continue;
     final key = bgImageKey(m.image!), f = store.media(m.image!);
     if (!images.containsKey(key) && await f.exists()) images[key] = await decodeImage(await f.readAsBytes());
   }
@@ -317,12 +319,13 @@ Future<ui.Image> decodeImage(Uint8List bytes) async {
 }
 
 /// [region]: página de un lienzo (ver [paintSheet]); el PNG tiene el mismo ancho y el alto proporcional.
-Future<Uint8List> renderSheetPng(NotebookDoc doc, int sheet, {Map<String, ui.Image>? images, ui.Rect? region}) async {
+Future<Uint8List> renderSheetPng(NotebookDoc doc, int sheet,
+    {Map<String, ui.Image>? images, ui.Rect? region, bool background = true}) async {
   const k = _pxWidth / kW;
   final rec = ui.PictureRecorder();
   final c = ui.Canvas(rec);
   c.scale(k);
-  paintSheet(c, doc, sheet, k, images: images, region: region);
+  paintSheet(c, doc, sheet, k, images: images, region: region, background: background);
   final img = await rec.endRecording().toImage(_pxWidth.round(), ((region?.height ?? kSheetH) * k).round());
   final data = await img.toByteData(format: ui.ImageByteFormat.png);
   img.dispose();
@@ -346,9 +349,11 @@ Future<bool> savePdf(Uint8List bytes, String name) async {
 }
 
 /// Guarda la hoja [sheet] como PNG, preguntando dónde. Devuelve false si el usuario canceló.
-Future<bool> saveSheetPng(Storage store, NotebookDoc doc, int sheet, String name) async {
+Future<bool> saveSheetPng(Storage store, NotebookDoc doc, int sheet, String name,
+    {bool background = true}) async {
   final (src, i) = await sheetSource(store, doc, sheet);
-  final png = await renderSheetPng(src, i, images: await loadImages(store, src, sheet: i));
+  final png = await renderSheetPng(src, i,
+      images: await loadImages(store, src, sheet: i, background: background), background: background);
   final uri = await FilePicker.saveFile(
     dialogTitle: 'Guardar imagen',
     fileName: safeFileName('$name.png'),
@@ -364,13 +369,13 @@ Future<bool> saveSheetPng(Storage store, NotebookDoc doc, int sheet, String name
 /// [sections]: ids de las secciones a incluir (todas si es null). [onProgress] recibe (hechas, total) antes de cada hoja.
 /// Si [cancelled] da true entre hoja y hoja, el flujo termina sin dar las que faltan.
 Stream<({String name, Uint8List png})> notebookPngs(Storage store, NotebookDoc doc,
-    {Set<String>? sections, void Function(int, int)? onProgress, bool Function()? cancelled}) async* {
+    {Set<String>? sections, void Function(int, int)? onProgress, bool Function()? cancelled, bool background = true}) async* {
   final safe = safeFileName(doc.nb.name).trim();
   final name = safe.isEmpty ? 'Cuaderno' : safe;
   if (doc.nb.canvas) {
     // lienzo infinito: una imagen por página con contenido
     final multi = doc.nb.sections.length > 1, used = <String>{};
-    await for (final p in canvasPagePngs(store, doc, sections: sections, onProgress: onProgress, cancelled: cancelled)) {
+    await for (final p in canvasPagePngs(store, doc, sections: sections, onProgress: onProgress, cancelled: cancelled, background: background)) {
       final sec = safeFileName(p.section.name).trim();
       final base = '$name - ${multi ? '${sec.isEmpty ? 'Sección' : sec} - ' : ''}página ${'${p.n + 1}'.padLeft(2, '0')}';
       var file = base;
@@ -392,10 +397,10 @@ Stream<({String name, Uint8List png})> notebookPngs(Storage store, NotebookDoc d
     if (cancelled?.call() ?? false) return;
     onProgress?.call(d, n);
     final (src, i) = await exportSource(store, doc, e);
-    final images = await loadImages(store, src, sheet: i);
+    final images = await loadImages(store, src, sheet: i, background: background);
     final Uint8List png;
     try {
-      png = await renderSheetPng(src, i, images: images);
+      png = await renderSheetPng(src, i, images: images, background: background);
     } finally {
       for (final img in images.values) {
         img.dispose();
@@ -415,11 +420,11 @@ Stream<({String name, Uint8List png})> notebookPngs(Storage store, NotebookDoc d
 /// Un PNG por hoja ([notebookPngs]). Con varias hojas arma un ZIP; con una sola devuelve el PNG directo (`zip` falso).
 /// [onProgress] recibe (hechas, total). Si [cancelled] da true entre hoja y hoja, devuelve null.
 Future<({Uint8List bytes, bool zip})?> buildNotebookPngs(Storage store, NotebookDoc doc,
-    {void Function(int, int)? onProgress, bool Function()? cancelled, Set<String>? sections}) async {
+    {void Function(int, int)? onProgress, bool Function()? cancelled, Set<String>? sections, bool background = true}) async {
   final n = doc.nb.canvas ? -1 : exportSheets(doc.nb, sections: sections).length;
   final zip = Archive();
   Uint8List? single;
-  await for (final p in notebookPngs(store, doc, sections: sections, onProgress: onProgress, cancelled: cancelled)) {
+  await for (final p in notebookPngs(store, doc, sections: sections, onProgress: onProgress, cancelled: cancelled, background: background)) {
     single = p.png;
     zip.add(ArchiveFile.bytes(p.name, p.png));
   }

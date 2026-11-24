@@ -411,7 +411,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
 
   /// "Exportar" de la biblioteca: la misma hoja que el cuaderno, sin "PDF de esta hoja".
   Future<void> _export(Notebook nb) async {
-    final v = await showExportSheet(context);
+    final v = await showExportSheet(context, store, tools);
     if (v == null || !mounted) return;
     switch (v) {
       case 'pdf':

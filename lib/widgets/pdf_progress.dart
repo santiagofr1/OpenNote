@@ -43,7 +43,9 @@ Future<Uint8List?> buildPdfWithProgress(BuildContext context, Storage store, Not
     ),
   ));
   try {
-    final bytes = await buildNotebookPdf(store, doc, only: only, sections: sections, onProgress: (a, b) => progress.value = (a, b));
+    final bg = await exportBackgroundPref(store);
+    final bytes = await buildNotebookPdf(store, doc,
+        only: only, sections: sections, background: bg, onProgress: (a, b) => progress.value = (a, b));
     nav.pop();
     return bytes;
   } catch (e) {
@@ -78,7 +80,9 @@ Future<void> exportPngFlow(BuildContext context, Storage store, NotebookDoc doc,
   ));
   ({Uint8List bytes, bool zip})? r;
   try {
-    r = await buildNotebookPngs(store, doc, sections: sections, onProgress: (a, b) => progress.value = (a, b), cancelled: () => cancel);
+    final bg = await exportBackgroundPref(store);
+    r = await buildNotebookPngs(store, doc,
+        sections: sections, background: bg, onProgress: (a, b) => progress.value = (a, b), cancelled: () => cancel);
   } catch (e) {
     nav.pop();
     messenger.showSnackBar(SnackBar(content: Text('No se pudieron generar las imágenes: $e')));

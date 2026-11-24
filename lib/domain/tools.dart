@@ -122,6 +122,7 @@ class ToolState {
   bool shapeFill = false; // relleno con color (solo formas cerradas)
   String shapeFillColor = '#93c5fd';
   bool shapeGrid = true; // pegar a la cuadrícula del fondo
+  bool exportBackground = true; // exportar con el fondo de la hoja (papel, rayado, imagen) o solo lo escrito
   final clipboard = SelectionClipboard(); // no se guarda
 
   bool get drawing => tool == Tool.pen || tool == Tool.hl || tool == Tool.paint || tool == Tool.shape;
@@ -180,6 +181,7 @@ class ToolState {
         'shapeFill': shapeFill,
         'shapeFillColor': shapeFillColor,
         'shapeGrid': shapeGrid,
+        'exportBg': exportBackground,
       };
 
   void load(Map? j) {
@@ -211,5 +213,6 @@ class ToolState {
     final fc = j['shapeFillColor'];
     if (fc is String && RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(fc)) shapeFillColor = fc;
     shapeGrid = j['shapeGrid'] is bool ? j['shapeGrid'] as bool : true;
+    exportBackground = j['exportBg'] is bool ? j['exportBg'] as bool : true;
   }
 }

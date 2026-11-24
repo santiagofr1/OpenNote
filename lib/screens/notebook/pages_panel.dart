@@ -146,9 +146,12 @@ class _PagesPanelState extends State<PagesPanel> {
                 ),
               ]),
             ),
+            if (onlyBookmarks) _bookmarkList(list, cs),
             Expanded(
               child: list.isEmpty
-                  ? Center(child: Text('No hay hojas marcadas', style: TextStyle(color: cs.onSurfaceVariant)))
+                  ? (onlyBookmarks
+                      ? const SizedBox.shrink()
+                      : Center(child: Text('No hay hojas marcadas', style: TextStyle(color: cs.onSurfaceVariant))))
                   : GridView.builder(
                       key: _gridKey,
                       controller: _scroll,
@@ -165,6 +168,42 @@ class _PagesPanelState extends State<PagesPanel> {
             ),
           ]);
         },
+      ),
+    );
+  }
+
+  /// Lista compacta de las hojas marcadas (de la sección activa), arriba de las miniaturas con el filtro prendido.
+  Widget _bookmarkList(List<int> list, ColorScheme cs) {
+    if (list.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        child: Text('No hay hojas marcadas. Usá el marcador de arriba para marcar la hoja que estás viendo.',
+            key: const Key('noBookmarks'), style: TextStyle(color: cs.onSurfaceVariant)),
+      );
+    }
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 190),
+      child: Material(
+        color: Colors.transparent, // el panel tiene fondo propio: el ListTile pinta sobre este Material
+        child: ListView(
+        shrinkWrap: true,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        children: [
+          for (final k in list)
+            ListTile(
+              key: Key('bookmarkItem-${doc.sheets[k].id}'),
+              dense: true,
+              visualDensity: VisualDensity.compact,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              leading: Icon(Symbols.bookmark, size: 20, fill: 1, weight: 400, color: cs.primary),
+              title: Text(doc.sheets[k].title.isEmpty ? 'Hoja ${k + 1}' : doc.sheets[k].title,
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+              trailing: Text('Hoja ${k + 1}', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+              onTap: () => widget.onOpen(k),
+            ),
+          const Divider(height: 8),
+        ],
+        ),
       ),
     );
   }
@@ -292,9 +331,18 @@ class _PagesPanelState extends State<PagesPanel> {
                     isCur: isCur,
                   ),
                 ),
+                // cinta de hoja marcada (el borde ya indica la hoja actual)
+                if (meta.bookmark)
+                  Positioned(
+                    top: 0,
+                    right: 0,
+                    child: IgnorePointer(
+                      child: CustomPaint(size: const Size(14, 20), painter: _RibbonPainter(cs.primary)),
+                    ),
+                  ),
                 Positioned(
                   top: 2,
-                  right: 2,
+                  right: 12,
                   child: IconButton(
                     visualDensity: VisualDensity.compact,
                     tooltip: meta.bookmark ? 'Quitar marcador' : 'Marcar',
@@ -431,4 +479,24 @@ class _SheetThumbState extends State<_SheetThumb> {
           SheetThumb(doc: snap.data ?? _paper, version: snap.data == null ? -1 : m.rev, store: w.cache.store),
     );
   }
+}
+
+/// Cinta de marcador: un rectángulo con la punta en V abajo.
+class _RibbonPainter extends CustomPainter {
+  final Color color;
+  const _RibbonPainter(this.color);
+  @override
+  void paint(Canvas c, Size s) {
+    final p = Path()
+      ..moveTo(0, 0)
+      ..lineTo(s.width, 0)
+      ..lineTo(s.width, s.height)
+      ..lineTo(s.width / 2, s.height - 6)
+      ..lineTo(0, s.height)
+      ..close();
+    c.drawPath(p, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(_RibbonPainter o) => o.color != color;
 }
