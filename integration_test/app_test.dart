@@ -61,6 +61,9 @@ void main() {
     await t.pump();
   }
 
+  /// Una muestra de 30 dp de la paleta del panel (el primer color que no es favorito).
+  Finder panelSwatch(String c) => find.byWidgetPredicate((w) => w is Container && w.constraints?.maxWidth == 30 && (w.decoration as BoxDecoration?)?.color == parseColor(c)).first;
+
   Future<void> settle(WidgetTester t, [int ms = 400]) async {
     for (var i = 0; i < ms ~/ 50; i++) {
       await t.pump(const Duration(milliseconds: 50));
@@ -193,7 +196,7 @@ void main() {
     await settle(t, 1200);
   });
 
-  testWidgets('barra: 4 colores favoritos fijos; tocar elige sin reordenar y mantener apretado guarda el color actual (issue #23)', (t) async {
+  testWidgets('barra: 4 colores favoritos fijos; tocar elige sin reordenar y mantener apretado abre el panel editando ese favorito (issue #23)', (t) async {
     await start(t);
     await createNotebook(t, 'Favoritos');
     final ts = editor(t).ts;
@@ -204,7 +207,17 @@ void main() {
     expect(ts.favorites, antes, reason: 'elegir un favorito no los reordena');
     await t.longPress(find.byKey(const ValueKey('fav-0')));
     await settle(t);
-    expect(ts.favorites, [antes[2], antes[1], antes[2], antes[3]]);
+    expect(find.byKey(const Key('colorSquare')), findsOneWidget, reason: 'mantener apretado abre el panel editando');
+    expect(find.text('Listo'), findsOneWidget);
+    final nuevo = palette.firstWhere((c) => !antes.contains(c));
+    await t.ensureVisible(panelSwatch(nuevo));
+    await t.tap(panelSwatch(nuevo));
+    await settle(t);
+    expect(ts.favorites, [nuevo, antes[1], antes[2], antes[3]]);
+    // cerrar el panel
+    await t.tapAt(const Offset(4, 600));
+    await settle(t);
+    expect(find.byKey(const Key('colorSquare')), findsNothing);
     // dejar los favoritos como estaban
     ts.setFavorite(0, antes[0]);
     editor(t).widget.onPrefsChanged();
@@ -2617,6 +2630,35 @@ void main() {
     expect(find.byKey(Key('indexEntry-${h1.id}')), findsNothing);
     expect(entry(h2.id), ['1', 'Objetivos', '2']);
 
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+  });
+
+  testWidgets('favoritos: Cambiar en el panel del lápiz y arrastrar en el cuadrado deja el color nuevo en el favorito 0 de la barra', (t) async {
+    await start(t);
+    await createNotebook(t, 'Selector');
+    final ts = editor(t).ts;
+    final antes = ts.favorites[0];
+    await t.tap(find.byTooltip('Lápiz · tocá de nuevo para opciones'));
+    await settle(t);
+    await t.tap(find.byKey(const Key('favEdit')));
+    await settle(t);
+    final sq = find.byKey(const Key('colorSquare'));
+    await t.ensureVisible(sq);
+    await settle(t);
+    await t.dragFrom(t.getTopLeft(sq) + const Offset(60, 40), const Offset(50, 60));
+    await settle(t);
+    final nuevo = ts.favorites[0];
+    expect(nuevo, isNot(antes));
+    expect(nuevo, ts.pen.color);
+    await t.tapAt(const Offset(4, 600)); // cierra el panel
+    await settle(t);
+    expect(find.byKey(const Key('colorSquare')), findsNothing);
+    expect(ts.favorites[0], nuevo);
+    final dot = find.descendant(of: find.byKey(const ValueKey('fav-0')), matching: find.byWidgetPredicate((w) => w is Container && (w.decoration as BoxDecoration?)?.color == parseColor(nuevo)));
+    expect(dot, findsOneWidget, reason: 'la barra muestra el color nuevo');
+    // dejar el favorito como estaba
+    ts.setFavorite(0, antes);
     await t.tap(find.byKey(const Key('back')));
     await settle(t, 1200);
   });
