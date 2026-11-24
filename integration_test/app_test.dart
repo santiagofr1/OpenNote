@@ -1256,6 +1256,50 @@ void main() {
     expect(find.descendant(of: find.byKey(Key('indexEntry-${h.id}')), matching: find.text('Capitulo Uno')), findsOneWidget);
   });
 
+  testWidgets('la página de un PDF no se selecciona ni se mueve con el dedo (issue #42)', (t) async {
+    final pdfBytes = (await t.runAsync(() async {
+      final d = pw.Document();
+      d.addPage(pw.Page(build: (_) => pw.Text('Hola', style: pw.TextStyle(fontSize: 40))));
+      return Uint8List.fromList(await d.save());
+    }))!;
+    final savedPick = Pickers.pdf;
+    addTearDown(() => Pickers.pdf = savedPick);
+    Pickers.pdf = () async => (pdfBytes, 'Libro');
+    await start(t);
+    await createNotebook(t, 'Mover PDF');
+    final ed = editor(t);
+    await t.tap(find.byKey(const Key('insert')));
+    await settle(t);
+    await t.tap(find.text('PDF'));
+    await settle(t, 1500);
+    final pdf = ed.doc.items.values.firstWhere((i) => i.type == 'pdf');
+    final x0 = pdf.x, y0 = pdf.y;
+    final p = docToScreen(t);
+    final c = p(Offset(pdf.x + pdf.w / 2, pdf.y + pdf.h / 2));
+
+    // mantener con el dedo y arrastrar: la página no se mueve ni queda elegida
+    final g = await t.startGesture(c, kind: PointerDeviceKind.touch);
+    await t.pump(const Duration(milliseconds: 700));
+    for (var i = 1; i <= 10; i++) {
+      await g.moveTo(c + Offset(12.0 * i, 0));
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    await g.up();
+    await settle(t, 400);
+    expect((pdf.x, pdf.y), (x0, y0));
+    expect(ed.selI, isEmpty);
+
+    // con la herramienta seleccionar, un toque sobre el PDF tampoco lo elige
+    await t.tap(find.byKey(const ValueKey('tool-select')));
+    await settle(t);
+    final g2 = await t.startGesture(c, kind: PointerDeviceKind.stylus);
+    await t.pump(const Duration(milliseconds: 50));
+    await g2.up();
+    await settle(t, 300);
+    expect(ed.selI, isEmpty);
+    expect((pdf.x, pdf.y), (x0, y0));
+  });
+
   Future<void> createFolder(WidgetTester t, String name) async {
     await t.tap(find.byKey(const Key('new')));
     await settle(t);
