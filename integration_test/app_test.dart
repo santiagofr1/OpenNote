@@ -909,6 +909,51 @@ void main() {
     expect(ed.widget.tools.zoomLocked, isFalse);
   });
 
+  testWidgets('pellizco después de poner y sacar el candado: el zoom crece parejo y la hoja no tiembla (#27)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Pellizco');
+    final ed = editor(t);
+    ed.widget.tools.zoom = 1;
+    ed.widget.tools.zoomLocked = false;
+    await t.tap(find.byTooltip('Fijar el zoom'));
+    await settle(t);
+    await t.tap(find.byWidgetPredicate((w) => w is Tooltip && (w.message ?? '').startsWith('Zoom fijo')));
+    await settle(t);
+    expect(ed.widget.tools.zoomLocked, isFalse);
+
+    final c = sheetCenter(t);
+    final vp = find
+        .descendant(of: find.byType(PageEditor), matching: find.byType(Listener))
+        .evaluate()
+        .map((e) => e.renderObject as RenderBox)
+        .firstWhere((b) => b.hasSize && (b.size.height - ed.scroll.position.viewportDimension).abs() < .5);
+    final f = c - vp.localToGlobal(Offset.zero);
+    Offset off() => Offset(ed.hscroll.hasClients ? ed.hscroll.offset : 0, ed.scroll.offset);
+    final p0 = ed.layout.toPage(f, off());
+    final a = await t.createGesture(kind: PointerDeviceKind.touch);
+    final b = await t.createGesture(kind: PointerDeviceKind.touch);
+    await a.down(c - const Offset(100, 0));
+    await b.down(c + const Offset(100, 0));
+    await t.pump(const Duration(milliseconds: 16));
+    var last = ed.widget.tools.zoom;
+    for (var i = 1; i <= 20; i++) {
+      // se mide al terminar de pintar el cuadro, antes de cualquier corrección posterior
+      double? err;
+      WidgetsBinding.instance.addPostFrameCallback((_) => err = (ed.layout.scrollFor(p0, f) - off()).distance);
+      await a.moveTo(c - Offset(100 + 10.0 * i, 0));
+      await b.moveTo(c + Offset(100 + 10.0 * i, 0));
+      await t.pump(const Duration(milliseconds: 16));
+      expect(ed.widget.tools.zoom, greaterThanOrEqualTo(last - 1e-9), reason: 'zoom monótono (cuadro $i)');
+      last = ed.widget.tools.zoom;
+      expect(err, isNotNull);
+      expect(err!, lessThan(3), reason: 'la hoja no se corre del foco (cuadro $i)');
+    }
+    await a.up();
+    await b.up();
+    await settle(t, 300);
+    expect(ed.widget.tools.zoom, greaterThan(2));
+  });
+
   testWidgets('PDF: una hoja A4 por cada hoja del cuaderno, cada una con su papel', (t) async {
     final s = Storage(root: root);
     await s.init();
@@ -1564,6 +1609,56 @@ void main() {
     expect(find.byKey(const Key('selHandle-br')), findsNothing);
     await tapAt(const Offset(700, 700));
     expect(ed.sel.strokes, {far}, reason: 'el segundo toque, ya sin selección, elige');
+  });
+
+  testWidgets('#28: llevar una selección al borde de abajo desplaza el cuaderno', (t) async {
+    await start(t);
+    await createNotebook(t, 'BordeAuto');
+    final ed = editor(t);
+    for (var i = 0; i < 2; i++) {
+      ed.doc.nb.sheets.add(ed.doc.nb.newSheet()); // varias hojas: hay hasta dónde bajar
+    }
+    final st = Stroke('st28', 'pen', '#22211e', 2.6, [150, 200, .5, 450, 200, .5]);
+    ed.doc.strokes[st.id] = st;
+    ed.doc.markDirtyElement(st);
+    // ignore: invalid_use_of_protected_member
+    ed.setState(() {});
+    await settle(t, 800);
+
+    await t.tap(find.byTooltip('Seleccionar'));
+    await settle(t);
+    final p = docToScreen(t), view = t.getRect(find.byType(PageEditor));
+    final before = st.bounds, y0 = ed.scroll.offset;
+    await stylusDrag(t, p(before.topLeft - const Offset(25, 25)), p(before.bottomRight + const Offset(25, 25)));
+    expect(ed.sel.strokes, {st.id});
+
+    // arrastrar el trazo hasta 20 px del borde de abajo y quedarse ahí ~1 s (tiempo real)
+    final a = p(before.center), b = Offset(a.dx, view.bottom - 20);
+    final g = await t.startGesture(a, kind: PointerDeviceKind.stylus);
+    for (var i = 1; i <= 10; i++) {
+      await g.moveTo(Offset.lerp(a, b, i / 10)!);
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    final end = DateTime.now().add(const Duration(seconds: 1));
+    while (DateTime.now().isBefore(end)) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await t.pump();
+    }
+    final y1 = ed.scroll.offset;
+    await g.up();
+    await settle(t, 600);
+    expect(y1, greaterThan(y0 + 100), reason: 'el cuaderno bajó solo');
+    final moved = ed.doc.strokes[st.id]!.bounds;
+    expect(moved.top * ed.scale - ed.scroll.offset, greaterThan(0), reason: 'el trazo quedó a la vista');
+    expect(moved.top, greaterThan(before.top + (b.dy - a.dy) / ed.scale + 50), reason: 'viajó con la hoja');
+    final yEnd = ed.scroll.offset;
+    await settle(t, 300);
+    expect(ed.scroll.offset, yEnd, reason: 'al soltar el scroll para');
+
+    // deshacer: el trazo vuelve (no cambia los casos siguientes)
+    await t.tap(find.byTooltip('Deshacer'));
+    await settle(t);
+    expect(ed.doc.strokes[st.id]!.bounds, before);
   });
 
   testWidgets('selección: las manijas del medio estiran solo a lo ancho o solo a lo alto (trazos e imagen)', (t) async {
