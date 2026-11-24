@@ -102,7 +102,7 @@ Future<StyleChoice?> showStyleDialog(BuildContext context, NotebookDoc doc,
       }
       final title = TextStyle(fontWeight: FontWeight.w500, color: cs.onSurface);
       final options = spacingsFor(bg);
-      final controls = Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+      final sheetControls = Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('Tamaño', style: title),
         const SizedBox(height: 8),
         Wrap(spacing: 8, children: [
@@ -173,8 +173,16 @@ Future<StyleChoice?> showStyleDialog(BuildContext context, NotebookDoc doc,
           ]),
         ],
       ]);
+      // lienzo infinito: solo el color del papel, que vale para todo
+      final controls = !doc.nb.canvas
+          ? sheetControls
+          : Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Color del papel', style: title),
+              const SizedBox(height: 8),
+              Wrap(spacing: 10, runSpacing: 10, children: [for (final (c, label) in papers) paperOpt(c, label)]),
+            ]);
       return AlertDialog(
-        title: Text(forNew ? 'Hoja nueva' : 'Estilo de hoja'),
+        title: Text(doc.nb.canvas ? 'Color del papel' : (forNew ? 'Hoja nueva' : 'Estilo de hoja')),
         content: SizedBox(
           width: 560,
           child: SingleChildScrollView(

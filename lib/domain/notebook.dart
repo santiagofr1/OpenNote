@@ -7,6 +7,14 @@ import 'folders.dart';
 import 'outline.dart';
 import 'values.dart';
 
+/// Ancho inicial (y mínimo) de un lienzo infinito, en unidades lógicas.
+const kCanvasW0 = 2000.0;
+
+/// Ancho nuevo del lienzo de ancho [canvasW] si el contenido llega hasta [right]: crece de a 500 cuando el borde queda a
+/// menos de 400 del final, dejando 800 de aire. Nunca achica.
+double grownCanvasW(double canvasW, double right) =>
+    right > canvasW - 400 ? ((right + 800) / 500).ceil() * 500.0 : canvasW;
+
 /// Una hoja del cuaderno: lo que se guarda en `notebook.json` (el contenido está en su `.sheet`).
 class SheetMeta {
   final String id;
@@ -131,6 +139,8 @@ class Notebook {
   bool favorite;
   String? pin; // hash del PIN (ver hashPin), si está bloqueado
   String? folder; // id de la carpeta donde está (null = inicio)
+  bool canvas; // lienzo infinito: sin cortes, crece hacia abajo y a la derecha (fijo desde que se crea)
+  double canvasW; // ancho del lienzo en unidades lógicas (solo crece); kW es el ancho de una hoja A4
   Notebook(this.id, this.name,
       {List<SheetMeta>? sheets,
       List<Section>? sections,
@@ -144,22 +154,25 @@ class Notebook {
       this.last = 0,
       this.favorite = false,
       this.pin,
-      this.folder})
+      this.folder,
+      this.canvas = false,
+      this.canvasW = kCanvasW0})
       : sheets = sheets ?? [],
         sections = sections == null || sections.isEmpty ? [Section(kGeneralSection, 'General')] : sections,
         active = active ?? (sections == null || sections.isEmpty ? kGeneralSection : sections.first.id),
         spacing = spacing ?? defaultSpacing(bg);
 
   /// Cuaderno nuevo con una hoja en blanco.
-  factory Notebook.create(String name) {
-    final nb = Notebook(newId('n'), name);
+  factory Notebook.create(String name, {bool canvas = false}) {
+    final nb = Notebook(newId('n'), name, canvas: canvas, bg: canvas ? 'blank' : 'lined');
     nb.sheets.add(nb.newSheet());
     return nb;
   }
 
   /// Hoja nueva con el estilo del cuaderno, de la sección [section] (o la activa). No la agrega.
   SheetMeta newSheet({String? section}) =>
-      SheetMeta(newId('h'), bg: bg, image: image, paper: paper, spacing: spacing, size: size, section: section ?? active);
+      SheetMeta(newId('h'),
+          bg: canvas ? 'blank' : bg, image: canvas ? null : image, paper: paper, spacing: spacing, size: size, section: section ?? active);
 
   // ---------- secciones ----------
   Section get activeSection => sectionById(active) ?? sections.first;
@@ -308,6 +321,8 @@ class Notebook {
         favorite: (n['favorite'] ?? false) as bool,
         pin: n['pin'] as String?,
         folder: n['folder'] as String?,
+        canvas: (n['canvas'] ?? false) as bool,
+        canvasW: ((n['canvasW'] as num?)?.toDouble() ?? kCanvasW0).clamp(kCanvasW0, 1e6).toDouble(),
       );
 
   /// Entrada del índice (sin las hojas).
@@ -324,6 +339,8 @@ class Notebook {
         if (favorite) 'favorite': true,
         if (pin != null) 'pin': pin,
         if (folder != null) 'folder': folder,
+        if (canvas) 'canvas': true,
+        if (canvas) 'canvasW': canvasW,
       };
 
   /// Lo que va en `notebook.json`: las secciones en orden, la activa y TODAS las hojas (de todas las secciones),

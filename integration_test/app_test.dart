@@ -2851,6 +2851,69 @@ void main() {
     await t.tap(find.byKey(const Key('back')));
     await settle(t, 1200);
   });
+
+  // ---------------- lienzo infinito (issue #36) ----------------
+  /// Como [createNotebook] pero elige el tipo (por defecto Hojas, como el helper de siempre).
+  Future<void> createKindNotebook(WidgetTester t, String name, {required bool canvas}) async {
+    await t.tap(find.byKey(const Key('new')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('newNotebook')));
+    await settle(t);
+    await t.enterText(find.byKey(const Key('askText')), name);
+    await t.tap(find.byKey(Key(canvas ? 'nbKindCanvas' : 'nbKindSheets')));
+    await settle(t, 200);
+    await t.tap(find.byKey(const Key('askOk')));
+    await settle(t, 1500);
+  }
+
+  testWidgets('lienzo infinito: crece a la derecha y hacia abajo, sin botón de hojas, y se conserva (issue #36)', (t) async {
+    await start(t);
+    await createKindNotebook(t, 'Mapa', canvas: true);
+    expect(find.byKey(const Key('pagesBtn')), findsNothing);
+    final ed = editor(t);
+    expect(ed.doc.nb.canvas, isTrue);
+    expect(ed.doc.nb.canvasW, 2000);
+    final antes = ed.hscroll.position.maxScrollExtent;
+    expect(antes, greaterThan(0), reason: 'el lienzo es más ancho que la pantalla');
+
+    // derecha: se va al borde y se escribe pegado a él
+    ed.hscroll.jumpTo(ed.hscroll.position.maxScrollExtent);
+    await settle(t, 300);
+    final box = t.getRect(find.byType(PageEditor));
+    final y = box.top + 300;
+    await stylusDrag(t, Offset(box.right - 120, y), Offset(box.right - 40, y + 30));
+    expect(ed.doc.strokes.length, 1);
+    expect(ed.doc.nb.canvasW, greaterThan(2000));
+    expect(ed.hscroll.position.maxScrollExtent, greaterThan(antes), reason: 'se puede scrollear más a la derecha');
+
+    // abajo: se va al final y se escribe cerca del borde de abajo
+    ed.scroll.jumpTo(ed.scroll.position.maxScrollExtent);
+    await settle(t, 300);
+    final sheets = ed.doc.sheetCount;
+    await stylusDrag(t, Offset(box.left + 300, box.bottom - 80), Offset(box.left + 400, box.bottom - 60));
+    expect(ed.doc.sheetCount, greaterThan(sheets));
+
+    final w = ed.doc.nb.canvasW;
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+    final nb = await savedNotebook('Mapa');
+    expect(nb.canvas, isTrue);
+    expect(nb.canvasW, w);
+    await t.tap(find.byKey(const Key('nb-Mapa')));
+    await settle(t, 1500);
+    expect(editor(t).doc.nb.canvasW, w);
+    expect(editor(t).doc.strokes.length, 2, reason: 'los trazos quedaron guardados');
+    expect(find.byKey(const Key('pagesBtn')), findsNothing);
+  });
+
+  testWidgets('cuaderno de hojas con el tipo por defecto: sigue igual (issue #36)', (t) async {
+    await start(t);
+    await createKindNotebook(t, 'Hojas', canvas: false);
+    expect(find.byKey(const Key('pagesBtn')), findsOneWidget);
+    expect(editor(t).doc.nb.canvas, isFalse);
+    expect(editor(t).doc.width, kW);
+  });
+
 }
 
 /// Reconocimiento de letra de mentira: siempre lee [text].

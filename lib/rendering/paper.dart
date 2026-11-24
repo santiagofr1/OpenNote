@@ -250,3 +250,19 @@ class SheetPainter extends CustomPainter {
   @override
   bool shouldRepaint(SheetPainter o) => o._sig != _sig || o.scale != scale || o.first != first || o.last != last;
 }
+
+/// Fondo del lienzo infinito: un solo papel liso de [width] x [height] unidades, sin sombras, bordes ni patrón.
+class CanvasPainter extends CustomPainter {
+  final String paper;
+  final double height, width, scale;
+  CanvasPainter(this.paper, this.height, this.width, this.scale);
+
+  @override
+  void paint(Canvas c, Size size) {
+    c.scale(scale);
+    c.drawRect(Rect.fromLTWH(0, 0, width, height), Paint()..color = parseColor(paper));
+  }
+
+  @override
+  bool shouldRepaint(CanvasPainter o) => o.paper != paper || o.height != height || o.width != width || o.scale != scale;
+}

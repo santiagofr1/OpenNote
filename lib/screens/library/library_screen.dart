@@ -364,9 +364,10 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
   }
 
   Future<void> _createNotebook() async {
-    final name = (await askText(context, 'Nuevo cuaderno', hint: 'Ej: Análisis II', ok: 'Crear'))?.trim();
-    if (name == null || name.isEmpty) return;
-    final nb = Notebook.create(name)
+    final pick = await askNewNotebook(context);
+    final name = pick?.name.trim();
+    if (pick == null || name == null || name.isEmpty) return;
+    final nb = Notebook.create(name, canvas: pick.canvas)
       ..folder = current
       ..touch();
     final doc = NotebookDoc(nb);
@@ -386,7 +387,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
 
   Future<void> _duplicate(Notebook nb) async {
     // se copian los archivos de las hojas: no se carga ni se decodifica nada del cuaderno
-    final copy = Notebook(newId('n'), '${nb.name} (copia)', bg: nb.bg, image: nb.image, paper: nb.paper, spacing: nb.spacing, size: nb.size, folder: nb.folder)
+    final copy = Notebook(newId('n'), '${nb.name} (copia)', bg: nb.bg, image: nb.image, paper: nb.paper, spacing: nb.spacing, size: nb.size, folder: nb.folder, canvas: nb.canvas, canvasW: nb.canvasW)
       ..copySectionsFrom(nb) // las secciones y las hojas de TODAS (los archivos se copian todos)
       ..touch();
     await store.copyNotebookFiles(nb, copy);

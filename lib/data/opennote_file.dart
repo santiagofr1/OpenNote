@@ -55,6 +55,8 @@ Future<Uint8List> exportNotebookBytes(Storage store, Notebook nb) async {
     'paper': nb.paper,
     'spacing': nb.spacing,
     if (nb.size != 'a4') 'size': nb.size,
+    if (nb.canvas) 'canvas': true,
+    if (nb.canvas) 'canvasW': nb.canvasW,
     'sheets': nb.totalSheets,
     'exported': DateTime.now().millisecondsSinceEpoch,
   };
@@ -158,6 +160,8 @@ Future<Notebook> importNotebookBytes(Storage store, Uint8List bytes,
       paper: (manifest['paper'] ?? '#fffefb') as String,
       spacing: (manifest['spacing'] as num?)?.toDouble(),
       size: validPaperSize(manifest['size']),
+      canvas: manifest['canvas'] == true,
+      canvasW: ((manifest['canvasW'] as num?)?.toDouble() ?? kCanvasW0).clamp(kCanvasW0, 1e6).toDouble(),
       folder: folder)
     ..loadSheetsJson(nbJson) // secciones y hojas (las secciones se conservan al importar)
     ..touch();
