@@ -16,6 +16,9 @@ const kCoverTip = 'cover';
 /// Lo que se dibuja debajo de la tinta de su tanda: resaltador y pintura.
 bool isUnderInk(String k) => k == 'hl' || isPaint(k);
 
+/// Resaltador: se compone multiplicando con lo de abajo (el texto de un PDF queda encima).
+bool isHighlighter(String k) => k == 'hl';
+
 /// Tipos de trazo de la pintura: pincel seco, resaltador (franja plana translúcida) y fibra (franja sólida pareja).
 const paintStyleIds = ['brush', 'hl', 'marker'];
 

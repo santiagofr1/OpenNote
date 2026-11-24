@@ -25,6 +25,7 @@ import '../widgets/auto_scroller.dart';
 import '../widgets/dialogs.dart';
 import 'context_menu.dart';
 import 'dock_layout.dart';
+import 'fast_scroller.dart';
 import 'format_bar.dart';
 import 'handwriting.dart';
 import 'heading_dialog.dart';
@@ -2597,15 +2598,21 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
                 // el lápiz NO scrollea: solo dedo y touchpad
                 // con el zoom fijado el dedo solo NO mueve la hoja (así la palma no la corre al escribir): se mueve con
                 // dos dedos; la rueda del mouse y el trackpad siguen andando
+                // (la barra vertical la reemplaza el scroll rápido; la horizontal tiene la suya más abajo)
                 behavior: ScrollConfiguration.of(context).copyWith(
                   dragDevices: {if (!ts.zoomLocked) PointerDeviceKind.touch, PointerDeviceKind.trackpad},
-                  scrollbars: true,
+                  scrollbars: false,
                 ),
                 child: SingleChildScrollView(
                   controller: scroll,
                   physics: physics,
                   keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
-                  child: SingleChildScrollView(
+                  child: ScrollConfiguration(
+                    behavior: ScrollConfiguration.of(context).copyWith(
+                      dragDevices: {if (!ts.zoomLocked) PointerDeviceKind.touch, PointerDeviceKind.trackpad},
+                      scrollbars: true,
+                    ),
+                    child: SingleChildScrollView(
                     controller: hscroll,
                     scrollDirection: Axis.horizontal,
                     physics: physics,
@@ -2633,9 +2640,21 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
                           ),
                       ]),
                     ),
+                    ),
                   ),
                 ),
               ),
+            ),
+          ),
+          // hermano del visor: el dedo sobre el pulgar no llega a los manejadores de toque del visor
+          Positioned(
+            top: 0,
+            bottom: 0,
+            right: 0,
+            width: 200,
+            child: FastScroller(
+              controller: scroll,
+              label: doc.nb.canvas ? null : () => 'Hoja ${visibleSheet + 1} de ${doc.sheetCount}',
             ),
           ),
           Positioned(left: 0, right: 0, bottom: 28, child: Center(child: PullIndicator(pull))),
@@ -2847,7 +2866,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             if (!doc.isLoadedAt(k)) _loadingMark(k),
             for (final (i, run) in _sheetRuns[doc.sheets[k].id]!.indexed) _run(run, i, textMode, k),
           ],
-          for (final (i, run) in zRuns(sortByZ(extras)).indexed) _run(run, i, textMode, -1),
+          for (final (i, run) in splitHighlighters(zRuns(sortByZ(extras))).indexed) _run(run, i, textMode, -1),
           Positioned.fill(
             child: IgnorePointer(
               child: RepaintBoundary(
@@ -2887,7 +2906,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     for (final t in doc.texts.values) {
       buckets[doc.sheetOfY(t.y)]?.add(t);
     }
-    buckets.forEach((k, els) => _sheetRuns[doc.sheets[k].id] = zRuns(sortByZ(els)));
+    buckets.forEach((k, els) => _sheetRuns[doc.sheets[k].id] = splitHighlighters(zRuns(sortByZ(els))));
   }
 
   /// Aviso (sin animación) en una hoja visible que todavía no se leyó de disco: se ve el papel y nada más.
@@ -2931,8 +2950,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
           child: RepaintBoundary(
             child: CustomPaint(
                 painter: InkPainter(doc, strokes, r, scale, _verOf(id), () => sel.moving ? sel.strokes : (_shapeEdit != null ? {_shapeEdit!.id} : const {}),
-                    cache: _imgs, cacheKey: 'ink-$id-$i', sheetId: id, dpr: _dpr, maxPx: 2 * _viewW * _dpr),
-                isComplex: true),
+                    cache: _imgs, cacheKey: 'ink-$id-$i', sheetId: id, dpr: _dpr, maxPx: 2 * _viewW * _dpr, multiply: run.multiply),
+                // la tanda multiplicada no se rasteriza aparte: perdería la mezcla con el PDF de abajo
+                isComplex: !run.multiply,
+                willChange: run.multiply),
           ),
         ),
       );

@@ -27,6 +27,9 @@ class InkPainter extends CustomPainter {
   final ValueNotifier<int> version;
   final Set<String> Function() hidden;
 
+  /// Tanda de resaltadores que se compone multiplicando con lo de abajo (ver [isHighlighter]).
+  final bool multiply;
+
   /// Caché de imagen (ver [SheetImageCache]): [cacheKey] / [sheetId] dicen qué tanda es. [dpr] pasa de unidades
   /// lógicas a píxeles; [maxPx] es el ancho máximo en píxeles que se cachea (más zoom que eso va vectorial).
   final SheetImageCache? cache;
@@ -37,7 +40,7 @@ class InkPainter extends CustomPainter {
   int? _stripN;
 
   InkPainter(this.doc, this.strokes, this.sheet, this.scale, this.version, this.hidden,
-      {this.cache, this.cacheKey = '', this.sheetId = '', this.dpr = 1, this.maxPx = 4096})
+      {this.cache, this.cacheKey = '', this.sheetId = '', this.dpr = 1, this.maxPx = 4096, this.multiply = false})
       : _img = cache?.entry(cacheKey, sheetId),
         super(repaint: cache == null ? version : Listenable.merge([version, cache.entry(cacheKey, sheetId)]));
 
@@ -94,7 +97,9 @@ class InkPainter extends CustomPainter {
           final (y0, y1) = SheetImageCache.stripRange(s.fullH, n, i);
           c.drawImageRect(s.image, Rect.fromLTWH(0, 0, s.image.width.toDouble(), s.image.height.toDouble()),
               Rect.fromLTRB(0, size.height * y0 / s.fullH, size.width, size.height * y1 / s.fullH),
-              Paint()..filterQuality = FilterQuality.low);
+              Paint()
+                ..filterQuality = FilterQuality.low
+                ..blendMode = multiply ? BlendMode.multiply : BlendMode.srcOver);
         }
         img.schedule();
         // hoja que todavía no se ve y con franjas sin generar: solo van las listas, sin trazos (el prefetch genera el
@@ -151,7 +156,7 @@ class InkPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(InkPainter o) =>
-      o.doc != doc || o.scale != scale || o.sheet != sheet || o.dpr != dpr || !InkImage.sameStrokes(o.strokes, strokes);
+      o.doc != doc || o.scale != scale || o.sheet != sheet || o.dpr != dpr || o.multiply != multiply || !InkImage.sameStrokes(o.strokes, strokes);
 }
 
 /// Capa de lo que pasa "ahora": trazo en curso, goma, selección.

@@ -36,8 +36,13 @@ List<Layered> sortByZ(Iterable<Layered> els) {
 class ZRun {
   final List<Stroke>? strokes;
   final Layered? single;
-  const ZRun.ink(List<Stroke> this.strokes) : single = null;
-  const ZRun.one(Layered this.single) : strokes = null;
+
+  /// Tanda de resaltadores que se compone multiplicando con lo de abajo (ver [splitHighlighters]).
+  final bool multiply;
+  const ZRun.ink(List<Stroke> this.strokes, {this.multiply = false}) : single = null;
+  const ZRun.one(Layered this.single)
+      : strokes = null,
+        multiply = false;
 }
 
 /// Agrupa un orden de dibujo en tramos: cada tanda de trazos seguidos es un tramo (se dibuja y cachea junta).
@@ -55,6 +60,37 @@ List<ZRun> zRuns(Iterable<Layered> order) {
       cur = null;
       out.add(ZRun.one(e));
     }
+  }
+  return out;
+}
+
+/// Parte las tandas que tienen resaltadores en tandas seguidas que dibujan lo mismo y en el mismo orden que
+/// `paintStrokes`: primero lo que va debajo de la tinta ([isUnderInk]) en su orden, partido en tramos de
+/// resaltador (`multiply: true`) y de pintura; después los demás trazos. Así cada tanda de resaltadores se
+/// puede componer multiplicando contra lo de abajo (el PDF) sin tocar el resto. Las tandas sin resaltador y
+/// los elementos sueltos pasan tal cual (misma instancia). Nunca deja tandas vacías.
+List<ZRun> splitHighlighters(List<ZRun> runs) {
+  final out = <ZRun>[];
+  for (final r in runs) {
+    final strokes = r.strokes;
+    if (strokes == null || !strokes.any((s) => isHighlighter(s.k))) {
+      out.add(r);
+      continue;
+    }
+    List<Stroke>? cur;
+    bool? curHl;
+    for (final s in strokes) {
+      if (!isUnderInk(s.k)) continue;
+      final hl = isHighlighter(s.k);
+      if (cur == null || curHl != hl) {
+        cur = [];
+        curHl = hl;
+        out.add(ZRun.ink(cur, multiply: hl));
+      }
+      cur.add(s);
+    }
+    final rest = [for (final s in strokes) if (!isUnderInk(s.k)) s];
+    if (rest.isNotEmpty) out.add(ZRun.ink(rest));
   }
   return out;
 }

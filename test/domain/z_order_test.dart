@@ -152,4 +152,52 @@ void main() {
       expect(back.strokes['b']!.z, greaterThan(back.items['i']!.z));
     });
   });
+
+  group('splitHighlighters', () {
+    final paintK = 'paint-${paintShapeIds.first}';
+    List<List<String>> idsOf(List<ZRun> l) => [for (final r in l) ids(r.strokes ?? [r.single!])];
+
+    test('[pen, hl, pen]: el resaltador va primero y multiplica; la tinta después', () {
+      final run = ZRun.ink([stroke('a', 0, 0), stroke('h', 0, 10, k: 'hl'), stroke('b', 0, 20)]);
+      final out = splitHighlighters([run]);
+      expect(idsOf(out), [
+        ['h'],
+        ['a', 'b']
+      ]);
+      expect([for (final r in out) r.multiply], [true, false]);
+    });
+    test('[pintura, hl, hl, pen]: la pintura no multiplica, los resaltadores seguidos sí', () {
+      final run = ZRun.ink(
+          [stroke('p', 0, 0, k: paintK), stroke('h1', 0, 10, k: 'hl'), stroke('h2', 0, 20, k: 'hl'), stroke('a', 0, 30)]);
+      final out = splitHighlighters([run]);
+      expect(idsOf(out), [
+        ['p'],
+        ['h1', 'h2'],
+        ['a']
+      ]);
+      expect([for (final r in out) r.multiply], [false, true, false]);
+    });
+    test('sin resaltador: misma instancia', () {
+      final run = ZRun.ink([stroke('a', 0, 0), stroke('b', 0, 10, k: paintK)]);
+      final one = ZRun.one(item('i', 0, 0));
+      final out = splitHighlighters([run, one]);
+      expect(out.length, 2);
+      expect(identical(out[0], run), isTrue);
+      expect(identical(out[1], one), isTrue);
+    });
+    test('un elemento suelto entre tandas queda en su lugar', () {
+      final one = ZRun.one(item('i', 0, 0));
+      final out = splitHighlighters([
+        ZRun.ink([stroke('h', 0, 0, k: 'hl')]),
+        one,
+        ZRun.ink([stroke('a', 0, 0), stroke('g', 0, 5, k: 'hl')])
+      ]);
+      expect(idsOf(out), [
+        ['h'],
+        ['i'],
+        ['g'],
+        ['a']
+      ]);
+    });
+  });
 }
