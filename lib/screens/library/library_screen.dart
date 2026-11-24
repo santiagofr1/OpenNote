@@ -386,7 +386,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
 
   Future<void> _duplicate(Notebook nb) async {
     // se copian los archivos de las hojas: no se carga ni se decodifica nada del cuaderno
-    final copy = Notebook(newId('n'), '${nb.name} (copia)', bg: nb.bg, paper: nb.paper, spacing: nb.spacing, size: nb.size, folder: nb.folder)
+    final copy = Notebook(newId('n'), '${nb.name} (copia)', bg: nb.bg, image: nb.image, paper: nb.paper, spacing: nb.spacing, size: nb.size, folder: nb.folder)
       ..copySectionsFrom(nb) // las secciones y las hojas de TODAS (los archivos se copian todos)
       ..touch();
     await store.copyNotebookFiles(nb, copy);

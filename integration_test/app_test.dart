@@ -14,6 +14,7 @@ import 'package:apuntes/data/export_folder.dart';
 import 'package:apuntes/data/media_import.dart';
 import 'package:apuntes/data/sheet_codec.dart';
 import 'package:apuntes/data/storage.dart';
+import 'package:apuntes/data/templates.dart';
 import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/editor/fake_audio_source.dart';
 import 'package:apuntes/editor/handwriting.dart';
@@ -28,6 +29,7 @@ import 'package:apuntes/sync/fake_backend.dart';
 import 'package:apuntes/sync/fake_remote_store.dart';
 import 'package:apuntes/sync/sync_engine.dart';
 import 'package:archive/archive.dart';
+import 'package:image/image.dart' as img;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -2619,6 +2621,117 @@ void main() {
 
     await t.tap(find.byKey(const Key('back')));
     await settle(t, 1200);
+  });
+  // ---------------- fondos y plantillas (#31, #33) ----------------
+  testWidgets('fondos nuevos: milimetrado y ejes cartesianos (issue #31)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Fondos');
+    await openMore(t, 'Estilo de hoja');
+    await t.tap(find.byKey(const Key('bg-mm')));
+    await t.tap(find.byKey(const Key('applySheet')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('styleOk')));
+    await settle(t, 800);
+    expect(editor(t).doc.sheets[0].bg, 'mm');
+
+    await openMore(t, 'Estilo de hoja');
+    await t.tap(find.byKey(const Key('bg-axes')));
+    await t.tap(find.byKey(const Key('applySheet')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('spacing-7')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('styleOk')));
+    await settle(t, 800);
+    expect([editor(t).doc.sheets[0].bg, editor(t).doc.sheets[0].spacing], ['axes', 7.0]);
+  });
+
+  testWidgets('plantillas incluidas: aplicar una a la hoja y crear una hoja nueva con otra (issue #33)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Plantillas');
+    await openMore(t, 'Estilo de hoja');
+    await t.tap(find.byKey(const Key('bg-cornell')));
+    await t.tap(find.byKey(const Key('applySheet')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('styleOk')));
+    await settle(t, 800);
+    expect(editor(t).doc.sheets[0].bg, 'cornell');
+
+    await t.tap(find.byKey(const Key('pagesBtn')));
+    await settle(t, 600);
+    await holdOn(t, find.byKey(const Key('thumb-1')));
+    await settle(t, 500);
+    await t.tap(find.text('Hoja nueva con plantilla…'));
+    await settle(t, 800);
+    expect(find.text('Hoja nueva'), findsOneWidget);
+    expect(find.byKey(const Key('applySheet')), findsNothing, reason: 'una hoja nueva no tiene "Aplicar a"');
+    await t.tap(find.byKey(const Key('bg-staff')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('styleOk')));
+    await settle(t, 900);
+    expect(editor(t).doc.sheetCount, 2);
+    expect([editor(t).doc.sheets[0].bg, editor(t).doc.sheets[1].bg], ['cornell', 'staff']);
+  });
+
+  testWidgets('plantillas propias: guardar una hoja como plantilla y usarla de fondo (issue #33)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Propias');
+    final c = sheetCenter(t);
+    await stylusLine(t, c, c + const Offset(200, 0));
+    await t.tap(find.byKey(const Key('pagesBtn')));
+    await settle(t, 600);
+    await holdOn(t, find.byKey(const Key('thumb-1')));
+    await settle(t, 500);
+    await t.tap(find.text('Guardar como plantilla'));
+    await settle(t, 600);
+    await t.tap(find.byKey(const Key('tplSave')));
+    await settle(t, 2000);
+
+    final st = Storage(root: root);
+    await st.init();
+    final list = await readTemplates(st);
+    expect(list.length, 1);
+    final tpl = list.single;
+    expect(File('${root.path}/templates/${tpl.id}.json').existsSync(), isTrue);
+    expect(st.media(tpl.file).existsSync(), isTrue);
+
+    await openMore(t, 'Estilo de hoja');
+    await t.tap(find.byKey(Key('tpl-${tpl.id}')));
+    await t.tap(find.byKey(const Key('applySheet')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('styleOk')));
+    await settle(t, 1000);
+    final m = editor(t).doc.sheets[0];
+    expect([m.bg, m.image], ['image', tpl.file]);
+    expect(find.byKey(ValueKey('bgImage-${m.id}')), findsOneWidget);
+  });
+
+  testWidgets('plantilla desde una imagen de la tablet: todo el cuaderno y hojas nuevas (issue #33)', (t) async {
+    final saved = Pickers.bgImage;
+    addTearDown(() => Pickers.bgImage = saved);
+    final png = File('${root.path}/fondo.png')..writeAsBytesSync(img.encodePng(img.Image(width: 300, height: 400)));
+    Pickers.bgImage = () async => png;
+    await start(t);
+    await createNotebook(t, 'Imagen');
+    await openMore(t, 'Estilo de hoja');
+    await t.tap(find.byKey(const Key('tplFromImage')));
+    await settle(t, 1500);
+    await t.tap(find.byKey(const Key('applyAll')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('styleOk')));
+    await settle(t, 1000);
+    final ed = editor(t);
+    final file = ed.doc.nb.image;
+    expect(file, isNotNull);
+    expect(ed.doc.nb.bg, 'image');
+    for (final m in ed.doc.sheets) {
+      expect([m.bg, m.image], ['image', file]);
+    }
+    await t.tap(find.byKey(const Key('pagesBtn')));
+    await settle(t, 600);
+    await t.tap(find.byKey(const Key('addPage')));
+    await settle(t, 900);
+    expect(ed.doc.sheetCount, 2);
+    expect([ed.doc.sheets[1].bg, ed.doc.sheets[1].image], ['image', file], reason: 'la hoja nueva sale con la imagen');
   });
 }
 

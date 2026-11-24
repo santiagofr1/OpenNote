@@ -12,7 +12,8 @@ class SheetMeta {
   final String id;
   String title; // opcional, vacío si no tiene
   bool bookmark;
-  String bg; // lined | grid | dots | blank
+  String bg; // lined | grid | dots | mm | axes | blank | plantillas de la app | image (ver backgrounds.dart)
+  String? image; // archivo de media/ del fondo (solo con bg == 'image')
   String paper; // color del papel
   double spacing; // interlineado / paso de la cuadrícula en mm (ver paper_layout.dart)
   String size; // a4 | a3 | a5 (ver paper_layout.dart)
@@ -24,6 +25,7 @@ class SheetMeta {
       {this.title = '',
       this.bookmark = false,
       this.bg = 'lined',
+      this.image,
       this.paper = '#fffefb',
       double? spacing,
       this.size = 'a4',
@@ -37,6 +39,7 @@ class SheetMeta {
   /// Cambia el fondo; el espaciado vuelve al por defecto si el actual no existe en el fondo nuevo.
   void setBg(String v) {
     bg = v;
+    if (v != 'image') image = null;
     spacing = validSpacing(v, spacing);
   }
 
@@ -45,6 +48,7 @@ class SheetMeta {
       title: title ?? this.title,
       bookmark: bookmark ?? this.bookmark,
       bg: bg,
+      image: image,
       paper: paper,
       spacing: spacing,
       size: size,
@@ -58,6 +62,7 @@ class SheetMeta {
         title: (j['title'] ?? '') as String,
         bookmark: (j['bookmark'] ?? false) as bool,
         bg: (j['bg'] ?? 'lined') as String,
+        image: j['image'] as String?,
         paper: (j['paper'] ?? '#fffefb') as String,
         spacing: (j['spacing'] as num?)?.toDouble(), // los archivos viejos no lo tienen: el por defecto del fondo
         size: validPaperSize(j['size']), // los archivos viejos no lo tienen: A4
@@ -71,6 +76,7 @@ class SheetMeta {
         if (title.isNotEmpty) 'title': title,
         if (bookmark) 'bookmark': true,
         'bg': bg,
+        if (image != null) 'image': image,
         'paper': paper,
         'spacing': spacing,
         if (size != 'a4') 'size': size,
@@ -117,6 +123,7 @@ class Notebook {
   final List<Section> sections; // en orden; nunca vacía
   String active; // id de la sección abierta
   String bg, paper; // estilo de las hojas nuevas
+  String? image; // fondo de imagen de las hojas nuevas (con bg == 'image')
   double spacing; // espaciado (mm) de las hojas nuevas
   String size; // tamaño de las hojas nuevas
   int updated; // última edición (ms)
@@ -129,6 +136,7 @@ class Notebook {
       List<Section>? sections,
       String? active,
       this.bg = 'lined',
+      this.image,
       this.paper = '#fffefb',
       double? spacing,
       this.size = 'a4',
@@ -151,7 +159,7 @@ class Notebook {
 
   /// Hoja nueva con el estilo del cuaderno, de la sección [section] (o la activa). No la agrega.
   SheetMeta newSheet({String? section}) =>
-      SheetMeta(newId('h'), bg: bg, paper: paper, spacing: spacing, size: size, section: section ?? active);
+      SheetMeta(newId('h'), bg: bg, image: image, paper: paper, spacing: spacing, size: size, section: section ?? active);
 
   // ---------- secciones ----------
   Section get activeSection => sectionById(active) ?? sections.first;
@@ -291,6 +299,7 @@ class Notebook {
         n['id'] as String,
         n['name'] as String,
         bg: (n['bg'] ?? 'lined') as String,
+        image: n['image'] as String?,
         paper: (n['paper'] ?? '#fffefb') as String,
         spacing: (n['spacing'] as num?)?.toDouble(),
         size: validPaperSize(n['size']),
@@ -307,6 +316,7 @@ class Notebook {
         'name': name,
         'updated': updated,
         'bg': bg,
+        if (image != null) 'image': image,
         'paper': paper,
         'spacing': spacing,
         if (size != 'a4') 'size': size,

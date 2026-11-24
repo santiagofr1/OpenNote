@@ -88,6 +88,11 @@ Future<(NotebookDoc, int)> exportSource(Storage store, NotebookDoc doc, ExportSh
 /// (las que faltan se saltean). Las páginas de PDF van por [pdfImageKey], dibujadas al ancho de la salida.
 Future<Map<String, ui.Image>> loadImages(Storage store, NotebookDoc doc, {int? sheet}) async {
   final images = <String, ui.Image>{};
+  for (final m in sheet != null ? [doc.sheets[sheet]] : doc.sheets) {
+    if (m.bg != 'image' || m.image == null) continue;
+    final key = bgImageKey(m.image!), f = store.media(m.image!);
+    if (!images.containsKey(key) && await f.exists()) images[key] = await decodeImage(await f.readAsBytes());
+  }
   for (final it in doc.items.values) {
     if (sheet != null && !it.rect.overlaps(ui.Rect.fromLTWH(0, sheet * kSheetStep, kW, kSheetH))) continue;
     if (it.type == 'pdf' && it.file != null) {
@@ -111,6 +116,19 @@ Future<Map<String, ui.Image>> loadImages(Storage store, NotebookDoc doc, {int? s
 Future<Map<String, ui.Image>> loadThumbImages(Storage store, NotebookDoc doc, int sheet, double pxWidth) async {
   final images = <String, ui.Image>{};
   final sheetRect = ui.Rect.fromLTWH(0, sheet * kSheetStep, kW, kSheetH);
+  final bgm = doc.sheets[sheet];
+  if (bgm.bg == 'image' && bgm.image != null) {
+    try {
+      final f = store.media(bgm.image!);
+      if (await f.exists()) {
+        final codec = await ui.instantiateImageCodec(await f.readAsBytes(), targetWidth: max(1, pxWidth.ceil()));
+        images[bgImageKey(bgm.image!)] = (await codec.getNextFrame()).image;
+        codec.dispose();
+      }
+    } catch (_) {
+      // un fondo roto no impide ver el resto de la miniatura
+    }
+  }
   for (final it in doc.items.values) {
     if (it.file == null || (it.type != 'pdf' && it.type != 'image') || !it.rect.overlaps(sheetRect)) continue;
     final w = it.w * pxWidth / kW;

@@ -10,6 +10,7 @@ import '../../data/export.dart';
 import '../../data/media_import.dart';
 import '../../data/opennote_file.dart';
 import '../../data/storage.dart';
+import '../../data/templates.dart';
 import '../../domain/domain.dart';
 import '../../editor/history.dart';
 import '../../editor/page_editor.dart';
@@ -218,6 +219,60 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
   void _addSheetAfter(int k) =>
       _sheetOp((d) => [SheetPresenceOp.added(d, d.insertSheet(k + 1))], goTo: k + 1);
 
+  /// Hoja nueva después de [k] con el fondo que se elija (incluidas las plantillas).
+  Future<void> _addSheetWithTemplate(int k) async {
+    final d = doc;
+    if (d == null) return;
+    final r = await showStyleDialog(context, d, store: store, sheet: k, forNew: true);
+    if (r == null || !mounted) return;
+    final meta = nb.newSheet()
+      ..bg = r.bg
+      ..image = r.bg == 'image' ? r.image : null
+      ..paper = r.paper
+      ..spacing = r.spacing
+      ..size = r.size;
+    _sheetOp((d) => [SheetPresenceOp.added(d, d.insertSheet(k + 1, meta: meta))], goTo: k + 1);
+  }
+
+  /// Guarda la hoja [k] como plantilla propia (imagen de la hoja tal como se ve), pidiendo el nombre.
+  Future<void> _saveTemplate(int k) async {
+    final d = doc;
+    if (d == null) return;
+    final n = (await readTemplates(store)).length + 1;
+    if (!mounted) return;
+    final title = d.sheets[k].title;
+    final name = await _askTemplateName(title.isEmpty ? 'Plantilla $n' : title);
+    if (name == null || !mounted) return;
+    try {
+      await templateFromSheet(store, d, k, name.trim().isEmpty ? 'Plantilla $n' : name.trim());
+    } catch (e) {
+      if (mounted) snack(context, 'No se pudo guardar la plantilla: $e');
+      return;
+    }
+    if (mounted) snack(context, 'Plantilla guardada');
+  }
+
+  Future<String?> _askTemplateName(String initial) {
+    final ctl = TextEditingController(text: initial);
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Guardar como plantilla'),
+        content: TextField(
+          key: const Key('tplName'),
+          controller: ctl,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Nombre'),
+          onSubmitted: (v) => Navigator.pop(ctx, v),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          FilledButton(key: const Key('tplSave'), onPressed: () => Navigator.pop(ctx, ctl.text), child: const Text('Guardar')),
+        ],
+      ),
+    );
+  }
+
   Future<void> _renameSheet(int k) async {
     final m = doc!.sheets[k];
     final n = await askText(context, 'Nombre de la hoja ${k + 1}', initial: m.title, hint: 'Opcional');
@@ -276,8 +331,12 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         _renameSheet(k);
       case SheetAction.addAfter:
         _addSheetAfter(k);
+      case SheetAction.addWithTemplate:
+        _addSheetWithTemplate(k);
       case SheetAction.duplicate:
         _duplicateSheet(k);
+      case SheetAction.saveTemplate:
+        _saveTemplate(k);
       case SheetAction.moveUp:
         _moveSheet(k, k - 1);
       case SheetAction.moveDown:
@@ -663,16 +722,18 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     final d = doc;
     if (d == null) return;
     final k = curSheet;
-    final r = await showStyleDialog(context, d, sheet: k);
+    final r = await showStyleDialog(context, d, store: store, sheet: k);
     if (r == null || !mounted) return;
     void apply(SheetMeta m) {
       m.bg = r.bg;
+      m.image = r.bg == 'image' ? r.image : null;
       m.paper = r.paper;
       m.spacing = r.spacing;
       m.size = r.size;
     }
     if (r.all) {
       nb.bg = r.bg;
+      nb.image = r.bg == 'image' ? r.image : null;
       nb.paper = r.paper;
       nb.spacing = r.spacing;
       nb.size = r.size;

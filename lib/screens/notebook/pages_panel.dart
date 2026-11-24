@@ -9,7 +9,7 @@ import '../../domain/domain.dart';
 import '../../widgets/sheet_thumb.dart';
 import 'thumb_cache.dart';
 
-enum SheetAction { rename, addAfter, duplicate, moveUp, moveDown, delete }
+enum SheetAction { rename, addAfter, addWithTemplate, duplicate, saveTemplate, moveUp, moveDown, delete }
 
 /// Panel de hojas a la izquierda: contador, filtros y una miniatura por hoja en dos columnas.
 /// Tocar una miniatura lleva a esa hoja; mantenerla apretada abre el menú de la hoja; el asa de abajo a la izquierda
@@ -346,7 +346,9 @@ class _PagesPanelState extends State<PagesPanel> {
                     style: Theme.of(ctx).textTheme.titleMedium)),
             tile(SheetAction.rename, Symbols.edit, 'Renombrar'),
             tile(SheetAction.addAfter, Symbols.note_add, 'Hoja nueva después'),
+            tile(SheetAction.addWithTemplate, Symbols.note_stack_add, 'Hoja nueva con plantilla…'),
             tile(SheetAction.duplicate, Symbols.content_copy, 'Duplicar'),
+            tile(SheetAction.saveTemplate, Symbols.bookmark_add, 'Guardar como plantilla'),
             if (k > 0) tile(SheetAction.moveUp, Symbols.arrow_upward, 'Mover antes'),
             if (k < doc.sheetCount - 1) tile(SheetAction.moveDown, Symbols.arrow_downward, 'Mover después'),
             if (doc.sheetCount > 1) tile(SheetAction.delete, Symbols.delete, 'Borrar', danger: true),

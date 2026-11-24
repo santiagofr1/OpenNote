@@ -2239,6 +2239,24 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
           Positioned.fill(
             child: RepaintBoundary(child: CustomPaint(painter: SheetPainter(doc.sheets, scale, first, last))),
           ),
+          // fondos de imagen: la imagen que no está todavía (sin sincronizar) no muestra nada
+          for (var k = first; k <= last; k++)
+            if (doc.sheets[k].bg == 'image' && doc.sheets[k].image != null)
+              Positioned(
+                key: ValueKey('bgImage-${doc.sheets[k].id}'),
+                left: 0,
+                top: k * kSheetStep * scale,
+                width: kW * scale,
+                height: kSheetH * scale,
+                child: IgnorePointer(
+                  child: Image.file(widget.store.media(doc.sheets[k].image!),
+                      fit: BoxFit.contain,
+                      cacheWidth: 1600,
+                      gaplessPlayback: true,
+                      filterQuality: FilterQuality.medium,
+                      errorBuilder: (_, _, _) => const SizedBox()),
+                ),
+              ),
           for (var k = first; k <= last; k++) ...[
             if (!doc.isLoadedAt(k)) _loadingMark(k),
             for (final (i, run) in _sheetRuns[doc.sheets[k].id]!.indexed) _run(run, i, textMode, k),

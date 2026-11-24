@@ -16,8 +16,17 @@ void paintSheet(Canvas c, NotebookDoc doc, int sheet, double pxPerUnit, {Map<Str
   c.save();
   c.clipRect(const Rect.fromLTWH(0, 0, kW, kSheetH));
   c.drawRect(const Rect.fromLTWH(0, 0, kW, kSheetH), Paint()..color = parseColor(meta.paper));
-  // en miniaturas chicas las líneas no pueden ser más finas que esto o desaparecen
-  paintPaperPattern(c, meta.bg, meta.spacing, size: meta.size, ruleWidth: max(.6, 1 / pxPerUnit), marginWidth: max(.8, 1.2 / pxPerUnit));
+  if (meta.bg == 'image') {
+    // fondo de imagen: entra completa en la hoja, sin patrón
+    final img = meta.image == null ? null : images?[bgImageKey(meta.image!)];
+    if (img != null) {
+      c.drawImageRect(img, Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+          containRect(img.width.toDouble(), img.height.toDouble()), Paint()..filterQuality = FilterQuality.medium);
+    }
+  } else {
+    // en miniaturas chicas las líneas no pueden ser más finas que esto o desaparecen
+    paintPaperPattern(c, meta.bg, meta.spacing, size: meta.size, ruleWidth: max(.6, 1 / pxPerUnit), marginWidth: max(.8, 1.2 / pxPerUnit));
+  }
   c.translate(0, -top);
   final visible = Rect.fromLTWH(0, top, kW, kSheetH);
   // un solo orden de dibujo para todo; de cada tanda de trazos seguidos, los resaltadores van primero
@@ -35,6 +44,15 @@ void paintSheet(Canvas c, NotebookDoc doc, int sheet, double pxPerUnit, {Map<Str
     }
   }
   c.restore();
+}
+
+/// Clave, en el mapa de imágenes de [paintSheet], del fondo de imagen [file].
+String bgImageKey(String file) => 'bg:$file';
+
+/// Rectángulo donde entra una imagen de [imgW] x [imgH] completa en la hoja (0, 0, kW, kSheetH), centrada y sin deformar.
+Rect containRect(double imgW, double imgH) {
+  final k = min(kW / imgW, kSheetH / imgH), w = imgW * k, h = imgH * k;
+  return Rect.fromLTWH((kW - w) / 2, (kSheetH - h) / 2, w, h);
 }
 
 /// Miniatura de la hoja [sheet] (por defecto la primera)

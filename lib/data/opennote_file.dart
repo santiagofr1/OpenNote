@@ -37,6 +37,10 @@ Future<Uint8List> exportNotebookBytes(Storage store, Notebook nb) async {
     zip.add(ArchiveFile.bytes('sheets/${m.id}.sheet', bytes));
     media.addAll(await _compute(() => _mediaOf(bytes)));
   }
+  for (final m in nb.allSheets) {
+    if (m.image != null) media.add(m.image!);
+  }
+  if (nb.image != null) media.add(nb.image!);
   for (final name in media) {
     final f = store.media(name);
     if (await f.exists()) zip.add(ArchiveFile.bytes('media/$name', await f.readAsBytes()));
@@ -47,6 +51,7 @@ Future<Uint8List> exportNotebookBytes(Storage store, Notebook nb) async {
     'notebookFormat': Notebook.kFormat,
     'name': nb.name,
     'bg': nb.bg,
+    if (nb.image != null) 'image': nb.image,
     'paper': nb.paper,
     'spacing': nb.spacing,
     if (nb.size != 'a4') 'size': nb.size,
@@ -149,6 +154,7 @@ Future<Notebook> importNotebookBytes(Storage store, Uint8List bytes,
   final name = _uniqueName((manifest['name'] as String?)?.trim().isNotEmpty == true ? (manifest['name'] as String).trim() : 'Cuaderno', taken);
   final nb = Notebook(newId('n'), name,
       bg: (manifest['bg'] ?? 'lined') as String,
+      image: manifest['image'] as String?,
       paper: (manifest['paper'] ?? '#fffefb') as String,
       spacing: (manifest['spacing'] as num?)?.toDouble(),
       size: validPaperSize(manifest['size']),
