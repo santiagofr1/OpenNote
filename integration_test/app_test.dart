@@ -25,6 +25,7 @@ import 'package:apuntes/editor/pdf_page_image.dart';
 import 'package:apuntes/editor/voice_recorder.dart';
 import 'package:apuntes/editor/selection.dart';
 import 'package:apuntes/editor/selection_menu.dart';
+import 'package:apuntes/editor/viewport.dart' show kTopPad;
 import 'package:apuntes/rendering/sheet_image_cache.dart';
 import 'package:apuntes/rendering/text_layout.dart';
 import 'package:apuntes/sync/fake_backend.dart';
@@ -3375,6 +3376,59 @@ void main() {
     expect(find.byKey(const Key('pagesBtn')), findsOneWidget);
     expect(editor(t).doc.nb.canvas, isFalse);
     expect(editor(t).doc.width, kW);
+  });
+
+
+  testWidgets('índice: al cerrarlo la vista se queda en el título elegido', (t) async {
+    // visor ancho: la escala depende del ancho y el panel del índice se lo come
+    t.view.physicalSize = const Size(2560, 1600);
+    addTearDown(t.view.resetPhysicalSize);
+    await start(t);
+    await createNotebook(t, 'IndiceSalto');
+    var ed = editor(t);
+    while (ed.doc.sheetCount < 8) {
+      ed.doc.addSheet();
+    }
+    ed.sheetsChanged();
+    await settle(t, 600);
+    final head = Heading(newId('h'), level: 1, title: 'Capítulo cinco', y: 400);
+    ed.doc.sheets[5].heads.add(head);
+    ed.headingsChanged();
+    await settle(t);
+
+    double docY() => (ed.scroll.offset - kTopPad) / ed.scale;
+    final scale0 = ed.scale;
+
+    // abrir el índice y tocar el título
+    await t.tap(find.byKey(const Key('indexBtn')));
+    await settle(t, 800);
+    expect(ed.scale, isNot(closeTo(scale0, 1e-3)), reason: 'el panel tiene que cambiar la escala para que valga el caso');
+    await t.tap(find.byKey(Key('indexEntry-${head.id}')));
+    await settle(t, 800);
+    expect(ed.visibleSheet, 5);
+    final y0 = docY();
+
+    // cerrarlo: la vista se queda
+    await t.tap(find.byKey(const Key('indexBtn')));
+    await settle(t, 800);
+    expect(ed.visibleSheet, 5);
+    expect((docY() - y0).abs(), lessThan(2));
+
+    // abrirlo de nuevo sin tocar nada: sigue ahí
+    await t.tap(find.byKey(const Key('indexBtn')));
+    await settle(t, 800);
+    expect(ed.visibleSheet, 5);
+    expect((docY() - y0).abs(), lessThan(2));
+
+    // volver arriba, tocar el título y cerrar enseguida (el scroll animado todavía no terminó)
+    ed.scrollToSheet(0, animate: false);
+    await settle(t, 400);
+    expect(ed.visibleSheet, 0);
+    await t.tap(find.byKey(Key('indexEntry-${head.id}')));
+    await t.pump(const Duration(milliseconds: 100));
+    await t.tap(find.byKey(const Key('indexBtn')));
+    await settle(t, 800);
+    expect(ed.visibleSheet, 5);
   });
 
 }
