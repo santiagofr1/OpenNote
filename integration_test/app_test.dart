@@ -69,6 +69,16 @@ void main() {
   /// Una muestra de 30 dp de la paleta del panel (el primer color que no es favorito).
   Finder panelSwatch(String c) => find.byWidgetPredicate((w) => w is Container && w.constraints?.maxWidth == 30 && (w.decoration as BoxDecoration?)?.color == parseColor(c)).first;
 
+  /// Toca [f] esperando a que aparezca (hasta 3 s) y llevándolo a la vista (diálogos más altos que la pantalla).
+  Future<void> tapV(WidgetTester t, Finder f) async {
+    for (var i = 0; i < 60 && f.evaluate().isEmpty; i++) {
+      await t.pump(const Duration(milliseconds: 50));
+    }
+    await t.ensureVisible(f);
+    await t.pump(const Duration(milliseconds: 100));
+    await t.tap(f);
+  }
+
   Future<void> settle(WidgetTester t, [int ms = 400]) async {
     for (var i = 0; i < ms ~/ 50; i++) {
       await t.pump(const Duration(milliseconds: 50));
@@ -755,21 +765,21 @@ void main() {
   testWidgets('estilo de hoja: esta hoja y todo el cuaderno', (t) async {
     await start(t);
     await createNotebook(t, 'Estilo');
-    await t.tap(find.byKey(const Key('pagesBtn')));
+    await tapV(t, find.byKey(const Key('pagesBtn')));
     await settle(t, 600);
-    await t.tap(find.byKey(const Key('addPage')));
+    await tapV(t, find.byKey(const Key('addPage')));
     await settle(t, 800);
 
     // solo la hoja que se ve (la 2, que acaba de agregarse)
     await openMore(t, 'Estilo de hoja');
-    await t.tap(find.byKey(const Key('applySheet')));
-    await t.tap(find.byKey(const Key('size-a3')));
-    await t.tap(find.text('Cuadriculado'));
+    await tapV(t, find.byKey(const Key('applySheet')));
+    await tapV(t, find.byKey(const Key('size-a3')));
+    await tapV(t, find.text('Cuadriculado'));
     await settle(t, 300);
-    await t.tap(find.byKey(const Key('spacing-7')));
-    await t.tap(find.byTooltip('Crema'));
+    await tapV(t, find.byKey(const Key('spacing-7')));
+    await tapV(t, find.byTooltip('Crema'));
     await settle(t);
-    await t.tap(find.byKey(const Key('styleOk')));
+    await tapV(t, find.byKey(const Key('styleOk')));
     await settle(t, 1200);
 
     await t.tap(find.byKey(const Key('back')));
@@ -782,17 +792,17 @@ void main() {
     expect(textLine('grid', 7, size: 'a3'), lessThan(textLine('grid', 7)), reason: 'en A3 el renglón es más chico en unidades');
 
     // todo el cuaderno (es lo que viene marcado), y también las hojas nuevas
-    await t.tap(find.byKey(const Key('nb-Estilo')));
+    await tapV(t, find.byKey(const Key('nb-Estilo')));
     await settle(t, 1200);
     await openMore(t, 'Estilo de hoja');
-    await t.tap(find.byKey(const Key('applyAll')));
-    await t.tap(find.byKey(const Key('size-a4'))); // se vuelve a A4 para todo el cuaderno
-    await t.tap(find.text('Rayado'));
+    await tapV(t, find.byKey(const Key('applyAll')));
+    await tapV(t, find.byKey(const Key('size-a4'))); // se vuelve a A4 para todo el cuaderno
+    await tapV(t, find.text('Rayado'));
     await settle(t, 300);
-    await t.tap(find.byKey(const Key('spacing-10')));
-    await t.tap(find.byTooltip('Celeste'));
+    await tapV(t, find.byKey(const Key('spacing-10')));
+    await tapV(t, find.byTooltip('Celeste'));
     await settle(t);
-    await t.tap(find.byKey(const Key('styleOk')));
+    await tapV(t, find.byKey(const Key('styleOk')));
     await settle(t, 1200);
 
     await t.tap(find.byKey(const Key('back')));
@@ -2643,20 +2653,20 @@ void main() {
     await start(t);
     await createNotebook(t, 'Fondos');
     await openMore(t, 'Estilo de hoja');
-    await t.tap(find.byKey(const Key('bg-mm')));
-    await t.tap(find.byKey(const Key('applySheet')));
+    await tapV(t, find.byKey(const Key('bg-mm')));
+    await tapV(t, find.byKey(const Key('applySheet')));
     await settle(t);
-    await t.tap(find.byKey(const Key('styleOk')));
+    await tapV(t, find.byKey(const Key('styleOk')));
     await settle(t, 800);
     expect(editor(t).doc.sheets[0].bg, 'mm');
 
     await openMore(t, 'Estilo de hoja');
-    await t.tap(find.byKey(const Key('bg-axes')));
-    await t.tap(find.byKey(const Key('applySheet')));
+    await tapV(t, find.byKey(const Key('bg-axes')));
+    await tapV(t, find.byKey(const Key('applySheet')));
     await settle(t);
-    await t.tap(find.byKey(const Key('spacing-7')));
+    await tapV(t, find.byKey(const Key('spacing-7')));
     await settle(t);
-    await t.tap(find.byKey(const Key('styleOk')));
+    await tapV(t, find.byKey(const Key('styleOk')));
     await settle(t, 800);
     expect([editor(t).doc.sheets[0].bg, editor(t).doc.sheets[0].spacing], ['axes', 7.0]);
   });
@@ -2665,24 +2675,24 @@ void main() {
     await start(t);
     await createNotebook(t, 'Plantillas');
     await openMore(t, 'Estilo de hoja');
-    await t.tap(find.byKey(const Key('bg-cornell')));
-    await t.tap(find.byKey(const Key('applySheet')));
+    await tapV(t, find.byKey(const Key('bg-cornell')));
+    await tapV(t, find.byKey(const Key('applySheet')));
     await settle(t);
-    await t.tap(find.byKey(const Key('styleOk')));
+    await tapV(t, find.byKey(const Key('styleOk')));
     await settle(t, 800);
     expect(editor(t).doc.sheets[0].bg, 'cornell');
 
-    await t.tap(find.byKey(const Key('pagesBtn')));
+    await tapV(t, find.byKey(const Key('pagesBtn')));
     await settle(t, 600);
     await holdOn(t, find.byKey(const Key('thumb-1')));
     await settle(t, 500);
-    await t.tap(find.text('Hoja nueva con plantilla…'));
+    await tapV(t, find.text('Hoja nueva con plantilla…'));
     await settle(t, 800);
     expect(find.text('Hoja nueva'), findsOneWidget);
     expect(find.byKey(const Key('applySheet')), findsNothing, reason: 'una hoja nueva no tiene "Aplicar a"');
-    await t.tap(find.byKey(const Key('bg-staff')));
+    await tapV(t, find.byKey(const Key('bg-staff')));
     await settle(t);
-    await t.tap(find.byKey(const Key('styleOk')));
+    await tapV(t, find.byKey(const Key('styleOk')));
     await settle(t, 900);
     expect(editor(t).doc.sheetCount, 2);
     expect([editor(t).doc.sheets[0].bg, editor(t).doc.sheets[1].bg], ['cornell', 'staff']);
@@ -2693,13 +2703,13 @@ void main() {
     await createNotebook(t, 'Propias');
     final c = sheetCenter(t);
     await stylusLine(t, c, c + const Offset(200, 0));
-    await t.tap(find.byKey(const Key('pagesBtn')));
+    await tapV(t, find.byKey(const Key('pagesBtn')));
     await settle(t, 600);
     await holdOn(t, find.byKey(const Key('thumb-1')));
     await settle(t, 500);
-    await t.tap(find.text('Guardar como plantilla'));
+    await tapV(t, find.text('Guardar como plantilla'));
     await settle(t, 600);
-    await t.tap(find.byKey(const Key('tplSave')));
+    await tapV(t, find.byKey(const Key('tplSave')));
     await settle(t, 2000);
 
     final st = Storage(root: root);
@@ -2711,10 +2721,10 @@ void main() {
     expect(st.media(tpl.file).existsSync(), isTrue);
 
     await openMore(t, 'Estilo de hoja');
-    await t.tap(find.byKey(Key('tpl-${tpl.id}')));
-    await t.tap(find.byKey(const Key('applySheet')));
+    await tapV(t, find.byKey(Key('tpl-${tpl.id}')));
+    await tapV(t, find.byKey(const Key('applySheet')));
     await settle(t);
-    await t.tap(find.byKey(const Key('styleOk')));
+    await tapV(t, find.byKey(const Key('styleOk')));
     await settle(t, 1000);
     final m = editor(t).doc.sheets[0];
     expect([m.bg, m.image], ['image', tpl.file]);
@@ -2729,11 +2739,11 @@ void main() {
     await start(t);
     await createNotebook(t, 'Imagen');
     await openMore(t, 'Estilo de hoja');
-    await t.tap(find.byKey(const Key('tplFromImage')));
+    await tapV(t, find.byKey(const Key('tplFromImage')));
     await settle(t, 1500);
-    await t.tap(find.byKey(const Key('applyAll')));
+    await tapV(t, find.byKey(const Key('applyAll')));
     await settle(t);
-    await t.tap(find.byKey(const Key('styleOk')));
+    await tapV(t, find.byKey(const Key('styleOk')));
     await settle(t, 1000);
     final ed = editor(t);
     final file = ed.doc.nb.image;
@@ -2742,9 +2752,9 @@ void main() {
     for (final m in ed.doc.sheets) {
       expect([m.bg, m.image], ['image', file]);
     }
-    await t.tap(find.byKey(const Key('pagesBtn')));
+    await tapV(t, find.byKey(const Key('pagesBtn')));
     await settle(t, 600);
-    await t.tap(find.byKey(const Key('addPage')));
+    await tapV(t, find.byKey(const Key('addPage')));
     await settle(t, 900);
     expect(ed.doc.sheetCount, 2);
     expect([ed.doc.sheets[1].bg, ed.doc.sheets[1].image], ['image', file], reason: 'la hoja nueva sale con la imagen');
@@ -3099,7 +3109,7 @@ void main() {
     await settle(t);
     await t.tap(find.byKey(const Key('thumb-1')));
     await settle(t, 800);
-    expect(find.text('1 / 2'), findsOneWidget);
+    expect(editor(t).visibleSheet, 0);
     await t.tap(find.byTooltip('Solo marcadas'));
     await settle(t);
     await t.tap(find.byKey(Key('bookmarkItem-$id')));
