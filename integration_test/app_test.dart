@@ -3400,7 +3400,8 @@ void main() {
     // se arrastra hasta abajo: la burbuja dice en qué hoja va
     final g = await t.startGesture(t.getCenter(thumb));
     var vistaBurbuja = false;
-    for (var i = 0; i < 12; i++) {
+    // de sobra para cualquier alto de pantalla: el pulgar se frena al final del recorrido
+    for (var i = 0; i < 25; i++) {
       await g.moveBy(const Offset(0, 80));
       await t.pump(const Duration(milliseconds: 50));
       if (find.textContaining('de 12').evaluate().isNotEmpty) vistaBurbuja = true;
