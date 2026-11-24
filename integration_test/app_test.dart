@@ -2747,6 +2747,8 @@ void main() {
     await settle(t, 900);
     expect(ed.doc.sheetCount, 2);
     expect([ed.doc.sheets[1].bg, ed.doc.sheets[1].image], ['image', file], reason: 'la hoja nueva sale con la imagen');
+  });
+
   // ---- pegar imagen del sistema (issue #32) ----
   Future<void> mantenerVacio(WidgetTester t) async {
     final g = await t.startGesture(sheetCenter(t) + const Offset(0, 250));
