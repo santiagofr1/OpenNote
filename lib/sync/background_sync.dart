@@ -87,7 +87,7 @@ void backgroundSyncDispatcher() {
       final store = Storage();
       await store.init();
       final r = await runBackgroundPass(store, GoogleBackend());
-      debugPrint('OpenNote sync de fondo: ${r.outcome.name}${r.error != null ? ' (${r.error})' : ''}${r.report != null ? ' ${r.report}' : ''}');
+      debugPrint('Vynote sync de fondo: ${r.outcome.name}${r.error != null ? ' (${r.error})' : ''}${r.report != null ? ' ${r.report}' : ''}');
       // "failed" devuelve false para que WorkManager reintente con su retroceso; lo demás es un final normal
       return r.outcome != BackgroundOutcome.failed;
     } catch (_) {

@@ -26,8 +26,8 @@ class Pickers {
     return (await File(f!.path!).readAsBytes(), f.name.replaceAll(RegExp(r'\.pdf$', caseSensitive: false), ''));
   };
 
-  /// Un archivo `.opennote` (bytes) para importar; null si se canceló.
-  static Future<Uint8List?> Function() opennote = () async {
+  /// Un archivo `.vynote` (o un `.opennote` de antes) en bytes para importar; null si se canceló. Sin filtro de extensión.
+  static Future<Uint8List?> Function() vynote = () async {
     final r = await FilePicker.pickFiles(type: FileType.any);
     final p = r.isEmpty ? null : r.first.path;
     return p == null ? null : File(p).readAsBytes();

@@ -43,10 +43,10 @@ jobs:
             choco install innosetup -y --no-progress
             export PATH="$PATH:/c/Program Files (x86)/Inno Setup 6"
           fi
-          iscc "//DAppVersion=0.0.${{ github.run_number }}" windows/installer/opennote.iss
+          iscc "//DAppVersion=0.0.${{ github.run_number }}" windows/installer/vynote.iss
 
       - name: Guardar el instalador
         uses: actions/upload-artifact@v4
         with:
-          name: OpenNote-windows-setup
+          name: Vynote-windows-setup
           path: dist/*.exe

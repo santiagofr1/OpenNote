@@ -7,7 +7,7 @@ import 'package:cryptography/cryptography.dart';
 
 import 'remote_store.dart';
 
-/// Cifrado de extremo a extremo de los archivos que se suben a la nube (ver docs/SINCRONIZACION.md, "Cifrado").
+/// Cifrado de extremo a extremo de los archivos que se suben a la nube (ver docs/SYNC.md, "End-to-end encryption").
 ///
 ///  - Clave: Argon2id sobre la frase del usuario con una sal al azar (guardada en `crypto.json`, no es secreta).
 ///  - Cada archivo: XChaCha20-Poly1305 con un nonce al azar de 24 bytes (no se repite en la práctica).
@@ -34,7 +34,7 @@ class CorruptEncryptedException extends RemoteException {
 }
 
 /// Parámetros de Argon2id. [memoryKiB] en KiB. Los de fábrica ([KdfParams.standard]) se fijaron midiendo en Dart puro
-/// (ver docs/SINCRONIZACION.md).
+/// (ver docs/SYNC.md).
 class KdfParams {
   final int memoryKiB, iterations, parallelism;
   const KdfParams(this.memoryKiB, this.iterations, this.parallelism);
@@ -67,10 +67,10 @@ class VaultInfo {
     if (j['app'] != 'opennote' || j['kdf'] is! Map) throw const CorruptEncryptedException('crypto.json inválido');
     final k = j['kdf'] as Map;
     if (k['name'] != 'argon2id' || j['cipher'] != 'xchacha20-poly1305') {
-      throw const CorruptEncryptedException('La nube usa un cifrado que esta versión de OpenNote no conoce');
+      throw const CorruptEncryptedException('La nube usa un cifrado que esta versión de Vynote no conoce');
     }
     final v = j['version'] as int;
-    if (v > _formatVersion) throw const CorruptEncryptedException('La nube se cifró con una versión más nueva de OpenNote');
+    if (v > _formatVersion) throw const CorruptEncryptedException('La nube se cifró con una versión más nueva de Vynote');
     final m = j['migrating'];
     return VaultInfo(
       version: v,
@@ -105,7 +105,7 @@ class VaultInfo {
       })));
 }
 
-/// ¿Estos bytes tienen la cabecera de un archivo cifrado de OpenNote?
+/// ¿Estos bytes tienen la cabecera de un archivo cifrado de Vynote?
 bool hasEncryptedHeader(List<int> b) =>
     b.length >= _headerLen + _nonceLen + _macLen && b[0] == _magic[0] && b[1] == _magic[1] && b[2] == _magic[2] && b[3] == _magic[3];
 

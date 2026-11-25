@@ -74,7 +74,7 @@ void main() {
 
   testWidgets('muestra versión y notas con scroll', (t) async {
     await open(t);
-    expect(find.text('Hay una versión nueva de OpenNote'), findsOneWidget);
+    expect(find.text('Hay una versión nueva de Vynote'), findsOneWidget);
     expect(find.text('Versión nueva: 1.0.12'), findsOneWidget);
     expect(find.text('Ahora no'), findsOneWidget);
     expect(find.text('Omitir esta versión'), findsOneWidget);
@@ -178,7 +178,7 @@ void main() {
     result = InstallResult.installed;
     await open(t);
     await update(t);
-    expect(find.text('OpenNote se actualizó'), findsOneWidget);
+    expect(find.text('Vynote se actualizó'), findsOneWidget);
     await t.tap(find.byKey(const Key('updateRestart')));
     await t.pumpAndSettle();
     expect(restarts, 1);

@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:apuntes/data/export.dart';
-import 'package:apuntes/data/opennote_file.dart';
+import 'package:apuntes/data/vynote_file.dart';
 import 'package:apuntes/data/sheet_codec.dart';
 import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/domain/domain.dart';
@@ -11,7 +11,7 @@ import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Secciones dentro de un cuaderno: modelo, notebook.json, REGLA DE ORO (nunca borrar ni pisar las hojas de otra sección),
-/// duplicar, `.opennote`, exportar y fusión de la sync.
+/// duplicar, `.vynote`, exportar y fusión de la sync.
 void main() {
   late Directory root;
   late Storage store;
@@ -280,8 +280,8 @@ void main() {
     });
   });
 
-  group('.opennote y exportar', () {
-    test('.opennote conserva las secciones al exportar e importar', () async {
+  group('.vynote y exportar', () {
+    test('.vynote conserva las secciones al exportar e importar', () async {
       final (nb, _) = await make();
       final b = await addWithStroke(nb, 'Práctica', 'b0', back: kGeneralSection);
       final bytes = await exportNotebookBytes(store, nb);
@@ -297,7 +297,7 @@ void main() {
       expect(d.strokes.keys, ['b0']);
     });
 
-    test('importar un .opennote viejo (sin secciones) lo deja en "General"', () async {
+    test('importar un .vynote viejo (sin secciones) lo deja en "General"', () async {
       final (nb, _) = await make();
       final bytes = await exportNotebookBytes(store, nb);
       // se le saca lo nuevo al notebook.json, como lo escribía la versión anterior

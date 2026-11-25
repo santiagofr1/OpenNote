@@ -97,7 +97,7 @@ class PlainRemoteStore implements RemoteStore, PurgingRemoteStore {
 }
 
 /// Decorador de [RemoteStore] que cifra al subir y descifra al bajar: lo de abajo ([inner], por ejemplo Drive) solo ve
-/// archivos cifrados. Las RUTAS no se cifran (son ids al azar, ver docs/SINCRONIZACION.md).
+/// archivos cifrados. Las RUTAS no se cifran (son ids al azar, ver docs/SYNC.md).
 ///
 /// LOS HASHES. El motor compara el md5 de lo LOCAL (claro) con el md5 que dice el remoto. El del remoto sería el del
 /// texto cifrado, que cambia en cada subida (nonce al azar) y nunca coincide con el claro: el motor vería conflictos

@@ -137,8 +137,8 @@ enum InstallResult {
 /// Operaciones de actualización. Son variables para que los tests las reemplacen
 /// (como `Pickers`): los tests no tocan la red ni el instalador.
 class Updates {
-  static const repoApi = 'https://api.github.com/repos/santiagofr1/OpenNote/releases/latest';
-  static const _channel = MethodChannel('opennote/updater');
+  static const repoApi = 'https://api.github.com/repos/santiagofr1/Vynote/releases/latest';
+  static const _channel = MethodChannel('vynote/updater');
 
   /// Plataforma donde corre la app, o null si no se actualiza sola.
   static UpdatePlatform? Function() platform = () {
@@ -196,7 +196,7 @@ class Updates {
     exit(0);
   };
 
-  /// Abre "instalar apps desconocidas" de OpenNote.
+  /// Abre "instalar apps desconocidas" de Vynote.
   static Future<void> Function() openInstallSettings = () async {
     try {
       await _channel.invokeMethod('openInstallSettings');
@@ -232,7 +232,7 @@ Future<Map<String, dynamic>?> _getJson(String url) async {
   try {
     final req = await c.getUrl(Uri.parse(url));
     req.headers
-      ..set(HttpHeaders.userAgentHeader, 'OpenNote-app')
+      ..set(HttpHeaders.userAgentHeader, 'Vynote-app')
       ..set(HttpHeaders.acceptHeader, 'application/vnd.github+json');
     final res = await req.close().timeout(const Duration(seconds: 15));
     if (res.statusCode != 200) {
@@ -249,7 +249,7 @@ Future<Map<String, dynamic>?> _getJson(String url) async {
 
 Future<File?> _download(UpdateInfo info, void Function(int, int) progress, CancelFlag cancel) async {
   // En Android el nombre de la carpeta lo exige file_paths.xml; en Linux el tmp es /tmp, compartido.
-  final sub = Updates.platform() == UpdatePlatform.android ? 'updates' : 'opennote-updates';
+  final sub = Updates.platform() == UpdatePlatform.android ? 'updates' : 'vynote-updates';
   final dir = Directory('${(await getTemporaryDirectory()).path}/$sub');
   if (await dir.exists()) await dir.delete(recursive: true); // instaladores viejos
   await dir.create(recursive: true);
@@ -260,7 +260,7 @@ Future<File?> _download(UpdateInfo info, void Function(int, int) progress, Cance
   var ok = false;
   try {
     final req = await c.getUrl(Uri.parse(info.url));
-    req.headers.set(HttpHeaders.userAgentHeader, 'OpenNote-app');
+    req.headers.set(HttpHeaders.userAgentHeader, 'Vynote-app');
     final res = await req.close();
     if (res.statusCode != 200) return null;
     final total = info.size > 0 ? info.size : res.contentLength;

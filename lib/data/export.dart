@@ -37,7 +37,7 @@ List<ExportSheet> exportSheets(Notebook nb, {Set<String>? sections, List<int>? o
 /// resuelve a una hoja cuando ya se sabe cuáles hojas hay).
 typedef _PdfLink = ({ui.Rect rect, String? url, String? sheetId, String? pdfKey});
 
-/// Los links de la hoja [sheet] de [doc]: los de OpenNote y los que traen las páginas de PDF importadas que hay en ella.
+/// Los links de la hoja [sheet] de [doc]: los de Vynote y los que traen las páginas de PDF importadas que hay en ella.
 /// Los links a otro cuaderno no se exportan.
 Future<List<_PdfLink>> _sheetLinks(Storage store, NotebookDoc doc, int sheet) async {
   final out = <_PdfLink>[];
@@ -86,12 +86,12 @@ typedef _PagePlan = ({String id, SheetMeta meta, Uint8List png, List<_PdfLink> l
 Future<bool> exportBackgroundPref(Storage store) async => (await store.loadPrefs())?['exportBg'] != false;
 
 /// Arma el PDF del cuaderno: una página del tamaño de cada hoja, cada una con su fondo y su papel. Las secciones elegidas
-/// ([sections], todas si es null) van una atrás de la otra, en su orden. Los links (de OpenNote y de los PDF importados)
+/// ([sections], todas si es null) van una atrás de la otra, en su orden. Los links (de Vynote y de los PDF importados)
 /// siguen andando: a una web, o a otra hoja que esté en el PDF.
 /// [only]: índices de las hojas de la sección abierta a incluir. [onProgress] recibe (hechas, total).
 Future<Uint8List> buildNotebookPdf(Storage store, NotebookDoc nb,
     {void Function(int, int)? onProgress, List<int>? only, Set<String>? sections, bool background = true}) async {
-  final pdf = pw.Document(title: nb.nb.name, creator: 'OpenNote');
+  final pdf = pw.Document(title: nb.nb.name, creator: 'Vynote');
   if (nb.nb.canvas) {
     // lienzo infinito: se parte en páginas de ancho A4 (solo las que tienen algo)
     await for (final p in canvasPagePngs(store, nb, sections: sections, onProgress: onProgress, background: background)) {
@@ -447,13 +447,13 @@ Future<bool> Function(Uint8List bytes, String name, bool zip) saveImages = (byte
   return uri != null;
 };
 
-/// Abre el selector del sistema para elegir carpeta y nombre, y guarda el `.opennote`. Falso si el usuario canceló.
+/// Abre el selector del sistema para elegir carpeta y nombre, y guarda el `.vynote`. Falso si el usuario canceló.
 /// Es una variable para que los tests la reemplacen (no pueden manejar el diálogo del sistema).
-Future<bool> Function(Uint8List bytes, String name) saveOpennote = (bytes, name) async {
+Future<bool> Function(Uint8List bytes, String name) saveVynote = (bytes, name) async {
   final safe = safeFileName(name).trim();
   final uri = await FilePicker.saveFile(
     dialogTitle: 'Guardar cuaderno',
-    fileName: '${safe.isEmpty ? 'Cuaderno' : safe}.opennote',
+    fileName: '${safe.isEmpty ? 'Cuaderno' : safe}.vynote',
     bytes: bytes,
     mimeType: 'application/octet-stream',
   );

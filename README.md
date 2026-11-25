@@ -1,189 +1,200 @@
-# OpenNote
+<p align="center"><img src="docs/img/icon.png" width="128" alt="Vynote"></p>
 
-**Tomá apuntes a mano en tu tablet, libre y sin ataduras.**
+# Vynote
 
-[![Release](https://img.shields.io/github/v/release/santiagofr1/OpenNote?color=brightgreen)](https://github.com/santiagofr1/OpenNote/releases/latest)
-[![Workflow de release](https://github.com/santiagofr1/OpenNote/actions/workflows/release.yml/badge.svg)](https://github.com/santiagofr1/OpenNote/actions/workflows/release.yml)
-[![Licencia: MIT](https://img.shields.io/badge/licencia-MIT-blue.svg)](LICENSE)
-[![PRs bienvenidos](https://img.shields.io/badge/PRs-bienvenidos-brightgreen.svg)](CONTRIBUTING.md)
-[![Plataforma: Android](https://img.shields.io/badge/plataforma-Android-3DDC84.svg?logo=android&logoColor=white)](https://github.com/santiagofr1/OpenNote/releases/latest)
-[![Hecho con Flutter](https://img.shields.io/badge/hecho%20con-Flutter-02569B.svg?logo=flutter&logoColor=white)](https://flutter.dev)
+**English** · [Español](README.es.md)
 
-OpenNote es una app de apuntes a mano con S Pen (y también con teclado) para tablets Android.
-Es gratis, es de código abierto, funciona sin conexión y tus apuntes son tuyos: se guardan en tu dispositivo,
-sin cuentas ni servidores propios. Si querés, los sincronizás entre la tablet y la PC con tu propio Google Drive.
+**Take handwritten notes on your tablet, free and without strings attached.**
 
-## Qué tiene
+[![Release](https://img.shields.io/github/v/release/santiagofr1/Vynote?color=brightgreen)](https://github.com/santiagofr1/Vynote/releases/latest)
+[![Release workflow](https://github.com/santiagofr1/Vynote/actions/workflows/release.yml/badge.svg)](https://github.com/santiagofr1/Vynote/actions/workflows/release.yml)
+[![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![Platform: Android](https://img.shields.io/badge/platform-Android-3DDC84.svg?logo=android&logoColor=white)](https://github.com/santiagofr1/Vynote/releases/latest)
+[![Made with Flutter](https://img.shields.io/badge/made%20with-Flutter-02569B.svg?logo=flutter&logoColor=white)](https://flutter.dev)
 
-- **Escritura con presión**: el trazo engrosa o se afina según cuánto apretás el lápiz.
-- **Puntas y colores**: bolígrafo, pluma, lápiz, fibra y caligrafía, más resaltador, con paleta propia y grosores a elección.
-- **Figuras inteligentes**: dibujás una recta, círculo, elipse, rectángulo/cuadrado, triángulo o polígono, dejás el
-  lápiz quieto un instante y se vuelve una figura prolija; sin levantar el lápiz la agrandás o achicás. Se activa o
-  desactiva en el panel del lápiz.
-- **Borrador en el botón**: apretá el botón del S Pen para borrar. Hay tres tamaños de goma.
-- **Texto con formato**: tocá el tecladito y se abre un renglón nuevo con negrita, cursiva, subrayado, colores,
-  títulos, listas, sangría y alineación.
-- **Índice del cuaderno**: con la herramienta Título encerrás lo que escribiste (a mano o con teclado) y lo marcás
-  como Título 1, 2, 3…; la letra a mano se lee sola, sin internet. El panel Índice muestra todo numerado (1, 1.1,
-  1.2…) con el número de hoja y te lleva a cada título; los títulos marcados se ven en la hoja con su número y viajan
-  con la sincronización.
-- **Selección tipo AutoCAD**: arrastrando hacia la derecha tomás lo que queda adentro del recuadro; hacia la
-  izquierda, todo lo que el recuadro toca. Un toque elige un solo elemento y tocar de nuevo alterna al de abajo (por
-  ejemplo, solo el resaltador de una palabra); tocar afuera deselecciona. Dejando el dedo apretado sobre la hoja, "Seleccionar todo" toma lo de esa hoja y
-  "Seleccionar todo el cuaderno" carga y toma todas. Después podés mover, copiar, duplicar o eliminar. Las esquinas escalan manteniendo la proporción y los puntos del medio de cada lado estiran solo a lo ancho o solo a lo alto; también se puede rotar.
-- **Orden de capas**: traer al frente, subir, bajar o enviar al fondo lo seleccionado. Se puede deshacer.
-- **Imágenes, notas adhesivas y audios**: insertalos dentro de la hoja, junto con la tinta.
-- **Cuadernos como tira de hojas**: deslizás de una hoja a otra y el título muestra cuál estás viendo (por
-  ejemplo, "2 / 5"). Agregá, duplicá, borrá, marcá o renombrá hojas desde el panel de miniaturas, y reordenalas
-  arrastrando el asa. Todo eso se puede deshacer.
-- **Fondos en medidas reales de A4**: rayado de 7, 8 o 10 mm, cuadriculado o puntos. Si imprimís al 100 %, sale a
-  tamaño real.
-- **Estilo por hoja o por cuaderno**: elegí el fondo, el color de papel y el interlineado.
-- **Biblioteca ordenada**: carpetas anidadas, favoritos, búsqueda por nombre sin importar mayúsculas ni tildes,
-  y cuadernos protegidos con PIN.
-- **Modo lectura**: para leer sin tocar nada por error.
-- **Exportar e importar**: con una sola opción "Exportar" sacás cuadernos a PDF o PNG, o enteros como archivo `.opennote` para respaldarlos o
-  pasarlos a otra tablet; importá `.opennote`, PDF, imágenes y audios. Un PDF importado entra en la hoja que estás viendo y sus páginas se abren al instante, listas para escribir encima.
-- **Sincronización con Google Drive (opcional)**: te conectás una vez con tu cuenta de Google y la tablet y la app de PC (Linux y Windows) quedan sincronizadas solas. La app solo ve su propia carpeta "OpenNote" en tu Drive, los cambios hechos en dos dispositivos se combinan hoja por hoja, y podés activar cifrado de extremo a extremo con una frase para que nadie más pueda leer tus apuntes, ni siquiera Google.
-- **App de PC**: la misma app para Linux y Windows, con tus cuadernos sincronizados; se instala desde el repo apt o el instalador (ver Instalación).
-- **Aspecto Material You**: sigue el tema de tu tablet.
+Vynote is a handwriting note-taking app with the S Pen (and with the keyboard too) for Android tablets.
+It's free, it's open source, it works offline, and your notes are yours: they're stored on your device,
+with no accounts and no servers of our own. If you want, you can sync them between your tablet and your PC with your own Google Drive.
 
-## Capturas
+## Features
+
+- **Pressure-sensitive writing**: the stroke gets thicker or thinner depending on how hard you press the pen.
+- **Tips and colors**: ballpoint, fountain pen, pencil, felt-tip and calligraphy, plus a highlighter, with its own palette and adjustable widths.
+- **Smart shapes**: draw a line, circle, ellipse, rectangle/square, triangle or polygon, keep the pen still for a moment,
+  and it turns into a neat shape. Without lifting the pen, you can stretch or shrink it. You can turn this on or off in the pen panel.
+- **Eraser on the button**: press the S Pen button to erase. There are three eraser sizes.
+- **Formatted text**: tap the keyboard icon and a new line opens with bold, italic, underline, colors,
+  headings, lists, indentation and alignment.
+- **Notebook index**: with the **"Título"** (Title) tool, you enclose what you wrote (by hand or with the keyboard) and mark it as
+  Title 1, 2, 3… Handwriting is read on the spot, no internet needed. The **"Índice"** (Index) panel shows everything
+  numbered (1, 1.1, 1.2…) with the page number and takes you to each title. Marked titles appear on the page with
+  their number and travel with sync.
+- **AutoCAD-style selection**: dragging to the right selects what's fully inside the box; dragging to the left selects
+  everything the box touches. A tap selects a single item, and tapping again cycles to the one underneath (for example,
+  only the highlighter on one word). Tapping outside deselects. Pressing and holding on the page, **"Seleccionar todo"**
+  (Select all) takes everything on that page, and **"Seleccionar todo el cuaderno"** (Select entire notebook) loads and
+  takes all of them. Then you can move, copy, duplicate or delete. Corner handles scale while keeping proportions, the
+  handles in the middle of each side stretch only width or only height, and you can rotate.
+- **Layer order**: bring to front, bring forward, send backward or send to back the selection. Can be undone.
+- **Images, sticky notes and audio**: insert them on the page, alongside the ink.
+- **Notebooks as a strip of pages**: swipe from page to page and the title shows which one you're on (for example,
+  "2 / 5"). Add, duplicate, delete, mark or rename pages from the thumbnail panel, and reorder them by dragging the
+  handle. All of that can be undone.
+- **Backgrounds at real A4 size**: ruled at 7, 8 or 10 mm, grid or dots. If you print at 100 %, it comes out at actual size.
+- **Style per page or per notebook**: choose the background, paper color and line spacing.
+- **Organized library**: nested folders, favorites, name search that ignores case and accents, and notebooks protected with a PIN.
+- **Reading mode**: read without touching anything by mistake.
+- **Export and import**: with a single **"Exportar"** (Export) option, you can take notebooks out as PDF or PNG, or whole as an
+  `.vynote` file to back them up or move them to another tablet. You can import `.vynote`, PDF, images and audio (old `.opennote` files from before the rename still import).
+  An imported PDF goes into the page you're looking at, and its pages open instantly, ready to write on top of.
+- **Google Drive sync (optional)**: connect once with your Google account, and the tablet and the PC apps (Linux and
+  Windows) stay in sync on their own. The app only sees its own "Vynote" folder in your Drive, changes made on two
+  devices are merged page by page, and you can turn on end-to-end encryption with a passphrase so nobody else can read
+  your notes, not even Google.
+- **PC app**: the same app for Linux and Windows, with your synced notebooks. Install it from the apt repo or the
+  installer (see Installation).
+- **Material You look**: follows your tablet's theme.
+
+## Screenshots
 
 <table>
   <tr>
-    <td align="center"><img src="docs/img/01_cuaderno.png" width="260" alt="Un cuaderno de Física con escritura a mano, un diagrama de una lente, resaltador y una nota adhesiva"><br><sub><b>Cuaderno</b>: escritura a mano con presión, texto con teclado, resaltador y notas.</sub></td>
-    <td align="center"><img src="docs/img/02_panel_hojas.png" width="260" alt="El panel de hojas con las miniaturas de cada hoja del cuaderno"><br><sub><b>Panel de hojas</b>: miniaturas para saltar, mover o marcar cada hoja.</sub></td>
-    <td align="center"><img src="docs/img/03_biblioteca.png" width="260" alt="La biblioteca con carpetas y cuadernos"><br><sub><b>Biblioteca</b>: carpetas, favoritos y miniaturas de tus cuadernos.</sub></td>
+    <td align="center"><img src="docs/img/01_cuaderno.png" width="260" alt="A physics notebook with handwriting, a lens diagram, a highlighter and a sticky note"><br><sub><b>Notebook</b>: handwriting with pressure, keyboard text, highlighter and notes.</sub></td>
+    <td align="center"><img src="docs/img/02_panel_hojas.png" width="260" alt="The page panel with thumbnails of each page in the notebook"><br><sub><b>Page panel</b>: thumbnails to jump to, move or mark each page.</sub></td>
+    <td align="center"><img src="docs/img/03_biblioteca.png" width="260" alt="The library with folders and notebooks"><br><sub><b>Library</b>: folders, favorites and thumbnails of your notebooks.</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/img/04_indice.png" width="260" alt="El panel Índice con los títulos del cuaderno numerados por niveles"><br><sub><b>Índice</b>: títulos a mano numerados por niveles, con el panel para saltar a cada uno.</sub></td>
-    <td align="center"><img src="docs/img/05_figuras.png" width="260" alt="Figuras prolijas dibujadas a partir del trazo, con manijas para estirar y rotar"><br><sub><b>Figuras y selección</b>: figuras prolijas a partir del trazo, con manijas para estirar y rotar.</sub></td>
-    <td align="center"><img src="docs/img/06_pdf.png" width="260" alt="Un PDF importado con resaltador y respuestas a mano encima"><br><sub><b>PDF anotado</b>: un PDF importado con resaltador y respuestas a mano encima.</sub></td>
+    <td align="center"><img src="docs/img/04_indice.png" width="260" alt="The Index panel with the notebook titles numbered by level"><br><sub><b>Index</b>: handwritten titles numbered by level, with the panel to jump to each one.</sub></td>
+    <td align="center"><img src="docs/img/05_figuras.png" width="260" alt="Neat shapes drawn from strokes, with handles to stretch and rotate"><br><sub><b>Shapes and selection</b>: neat shapes made from your strokes, with handles to stretch and rotate.</sub></td>
+    <td align="center"><img src="docs/img/06_pdf.png" width="260" alt="An imported PDF with highlighting and handwritten answers on top"><br><sub><b>Annotated PDF</b>: an imported PDF with highlighting and handwritten answers on top.</sub></td>
   </tr>
-  <tr><td colspan="3" align="center"><img src="docs/img/07_sync.png" width="800" alt="El mismo cuaderno abierto en la tablet y en la app de Linux, sincronizados con Google Drive"><br><sub><b>Tablet y PC sincronizadas</b>: el mismo cuaderno en la tablet y en la app de Linux, con Google Drive.</sub></td></tr>
+  <tr><td colspan="3" align="center"><img src="docs/img/07_sync.png" width="800" alt="The same notebook open on the tablet and in the Linux app, synced with Google Drive"><br><sub><b>Tablet and PC in sync</b>: the same notebook on the tablet and in the Linux app, with Google Drive.</sub></td></tr>
 </table>
 
-## Instalación
+## Installation
 
-### Desde el APK (lo más fácil)
+### From the APK (easiest)
 
-1. Bajá el archivo `.apk` de la [última release](https://github.com/santiagofr1/OpenNote/releases/latest).
-2. Abrilo desde tu tablet. Si Android lo pide, habilitá **"Instalar apps desconocidas"** para el navegador o el
-   gestor de archivos que uses.
-3. Seguí los pasos del instalador.
+1. Download the `.apk` file from the [latest release](https://github.com/santiagofr1/Vynote/releases/latest).
+2. Open it on your tablet. If Android asks, enable **"Instalar apps desconocidas"** (Install unknown apps) for the browser
+   or file manager you use.
+3. Follow the installer's steps.
 
-La app se actualiza sola: al abrirla busca una versión nueva en GitHub, te muestra las novedades y te pregunta si
-querés instalarla. Nunca toca tus cuadernos.
+The app updates itself: when you open it, it looks for a new version on GitHub, shows you what's new, and asks whether
+you want to install it. It never touches your notebooks.
 
-> Si ya instalaste una versión compilada por vos (firmada con la clave de debug), la primera release firmada con la
-> clave oficial no se puede instalar encima. Hacé un backup de tus cuadernos, desinstalá OpenNote una vez e instalá
-> el APK. Después, las actualizaciones son normales. Detalles en [docs/RELEASES.md](docs/RELEASES.md).
+> If you already installed a version you compiled yourself (signed with the debug key), the first release signed with
+> the official key can't be installed on top of it. Back up your notebooks, uninstall Vynote once, and install the APK.
+> After that, updates work normally. Details in [docs/RELEASES.md](docs/RELEASES.md).
 
-### En Linux (Debian/Ubuntu)
+### On Linux (Debian/Ubuntu)
 
-Con el repo apt (se actualiza con `apt upgrade`):
+Using the apt repo (updated with `apt upgrade`):
 
 ```sh
 sudo install -d -m 0755 /etc/apt/keyrings
 curl -fsSL https://santiagofr1.github.io/apt/key.asc | sudo gpg --dearmor -o /etc/apt/keyrings/santiagofr1.gpg
 echo "deb [signed-by=/etc/apt/keyrings/santiagofr1.gpg] https://santiagofr1.github.io/apt stable main" | sudo tee /etc/apt/sources.list.d/santiagofr1.list
 sudo apt update
-sudo apt install opennote
+sudo apt install vynote
 ```
 
-O bajando el `.deb` de la [última release](https://github.com/santiagofr1/OpenNote/releases/latest):
+Or by downloading the `.deb` from the [latest release](https://github.com/santiagofr1/Vynote/releases/latest):
 
 ```sh
-sudo apt install ./opennote_<versión>_amd64.deb
+sudo apt install ./vynote_<version>_amd64.deb
 ```
 
-Después lo abrís desde el menú de aplicaciones o con `opennote`. Para armar el `.deb` vos mismo: `tool/build_deb.sh <versión>`.
+Then open it from the applications menu or with `vynote`. To build the `.deb` yourself: `tool/build_deb.sh <version>`.
 
-### En Windows
+### On Windows
 
-Bajá `OpenNote-v<versión>-windows-setup.exe` de la [última release](https://github.com/santiagofr1/OpenNote/releases/latest)
-y ejecutalo (Windows 10 u 11, 64 bits). Instala en `Program Files\OpenNote`, crea el acceso directo en el menú inicio
-(y en el escritorio si lo elegís) y se desinstala desde "Aplicaciones instaladas". El instalador sale unos minutos
-después del APK y no está firmado: Windows SmartScreen puede avisar, "Más información" y "Ejecutar de todas formas".
-Sin sincronización en segundo plano (como en Linux); el login de Google abre el navegador.
+Download `Vynote-v<version>-windows-setup.exe` from the [latest release](https://github.com/santiagofr1/Vynote/releases/latest)
+and run it (Windows 10 or 11, 64-bit). It installs to `Program Files\Vynote`, creates a Start menu shortcut (and a
+desktop one if you choose), and uninstalls from **"Aplicaciones instaladas"** (Installed apps). The installer comes out
+a few minutes after the APK and is not signed: Windows SmartScreen may warn you, so pick **"Más información"** (More info)
+and then **"Ejecutar de todas formas"** (Run anyway). No background sync (same as Linux); Google login opens your browser.
 
-### Desde el código
+### From the source
 
-Necesitás [Flutter](https://flutter.dev) en canal *stable*:
+You need [Flutter](https://flutter.dev) on the *stable* channel:
 
 ```sh
-git clone https://github.com/santiagofr1/OpenNote
-cd OpenNote
+git clone https://github.com/santiagofr1/Vynote
+cd Vynote
 flutter pub get
-flutter run                # en una tablet o emulador conectado
-flutter build apk          # genera el APK en build/app/outputs/flutter-apk/
+flutter run                # on a connected tablet or emulator
+flutter build apk          # builds the APK into build/app/outputs/flutter-apk/
 ```
 
-Para compilar para la tablet hacen falta también el Android SDK y JDK 21. Los pasos completos están en
+To build for the tablet you also need the Android SDK and JDK 21. The full steps are in
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Uso
+## Usage
 
-- **Escribir**: usá el S Pen para escribir. Con el dedo te desplazás por la hoja, y pellizcás para hacer zoom.
-  Podés bloquear el zoom si te molesta.
-- **Borrar**: apretá el botón del S Pen mientras pasás la punta por la tinta.
-- **Texto**: tocá el tecladito de la barra para abrir un renglón nuevo y escribir con teclado.
-- **Hojas**: deslizá entre hojas. Al final de la página, tirá hacia arriba y mantené hasta que se llene el círculo
-  para agregar una hoja nueva. El panel de hojas te muestra todas en miniatura.
-- **Cuadernos**: desde la biblioteca, el "+" crea un cuaderno nuevo (en la carpeta en la que estás) o una carpeta.
-  Mantené apretado un cuaderno o una carpeta para elegir "Mover a…".
+- **Writing**: use the S Pen to write. With your finger you scroll across the page, and pinch to zoom.
+  You can lock the zoom if it bothers you.
+- **Erasing**: press the S Pen button while moving the tip over the ink.
+- **Text**: tap the keyboard icon in the toolbar to open a new line and type with the keyboard.
+- **Pages**: swipe between pages. At the end of the last page, drag up and hold until the circle fills to add a new
+  page. The page panel shows all of them as thumbnails.
+- **Notebooks**: from the library, the "+" creates a new notebook (in the folder you're in) or a new folder. Press and
+  hold a notebook or folder to choose **"Mover a…"** (Move to…).
 
-## Compatibilidad
+## Compatibility
 
-OpenNote fue probado en una **Samsung Galaxy Tab S6 Lite (SM-P620) con Android 16** y el S Pen.
+Vynote was tested on a **Samsung Galaxy Tab S6 Lite (SM-P620) with Android 16** and the S Pen.
 
-Debería funcionar en otras tablets Android con lápiz activo, como la gama Galaxy Tab S o tablets con lápiz USI,
-pero todavía no las probamos. Si tenés una y la probás, contanos en un issue: sirve mucho saber qué anda y qué no.
+It should work on other Android tablets with an active pen, like the Galaxy Tab S line or tablets with USI pens, but we
+haven't tested those yet. If you have one and try it, let us know in an issue: it really helps to know what works and
+what doesn't.
 
-## Cómo está armado
+## How it's built
 
 ```
 lib/
-├── domain/      # datos puros, sin Flutter: hojas, trazos, z-order, mallas, cuadernos, carpetas, herramientas
-├── data/        # almacenamiento por hoja (binario + zlib), guardado en segundo plano, carga perezosa, export
-├── rendering/   # dibujo de trazos como mallas, papel, imágenes de hojas por franjas
-├── editor/      # editor, herramientas, selección, historial, texto, zoom, barra
-├── screens/     # biblioteca, cuaderno abierto, panel de hojas, búsqueda y menús
-├── widgets/     # diálogos y piezas compartidas
-└── theme/       # tema y colores
-integration_test/  # suite completa en tablet (app_test.dart)
-tool/              # scripts: capturas, ícono, trazas
-docs/              # releases, capturas e ícono
+├── domain/      # pure data, no Flutter: pages, strokes, z-order, meshes, notebooks, folders, tools
+├── data/        # per-page storage (binary + zlib), background saving, lazy loading, export
+├── rendering/   # stroke drawing as meshes, paper, page images in strips
+├── editor/      # editor, tools, selection, history, text, zoom, toolbar
+├── screens/     # library, open notebook, page panel, search and menus
+├── widgets/     # dialogs and shared pieces
+└── theme/       # theme and colors
+integration_test/  # full tablet suite (app_test.dart)
+tool/              # scripts: screenshots, icon, traces
+docs/              # releases, screenshots and icon
 ```
 
-Cada capa usa solo las de arriba: `domain` no sabe nada de Flutter, y el resto se apoya en él.
+Each layer only uses the ones above it: `domain` knows nothing about Flutter, and the rest build on top of it.
 
-## Contribuir
+## Contributing
 
-OpenNote es **software libre** bajo licencia MIT. Lo podés usar, copiar, modificar y redistribuir como quieras.
+Vynote is **free software** under the GPL v3 or later. You can use, copy, modify and redistribute it, as long as
+whatever you distribute stays free.
 
-El software libre funciona porque la gente se anima a meter mano. No hace falta ser experto en Flutter ni pedir permiso:
+Free software works because people dive in. You don't need to be a Flutter expert or ask for permission:
 
-- **Forkealo** y hacé tu propia versión: otra paleta, otras puntas, otro estilo de hoja. Si sale algo lindo, contalo.
-- **Mandá un PR**, por chico que sea. Arreglar un texto, sumar un fondo o probar un test cuenta igual.
-- **Abrí un issue** si algo no anda en tu tablet o con tu lápiz. Con tantos modelos y marcas distintas, tu reporte
-  es lo que hace que funcione para todos.
-- **Proponé ideas**: [Nuevo issue](https://github.com/santiagofr1/OpenNote/issues/new/choose) tiene plantillas para
-  reportar un error y para proponer una mejora.
+- **Fork it** and make your own version: another palette, other pen tips, another page style. If something cool comes out of it, tell us.
+- **Send a PR**, however small. Fixing a text, adding a background or running a test counts too.
+- **Open an issue** if something doesn't work on your tablet or with your pen. With so many different models and brands,
+  your report is what makes it work for everyone.
+- **Suggest ideas**: [New issue](https://github.com/santiagofr1/Vynote/issues/new/choose) has templates for reporting
+  a bug and proposing an improvement.
 
-Algunas buenas primeras contribuciones:
+Some good first contributions:
 
-- [ ] Probar OpenNote en otra tablet o con otro lápiz (USI, Galaxy Tab S más nueva) y reportar qué anda
-- [ ] Traducción al inglés de los textos de la interfaz (hoy está todo en español)
-- [ ] Nuevos fondos o plantillas de hoja (`lib/domain/paper_layout.dart`, `lib/widgets/backgrounds.dart`)
-- [ ] Nuevas puntas para el lápiz (`lib/domain/tools.dart`, dibujo en `lib/domain/stroke_mesh.dart`)
-- [ ] Empaquetado para F-Droid
-- [ ] App de PC: ya hay Linux (.deb) y Windows (.exe); falta macOS, y resolver entrada con mouse y tableta, atajos y empaquetado
-- [ ] Más tests de lógica pura en `test/`
+- [ ] Try Vynote on another tablet or with another pen (USI, newer Galaxy Tab S) and report what works
+- [ ] Translate the interface text into English (right now everything is in Spanish)
+- [ ] New page backgrounds or templates (`lib/domain/paper_layout.dart`, `lib/widgets/backgrounds.dart`)
+- [ ] New pen tips (`lib/domain/tools.dart`, drawing in `lib/domain/stroke_mesh.dart`)
+- [ ] F-Droid packaging
+- [ ] PC app: Linux (.deb) and Windows (.exe) are already there; macOS is missing, along with mouse and graphics tablet input, shortcuts and packaging
+- [ ] More pure-logic tests in `test/`
 
-La guía para arrancar está en [CONTRIBUTING.md](CONTRIBUTING.md).
+The contributing guide is in [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Licencia
+## License
 
-[MIT](LICENSE). Hacé lo que quieras con el código, solo mantené el aviso de copyright.
+[GPL v3 or later](LICENSE) © 2026 Santiago Frances. You may use, study, modify and redistribute the code. If you
+distribute a modified version, it must use the same license and ship its source code.

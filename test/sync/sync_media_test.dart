@@ -58,10 +58,10 @@ void main() {
 
   group('nombres de los archivos de media', () {
     // Causa 1: la extensión salía de lo que viniera después del último punto de la RUTA entera. Con un nombre sin
-    // extensión dentro de una carpeta con punto (el paquete de Android es `com.apuntes.apuntes`), o con espacios, el
+    // extensión dentro de una carpeta con punto (el paquete de Android es `io.github.santiagofr1.vynote`), o con espacios, el
     // archivo quedaba con un nombre que el motor no reconoce (silenciosamente no se sube) o directamente no se copiaba.
     final raros = {
-      'sin extensión, carpeta con punto': ('com.apuntes.apuntes/cache/file_picker/17000', 'Nota de voz'),
+      'sin extensión, carpeta con punto': ('io.github.santiagofr1.vynote/cache/file_picker/17000', 'Nota de voz'),
       'extensión con espacio': ('cache', 'clase.m4a copia'),
       'fecha con puntos y letras': ('cache', 'Grabación 21.11.2026 de la mañana'),
       'extensión en mayúsculas': ('cache', 'CLASE.M4A'),
@@ -173,7 +173,7 @@ void main() {
 
     test('un archivo de más de 5 MB (audio importado, foto grande) se sube con subida reanudable', () async {
       final (c, uploads) = drive();
-      final store = DriveRemoteStore(c, rootName: 'OpenNote');
+      final store = DriveRemoteStore(c, rootName: 'Vynote');
       final big = Uint8List(6 * 1024 * 1024)..fillRange(0, 6 * 1024 * 1024, 9);
       await store.upload('media/mbig.mp3', big);
       expect(uploads, hasLength(1));
@@ -183,7 +183,7 @@ void main() {
 
     test('uno chico sigue yendo en un solo pedido (multipart)', () async {
       final (c, uploads) = drive();
-      final store = DriveRemoteStore(c, rootName: 'OpenNote');
+      final store = DriveRemoteStore(c, rootName: 'Vynote');
       await store.upload('media/mchico.jpg', Uint8List(100 * 1024));
       expect(uploads.single.type, 'multipart');
     });

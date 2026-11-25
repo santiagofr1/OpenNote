@@ -9,14 +9,14 @@ import 'package:apuntes/domain/domain.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Exportar (mantener apretado un cuaderno) e importar ("+") archivos `.opennote` desde la biblioteca.
+/// Exportar (mantener apretado un cuaderno) e importar ("+") archivos `.vynote` desde la biblioteca.
 void main() {
   late Directory root;
-  final savedPickers = Pickers.opennote, savedSave = saveOpennote;
+  final savedPickers = Pickers.vynote, savedSave = saveVynote;
 
   setUp(() async {
     Storage.useIsolates = false;
-    root = await Directory.systemTemp.createTemp('apuntes_opennote_ui');
+    root = await Directory.systemTemp.createTemp('apuntes_vynote_ui');
     final nb = Notebook.create('Hojas');
     nb.sheets.add(nb.newSheet());
     final d = NotebookDoc(nb);
@@ -28,8 +28,8 @@ void main() {
   });
   tearDown(() async {
     Storage.useIsolates = true;
-    Pickers.opennote = savedPickers;
-    saveOpennote = savedSave;
+    Pickers.vynote = savedPickers;
+    saveVynote = savedSave;
     await root.delete(recursive: true);
   });
 
@@ -55,7 +55,7 @@ void main() {
     await openLibrary(t);
     Uint8List? saved;
     String? savedName;
-    saveOpennote = (bytes, name) async {
+    saveVynote = (bytes, name) async {
       saved = bytes;
       savedName = name;
       return true;
@@ -64,14 +64,14 @@ void main() {
     await settle(t, 600);
     await t.tap(find.byKey(const Key('exportNotebook')));
     await settle(t, 600);
-    await t.tap(find.byKey(const Key('export-opennote')));
+    await t.tap(find.byKey(const Key('export-vynote')));
     for (var i = 0; i < 30 && saved == null; i++) {
       await settle(t, 100);
     }
     expect(saved, isNotNull);
     expect(savedName, 'Hojas');
 
-    Pickers.opennote = () async => saved;
+    Pickers.vynote = () async => saved;
     await t.tap(find.byKey(const Key('new')));
     await settle(t, 600);
     await t.tap(find.byKey(const Key('importNotebook')));
@@ -91,7 +91,7 @@ void main() {
 
   testWidgets('un archivo roto se rechaza con un aviso y no agrega nada', (t) async {
     await openLibrary(t);
-    Pickers.opennote = () async => Uint8List.fromList([1, 2, 3]);
+    Pickers.vynote = () async => Uint8List.fromList([1, 2, 3]);
     await t.tap(find.byKey(const Key('new')));
     await settle(t, 600);
     await t.tap(find.byKey(const Key('importNotebook')));

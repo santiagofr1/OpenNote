@@ -58,7 +58,7 @@ class _Skip implements Exception {
 /// (la memoria del editor los pisaría). Lo único que hace ahí es SUBIR: una hoja o `notebook.json` que cambió acá
 /// (lo guardado en disco es consistente: la escritura es atómica) mientras la nube sigue en la base. Si la nube
 /// también cambió (o borró) algo de ese cuaderno, queda sin aplicar y se anota en [SyncReport.remoteWaiting]: se
-/// aplica al cerrarlo o con "Actualizar" (ver `docs/SINCRONIZACION.md`). Con algún cuaderno abierto `index.json` también
+/// aplica al cerrarlo o con "Actualizar" (ver `docs/SYNC.md`). Con algún cuaderno abierto `index.json` también
 /// es solo-subida (la biblioteca lo tiene en memoria). Lo abierto se consulta en cada archivo, no al empezar.
 class SyncEngine {
   SyncEngine(this.store, this.remote, {Set<String> Function()? busy, this.account = ''})

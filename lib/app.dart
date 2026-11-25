@@ -22,7 +22,7 @@ class ApuntesApp extends StatelessWidget {
   Widget build(BuildContext context) => DynamicColorBuilder(
         // colores del sistema (Material You) y modo claro/oscuro del dispositivo
         builder: (light, dark) => MaterialApp(
-          title: 'OpenNote',
+          title: 'Vynote',
           debugShowCheckedModeBanner: false,
           themeMode: ThemeMode.system,
           theme: appTheme(ColorScheme.fromSeed(seedColor: light?.primary ?? kAccent)),

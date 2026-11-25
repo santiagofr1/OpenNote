@@ -464,7 +464,7 @@ void main() {
     expect(sheets.length, 1);
   });
 
-  testWidgets('hojas: borrar y deshacer, mover con el asa y deshacer, exportar e importar .opennote', (t) async {
+  testWidgets('hojas: borrar y deshacer, mover con el asa y deshacer, exportar e importar .vynote', (t) async {
     await start(t);
     await createNotebook(t, 'Tres');
     await t.tap(find.byKey(const Key('pagesBtn')));
@@ -524,26 +524,26 @@ void main() {
     expect(sheetOf('st2'), 2);
     expect(sheetOf('st0'), 0);
 
-    // exportar .opennote (el diálogo del sistema se reemplaza) e importarlo
+    // exportar .vynote (el diálogo del sistema se reemplaza) e importarlo
     await t.tap(find.byKey(const Key('pagesBtn')));
     await settle(t, 600);
     Uint8List? saved;
-    final savedSave = saveOpennote, savedPick = Pickers.opennote;
-    saveOpennote = (bytes, name) async {
+    final savedSave = saveVynote, savedPick = Pickers.vynote;
+    saveVynote = (bytes, name) async {
       saved = bytes;
       return true;
     };
     addTearDown(() {
-      saveOpennote = savedSave;
-      Pickers.opennote = savedPick;
+      saveVynote = savedSave;
+      Pickers.vynote = savedPick;
     });
     await openMore(t, 'Exportar');
-    await t.tap(find.byKey(const Key('export-opennote')));
+    await t.tap(find.byKey(const Key('export-vynote')));
     await settle(t, 600);
     expect(saved, isNotNull);
     await t.tap(find.byKey(const Key('back')));
     await settle(t, 1200);
-    Pickers.opennote = () async => saved;
+    Pickers.vynote = () async => saved;
     await t.tap(find.byKey(const Key('new')));
     await settle(t, 600);
     await t.tap(find.byKey(const Key('importNotebook')));
@@ -2359,7 +2359,7 @@ void main() {
     expect(ed.doc.strokes.length, 2, reason: 'pegó una copia del trazo');
   });
 
-  testWidgets('Exportar: una sola opción con PDF, PNG y .opennote', (t) async {
+  testWidgets('Exportar: una sola opción con PDF, PNG y .vynote', (t) async {
     await start(t);
     await createNotebook(t, 'Exporta');
     for (var i = 0; i < 2; i++) {
@@ -2368,15 +2368,15 @@ void main() {
       await t.tap(find.text('Hoja nueva'));
       await settle(t, 800);
     }
-    // dentro del cuaderno: el menú ⋮ tiene una sola entrada "Exportar" (sin "Guardar como" ni el .opennote suelto)
+    // dentro del cuaderno: el menú ⋮ tiene una sola entrada "Exportar" (sin "Guardar como" ni el .vynote suelto)
     await t.tap(find.byKey(const Key('more')));
     await settle(t);
     expect(find.text('Exportar'), findsOneWidget);
     expect(find.text('Guardar como'), findsNothing);
-    expect(find.text('Exportar cuaderno (.opennote)'), findsNothing);
+    expect(find.text('Exportar cuaderno (.vynote)'), findsNothing);
     await t.tap(find.text('Exportar'));
     await settle(t, 600);
-    for (final k in ['pdf', 'sheet', 'sheetpng', 'png', 'opennote']) {
+    for (final k in ['pdf', 'sheet', 'sheetpng', 'png', 'vynote']) {
       expect(find.byKey(Key('export-$k')), findsOneWidget, reason: 'opción $k');
     }
     // "Imágenes (PNG)" exporta todo el cuaderno: un .zip con un PNG por hoja (el diálogo del sistema se reemplaza)
@@ -2417,7 +2417,7 @@ void main() {
     expect(find.text('Exportar a PDF'), findsNothing);
     await t.tap(find.byKey(const Key('exportNotebook')));
     await settle(t, 600);
-    for (final k in ['pdf', 'png', 'opennote']) {
+    for (final k in ['pdf', 'png', 'vynote']) {
       expect(find.byKey(Key('export-$k')), findsOneWidget, reason: 'opción $k');
     }
     expect(find.byKey(const Key('export-sheet')), findsNothing);

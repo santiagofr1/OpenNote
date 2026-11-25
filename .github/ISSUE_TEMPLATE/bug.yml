@@ -1,29 +1,29 @@
-name: Reporte de error
-description: Algo no funciona como debería en OpenNote
+name: Bug report
+description: Something doesn't work the way it should in Vynote
 title: "[Bug] "
 labels: ["bug"]
 body:
   - type: textarea
     id: descripcion
     attributes:
-      label: ¿Qué pasó?
-      description: Contalo con tus palabras. Si sabés cómo repetirlo, mejor.
-      placeholder: Al cerrar un cuaderno con texto, la última línea desaparece.
+      label: What happened?
+      description: Tell us in your own words. If you know how to reproduce it, even better.
+      placeholder: When I close a notebook with text, the last line disappears.
     validations:
       required: true
 
   - type: input
     id: dispositivo
     attributes:
-      label: Dispositivo y versión de la app
-      placeholder: Galaxy Tab S6 Lite, Android 16, OpenNote 1.0.0
+      label: Device and app version
+      placeholder: Galaxy Tab S6 Lite, Android 16, Vynote 1.0.0
     validations:
       required: false
 
   - type: textarea
     id: capturas
     attributes:
-      label: Capturas o video
-      description: Opcional. Arrastrá imágenes o un video acá.
+      label: Screenshots or video
+      description: Optional. Drag images or a video here.
     validations:
       required: false

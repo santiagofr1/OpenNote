@@ -10,7 +10,7 @@ import 'dialogs.dart';
 
 enum UpdateChoice { later, skip, update }
 
-/// "Hay una versión nueva de OpenNote": versiones, novedades (con scroll) y tres botones.
+/// "Hay una versión nueva de Vynote": versiones, novedades (con scroll) y tres botones.
 Future<UpdateChoice?> showUpdateDialog(BuildContext context, UpdateInfo info, {AppVersion? installed}) {
   final notes = userNotes(info.notes);
   final theme = Theme.of(context);
@@ -20,7 +20,7 @@ Future<UpdateChoice?> showUpdateDialog(BuildContext context, UpdateInfo info, {A
     builder: (ctx) => AlertDialog(
       scrollable: true,
       icon: const Icon(Symbols.new_releases, weight: 300),
-      title: const Text('Hay una versión nueva de OpenNote', textAlign: TextAlign.center),
+      title: const Text('Hay una versión nueva de Vynote', textAlign: TextAlign.center),
       content: SizedBox(
         width: 420,
         child: Column(
@@ -160,7 +160,7 @@ Future<void> _downloadAndInstall(BuildContext context, UpdateInfo info) async {
         builder: (ctx) => AlertDialog(
           title: const Text('Un paso más'),
           content: const Text(
-            'Android pide que le des permiso a OpenNote para instalar su propia actualización. '
+            'Android pide que le des permiso a Vynote para instalar su propia actualización. '
             'Es una sola vez. Te llevamos a los ajustes: activá "Permitir de esta fuente", volvé y tocá Actualizar de nuevo.',
           ),
           actions: [
@@ -178,7 +178,7 @@ Future<void> _downloadAndInstall(BuildContext context, UpdateInfo info) async {
       final restart = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('OpenNote se actualizó'),
+          title: const Text('Vynote se actualizó'),
           content: Text('Ya quedó instalada la ${info.version}. Reiniciá la app para usarla.'),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Después')),

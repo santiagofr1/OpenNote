@@ -104,10 +104,10 @@ void main() {
       return ZipDecoder().decodeBytes(bytes!).where((e) => e.isFile).toList();
     }
 
-    testWidgets('opennote: un .opennote por cuaderno respetando carpetas', (t) async {
+    testWidgets('vynote: un .vynote por cuaderno respetando carpetas', (t) async {
       final progress = <(int, int, String)>[];
-      final files = await zipOf(t, FolderExportFormat.opennote, progress: progress);
-      expect(files.map((f) => f.name), ['Facultad/Álgebra.opennote', 'Facultad/Análisis/Parcial.opennote']);
+      final files = await zipOf(t, FolderExportFormat.vynote, progress: progress);
+      expect(files.map((f) => f.name), ['Facultad/Álgebra.vynote', 'Facultad/Análisis/Parcial.vynote']);
       expect(files.every((f) => f.content.isNotEmpty), isTrue);
       expect(progress, [(0, 2, 'Álgebra'), (1, 2, 'Parcial'), (2, 2, '')]);
     });
@@ -131,9 +131,9 @@ void main() {
     });
 
     testWidgets('cancelar devuelve null y no deja el archivo', (t) async {
-      final f = await t.runAsync(() => buildFolderZip(store, idx, fac, FolderExportFormat.opennote, tmp: tmp, cancelled: () => true));
+      final f = await t.runAsync(() => buildFolderZip(store, idx, fac, FolderExportFormat.vynote, tmp: tmp, cancelled: () => true));
       expect(f, isNull);
-      final left = await t.runAsync(() => Directory('${tmp.path}/opennote-export').list().toList());
+      final left = await t.runAsync(() => Directory('${tmp.path}/vynote-export').list().toList());
       expect(left, isEmpty);
     });
   });

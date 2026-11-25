@@ -1,14 +1,14 @@
 #!/bin/bash
 # Traza de la línea de tiempo en la tablet: genera un cuaderno de HOJAS hojas (50 por defecto), lo abre y hace el scroll
 # "medio" de perf.sh envuelto en binding.traceAction. Mismas verificaciones de seguridad que tool/perf.sh
-# (app real intacta, datos reales sin cambios, foco en el inicio u OpenNote). Deja en build/perf/:
+# (app real intacta, datos reales sin cambios, foco en el inicio u Vynote). Deja en build/perf/:
 #   traza.timeline.json (traza cruda), traza.timeline_summary.json, perf.json y traza.log
 # y al final corre tool/traza_resumen.py (qué hay en los frames > 16 ms).  HOJAS=100 tool/traza.sh  /  BACKUP=1 ...
 set -e
 export PATH=~/flutter/bin:$PATH JAVA_HOME=~/Android/jdk21 ANDROID_HOME=~/Android/Sdk
 cd "$(dirname "$0")/.."
 DEV=${DEV:-$(adb devices | awk 'NR==2{print $1}')}
-PKG=com.apuntes.apuntes
+PKG=io.github.santiagofr1.vynote
 DATA=/sdcard/Android/data/$PKG/files/apuntes
 APK=build/app/outputs/flutter-apk/app-profile.apk
 HOJAS=${HOJAS:-50}
@@ -20,13 +20,13 @@ instalada() { adb -s "$DEV" shell pm list packages "$PKG" | tr -d '\r' | grep -q
 
 instalada || { echo "ERROR: la app real ($PKG) no está instalada; no corro nada."; exit 1; }
 
-# 1) Solo si la tablet está en el inicio o en OpenNote (nunca encima de otra app).
+# 1) Solo si la tablet está en el inicio o en Vynote (nunca encima de otra app).
 FOCO=$(adb -s "$DEV" shell dumpsys window | grep mCurrentFocus | tr -d '\r')
 echo "$FOCO" | grep -qE 'launcher|com\.apuntes\.apuntes' || { echo "ERROR: la tablet está en otra app; no corro nada."; echo "$FOCO"; exit 1; }
 
 # 2) Compilar ANTES (profile, con el benchmark como punto de entrada) y verificar el id del APK.
 #    El build profile lleva el sufijo .test (android/app/build.gradle.kts), igual que debug: si el id fuera
-#    com.apuntes.apuntes pisaría la app real, así que se verifica y, si no coincide, no se corre nada.
+#    io.github.santiagofr1.vynote pisaría la app real, así que se verifica y, si no coincide, no se corre nada.
 #    `flutter drive` no tiene --no-uninstall: se le pasa el APK ya compilado, así solo toca la app del APK.
 mkdir -p build/perf
 rm -f build/perf/perf.json build/perf/traza.timeline.json build/perf/traza.timeline_summary.json

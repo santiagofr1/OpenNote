@@ -16,7 +16,7 @@ import 'remote_store.dart';
 import 'secret_service.dart';
 import 'sync_backend.dart';
 
-/// Con `drive.file` la app solo ve lo que ella misma crea (la carpeta `OpenNote` y su contenido).
+/// Con `drive.file` la app solo ve lo que ella misma crea (la carpeta `Vynote` y su contenido).
 const kDriveScope = 'https://www.googleapis.com/auth/drive.file';
 
 /// Dónde se guardan los tokens. La implementación real usa el almacenamiento seguro del sistema (Keystore en Android,

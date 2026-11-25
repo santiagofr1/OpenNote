@@ -9,7 +9,7 @@ class SystemClipboard {
   static Future<Uint8List?> Function() readImage = _readImage; // bytes PNG/JPEG/…, null si no hay
 }
 
-const _channel = MethodChannel('opennote/clipboard');
+const _channel = MethodChannel('vynote/clipboard');
 const _cmdTimeout = Duration(seconds: 3);
 
 /// Extensión con la que guardar [b] sin recodificar: 'png' o 'jpg'; null si es otro formato.
@@ -48,7 +48,7 @@ Future<Uint8List?> _readImage() async {
       return out is List<int> && out.isNotEmpty ? Uint8List.fromList(out) : null;
     }
     if (Platform.isWindows) {
-      final f = File('${Directory.systemTemp.path}/opennote_clip_${DateTime.now().microsecondsSinceEpoch}.png');
+      final f = File('${Directory.systemTemp.path}/vynote_clip_${DateTime.now().microsecondsSinceEpoch}.png');
       try {
         final path = f.path.replaceAll("'", "''");
         await _powershell("$_winAsm; \$i = [System.Windows.Forms.Clipboard]::GetImage(); "

@@ -1,4 +1,4 @@
-package com.apuntes.apuntes
+package io.github.santiagofr1.vynote
 
 import android.content.ClipboardManager
 import android.content.Intent
@@ -15,7 +15,7 @@ import java.io.File
 class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "opennote/updater")
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "vynote/updater")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "canInstall" ->
@@ -44,7 +44,7 @@ class MainActivity : FlutterActivity() {
             }
 
         // Portapapeles del sistema: solo imágenes (capturas, imágenes copiadas de otra app)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "opennote/clipboard")
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "vynote/clipboard")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "hasImage" -> result.success(try { clipImageUri() != null } catch (e: Exception) { false })

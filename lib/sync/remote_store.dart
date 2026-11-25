@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-/// Un archivo del remoto. [path] es relativo a la carpeta `OpenNote/` (ver sync_paths.dart), [md5] el hash de sus
+/// Un archivo del remoto. [path] es relativo a la carpeta `Vynote/` (ver sync_paths.dart), [md5] el hash de sus
 /// bytes y [modified] la hora (ms) de la última modificación según el remoto.
 class RemoteFile {
   final String path;

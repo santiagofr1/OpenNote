@@ -14,7 +14,7 @@ trap 'rm -f "$JSON"' EXIT
 : > "$REPORTE"
 fallo=0
 
-echo "== OpenNote: tests en la PC ($(date '+%Y-%m-%d %H:%M')) ==" | tee -a "$REPORTE"
+echo "== Vynote: tests en la PC ($(date '+%Y-%m-%d %H:%M')) ==" | tee -a "$REPORTE"
 
 # ---- análisis: errores y avisos (los `info` de deprecated_member_use son de siempre y no cuentan) ----
 if [ "${SIN_ANALISIS:-0}" != 1 ]; then

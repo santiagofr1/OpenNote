@@ -86,7 +86,7 @@ void main() {
     final savedZip = saveFolderZip;
     tearDown(() => saveFolderZip = savedZip);
 
-    testWidgets('Exportar > OpenNote guarda el zip y avisa', (t) async {
+    testWidgets('Exportar > Vynote guarda el zip y avisa', (t) async {
       final tmp = (await t.runAsync(() => Directory.systemTemp.createTemp('apuntes_library_tmp')))!;
       addTearDown(() => tmp.delete(recursive: true));
       t.binding.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -104,7 +104,7 @@ void main() {
       await hold(t, k('folder-Facultad'));
       await tap(t, k('exportFolder'));
       expect(find.text('Exportar carpeta'), findsOneWidget);
-      await t.tap(k('folderExport-opennote'));
+      await t.tap(k('folderExport-vynote'));
       for (var i = 0; i < 50 && name == null; i++) {
         await settle(t, 100);
       }
