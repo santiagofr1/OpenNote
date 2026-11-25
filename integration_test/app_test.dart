@@ -978,6 +978,57 @@ void main() {
     expect(ed.widget.tools.zoomLocked, isFalse);
   });
 
+  testWidgets('zoom en la PC: Ctrl + rueda agranda alrededor del cursor y la rueda sola scrollea', (t) async {
+    await start(t);
+    await createNotebook(t, 'Rueda');
+    final ed = editor(t);
+    ed.widget.tools.zoom = 1;
+    ed.widget.tools.zoomLocked = false;
+    final c = sheetCenter(t);
+    final vp = find
+        .descendant(of: find.byType(PageEditor), matching: find.byType(Listener))
+        .evaluate()
+        .map((e) => e.renderObject as RenderBox)
+        .firstWhere((b) => b.hasSize && (b.size.height - ed.scroll.position.viewportDimension).abs() < .5);
+    Offset off() => Offset(ed.hscroll.hasClients ? ed.hscroll.offset : 0, ed.scroll.offset);
+
+    Future<void> wheel(double dy, Offset at) async {
+      await t.sendEventToBinding(PointerScrollEvent(kind: PointerDeviceKind.mouse, position: at, scrollDelta: Offset(0, dy)));
+      await settle(t, 300);
+    }
+
+    // rueda sola: scrollea y no cambia el zoom
+    final z0 = ed.ts.zoom, y0 = ed.scroll.offset;
+    await wheel(120, c);
+    expect(ed.ts.zoom, z0, reason: 'la rueda sola no cambia el zoom');
+    expect(ed.scroll.offset, greaterThan(y0 + 20), reason: 'la rueda sola scrollea');
+
+    // Ctrl + rueda hacia arriba: agranda y deja quieto el punto bajo el cursor
+    final p = c + const Offset(40, 60);
+    final f = p - vp.localToGlobal(Offset.zero);
+    final y1 = ed.scroll.offset, z1 = ed.ts.zoom;
+    final before = ed.layout.toPage(f, off());
+    await simulateKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await wheel(-120, p);
+    expect(ed.ts.zoom, closeTo(z1 * exp(.24), .01), reason: 'Ctrl + rueda hacia arriba agranda');
+    final after = ed.layout.toPage(f, off());
+    expect((after - before).distance * ed.ts.zoom, lessThan(2), reason: 'el punto bajo el cursor no se mueve');
+    expect(ed.scroll.offset, isNot(y1), reason: 'el scroll solo cambió para sostener el punto');
+
+    // con el candado puesto, Ctrl + rueda no cambia el zoom
+    await simulateKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await t.tap(find.byTooltip('Fijar el zoom'));
+    await settle(t);
+    expect(ed.ts.zoomLocked, isTrue);
+    final fixed = ed.ts.zoom, yFixed = ed.scroll.offset;
+    await simulateKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await wheel(-120, p);
+    await simulateKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    expect(ed.ts.zoom, fixed, reason: 'con el candado no hay zoom');
+    expect(ed.scroll.offset, yFixed, reason: 'ni scroll con Ctrl');
+    expect(t.takeException(), isNull);
+  });
+
   testWidgets('pellizco después de poner y sacar el candado: el zoom crece parejo y la hoja no tiembla (#27)', (t) async {
     await start(t);
     await createNotebook(t, 'Pellizco');

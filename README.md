@@ -149,6 +149,7 @@ To build for the tablet you also need the Android SDK and JDK 21. The full steps
 ## Usage
 
 - **Writing**: use the S Pen to write. With your finger you scroll across the page, and pinch to zoom.
+- **Zoom on the PC**: hold Ctrl and turn the mouse wheel; the wheel alone scrolls the page.
   You can lock the zoom if it bothers you.
 - **Erasing**: press the S Pen button while moving the tip over the ink.
 - **Text**: tap the keyboard icon in the toolbar to open a new line and type with the keyboard.

@@ -45,6 +45,7 @@ import 'toolbar.dart';
 import 'voice_recorder.dart';
 import 'touch_gestures.dart';
 import 'viewport.dart';
+import 'wheel_zoom.dart';
 import 'zoom_indicator.dart';
 
 /// Hojas que se cargan de disco más allá del rango armado (de cada lado).
@@ -271,6 +272,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       v.dispose();
     }
     _stillTimer?.cancel();
+    _wheelSave?.cancel();
     _shapeHold?.cancel();
     _imgs.dispose();
     liveTick.dispose();
@@ -2000,6 +2002,38 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     _zoomScrollTo = SheetLayout(_viewW, z, units: doc.width).scrollFor(anchor, f);
   }
 
+  Timer? _wheelSave;
+
+  /// Ctrl + ruedita del mouse = zoom (la ruedita sola scrollea; ver [NoCtrlWheelPhysics]).
+  void _wheelSignal(PointerSignalEvent e) {
+    if (e is PointerScrollEvent && ctrlHeld()) {
+      GestureBinding.instance.pointerSignalResolver
+          .register(e, (ev) => _wheelZoom((ev as PointerScrollEvent).scrollDelta.dy, ev.position));
+    } else if (e is PointerScaleEvent) {
+      // algunas plataformas mandan Ctrl+rueda / pellizco del touchpad como escala
+      GestureBinding.instance.pointerSignalResolver
+          .register(e, (ev) => _wheelZoomBy((ev as PointerScaleEvent).scale, ev.position));
+    }
+  }
+
+  void _wheelZoom(double dy, Offset global) {
+    if (dy == 0) return; // rueda horizontal
+    _wheelZoomBy(wheelZoomFactor(dy), global);
+  }
+
+  void _wheelZoomBy(double factor, Offset global) {
+    if (ts.zoomLocked) {
+      _flashZoom(); // la píldora muestra el candado
+      return;
+    }
+    final box = _viewportKey.currentContext!.findRenderObject() as RenderBox;
+    _setZoom(ts.zoom * factor, box.globalToLocal(global));
+    _wheelSave?.cancel();
+    _wheelSave = Timer(const Duration(milliseconds: 500), () {
+      if (mounted) widget.onPrefsChanged();
+    });
+  }
+
   /// Aplica el scroll pendiente del zoom antes de que el visor arme su layout (mismo cuadro, sin notificar).
   void _applyZoomScroll() {
     final to = _zoomScrollTo;
@@ -2646,7 +2680,9 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         });
         final sheetSize = Size(layout.sheetWidth, doc.h * scale);
         // durante el pellizco no scrollea: si no, el zoom tironea
-        final physics = touch.pinching ? const NeverScrollableScrollPhysics() : const ClampingScrollPhysics();
+        final physics = touch.pinching
+            ? const NeverScrollableScrollPhysics()
+            : const NoCtrlWheelPhysics(parent: ClampingScrollPhysics());
         return Stack(children: [
           Listener(
             key: _viewportKey,
@@ -2654,6 +2690,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             onPointerMove: _touchMove,
             onPointerUp: _touchUp,
             onPointerCancel: _touchUp,
+            onPointerSignal: _wheelSignal,
             child: NotificationListener<ScrollNotification>(
               onNotification: (n) => doc.nb.canvas ? false : pull.onScroll(n, touching: touch.count > 0),
               child: ScrollConfiguration(

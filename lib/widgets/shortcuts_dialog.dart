@@ -26,6 +26,7 @@ const _sheet = <(String, String)>[
   ('Resaltador', 'H'),
   ('Texto (abre un bloque)', 'T'),
   ('Seleccionar', 'S'),
+  ('Zoom', 'Ctrl + rueda del mouse'),
   ('Ver estos atajos', 'Ctrl+/'),
 ];
 
