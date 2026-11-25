@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import '../data/export.dart';
 import '../data/vynote_file.dart';
 import '../editor/voice_recorder.dart';
 import '../sync/remote_store.dart';
@@ -43,6 +44,20 @@ String errText(L l, Object e) {
   }
   return '$e';
 }
+
+/// Los textos de lo que se exporta (nombres de archivo y diálogos de guardado) en el idioma de la app.
+ExportTexts exportTextsOf(L l) => ExportTexts(
+      notebook: l.exportFileNotebook,
+      folder: l.exportFileFolder,
+      section: l.exportFileSection,
+      page: l.exportFilePage,
+      sheet: l.exportFileSheet,
+      savePdf: l.exportSavePdf,
+      saveImage: l.exportSaveImage,
+      saveImages: l.exportSaveImages,
+      saveNotebook: l.exportSaveNotebook,
+      saveFolder: l.exportSaveFolder,
+    );
 
 /// Texto de un error de sincronización ([SyncError]) en el idioma de la app. [fallback] es el mensaje en español que
 /// trae el error (para los que no tienen traducción).

@@ -455,12 +455,12 @@ class NotebookDoc {
   }
 
   /// Copia la hoja [i] justo después de ella (con ids nuevos). Devuelve la hoja nueva.
-  SheetMeta duplicateSheet(int i) {
+  SheetMeta duplicateSheet(int i, {String Function(String title)? copyTitle}) {
     if (!isLoadedAt(i)) throw StateError('la hoja $i no está cargada: cargala antes de duplicarla');
     final src = sheets[i];
     final copy = _contentOf(i, fresh: true);
     return insertSheet(i + 1,
-        meta: src.copy(id: newId('h'), title: src.title.isEmpty ? '' : '${src.title} (copia)', bookmark: false),
+        meta: src.copy(id: newId('h'), title: src.title.isEmpty ? '' : (copyTitle?.call(src.title) ?? '${src.title} (copia)'), bookmark: false),
         content: copy);
   }
 

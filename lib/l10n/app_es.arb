@@ -2504,5 +2504,137 @@
   "paintSize": "Tamaño",
   "@paintSize": {
     "description": "Decorator panel: size slider"
+  },
+  "shapeMeasureTriangle": "base {base} · alto {height} mm",
+  "@shapeMeasureTriangle": {
+    "description": "Measurement label drawn while making a triangle: base and height in millimeters",
+    "placeholders": {
+      "base": {
+        "type": "String"
+      },
+      "height": {
+        "type": "String"
+      }
+    }
+  },
+  "librarySampleNotebook": "Mi cuaderno",
+  "@librarySampleNotebook": {
+    "description": "Name of the sample notebook created on the first launch (also add the translation to kSampleNotebookNames in domain/notebook.dart)"
+  },
+  "exportFileNotebook": "Cuaderno",
+  "@exportFileNotebook": {
+    "description": "Fallback file name for a notebook without a name (exported files)"
+  },
+  "exportFileFolder": "Carpeta",
+  "@exportFileFolder": {
+    "description": "Fallback file name for a folder without a name (exported files)"
+  },
+  "exportFileSection": "Sección",
+  "@exportFileSection": {
+    "description": "Fallback name of a section without a name inside exported file names"
+  },
+  "exportFilePage": "página",
+  "@exportFilePage": {
+    "description": "Word for \"page\" inside exported image file names of infinite canvases (lowercase)"
+  },
+  "exportFileSheet": "hoja",
+  "@exportFileSheet": {
+    "description": "Word for \"sheet\" inside exported image file names (lowercase)"
+  },
+  "exportSavePdf": "Guardar PDF",
+  "@exportSavePdf": {
+    "description": "Title of the system dialog that saves a PDF"
+  },
+  "exportSaveImage": "Guardar imagen",
+  "@exportSaveImage": {
+    "description": "Title of the system dialog that saves an image"
+  },
+  "exportSaveImages": "Guardar imágenes",
+  "@exportSaveImages": {
+    "description": "Title of the system dialog that saves several images"
+  },
+  "exportSaveNotebook": "Guardar cuaderno",
+  "@exportSaveNotebook": {
+    "description": "Title of the system dialog that saves a notebook file"
+  },
+  "exportSaveFolder": "Guardar carpeta",
+  "@exportSaveFolder": {
+    "description": "Title of the system dialog that saves a folder zip"
+  },
+  "settingsTitle": "Ajustes",
+  "@settingsTitle": {
+    "description": "Title of the settings screen and label of the library menu item that opens it"
+  },
+  "settingsSectionLanguage": "Idioma",
+  "@settingsSectionLanguage": {
+    "description": "Settings section: languages"
+  },
+  "settingsAppLanguage": "Idioma de la app",
+  "@settingsAppLanguage": {
+    "description": "Settings item: language of the app"
+  },
+  "settingsInkLanguage": "Idioma de la escritura a mano",
+  "@settingsInkLanguage": {
+    "description": "Settings item: language used to read handwriting"
+  },
+  "settingsLanguageSystem": "Como el sistema",
+  "@settingsLanguageSystem": {
+    "description": "Language option: follow the system language"
+  },
+  "settingsInkSameAsApp": "Igual que la app",
+  "@settingsInkSameAsApp": {
+    "description": "Handwriting language option: same as the app language"
+  },
+  "settingsInkHelp": "Se usa para leer los títulos que escribís a mano. Al cambiarlo se baja el modelo nuevo (unos 20 MB) y se borra el anterior.",
+  "@settingsInkHelp": {
+    "description": "Help text under the handwriting language setting"
+  },
+  "settingsSectionUpdates": "Actualizaciones",
+  "@settingsSectionUpdates": {
+    "description": "Settings section: updates"
+  },
+  "settingsCheckUpdates": "Buscar actualizaciones",
+  "@settingsCheckUpdates": {
+    "description": "Settings item: check for updates now"
+  },
+  "settingsAutoUpdates": "Buscar actualizaciones automáticamente",
+  "@settingsAutoUpdates": {
+    "description": "Settings switch: check for updates automatically"
+  },
+  "settingsSectionAbout": "Acerca de",
+  "@settingsSectionAbout": {
+    "description": "Settings section: about the app"
+  },
+  "settingsVersion": "Versión",
+  "@settingsVersion": {
+    "description": "Settings item: app version"
+  },
+  "settingsSource": "Código fuente",
+  "@settingsSource": {
+    "description": "Settings item: link to the source code"
+  },
+  "settingsLicense": "Licencia",
+  "@settingsLicense": {
+    "description": "Settings item: license"
+  },
+  "settingsLicenseValue": "GPL v3 o posterior",
+  "@settingsLicenseValue": {
+    "description": "License name shown under the license item"
+  },
+  "settingsPrivacy": "Política de privacidad",
+  "@settingsPrivacy": {
+    "description": "Settings item: link to the privacy policy"
+  },
+  "updateChecking": "Buscando actualizaciones…",
+  "@updateChecking": {
+    "description": "Snackbar while checking for updates"
+  },
+  "updateCheckFailed": "No se pudo buscar actualizaciones ahora",
+  "@updateCheckFailed": {
+    "description": "Snackbar when the update check failed"
+  },
+  "updateUpToDate": "Ya tenés la última versión",
+  "@updateUpToDate": {
+    "description": "Snackbar when the app is up to date"
   }
 }

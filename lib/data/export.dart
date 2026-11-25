@@ -332,6 +332,27 @@ Future<Uint8List> renderSheetPng(NotebookDoc doc, int sheet,
   return data!.buffer.asUint8List();
 }
 
+/// Textos de los archivos que se exportan y de los diálogos de guardado del sistema. La app los cambia al idioma
+/// elegido (ver `ApuntesApp`); por defecto, español.
+class ExportTexts {
+  const ExportTexts({
+    this.notebook = 'Cuaderno',
+    this.folder = 'Carpeta',
+    this.section = 'Sección',
+    this.page = 'página',
+    this.sheet = 'hoja',
+    this.savePdf = 'Guardar PDF',
+    this.saveImage = 'Guardar imagen',
+    this.saveImages = 'Guardar imágenes',
+    this.saveNotebook = 'Guardar cuaderno',
+    this.saveFolder = 'Guardar carpeta',
+  });
+  final String notebook, folder, section, page, sheet, savePdf, saveImage, saveImages, saveNotebook, saveFolder;
+}
+
+/// Los textos vigentes (ver [ExportTexts]).
+ExportTexts exportTexts = const ExportTexts();
+
 /// Cambia los caracteres que no se permiten en nombres de archivo.
 String safeFileName(String name) => name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '-');
 
@@ -340,8 +361,8 @@ String safeFileName(String name) => name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '-'
 Future<bool> savePdf(Uint8List bytes, String name) async {
   final safe = safeFileName(name).trim();
   final uri = await FilePicker.saveFile(
-    dialogTitle: 'Guardar PDF',
-    fileName: '${safe.isEmpty ? 'Cuaderno' : safe}.pdf',
+    dialogTitle: exportTexts.savePdf,
+    fileName: '${safe.isEmpty ? exportTexts.notebook : safe}.pdf',
     bytes: bytes,
     mimeType: 'application/pdf',
   );
@@ -355,7 +376,7 @@ Future<bool> saveSheetPng(Storage store, NotebookDoc doc, int sheet, String name
   final png = await renderSheetPng(src, i,
       images: await loadImages(store, src, sheet: i, background: background), background: background);
   final uri = await FilePicker.saveFile(
-    dialogTitle: 'Guardar imagen',
+    dialogTitle: exportTexts.saveImage,
     fileName: safeFileName('$name.png'),
     bytes: png,
     mimeType: 'image/png',
@@ -371,13 +392,13 @@ Future<bool> saveSheetPng(Storage store, NotebookDoc doc, int sheet, String name
 Stream<({String name, Uint8List png})> notebookPngs(Storage store, NotebookDoc doc,
     {Set<String>? sections, void Function(int, int)? onProgress, bool Function()? cancelled, bool background = true}) async* {
   final safe = safeFileName(doc.nb.name).trim();
-  final name = safe.isEmpty ? 'Cuaderno' : safe;
+  final name = safe.isEmpty ? exportTexts.notebook : safe;
   if (doc.nb.canvas) {
     // lienzo infinito: una imagen por página con contenido
     final multi = doc.nb.sections.length > 1, used = <String>{};
     await for (final p in canvasPagePngs(store, doc, sections: sections, onProgress: onProgress, cancelled: cancelled, background: background)) {
       final sec = safeFileName(p.section.name).trim();
-      final base = '$name - ${multi ? '${sec.isEmpty ? 'Sección' : sec} - ' : ''}página ${'${p.n + 1}'.padLeft(2, '0')}';
+      final base = '$name - ${multi ? '${sec.isEmpty ? exportTexts.section : sec} - ' : ''}${exportTexts.page} ${'${p.n + 1}'.padLeft(2, '0')}';
       var file = base;
       for (var c = 2; !used.add(file); c++) {
         file = '$base ($c)';
@@ -407,7 +428,7 @@ Stream<({String name, Uint8List png})> notebookPngs(Storage store, NotebookDoc d
       }
     }
     final sec = safeFileName(e.section.name).trim();
-    final base = '$name - ${multi ? '${sec.isEmpty ? 'Sección' : sec} - ' : ''}hoja ${'${k + 1}'.padLeft(width, '0')}';
+    final base = '$name - ${multi ? '${sec.isEmpty ? exportTexts.section : sec} - ' : ''}${exportTexts.sheet} ${'${k + 1}'.padLeft(width, '0')}';
     var file = base;
     for (var c = 2; !used.add(file); c++) {
       file = '$base ($c)'; // dos secciones con el mismo nombre: no se pisan
@@ -439,8 +460,8 @@ Future<({Uint8List bytes, bool zip})?> buildNotebookPngs(Storage store, Notebook
 Future<bool> Function(Uint8List bytes, String name, bool zip) saveImages = (bytes, name, zip) async {
   final safe = safeFileName(name).trim();
   final uri = await FilePicker.saveFile(
-    dialogTitle: 'Guardar imágenes',
-    fileName: '${safe.isEmpty ? 'Cuaderno' : safe}.${zip ? 'zip' : 'png'}',
+    dialogTitle: exportTexts.saveImages,
+    fileName: '${safe.isEmpty ? exportTexts.notebook : safe}.${zip ? 'zip' : 'png'}',
     bytes: bytes,
     mimeType: zip ? 'application/zip' : 'image/png',
   );
@@ -452,8 +473,8 @@ Future<bool> Function(Uint8List bytes, String name, bool zip) saveImages = (byte
 Future<bool> Function(Uint8List bytes, String name) saveVynote = (bytes, name) async {
   final safe = safeFileName(name).trim();
   final uri = await FilePicker.saveFile(
-    dialogTitle: 'Guardar cuaderno',
-    fileName: '${safe.isEmpty ? 'Cuaderno' : safe}.vynote',
+    dialogTitle: exportTexts.saveNotebook,
+    fileName: '${safe.isEmpty ? exportTexts.notebook : safe}.vynote',
     bytes: bytes,
     mimeType: 'application/octet-stream',
   );

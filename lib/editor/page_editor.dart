@@ -1015,7 +1015,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             }
             final k = doc.sheetOfY(a.dy), top = k * kSheetStep * scale, width = kW * scale;
             final box = shapeBox(kind, a, b);
-            final text = shapeMeasure(kind, a, b, unitsPerMm(doc.sizeAt(a.dy)));
+            final text = shapeMeasure(kind, a, b, unitsPerMm(doc.sizeAt(a.dy)), l: context.l10n);
             const bw = 300.0, bh = 28.0;
             final left = (box.center.dx * scale - bw / 2).clamp(0.0, max(0.0, width - bw)).toDouble();
             final above = box.top * scale - 8 - bh >= top;

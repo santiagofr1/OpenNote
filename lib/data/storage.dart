@@ -134,7 +134,7 @@ class Storage {
 
   // ================= índice =================
   /// Lee el índice. Si está en el formato viejo (páginas), lo convierte antes (ver [migrateLegacy]).
-  Future<NotesIndex> loadIndex() async {
+  Future<NotesIndex> loadIndex({String sampleName = 'Mi cuaderno'}) async {
     Map? j;
     try {
       final text = await indexFile.readAsString();
@@ -148,7 +148,7 @@ class Storage {
     }
     if (j == null) {
       // primera vez: cuaderno de ejemplo
-      final nb = Notebook.create('Mi cuaderno');
+      final nb = Notebook.create(sampleName);
       final idx = NotesIndex(last: nb.id, notebooks: [nb]);
       await saveNotebook(NotebookDoc(nb));
       await saveIndex(idx);

@@ -14,6 +14,7 @@ import '../../data/updates.dart';
 import '../../domain/domain.dart';
 import '../../domain/version.dart';
 import '../../l10n/l10n.dart';
+import '../../l10n/language_settings.dart';
 import '../../sync/background_sync.dart';
 import '../../sync/google_auth.dart';
 import '../../sync/google_config.dart';
@@ -26,6 +27,7 @@ import '../../widgets/dialogs.dart';
 import '../../widgets/pdf_progress.dart';
 import '../../widgets/update_dialog.dart';
 import '../notebook/menus.dart';
+import '../settings/settings_screen.dart';
 import '../notebook/notebook_screen.dart';
 import '../notebook/sections_menu.dart';
 import 'folder_card.dart';
@@ -121,10 +123,11 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     await store.init();
     store.onSaved = (_) => sync.notifySaved();
     final prefs = await store.loadPrefs();
+    if (mounted) LanguageScope.maybeOf(context)?.load(prefs);
     _setupBackgroundSync(prefs);
     tools.load(prefs);
     updPrefs = UpdatePrefs.from(prefs);
-    final idx = await store.loadIndex();
+    final idx = await store.loadIndex(sampleName: mounted ? context.l10n.librarySampleNotebook : 'Mi cuaderno');
     setState(() => index = idx);
     unawaited(sync.init());
     WidgetsBinding.instance.addPostFrameCallback((_) => _autoUpdateCheck());
@@ -160,19 +163,19 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
   }
 
   /// "Buscar actualizaciones" a mano: ignora el plazo de 24 h y la versión omitida.
-  Future<void> _manualUpdateCheck() async {
-    snack(context, 'Buscando actualizaciones…', duration: const Duration(seconds: 2));
+  Future<void> manualUpdateCheck() async {
+    snack(context, context.l10n.updateChecking, duration: const Duration(seconds: 2));
     final r = await Updates.check();
     if (!mounted) return;
     if (r.failed) {
-      snack(context, 'No se pudo buscar actualizaciones ahora');
+      snack(context, context.l10n.updateCheckFailed);
       return;
     }
     updPrefs.lastCheck = DateTime.now().millisecondsSinceEpoch;
     await store.savePrefs(updPrefs.toJson());
     if (!mounted) return;
     if (r.update == null) {
-      snack(context, 'Ya tenés la última versión');
+      snack(context, context.l10n.updateUpToDate);
     } else {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       await _offer(r.update!);
@@ -200,45 +203,34 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     }
   }
 
+  /// Menú ⋮: sincronización con Google Drive y Ajustes.
   Future<void> _settings() async {
-    final check = await showSafeSheet<String>(
+    final pick = await showSafeSheet<String>(
       context,
-      (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => Padding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            ListTile(
-              key: const Key('checkUpdates'),
-              leading: const Icon(Symbols.system_update, weight: 300),
-              title: const Text('Buscar actualizaciones'),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              onTap: () => Navigator.pop(ctx, 'check'),
-            ),
-            ListTile(
-              key: const Key('syncMenu'),
-              leading: const Icon(Symbols.cloud_sync, weight: 300),
-              title: const Text('Sincronización con Google Drive'),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              onTap: () => Navigator.pop(ctx, 'sync'),
-            ),
-            SwitchListTile(
-              key: const Key('autoUpdates'),
-              secondary: const Icon(Symbols.update, weight: 300),
-              title: const Text('Buscar actualizaciones automáticamente'),
-              value: updPrefs.auto,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              onChanged: (v) {
-                setS(() => updPrefs.auto = v);
-                store.savePrefs(updPrefs.toJson());
-              },
-            ),
-          ]),
-        ),
+      (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            key: const Key('syncMenu'),
+            leading: const Icon(Symbols.cloud_sync, weight: 300),
+            title: Text(ctx.l10n.syncTitle),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            onTap: () => Navigator.pop(ctx, 'sync'),
+          ),
+          ListTile(
+            key: const Key('settingsMenu'),
+            leading: const Icon(Symbols.settings, weight: 300),
+            title: Text(ctx.l10n.settingsTitle),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            onTap: () => Navigator.pop(ctx, 'settings'),
+          ),
+        ]),
       ),
     );
-    if (check == 'check' && mounted) await _manualUpdateCheck();
-    if (check == 'sync' && mounted) {
-      await _openSyncSheet();
+    if (pick == 'sync' && mounted) await _openSyncSheet();
+    if (pick == 'settings' && mounted) {
+      await Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => SettingsScreen(store: store, updates: updPrefs, onCheckUpdates: manualUpdateCheck)));
     }
   }
 

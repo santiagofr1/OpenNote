@@ -180,7 +180,7 @@ class SyncEngine {
       if (nbs is! List || nbs.length != 1 || (local['folders'] as List? ?? const []).isNotEmpty) return;
       final n = nbs.single as Map;
       final id = n['id'] as String;
-      if (n['name'] != 'Mi cuaderno' || n['folder'] != null || n['pin'] != null || openNotebooks().contains(id)) return;
+      if (!kSampleNotebookNames.contains(n['name']) || n['folder'] != null || n['pin'] != null || openNotebooks().contains(id)) return;
       // la nube tiene que tener algún cuaderno
       final remoteIdx = jsonDecode(utf8.decode(await remote.download('index.json'))) as Map;
       if (remoteIdx['notebooks'] is! List || (remoteIdx['notebooks'] as List).isEmpty) return;

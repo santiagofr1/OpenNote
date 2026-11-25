@@ -389,4 +389,8 @@ class NotesIndex {
 }
 
 /// PIN: se guarda solo su hash.
+/// Los nombres que puede tener el cuaderno de ejemplo que crea cada instalación (uno por idioma; ver la clave
+/// `librarySampleNotebook` de los .arb): la sincronización descarta el que sigue intacto. Si se traduce, agregar acá.
+const kSampleNotebookNames = {'Mi cuaderno', 'My notebook', 'Meu caderno'};
+
 String hashPin(String pin) => sha256.convert(utf8.encode('apuntes:$pin')).toString();

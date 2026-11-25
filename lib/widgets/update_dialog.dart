@@ -64,7 +64,7 @@ Future<UpdateChoice?> showUpdateDialog(BuildContext context, UpdateInfo info, {A
             ),
             const SizedBox(height: 12),
             Text(
-              'Se baja de la página oficial del proyecto en GitHub. Tus cuadernos no se tocan: solo se actualiza la app.',
+              ctx.l10n.updateSourceInfo,
               style: small,
             ),
           ],

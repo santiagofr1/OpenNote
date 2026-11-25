@@ -1811,4 +1811,100 @@ class LEn extends L {
 
   @override
   String get paintSize => 'Tamaño';
+
+  @override
+  String shapeMeasureTriangle(String base, String height) {
+    return 'base $base · alto $height mm';
+  }
+
+  @override
+  String get librarySampleNotebook => 'Mi cuaderno';
+
+  @override
+  String get exportFileNotebook => 'Cuaderno';
+
+  @override
+  String get exportFileFolder => 'Carpeta';
+
+  @override
+  String get exportFileSection => 'Sección';
+
+  @override
+  String get exportFilePage => 'página';
+
+  @override
+  String get exportFileSheet => 'hoja';
+
+  @override
+  String get exportSavePdf => 'Guardar PDF';
+
+  @override
+  String get exportSaveImage => 'Guardar imagen';
+
+  @override
+  String get exportSaveImages => 'Guardar imágenes';
+
+  @override
+  String get exportSaveNotebook => 'Guardar cuaderno';
+
+  @override
+  String get exportSaveFolder => 'Guardar carpeta';
+
+  @override
+  String get settingsTitle => 'Ajustes';
+
+  @override
+  String get settingsSectionLanguage => 'Idioma';
+
+  @override
+  String get settingsAppLanguage => 'Idioma de la app';
+
+  @override
+  String get settingsInkLanguage => 'Idioma de la escritura a mano';
+
+  @override
+  String get settingsLanguageSystem => 'Como el sistema';
+
+  @override
+  String get settingsInkSameAsApp => 'Igual que la app';
+
+  @override
+  String get settingsInkHelp =>
+      'Se usa para leer los títulos que escribís a mano. Al cambiarlo se baja el modelo nuevo (unos 20 MB) y se borra el anterior.';
+
+  @override
+  String get settingsSectionUpdates => 'Actualizaciones';
+
+  @override
+  String get settingsCheckUpdates => 'Buscar actualizaciones';
+
+  @override
+  String get settingsAutoUpdates => 'Buscar actualizaciones automáticamente';
+
+  @override
+  String get settingsSectionAbout => 'Acerca de';
+
+  @override
+  String get settingsVersion => 'Versión';
+
+  @override
+  String get settingsSource => 'Código fuente';
+
+  @override
+  String get settingsLicense => 'Licencia';
+
+  @override
+  String get settingsLicenseValue => 'GPL v3 o posterior';
+
+  @override
+  String get settingsPrivacy => 'Política de privacidad';
+
+  @override
+  String get updateChecking => 'Buscando actualizaciones…';
+
+  @override
+  String get updateCheckFailed => 'No se pudo buscar actualizaciones ahora';
+
+  @override
+  String get updateUpToDate => 'Ya tenés la última versión';
 }

@@ -3218,6 +3218,192 @@ abstract class L {
   /// In es, this message translates to:
   /// **'Tamaño'**
   String get paintSize;
+
+  /// Measurement label drawn while making a triangle: base and height in millimeters
+  ///
+  /// In es, this message translates to:
+  /// **'base {base} · alto {height} mm'**
+  String shapeMeasureTriangle(String base, String height);
+
+  /// Name of the sample notebook created on the first launch (also add the translation to kSampleNotebookNames in domain/notebook.dart)
+  ///
+  /// In es, this message translates to:
+  /// **'Mi cuaderno'**
+  String get librarySampleNotebook;
+
+  /// Fallback file name for a notebook without a name (exported files)
+  ///
+  /// In es, this message translates to:
+  /// **'Cuaderno'**
+  String get exportFileNotebook;
+
+  /// Fallback file name for a folder without a name (exported files)
+  ///
+  /// In es, this message translates to:
+  /// **'Carpeta'**
+  String get exportFileFolder;
+
+  /// Fallback name of a section without a name inside exported file names
+  ///
+  /// In es, this message translates to:
+  /// **'Sección'**
+  String get exportFileSection;
+
+  /// Word for "page" inside exported image file names of infinite canvases (lowercase)
+  ///
+  /// In es, this message translates to:
+  /// **'página'**
+  String get exportFilePage;
+
+  /// Word for "sheet" inside exported image file names (lowercase)
+  ///
+  /// In es, this message translates to:
+  /// **'hoja'**
+  String get exportFileSheet;
+
+  /// Title of the system dialog that saves a PDF
+  ///
+  /// In es, this message translates to:
+  /// **'Guardar PDF'**
+  String get exportSavePdf;
+
+  /// Title of the system dialog that saves an image
+  ///
+  /// In es, this message translates to:
+  /// **'Guardar imagen'**
+  String get exportSaveImage;
+
+  /// Title of the system dialog that saves several images
+  ///
+  /// In es, this message translates to:
+  /// **'Guardar imágenes'**
+  String get exportSaveImages;
+
+  /// Title of the system dialog that saves a notebook file
+  ///
+  /// In es, this message translates to:
+  /// **'Guardar cuaderno'**
+  String get exportSaveNotebook;
+
+  /// Title of the system dialog that saves a folder zip
+  ///
+  /// In es, this message translates to:
+  /// **'Guardar carpeta'**
+  String get exportSaveFolder;
+
+  /// Title of the settings screen and label of the library menu item that opens it
+  ///
+  /// In es, this message translates to:
+  /// **'Ajustes'**
+  String get settingsTitle;
+
+  /// Settings section: languages
+  ///
+  /// In es, this message translates to:
+  /// **'Idioma'**
+  String get settingsSectionLanguage;
+
+  /// Settings item: language of the app
+  ///
+  /// In es, this message translates to:
+  /// **'Idioma de la app'**
+  String get settingsAppLanguage;
+
+  /// Settings item: language used to read handwriting
+  ///
+  /// In es, this message translates to:
+  /// **'Idioma de la escritura a mano'**
+  String get settingsInkLanguage;
+
+  /// Language option: follow the system language
+  ///
+  /// In es, this message translates to:
+  /// **'Como el sistema'**
+  String get settingsLanguageSystem;
+
+  /// Handwriting language option: same as the app language
+  ///
+  /// In es, this message translates to:
+  /// **'Igual que la app'**
+  String get settingsInkSameAsApp;
+
+  /// Help text under the handwriting language setting
+  ///
+  /// In es, this message translates to:
+  /// **'Se usa para leer los títulos que escribís a mano. Al cambiarlo se baja el modelo nuevo (unos 20 MB) y se borra el anterior.'**
+  String get settingsInkHelp;
+
+  /// Settings section: updates
+  ///
+  /// In es, this message translates to:
+  /// **'Actualizaciones'**
+  String get settingsSectionUpdates;
+
+  /// Settings item: check for updates now
+  ///
+  /// In es, this message translates to:
+  /// **'Buscar actualizaciones'**
+  String get settingsCheckUpdates;
+
+  /// Settings switch: check for updates automatically
+  ///
+  /// In es, this message translates to:
+  /// **'Buscar actualizaciones automáticamente'**
+  String get settingsAutoUpdates;
+
+  /// Settings section: about the app
+  ///
+  /// In es, this message translates to:
+  /// **'Acerca de'**
+  String get settingsSectionAbout;
+
+  /// Settings item: app version
+  ///
+  /// In es, this message translates to:
+  /// **'Versión'**
+  String get settingsVersion;
+
+  /// Settings item: link to the source code
+  ///
+  /// In es, this message translates to:
+  /// **'Código fuente'**
+  String get settingsSource;
+
+  /// Settings item: license
+  ///
+  /// In es, this message translates to:
+  /// **'Licencia'**
+  String get settingsLicense;
+
+  /// License name shown under the license item
+  ///
+  /// In es, this message translates to:
+  /// **'GPL v3 o posterior'**
+  String get settingsLicenseValue;
+
+  /// Settings item: link to the privacy policy
+  ///
+  /// In es, this message translates to:
+  /// **'Política de privacidad'**
+  String get settingsPrivacy;
+
+  /// Snackbar while checking for updates
+  ///
+  /// In es, this message translates to:
+  /// **'Buscando actualizaciones…'**
+  String get updateChecking;
+
+  /// Snackbar when the update check failed
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo buscar actualizaciones ahora'**
+  String get updateCheckFailed;
+
+  /// Snackbar when the app is up to date
+  ///
+  /// In es, this message translates to:
+  /// **'Ya tenés la última versión'**
+  String get updateUpToDate;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

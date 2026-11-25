@@ -322,7 +322,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     }
     final i = d.indexOfSheet(id); // pudo moverse mientras se leía
     if (!mounted || i < 0 || !d.isLoadedAt(i)) return;
-    _sheetOp((d) => [SheetPresenceOp.added(d, d.duplicateSheet(i))], goTo: i + 1);
+    _sheetOp((d) => [SheetPresenceOp.added(d, d.duplicateSheet(i, copyTitle: context.l10n.libraryCopySuffix))], goTo: i + 1);
   }
 
   /// Lleva la hoja [from] a la posición [to] (menú del panel o arrastrando la miniatura).
@@ -745,6 +745,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     final sheetName = meta.title.isEmpty ? context.l10n.sheetLabel(k + 1) : context.l10n.sheetLabelTitled(k + 1, meta.title);
     final v = await showExportSheet(context, store, widget.tools, sheetName: nb.canvas ? null : sheetName);
     if (v == null || !mounted) return;
+    final l = context.l10n;
     switch (v) {
       case 'pdf':
         final secs = await askExportSections(context, nb); // con varias secciones, cuáles
@@ -755,7 +756,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         final secs = await askExportSections(context, nb);
         if (secs != null && mounted) await exportPngFlow(context, store, d, sections: secs);
       case 'sheetpng':
-        final ok = await saveSheetPng(store, d, k, context.l10n.notebookSheetFileName(nb.name, k + 1), background: await exportBackgroundPref(store));
+        final ok = await saveSheetPng(store, d, k, l.notebookSheetFileName(nb.name, k + 1), background: await exportBackgroundPref(store));
         if (ok && mounted) snack(context, context.l10n.notebookImageSaved);
       case 'vynote':
         await _exportVynote();
