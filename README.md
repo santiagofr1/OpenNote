@@ -2,8 +2,6 @@
 
 # Vynote
 
-**English** · [Español](README.es.md)
-
 **Take handwritten notes on your tablet, free and without strings attached.**
 
 [![Release](https://img.shields.io/github/v/release/santiagofr1/Vynote?color=brightgreen)](https://github.com/santiagofr1/Vynote/releases/latest)

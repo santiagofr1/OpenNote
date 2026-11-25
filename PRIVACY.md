@@ -1,7 +1,5 @@
 # Vynote Privacy Policy
 
-**English** · [Español](PRIVACIDAD.md)
-
 Last updated: November 21, 2026.
 
 Vynote is a free, open-source handwriting note-taking app (https://github.com/santiagofr1/Vynote).
