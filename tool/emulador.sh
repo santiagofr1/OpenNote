@@ -4,6 +4,7 @@
 # Corre sin ventana. Necesita KVM (/dev/kvm) y no puede correr al mismo tiempo que una VM de VirtualBox.
 #   tool/emulador.sh            -> crea la tablet virtual si no existe, la arranca y espera a que esté lista
 #   tool/emulador.sh parar      -> la apaga
+#   GPU=host tool/emulador.sh   -> dibuja con la placa de video (mucho más rápido si hay una; por defecto, por software)
 #   DEV=emulator-5554 ./run_tests.sh   -> el test completo en el emulador (ver lo que imprime al terminar)
 # Para la presión del lápiz real y la latencia sigue haciendo falta la tablet.
 set -e
@@ -46,7 +47,7 @@ if adb devices | grep -q "^$SERIAL"; then
   echo "El emulador ya está corriendo ($SERIAL)."
 else
   echo "Arrancando el emulador (sin ventana)…"
-  nohup emulator -avd $AVD -no-window -no-audio -no-boot-anim -no-snapshot-save -gpu swiftshader_indirect \
+  nohup emulator -avd $AVD -no-window -no-audio -no-boot-anim -no-snapshot-save -gpu "${GPU:-swiftshader_indirect}" \
     >/tmp/vynote_emulador.log 2>&1 &
 fi
 
