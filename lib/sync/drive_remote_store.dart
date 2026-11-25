@@ -44,13 +44,13 @@ class _Node {
 
 /// [RemoteStore] sobre Google Drive (API v3) con el permiso `drive.file`: la app solo ve lo que ella misma creó. Todo
 /// vive en una carpeta [rootName] de "Mi unidad", con la misma estructura que los datos locales (ver
-/// docs/SINCRONIZACION.md). [client] ya viene autenticado (ver google_auth.dart).
+/// docs/SYNC.md). [client] ya viene autenticado (ver google_auth.dart).
 ///
 /// Mantiene en memoria un mapa id → nodo de todo lo que la app tiene en Drive; las rutas salen de ahí. Los deltas usan
 /// la API de cambios (`changes.list` con un `startPageToken`).
 ///
 /// NOTA: escrito contra la documentación de Drive v3 y `googleapis` 19; todavía NO se probó contra Drive real (hacen falta
-/// credenciales, ver docs/SINCRONIZACION.md).
+/// credenciales, ver docs/SYNC.md).
 class DriveRemoteStore implements RemoteStore, PurgingRemoteStore {
   DriveRemoteStore(http.Client client, {this.rootName = kDefaultRoot}) : _api = drive.DriveApi(client);
 

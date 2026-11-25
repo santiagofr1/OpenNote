@@ -100,7 +100,7 @@ jobs:
           EOF
 
       # Sincronización con Google Drive: los IDs de cliente salen de secretos del repositorio. Si no existen, la app
-      # compila igual y la pantalla de sincronización avisa que falta configurar (ver docs/SINCRONIZACION.md).
+      # compila igual y la pantalla de sincronización avisa que falta configurar (ver docs/SYNC.md).
       - name: Datos de Google (opcional)
         env:
           GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}

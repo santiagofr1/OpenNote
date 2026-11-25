@@ -7,7 +7,7 @@ import 'package:cryptography/cryptography.dart';
 
 import 'remote_store.dart';
 
-/// Cifrado de extremo a extremo de los archivos que se suben a la nube (ver docs/SINCRONIZACION.md, "Cifrado").
+/// Cifrado de extremo a extremo de los archivos que se suben a la nube (ver docs/SYNC.md, "End-to-end encryption").
 ///
 ///  - Clave: Argon2id sobre la frase del usuario con una sal al azar (guardada en `crypto.json`, no es secreta).
 ///  - Cada archivo: XChaCha20-Poly1305 con un nonce al azar de 24 bytes (no se repite en la práctica).
@@ -34,7 +34,7 @@ class CorruptEncryptedException extends RemoteException {
 }
 
 /// Parámetros de Argon2id. [memoryKiB] en KiB. Los de fábrica ([KdfParams.standard]) se fijaron midiendo en Dart puro
-/// (ver docs/SINCRONIZACION.md).
+/// (ver docs/SYNC.md).
 class KdfParams {
   final int memoryKiB, iterations, parallelism;
   const KdfParams(this.memoryKiB, this.iterations, this.parallelism);

@@ -1,5 +1,7 @@
 # Política de privacidad de OpenNote
 
+[English](PRIVACY.md) · **Español**
+
 Última actualización: 21 de noviembre de 2026.
 
 OpenNote es una app de apuntes a mano, libre y de código abierto

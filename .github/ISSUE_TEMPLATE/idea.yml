@@ -1,13 +1,13 @@
-name: Idea o mejora
-description: Proponer una función nueva o un cambio en OpenNote
+name: Idea or improvement
+description: Propose a new feature or a change to OpenNote
 title: "[Idea] "
 labels: ["idea"]
 body:
   - type: textarea
     id: idea
     attributes:
-      label: ¿Qué se te ocurrió?
-      description: Contá la idea o qué te falta. Con una línea alcanza.
-      placeholder: Poder buscar una hoja por su título cuando tengo muchas.
+      label: What did you have in mind?
+      description: Describe the idea or what's missing. One line is enough.
+      placeholder: Being able to search for a page by its title when I have a lot of them.
     validations:
       required: true

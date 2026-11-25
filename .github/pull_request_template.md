@@ -1,10 +1,10 @@
-## ¿Qué cambia?
+## What changes?
 
-<!-- Contá brevemente qué hace este PR y por qué. Si resuelve un issue, mencionalo (Closes #123). -->
+<!-- Briefly describe what this PR does and why. If it resolves an issue, mention it (Closes #123). -->
 
 ## Checklist
 
-- [ ] `flutter analyze` sin errores
-- [ ] `flutter test` en verde
-- [ ] Probado en dispositivo: <!-- modelo y Android, por ejemplo Galaxy Tab S6 Lite SM-P620, Android 16 -->
-- [ ] Capturas de pantalla incluidas, si hay cambios de interfaz
+- [ ] `flutter analyze` with no errors
+- [ ] `flutter test` green
+- [ ] Tested on a device: <!-- model and Android version, for example Galaxy Tab S6 Lite SM-P620, Android 16 -->
+- [ ] Screenshots included, if there are UI changes

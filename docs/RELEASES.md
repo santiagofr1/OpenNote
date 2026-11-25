@@ -1,74 +1,74 @@
-# Releases de OpenNote
+# OpenNote Releases
 
-Cada push a `main` compila, prueba y publica automáticamente un APK firmado en GitHub Releases.
-Los pushes que solo tocan documentación (`**.md`, `docs/**` o `.github/ISSUE_TEMPLATE/**`) no
-disparan una release. También se puede lanzar a mano desde **Actions → Release → Run workflow**.
+Every push to `main` builds, tests and automatically publishes a signed APK to GitHub Releases.
+Pushes that only touch documentation (`**.md`, `docs/**` or `.github/ISSUE_TEMPLATE/**`) do not
+trigger a release. It can also be started by hand from **Actions → Release → Run workflow**.
 
-## Cómo funciona
+## How it works
 
-El workflow `.github/workflows/release.yml`:
+The `.github/workflows/release.yml` workflow:
 
-1. Ejecuta `flutter pub get`, `flutter analyze --no-fatal-infos` y `flutter test`.
-2. Calcula la versión con el número de ejecución de GitHub Actions:
-   - `versionName`: `1.0.<run_number>` (por ejemplo, `1.0.42`).
-   - `versionCode`: `<run_number> + 100` (por ejemplo, `142`), siempre mayor que el `1` local.
-3. Firma el APK con la clave de release guardada en los secretos del repositorio.
-4. Publica el APK como `OpenNote-v1.0.<run_number>.apk` en un GitHub Release con el tag
-   `v1.0.<run_number>`, usando como notas los asuntos de los commits desde el tag `v*` anterior.
-5. Marca esa release como la última (`make_latest`).
+1. Runs `flutter pub get`, `flutter analyze --no-fatal-infos` and `flutter test`.
+2. Computes the version from the GitHub Actions run number:
+   - `versionName`: `1.0.<run_number>` (for example, `1.0.42`).
+   - `versionCode`: `<run_number> + 100` (for example, `142`), always greater than the local `1`.
+3. Signs the APK with the release key stored in the repository secrets.
+4. Publishes the APK as `OpenNote-v1.0.<run_number>.apk` in a GitHub Release tagged
+   `v1.0.<run_number>`, using the commit subjects since the previous `v*` tag as the release notes.
+5. Marks that release as the latest (`make_latest`).
 
-Después corre el job `linux` (Ubuntu 24.04, `needs: release`): compila `flutter build linux --release`, arma
-`opennote_<versión>_amd64.deb` con `tool/build_deb.sh` (misma versión `1.0.<run_number>`, con los IDs de Google
-desde los mismos secretos) y lo sube con `gh release upload` al mismo release. Si ese job falla, el APK y el aviso
-de actualización de Android siguen andando (la app solo elige el asset `.apk`). Las notas del release traen las
-instrucciones de instalación para Linux. Al final avisa al repo apt (`santiagofr1/apt`) con un
-`repository_dispatch` `publish`, que baja el `.deb` de los Releases y republica el índice. El secreto
-`APT_DISPATCH_TOKEN` es opcional (fine-grained token con *Contents: read and write* sobre `santiagofr1/apt`):
-sin él no falla, el cron horario del repo apt lo levanta igual. Para que apt lo tome hay que listar
-`santiagofr1/OpenNote` en el `apps.txt` de ese repo.
+Then the `linux` job runs (Ubuntu 24.04, `needs: release`): it runs `flutter build linux --release`, builds
+`opennote_<version>_amd64.deb` with `tool/build_deb.sh` (same version `1.0.<run_number>`, with the Google IDs
+from the same secrets) and uploads it to the same release with `gh release upload`. If that job fails, the APK
+and the Android update notice keep working (the app only picks the `.apk` asset). The release notes include
+the installation instructions for Linux. At the end it notifies the apt repo (`santiagofr1/apt`) with a
+`repository_dispatch` event of type `publish`, which downloads the `.deb` from the Releases and republishes the
+index. The `APT_DISPATCH_TOKEN` secret is optional (a fine-grained token with *Contents: read and write* on
+`santiagofr1/apt`): without it the job does not fail, and the apt repo's hourly cron job picks the release up
+anyway. For apt to pick it up, `santiagofr1/OpenNote` must be listed in that repo's `apps.txt`.
 
-Con el mismo esquema corre el job `windows` (`windows-latest`, `needs: release`): compila
-`flutter build windows --release` (`--build-name=1.0.<run_number>`, `--build-number=<run_number> + 100`, con los IDs de
-Google desde los mismos secretos), arma el instalador con Inno Setup (`windows/installer/opennote.iss`, versión por
-`/DAppVersion=`; usa `iscc` y, si no está, `choco install innosetup`) y sube
-`OpenNote-v<versión>-windows-setup.exe` a la misma release con `softprops/action-gh-release@v2`. El `AppId` del
-instalador es fijo, así una versión nueva se instala sobre la anterior. Si el job falla, el APK y el .deb no se ven
-afectados. El instalador no está firmado (SmartScreen avisa). Las notas de la release mencionan el asset de Windows.
+The `windows` job (`windows-latest`, `needs: release`) follows the same pattern: it runs
+`flutter build windows --release` (`--build-name=1.0.<run_number>`, `--build-number=<run_number> + 100`, with the
+Google IDs from the same secrets), builds the installer with Inno Setup (`windows/installer/opennote.iss`, version
+passed via `/DAppVersion=`; it uses `iscc` and, if that is missing, runs `choco install innosetup`) and uploads
+`OpenNote-v<version>-windows-setup.exe` to the same release with `softprops/action-gh-release@v2`. The installer's
+`AppId` is fixed, so a new version installs over the previous one. If the job fails, the APK and the .deb are not
+affected. The installer is not signed (SmartScreen will warn). The release notes mention the Windows asset.
 
-Si falta el secreto del keystore, el job falla a propósito. Nunca se publica una release firmada con
-la clave de debug.
+If the keystore secret is missing, the job fails on purpose. A signed release is never published with the
+debug key.
 
-## Limpieza de releases viejos
+## Cleaning up old releases
 
-Al final del job, el paso "Podar releases viejos" corre `tool/podar_releases.sh`, que deja solo los
-últimos 2 releases (`KEEP=2` en el paso) y borra el resto con `gh release delete <tag> --cleanup-tag --yes`
-(borra también el tag). Reglas:
+At the end of the job, the "Podar releases viejos" step runs `tool/podar_releases.sh`, which keeps only the
+latest 2 releases (`KEEP=2` in the step) and deletes the rest with `gh release delete <tag> --cleanup-tag --yes`
+(this also deletes the tag). Rules:
 
-- Solo toca tags `^v1\.0\.[0-9]+$`; ignora drafts, prereleases y cualquier otro tag.
-- Ordena por fecha de creación y nunca borra el marcado Latest ni el recién publicado (`CURRENT_TAG`).
-- Corre solo si la publicación salió bien. Si un borrado falla, avisa con un warning y sigue con el resto;
-  el paso es `continue-on-error`, así que no tumba el workflow.
-- Usa `GH_TOKEN` (`github.token`) y el permiso `contents: write` que el workflow ya tiene.
-- La app solo consulta el último release, así que el aviso de actualización no se ve afectado.
+- It only touches tags matching `^v1\.0\.[0-9]+$`; it ignores drafts, prereleases and any other tag.
+- It sorts by creation date and never deletes the release marked Latest or the one just published (`CURRENT_TAG`).
+- It only runs if the publish succeeded. If a deletion fails, it emits a warning and moves on to the rest;
+  the step is `continue-on-error`, so it does not fail the workflow.
+- It uses `GH_TOKEN` (`github.token`) and the `contents: write` permission the workflow already has.
+- The app only checks the latest release, so the update notice is not affected.
 
-Para probar la selección sin borrar nada:
+To test the selection without deleting anything:
 `gh release list --json tagName,createdAt,isLatest,isDraft,isPrerelease --limit 200 | DRY_RUN=1 tool/podar_releases.sh`
 
-## Secretos del repositorio
+## Repository secrets
 
-Hay que configurar estos cuatro secretos en **Settings → Secrets and variables → Actions → New
+These four secrets must be set in **Settings → Secrets and variables → Actions → New
 repository secret**:
 
-| Secreto | Contenido |
+| Secret | Content |
 | --- | --- |
-| `ANDROID_KEYSTORE_BASE64` | El archivo `release.jks` codificado en base64. |
-| `ANDROID_KEYSTORE_PASSWORD` | La contraseña del keystore. |
-| `ANDROID_KEY_ALIAS` | El alias de la clave (por ejemplo, `opennote`). |
-| `ANDROID_KEY_PASSWORD` | La contraseña de la clave. |
+| `ANDROID_KEYSTORE_BASE64` | The `release.jks` file encoded in base64. |
+| `ANDROID_KEYSTORE_PASSWORD` | The keystore password. |
+| `ANDROID_KEY_ALIAS` | The key alias (for example, `opennote`). |
+| `ANDROID_KEY_PASSWORD` | The key password. |
 
-### 1. Crear el keystore (solo la primera vez)
+### 1. Create the keystore (first time only)
 
-Con el JDK 21:
+With JDK 21:
 
 ```bash
 ~/Android/jdk21/bin/keytool -genkey -v \
@@ -79,18 +79,18 @@ Con el JDK 21:
   -alias opennote
 ```
 
-`keytool` pide la contraseña del keystore, los datos del certificado y la contraseña de la clave.
-Se puede usar la misma contraseña para ambas, pero conviene guardar las dos.
+`keytool` asks for the keystore password, the certificate details and the key password.
+You can use the same password for both, but it is best to save both.
 
-### 2. Codificar el keystore en base64
+### 2. Encode the keystore in base64
 
 ```bash
 base64 -w0 release.jks > release.jks.base64
 ```
 
-El archivo resultante es una sola línea larga. Ese es el valor de `ANDROID_KEYSTORE_BASE64`.
+The resulting file is one long line. That is the value for `ANDROID_KEYSTORE_BASE64`.
 
-### 3. Cargar los secretos con GitHub CLI
+### 3. Load the secrets with the GitHub CLI
 
 ```bash
 gh secret set ANDROID_KEYSTORE_BASE64 < release.jks.base64
@@ -99,46 +99,45 @@ gh secret set ANDROID_KEY_ALIAS
 gh secret set ANDROID_KEY_PASSWORD
 ```
 
-Los tres últimos comandos piden el valor de forma interactiva, así no queda en el historial del
-shell. También se pueden cargar desde la web de GitHub.
+The last three commands prompt for the value interactively, so it does not end up in the shell history.
+They can also be set from the GitHub web interface.
 
-## Backup del keystore
+## Keystore backup
 
-**Guardá una copia privada y segura de `release.jks`, su alias y sus contraseñas.** Si se pierde la
-clave:
+**Keep a private, secure copy of `release.jks`, its alias and its passwords.** If the key is lost:
 
-- No se puede publicar una actualización que Android acepte sobre la app ya instalada.
-- Habría que publicar una app nueva con otro `applicationId`, y los usuarios perderían la
-  continuidad de las actualizaciones.
+- You cannot publish an update that Android will accept over the app already installed.
+- You would have to publish a new app with a different `applicationId`, and users would lose the
+  continuity of updates.
 
-No subas el keystore ni `android/key.properties` al repositorio: ya están en `.gitignore`. El secreto
-de GitHub es la copia que usa CI; el backup privado es la copia de recuperación.
+Do not upload the keystore or `android/key.properties` to the repository: they are already in `.gitignore`.
+The GitHub secret is the copy CI uses; the private backup is the recovery copy.
 
-## Primera instalación de una release firmada
+## First install of a signed release
 
-La app de release se instala sobre una instalación anterior **solo si ambas están firmadas con la
-misma clave**. Si en la tablet hay una versión firmada con debug (por ejemplo, instalada con
-`./build_install.sh`), Android rechaza la primera release firmada con la clave nueva.
+The release app installs over a previous installation **only if both are signed with the same key**. If the
+tablet has a version signed with the debug key (for example, installed with `./build_install.sh`), Android
+rejects the first release signed with the new key.
 
-Antes de instalar esa primera release:
+Before installing that first release:
 
-1. Hacé un backup de los cuadernos desde la app.
-2. Desinstalá OpenNote en la tablet.
-3. Instalá el APK de la release.
+1. Back up the notebooks from the app.
+2. Uninstall OpenNote on the tablet.
+3. Install the release APK.
 
-La desinstalación borra los datos locales de la app; por eso el backup es obligatorio. Después de
-esta única migración, las siguientes releases se actualizan normalmente sin desinstalar.
+Uninstalling deletes the app's local data, which is why the backup is mandatory. After this one-time
+migration, later releases update normally without uninstalling.
 
-## Probar la firma localmente
+## Testing the signing locally
 
-Para compilar una release local con la clave real, creá `android/key.properties` (no se versiona):
+To build a local release with the real key, create `android/key.properties` (it is not versioned):
 
 ```properties
-storeFile=/ruta/absoluta/a/release.jks
+storeFile=/absolute/path/to/release.jks
 storePassword=...
 keyAlias=opennote
 keyPassword=...
 ```
 
-Si el archivo no existe, `android/app/build.gradle.kts` usa la firma de debug para que
-`./build_install.sh` y `flutter run --release` sigan funcionando en desarrollo.
+If the file does not exist, `android/app/build.gradle.kts` uses the debug signing so that
+`./build_install.sh` and `flutter run --release` keep working in development.

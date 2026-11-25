@@ -2,7 +2,7 @@ import 'dart:io';
 
 /// Datos del proyecto de Google Cloud. NO están en el repo: se pasan al compilar con `--dart-define` (o, más cómodo,
 /// `--dart-define-from-file=google_config.json`; el archivo real está en el .gitignore, el modelo es
-/// `google_config.example.json`). Pasos para conseguirlos: docs/SINCRONIZACION.md, "Configurar Google Cloud".
+/// `google_config.example.json`). Pasos para conseguirlos: docs/SYNC.md, "Set up Google Cloud".
 ///
 /// Si faltan, la app compila y anda igual: la pantalla de sincronización avisa que falta configurar.
 class GoogleConfig {
