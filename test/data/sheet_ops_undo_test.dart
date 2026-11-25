@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:io';
 
-import 'package:apuntes/data/opennote_file.dart';
+import 'package:apuntes/data/vynote_file.dart';
 import 'package:apuntes/data/sheet_codec.dart';
 import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/domain/domain.dart';
@@ -11,7 +11,7 @@ import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Deshacer / rehacer las operaciones de hojas (agregar, duplicar, mover, borrar) sobre el modelo y el disco,
-/// y exportar / importar un cuaderno entero como `.opennote`.
+/// y exportar / importar un cuaderno entero como `.vynote`.
 void main() {
   late Directory root;
   late Storage store;
@@ -254,7 +254,7 @@ void main() {
     expect(doc.sheets.map((m) => m.id), src.sheets.map((m) => m.id));
   });
 
-  group('.opennote', () {
+  group('.vynote', () {
     Future<NotebookDoc> seeded() async {
       final d = sample(3);
       d.items['i1'] = Item('i1', 'image', 20, kSheetStep + 50, 200, 100, file: 'm_foto.png');
@@ -296,6 +296,24 @@ void main() {
       expect(shape(await fromDisk(d)), shape(d));
     });
 
+    test('exporta con app "Vynote" e importa también los `.opennote` viejos (app "OpenNote")', () async {
+      final d = await seeded();
+      final bytes = await exportNotebookBytes(store, d.nb);
+      final zip = ZipDecoder().decodeBytes(bytes);
+      final manifest = jsonDecode(utf8.decode(zip.firstWhere((f) => f.name == 'manifest.json').readBytes()!)) as Map;
+      expect(manifest['app'], 'Vynote');
+
+      final old = Archive();
+      for (final f in zip) {
+        old.add(f.name == 'manifest.json'
+            ? ArchiveFile.bytes(f.name, utf8.encode(jsonEncode({...manifest, 'app': 'OpenNote'})))
+            : ArchiveFile.bytes(f.name, f.readBytes()!));
+      }
+      final nb = await importNotebookBytes(store, Uint8List.fromList(ZipEncoder().encode(old)), taken: {});
+      expect(nb.name, 'Física');
+      expect(nb.id, isNot(d.nb.id));
+    });
+
     test('exporta las hojas sin cargar desde disco, sin cargarlas', () async {
       final d = await seeded();
       final nb = Notebook(d.id, d.nb.name)..sheets.addAll(d.sheets.map((m) => m.copy()));
@@ -327,7 +345,7 @@ void main() {
         'zip cortado': Uint8List.sublistView(good, 0, good.length ~/ 2),
         'sin manifest': zipOf({...parts()}..remove('manifest.json')),
         'manifest de otra app': zipOf({...parts(), 'manifest.json': json({'app': 'Otra', 'format': 1})}),
-        'versión más nueva': zipOf({...parts(), 'manifest.json': json({'app': 'OpenNote', 'format': 99})}),
+        'versión más nueva': zipOf({...parts(), 'manifest.json': json({'app': 'Vynote', 'format': 99})}),
         'manifest ilegible': zipOf({...parts(), 'manifest.json': [0xff, 0xfe, 1]}),
         'sin notebook.json': zipOf({...parts()}..remove('notebook.json')),
         'sin hojas': zipOf({...parts(), 'notebook.json': json({'format': 3, 'sheets': []})}),
@@ -341,7 +359,7 @@ void main() {
         'media con ruta': zipOf({...parts(), 'media/../../evil.txt': [1]}),
       };
       for (final e in bad.entries) {
-        expect(() => importNotebookBytes(store, e.value, taken: {}), throwsA(isA<OpennoteException>()), reason: e.key);
+        expect(() => importNotebookBytes(store, e.value, taken: {}), throwsA(isA<VynoteException>()), reason: e.key);
       }
       expect(Directory('${root.path}/notebooks').listSync().length, before, reason: 'no quedó ningún cuaderno a medias');
       expect(File('${root.path}/evil.txt').existsSync(), isFalse);

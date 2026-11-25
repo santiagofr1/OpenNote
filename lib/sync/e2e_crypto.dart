@@ -67,10 +67,10 @@ class VaultInfo {
     if (j['app'] != 'opennote' || j['kdf'] is! Map) throw const CorruptEncryptedException('crypto.json inválido');
     final k = j['kdf'] as Map;
     if (k['name'] != 'argon2id' || j['cipher'] != 'xchacha20-poly1305') {
-      throw const CorruptEncryptedException('La nube usa un cifrado que esta versión de OpenNote no conoce');
+      throw const CorruptEncryptedException('La nube usa un cifrado que esta versión de Vynote no conoce');
     }
     final v = j['version'] as int;
-    if (v > _formatVersion) throw const CorruptEncryptedException('La nube se cifró con una versión más nueva de OpenNote');
+    if (v > _formatVersion) throw const CorruptEncryptedException('La nube se cifró con una versión más nueva de Vynote');
     final m = j['migrating'];
     return VaultInfo(
       version: v,
@@ -105,7 +105,7 @@ class VaultInfo {
       })));
 }
 
-/// ¿Estos bytes tienen la cabecera de un archivo cifrado de OpenNote?
+/// ¿Estos bytes tienen la cabecera de un archivo cifrado de Vynote?
 bool hasEncryptedHeader(List<int> b) =>
     b.length >= _headerLen + _nonceLen + _macLen && b[0] == _magic[0] && b[1] == _magic[1] && b[2] == _magic[2] && b[3] == _magic[3];
 

@@ -1,5 +1,5 @@
 name: Bug report
-description: Something doesn't work the way it should in OpenNote
+description: Something doesn't work the way it should in Vynote
 title: "[Bug] "
 labels: ["bug"]
 body:
@@ -16,7 +16,7 @@ body:
     id: dispositivo
     attributes:
       label: Device and app version
-      placeholder: Galaxy Tab S6 Lite, Android 16, OpenNote 1.0.0
+      placeholder: Galaxy Tab S6 Lite, Android 16, Vynote 1.0.0
     validations:
       required: false
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Compila la app de Linux y arma dist/opennote_<VERSION>_amd64.deb.
+# Compila la app de Linux y arma dist/vynote_<VERSION>_amd64.deb.
 # Uso: tool/build_deb.sh VERSION   (ej. tool/build_deb.sh 1.0.42)
 # SKIP_BUILD=1 reutiliza build/linux/x64/release/bundle ya compilado.
 set -euo pipefail
@@ -8,29 +8,29 @@ VERSION="${1:?Uso: tool/build_deb.sh VERSION}"
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 
-APP_ID="io.github.santiagofr1.opennote"
+APP_ID="io.github.santiagofr1.vynote"
 bundle="build/linux/x64/release/bundle"
 pkg="dist/pkg"
-out="dist/opennote_${VERSION}_amd64.deb"
+out="dist/vynote_${VERSION}_amd64.deb"
 
 if [ -z "${SKIP_BUILD:-}" ]; then
   defines=()
   [ -f google_config.json ] && defines+=(--dart-define-from-file=google_config.json)
   flutter build linux --release --build-name="$VERSION" "${defines[@]}"
 fi
-[ -x "$bundle/opennote" ] || { echo "No está $bundle/opennote" >&2; exit 1; }
+[ -x "$bundle/vynote" ] || { echo "No está $bundle/vynote" >&2; exit 1; }
 
 rm -rf "$pkg"
-install -d "$pkg/DEBIAN" "$pkg/opt/opennote" "$pkg/usr/bin" "$pkg/usr/share/applications"
-cp -a "$bundle/." "$pkg/opt/opennote/"
-ln -s /opt/opennote/opennote "$pkg/usr/bin/opennote"
+install -d "$pkg/DEBIAN" "$pkg/opt/vynote" "$pkg/usr/bin" "$pkg/usr/share/applications"
+cp -a "$bundle/." "$pkg/opt/vynote/"
+ln -s /opt/vynote/vynote "$pkg/usr/bin/vynote"
 
 cat > "$pkg/usr/share/applications/$APP_ID.desktop" <<EOF
 [Desktop Entry]
 Type=Application
-Name=OpenNote
+Name=Vynote
 Comment=Cuadernos de apuntes a mano
-Exec=opennote
+Exec=vynote
 Icon=$APP_ID
 Terminal=false
 Categories=Office;
@@ -52,7 +52,7 @@ done
 # Dependencias reales: sonames del binario y las .so del bundle que no vienen en el bundle.
 bundled=$(cd "$bundle" && find . -name '*.so*' -printf '%f\n')
 deps=$(
-  for f in "$bundle/opennote" "$bundle"/lib/*.so; do
+  for f in "$bundle/vynote" "$bundle"/lib/*.so; do
     LD_LIBRARY_PATH="$bundle/lib" ldd "$f" 2>/dev/null | awk '/=> \//{print $3}'
   done | sort -u | while read -r lib; do
     grep -qxF "$(basename "$lib")" <<<"$bundled" && continue
@@ -73,7 +73,7 @@ libsecret-1-0, libgstreamer1.0-0, libgstreamer-plugins-base1.0-0, libegl1, libgl
 size=$(du -sk "$pkg" | cut -f1)
 
 cat > "$pkg/DEBIAN/control" <<EOF
-Package: opennote
+Package: vynote
 Version: $VERSION
 Section: editors
 Priority: optional
@@ -81,9 +81,12 @@ Architecture: amd64
 Maintainer: santiagofr1 <noreply@github.com>
 Installed-Size: $size
 Depends: $depends
-Homepage: https://github.com/santiagofr1/OpenNote
+Replaces: opennote
+Conflicts: opennote
+Provides: opennote
+Homepage: https://github.com/santiagofr1/Vynote
 Description: Cuadernos de apuntes a mano con lápiz
- OpenNote es una app de apuntes manuscritos con cuadernos, hojas y PDF,
+ Vynote es una app de apuntes manuscritos con cuadernos, hojas y PDF,
  sincronización opcional con Google Drive.
 EOF
 

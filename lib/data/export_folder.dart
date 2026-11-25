@@ -6,11 +6,11 @@ import 'package:path_provider/path_provider.dart';
 
 import '../domain/domain.dart';
 import 'export.dart';
-import 'opennote_file.dart';
+import 'vynote_file.dart';
 import 'storage.dart';
 
 /// Cómo se exporta cada cuaderno de una carpeta.
-enum FolderExportFormat { pdf, png, opennote }
+enum FolderExportFormat { pdf, png, vynote }
 
 /// Cuadernos de [root] y sus subcarpetas, con su ruta dentro del zip (sin extensión): "Facultad/Análisis/Parcial 1".
 /// Primero los cuadernos de la carpeta, después cada subcarpeta (por nombre), a fondo. Los nombres repetidos en una
@@ -52,7 +52,7 @@ Future<File?> buildFolderZip(Storage store, NotesIndex idx, Folder root, FolderE
   final entries = folderExportEntries(idx, root);
   final bg = await exportBackgroundPref(store);
   final base = tmp ?? await getTemporaryDirectory();
-  final dir = Directory('${base.path}/opennote-export');
+  final dir = Directory('${base.path}/vynote-export');
   if (await dir.exists()) await dir.delete(recursive: true);
   await dir.create(recursive: true);
   final safe = safeFileName(root.name).trim();
@@ -81,8 +81,8 @@ Future<File?> buildFolderZip(Storage store, NotesIndex idx, Folder root, FolderE
             enc.addArchiveFile(ArchiveFile.bytes('${e.path}/${p.name}', p.png));
           }
           if (cancelled?.call() ?? false) return await abort();
-        case FolderExportFormat.opennote:
-          enc.addArchiveFile(ArchiveFile.bytes('${e.path}.opennote', await exportNotebookBytes(store, e.nb)));
+        case FolderExportFormat.vynote:
+          enc.addArchiveFile(ArchiveFile.bytes('${e.path}.vynote', await exportNotebookBytes(store, e.nb)));
       }
     }
     closed = true;

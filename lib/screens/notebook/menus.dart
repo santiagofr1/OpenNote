@@ -105,15 +105,15 @@ Future<FolderExportFormat?> showFolderExportSheet(BuildContext context) {
           tile(Symbols.picture_as_pdf, 'PDF', 'Un PDF por cuaderno', FolderExportFormat.pdf),
           tile(Symbols.photo_library, 'Imágenes (PNG)', 'Una carpeta por cuaderno con una imagen por hoja',
               FolderExportFormat.png),
-          tile(Symbols.archive, 'OpenNote', 'Un .opennote por cuaderno, para pasarlo a otro dispositivo',
-              FolderExportFormat.opennote),
+          tile(Symbols.archive, 'Vynote', 'Un .vynote por cuaderno, para pasarlo a otro dispositivo',
+              FolderExportFormat.vynote),
         ]),
       ),
     ),
   );
 }
 
-/// "Exportar": una sola hoja con todo. Devuelve 'pdf' y 'png' (cuaderno entero), 'opennote', y solo si hay [sheetName]
+/// "Exportar": una sola hoja con todo. Devuelve 'pdf' y 'png' (cuaderno entero), 'vynote', y solo si hay [sheetName]
 /// (dentro del cuaderno) 'sheet' (PDF de la hoja que se ve) y 'sheetpng' (su imagen). Keys `export-<valor>`.
 ///
 /// Arriba va el interruptor "Incluir el fondo de la hoja": la elección queda en [tools] y en prefs.json enseguida,
@@ -153,8 +153,8 @@ Future<String?> showExportSheet(BuildContext context, Storage store, ToolState t
           ),
           tile(Symbols.picture_as_pdf, 'PDF', 'Todo el cuaderno', 'pdf'),
           tile(Symbols.photo_library, 'Imágenes (PNG)', 'Todas las hojas, en un .zip', 'png'),
-          tile(Symbols.archive, 'Cuaderno de OpenNote (.opennote)', 'Para pasarlo a otro dispositivo o hacer copia',
-              'opennote'),
+          tile(Symbols.archive, 'Cuaderno de Vynote (.vynote)', 'Para pasarlo a otro dispositivo o hacer copia',
+              'vynote'),
           if (sheetName != null) ...[
             const Divider(indent: 16, endIndent: 16),
             tile(Symbols.description, 'PDF de esta hoja', sheetName, 'sheet'),

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Mide en la tablet cómo anda la app con cuadernos grandes (50, 100, 200 y 400 hojas), sin tocar la app real.
-# Corre integration_test/perf_test.dart en modo PROFILE (compilado como com.apuntes.apuntes.test, "OpenNote Test",
+# Corre integration_test/perf_test.dart en modo PROFILE (compilado como io.github.santiagofr1.vynote.test, "Vynote Test",
 # con datos generados en una carpeta temporal). Mismas verificaciones de seguridad que run_tests.sh.
 # Deja build/perf/perf.log (todo) y build/perf/perf.json (los números), y muestra al final las líneas "PERF ".
 #   SIZES=100,200 tool/perf.sh   -> solo esos tamaños (por defecto 50,100,200,400; con 1 solo tamaño la memoria sale más limpia)
@@ -10,7 +10,7 @@ set -e
 export PATH=~/flutter/bin:$PATH JAVA_HOME=~/Android/jdk21 ANDROID_HOME=~/Android/Sdk
 cd "$(dirname "$0")/.."
 DEV=${DEV:-$(adb devices | awk 'NR==2{print $1}')}
-PKG=com.apuntes.apuntes
+PKG=io.github.santiagofr1.vynote
 DATA=/sdcard/Android/data/$PKG/files/apuntes
 APK=build/app/outputs/flutter-apk/app-profile.apk
 SIZES=${SIZES:-50,100,200,400}
@@ -23,13 +23,13 @@ instalada() { adb -s "$DEV" shell pm list packages "$PKG" | tr -d '\r' | grep -q
 
 instalada || { echo "ERROR: la app real ($PKG) no está instalada; no corro nada."; exit 1; }
 
-# 1) Solo si la tablet está en el inicio o en OpenNote (nunca encima de otra app).
+# 1) Solo si la tablet está en el inicio o en Vynote (nunca encima de otra app).
 FOCO=$(adb -s "$DEV" shell dumpsys window | grep mCurrentFocus | tr -d '\r')
 echo "$FOCO" | grep -qE 'launcher|com\.apuntes\.apuntes' || { echo "ERROR: la tablet está en otra app; no corro nada."; echo "$FOCO"; exit 1; }
 
 # 2) Compilar ANTES (profile, con el benchmark como punto de entrada) y verificar el id del APK.
 #    El build profile lleva el sufijo .test (android/app/build.gradle.kts), igual que debug: si el id fuera
-#    com.apuntes.apuntes pisaría la app real, así que se verifica y, si no coincide, no se corre nada.
+#    io.github.santiagofr1.vynote pisaría la app real, así que se verifica y, si no coincide, no se corre nada.
 #    `flutter drive` no tiene --no-uninstall: se le pasa el APK ya compilado, así solo toca la app del APK.
 mkdir -p build/perf
 rm -f build/perf/perf.json

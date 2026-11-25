@@ -13,8 +13,8 @@ void main() {
     final u = parseRelease(fixture())!;
     expect(u.version.toString(), '1.0.12');
     expect(u.notes, startsWith('- Arregla el zoom'));
-    expect(u.url, endsWith('/OpenNote-v1.0.12.apk'));
-    expect(u.fileName, 'OpenNote-v1.0.12.apk');
+    expect(u.url, endsWith('/Vynote-v1.0.12.apk'));
+    expect(u.fileName, 'Vynote-v1.0.12.apk');
     expect(u.size, 52428800);
   });
 
@@ -32,35 +32,35 @@ void main() {
     final j = fixture();
     final assets = (j['assets'] as List).cast<Map<String, dynamic>>();
     final deb = {
-      'name': 'opennote_1.0.12_amd64.deb',
+      'name': 'vynote_1.0.12_amd64.deb',
       'size': 1,
-      'browser_download_url': 'https://github.com/santiagofr1/OpenNote/releases/download/v1.0.12/opennote_1.0.12_amd64.deb',
+      'browser_download_url': 'https://github.com/santiagofr1/Vynote/releases/download/v1.0.12/vynote_1.0.12_amd64.deb',
     };
     final u = parseRelease({...j, 'assets': [deb, ...assets]})!;
-    expect(u.url, endsWith('/OpenNote-v1.0.12.apk'));
+    expect(u.url, endsWith('/Vynote-v1.0.12.apk'));
     expect(parseRelease({...j, 'assets': [deb]}), isNull);
   });
 
   test('release: en Linux elige el .deb y en Windows el setup.exe', () {
-    const base = 'https://github.com/santiagofr1/OpenNote/releases/download/v1.0.12';
+    const base = 'https://github.com/santiagofr1/Vynote/releases/download/v1.0.12';
     Map<String, dynamic> asset(String n, int size) => {'name': n, 'size': size, 'browser_download_url': '$base/$n'};
     final j = {
       ...fixture(),
       'assets': [
-        asset('OpenNote-v1.0.12.apk', 10),
-        asset('opennote_1.0.12_amd64.deb', 20),
-        asset('OpenNote-v1.0.12-windows-setup.exe', 30),
+        asset('Vynote-v1.0.12.apk', 10),
+        asset('vynote_1.0.12_amd64.deb', 20),
+        asset('Vynote-v1.0.12-windows-setup.exe', 30),
       ],
     };
     final a = parseRelease(j)!;
-    expect((a.fileName, a.size), ('OpenNote-v1.0.12.apk', 10));
+    expect((a.fileName, a.size), ('Vynote-v1.0.12.apk', 10));
     final l = parseRelease(j, platform: UpdatePlatform.linux)!;
-    expect(l.url, '$base/opennote_1.0.12_amd64.deb');
-    expect((l.fileName, l.size), ('opennote_1.0.12_amd64.deb', 20));
+    expect(l.url, '$base/vynote_1.0.12_amd64.deb');
+    expect((l.fileName, l.size), ('vynote_1.0.12_amd64.deb', 20));
     final w = parseRelease(j, platform: UpdatePlatform.windows)!;
-    expect(w.url, '$base/OpenNote-v1.0.12-windows-setup.exe');
-    expect((w.fileName, w.size), ('OpenNote-v1.0.12-windows-setup.exe', 30));
-    final onlyApk = {...j, 'assets': [asset('OpenNote-v1.0.12.apk', 10)]};
+    expect(w.url, '$base/Vynote-v1.0.12-windows-setup.exe');
+    expect((w.fileName, w.size), ('Vynote-v1.0.12-windows-setup.exe', 30));
+    final onlyApk = {...j, 'assets': [asset('Vynote-v1.0.12.apk', 10)]};
     expect(parseRelease(onlyApk, platform: UpdatePlatform.linux), isNull);
     expect(parseRelease(onlyApk, platform: UpdatePlatform.windows), isNull);
   });
@@ -100,7 +100,7 @@ void main() {
           '- Merge main into feat/a\n- Merge branch x\n- Tests de zoom\n- test: algo\n'
           '- Pendientes al día\n- README nuevo\n- docs: guía\n- Docs varias\n'
           '- Arregla el zoom\n- Arregla el zoom\n\n'
-          '**APK:** OpenNote-v1.0.6.apk\n**Código de versión:** 7';
+          '**APK:** Vynote-v1.0.6.apk\n**Código de versión:** 7';
       expect(userNotes(body), ['Arregla el zoom', 'Exporta mejor']);
     });
     test('vacío', () => expect(userNotes('**APK:** x\n\ntexto suelto'), isEmpty));

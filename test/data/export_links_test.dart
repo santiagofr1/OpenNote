@@ -5,7 +5,7 @@ import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/domain/domain.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Los links de OpenNote siguen andando en el PDF exportado.
+/// Los links de Vynote siguen andando en el PDF exportado.
 void main() {
   late Directory root;
   late Storage store;

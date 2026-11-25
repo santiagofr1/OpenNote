@@ -8,18 +8,18 @@ import '../domain/domain.dart';
 import 'sheet_codec.dart';
 import 'storage.dart';
 
-/// Versión del formato de los archivos `.opennote` que escribe esta app. Se rechazan los de una versión más nueva.
-const kOpennoteFormat = 1;
+/// Versión del formato de los archivos `.vynote` que escribe esta app. Se rechazan los de una versión más nueva.
+const kVynoteFormat = 1;
 
 /// El archivo no se pudo importar (roto, de otra app o de una versión más nueva). [message] se le muestra al usuario.
-class OpennoteException implements Exception {
+class VynoteException implements Exception {
   final String message;
-  OpennoteException(this.message);
+  VynoteException(this.message);
   @override
   String toString() => message;
 }
 
-/// Un `.opennote` es un ZIP con:
+/// Un `.vynote` es un ZIP con:
 ///   `manifest.json`            {app, format, name, bg, paper, spacing, size, sheets, exported}
 ///   `notebook.json`            secciones, orden y datos de las hojas (igual que en disco; todas las secciones)
 ///   `sheets/<hoja>.sheet`      el archivo de cada hoja tal cual está en disco (sin decodificar)
@@ -46,8 +46,8 @@ Future<Uint8List> exportNotebookBytes(Storage store, Notebook nb) async {
     if (await f.exists()) zip.add(ArchiveFile.bytes('media/$name', await f.readAsBytes()));
   }
   final manifest = {
-    'app': 'OpenNote',
-    'format': kOpennoteFormat,
+    'app': 'Vynote',
+    'format': kVynoteFormat,
     'notebookFormat': Notebook.kFormat,
     'name': nb.name,
     'bg': nb.bg,
@@ -77,9 +77,9 @@ Set<String> _mediaOf(Uint8List sheet) {
 final _safeId = RegExp(r'^[A-Za-z0-9_-]{1,64}$');
 final _safeFile = RegExp(r'^[A-Za-z0-9_-][A-Za-z0-9._-]{0,127}$');
 
-/// Importa el `.opennote` [bytes] como un cuaderno NUEVO (id nuevo; no pisa nada) y lo devuelve ya escrito en disco,
+/// Importa el `.vynote` [bytes] como un cuaderno NUEVO (id nuevo; no pisa nada) y lo devuelve ya escrito en disco,
 /// pero sin agregarlo al índice (eso lo hace quien llama). [taken]: nombres de cuadernos que ya existen: si el del
-/// archivo choca se llama "X (importado)". Valida todo antes de escribir; si el archivo está roto lanza [OpennoteException]
+/// archivo choca se llama "X (importado)". Valida todo antes de escribir; si el archivo está roto lanza [VynoteException]
 /// y no deja nada en disco.
 Future<Notebook> importNotebookBytes(Storage store, Uint8List bytes,
     {required Set<String> taken, String? folder}) async {
@@ -87,26 +87,27 @@ Future<Notebook> importNotebookBytes(Storage store, Uint8List bytes,
   try {
     zip = ZipDecoder().decodeBytes(bytes);
   } catch (_) {
-    throw OpennoteException('El archivo no es un cuaderno de OpenNote (no se puede leer).');
+    throw VynoteException('El archivo no es un cuaderno de Vynote (no se puede leer).');
   }
   final files = <String, ArchiveFile>{for (final f in zip) if (f.isFile) f.name: f};
 
   Map readJson(String name) {
     final f = files[name];
-    if (f == null) throw OpennoteException('Al archivo le falta $name: está roto o no es de OpenNote.');
+    if (f == null) throw VynoteException('Al archivo le falta $name: está roto o no es de Vynote.');
     try {
       return jsonDecode(utf8.decode(f.readBytes()!)) as Map;
     } catch (_) {
-      throw OpennoteException('$name está roto.');
+      throw VynoteException('$name está roto.');
     }
   }
 
   final manifest = readJson('manifest.json');
-  if (manifest['app'] != 'OpenNote' || manifest['format'] is! int) {
-    throw OpennoteException('El archivo no es un cuaderno de OpenNote.');
+  // los `.opennote` de antes del cambio de nombre traen app 'OpenNote': se siguen aceptando
+  if (!{'Vynote', 'OpenNote'}.contains(manifest['app']) || manifest['format'] is! int) {
+    throw VynoteException('El archivo no es un cuaderno de Vynote.');
   }
-  if ((manifest['format'] as int) > kOpennoteFormat) {
-    throw OpennoteException('El archivo es de una versión más nueva de OpenNote. Actualizá la app para abrirlo.');
+  if ((manifest['format'] as int) > kVynoteFormat) {
+    throw VynoteException('El archivo es de una versión más nueva de Vynote. Actualizá la app para abrirlo.');
   }
   final List<SheetMeta> sheets;
   final Map nbJson;
@@ -114,16 +115,16 @@ Future<Notebook> importNotebookBytes(Storage store, Uint8List bytes,
     nbJson = readJson('notebook.json');
     // se lee con el mismo código que el disco: archivos viejos (sin secciones) quedan en "General"
     sheets = (Notebook('', '')..loadSheetsJson(nbJson)).allSheets;
-  } on OpennoteException {
+  } on VynoteException {
     rethrow;
   } catch (_) {
-    throw OpennoteException('La lista de hojas está rota.');
+    throw VynoteException('La lista de hojas está rota.');
   }
-  if (sheets.isEmpty) throw OpennoteException('El cuaderno no tiene hojas.');
+  if (sheets.isEmpty) throw VynoteException('El cuaderno no tiene hojas.');
   final ids = <String>{};
   for (final m in sheets) {
     // los ids son nombres de archivo: nada de rutas ni repetidos
-    if (!_safeId.hasMatch(m.id) || !ids.add(m.id)) throw OpennoteException('La lista de hojas está rota.');
+    if (!_safeId.hasMatch(m.id) || !ids.add(m.id)) throw VynoteException('La lista de hojas está rota.');
   }
 
   final sheetFiles = <String, Uint8List>{};
@@ -131,7 +132,7 @@ Future<Notebook> importNotebookBytes(Storage store, Uint8List bytes,
     final f = files['sheets/${m.id}.sheet'];
     if (f == null) continue; // hoja sin archivo: vacía
     final data = f.readBytes();
-    if (data == null) throw OpennoteException('La hoja ${m.id} está rota.');
+    if (data == null) throw VynoteException('La hoja ${m.id} está rota.');
     final b = Uint8List.fromList(data);
     final ok = await _compute(() {
       try {
@@ -141,14 +142,14 @@ Future<Notebook> importNotebookBytes(Storage store, Uint8List bytes,
         return false;
       }
     });
-    if (!ok) throw OpennoteException('Una hoja del archivo está rota.');
+    if (!ok) throw VynoteException('Una hoja del archivo está rota.');
     sheetFiles[m.id] = b;
   }
   final media = <String, Uint8List>{};
   for (final f in files.values) {
     if (!f.name.startsWith('media/')) continue;
     final name = f.name.substring(6);
-    if (!_safeFile.hasMatch(name) || name.contains('..')) throw OpennoteException('El archivo tiene nombres no válidos.');
+    if (!_safeFile.hasMatch(name) || name.contains('..')) throw VynoteException('El archivo tiene nombres no válidos.');
     final d = f.readBytes();
     if (d != null) media[name] = Uint8List.fromList(d);
   }

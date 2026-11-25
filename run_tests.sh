@@ -1,7 +1,7 @@
 #!/bin/bash
 # Corre los tests de integración en la tablet sin tocar la app real.
-# El build debug se instala como com.apuntes.apuntes.test (otra app, otros datos),
-# así que al desinstalarse al final no afecta a los cuadernos de OpenNote.
+# El build debug se instala como io.github.santiagofr1.vynote.test (otra app, otros datos),
+# así que al desinstalarse al final no afecta a los cuadernos de Vynote.
 # Antes y después se verifica que la app real y sus datos sigan iguales.
 #   BACKUP=1 ./run_tests.sh   -> además baja un backup de los cuadernos reales a ~/apuntes_app_backup/
 #   NOMBRE='texto' ./run_tests.sh   -> solo los casos cuyo nombre contiene ese texto
@@ -17,9 +17,9 @@ export PATH=~/flutter/bin:$PATH JAVA_HOME=~/Android/jdk21 ANDROID_HOME=~/Android
 cd "$(dirname "$0")"
 LOG=test_tablet.log
 paso() { echo "[$1/4] $2"; }
-avisar() { command -v notify-send >/dev/null && notify-send -a OpenNote "Tests en la tablet" "$1" 2>/dev/null || true; }
+avisar() { command -v notify-send >/dev/null && notify-send -a Vynote "Tests en la tablet" "$1" 2>/dev/null || true; }
 DEV=${DEV:-$(adb devices | awk 'NR==2{print $1}')}
-PKG=com.apuntes.apuntes
+PKG=io.github.santiagofr1.vynote
 DATA=/sdcard/Android/data/$PKG/files/apuntes
 
 snapshot() { # lista de archivos (tamaño, fecha, ruta) de los cuadernos reales
@@ -31,12 +31,12 @@ instalada() { adb -s "$DEV" shell pm list packages "$PKG" | tr -d '\r' | grep -q
 
 instalada || { echo "ERROR: la app real ($PKG) no está instalada; no corro nada."; exit 1; }
 
-# 1) Solo si la tablet está en el inicio o en OpenNote (nunca encima de otra app).
+# 1) Solo si la tablet está en el inicio o en Vynote (nunca encima de otra app).
 FOCO=$(adb -s "$DEV" shell dumpsys window | grep mCurrentFocus | tr -d '\r')
 echo "$FOCO" | grep -qE 'launcher|com\.apuntes\.apuntes' || { echo "ERROR: la tablet está en otra app; no corro nada."; echo "$FOCO"; exit 1; }
 
 # 2) Compilar antes: flutter decide qué app desinstalar ANTES de compilar, leyendo el APK que haya.
-#    Sin APK previo usa el id del código (com.apuntes.apuntes) y desinstalaría la app real.
+#    Sin APK previo usa el id del código (io.github.santiagofr1.vynote) y desinstalaría la app real.
 paso 1 "Compilando la app de prueba (tarda unos minutos)…"
 flutter build apk --debug >/dev/null
 AAPT=$(ls -d "$ANDROID_HOME"/build-tools/*/ | tail -1)aapt2

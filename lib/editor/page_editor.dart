@@ -81,7 +81,7 @@ class PageEditor extends StatefulWidget {
   final VoiceRecorder? recorder;
   final VoidCallback? onStopRecording;
 
-  /// Se tocó un link (de OpenNote o de un PDF importado): quien lo muestra lo abre (web, otra hoja u otro cuaderno).
+  /// Se tocó un link (de Vynote o de un PDF importado): quien lo muestra lo abre (web, otra hoja u otro cuaderno).
   final ValueChanged<LinkTarget>? onOpenLink;
 
   /// Los otros cuadernos a los que se puede apuntar con un link.

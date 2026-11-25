@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "OpenNote" "\0"
-            VALUE "FileDescription", "OpenNote" "\0"
+            VALUE "CompanyName", "Vynote" "\0"
+            VALUE "FileDescription", "Vynote" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "OpenNote" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 OpenNote. All rights reserved." "\0"
-            VALUE "OriginalFilename", "OpenNote.exe" "\0"
-            VALUE "ProductName", "OpenNote" "\0"
+            VALUE "InternalName", "Vynote" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Santiago Frances" "\0"
+            VALUE "OriginalFilename", "Vynote.exe" "\0"
+            VALUE "ProductName", "Vynote" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

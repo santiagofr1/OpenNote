@@ -1,13 +1,13 @@
 #!/bin/bash
 # Genera las capturas del README (docs/img/*.png) en la tablet, sin tocar la app real.
-# Corre integration_test/screenshots_test.dart con el build debug (com.apuntes.apuntes.test, "OpenNote Test"),
+# Corre integration_test/screenshots_test.dart con el build debug (io.github.santiagofr1.vynote.test, "Vynote Test"),
 # con datos de ejemplo en una carpeta temporal. Mismas verificaciones de seguridad que run_tests.sh.
 #   BACKUP=1 tool/screenshots.sh   -> además baja un backup de los cuadernos reales a ~/apuntes_app_backup/
 set -e
 export PATH=~/flutter/bin:$PATH JAVA_HOME=~/Android/jdk21 ANDROID_HOME=~/Android/Sdk
 cd "$(dirname "$0")/.."
 DEV=${DEV:-$(adb devices | awk 'NR==2{print $1}')}
-PKG=com.apuntes.apuntes
+PKG=io.github.santiagofr1.vynote
 DATA=/sdcard/Android/data/$PKG/files/apuntes
 APK=build/app/outputs/flutter-apk/app-debug.apk
 
@@ -18,13 +18,13 @@ instalada() { adb -s "$DEV" shell pm list packages "$PKG" | tr -d '\r' | grep -q
 
 instalada || { echo "ERROR: la app real ($PKG) no está instalada; no corro nada."; exit 1; }
 
-# 1) Solo si la tablet está en el inicio o en OpenNote (nunca encima de otra app).
+# 1) Solo si la tablet está en el inicio o en Vynote (nunca encima de otra app).
 FOCO=$(adb -s "$DEV" shell dumpsys window | grep mCurrentFocus | tr -d '\r')
 echo "$FOCO" | grep -qE 'launcher|com\.apuntes\.apuntes' || { echo "ERROR: la tablet está en otra app; no corro nada."; echo "$FOCO"; exit 1; }
 
 # 2) Compilar ANTES (con el test como punto de entrada) y verificar el id del APK.
 #    `flutter drive` no tiene --no-uninstall: se le pasa el APK ya compilado (--use-application-binary), así nunca
-#    decide por su cuenta qué app instalar/desinstalar: solo toca la del APK, que es com.apuntes.apuntes.test.
+#    decide por su cuenta qué app instalar/desinstalar: solo toca la del APK, que es io.github.santiagofr1.vynote.test.
 flutter build apk --debug --target=integration_test/screenshots_test.dart >/dev/null
 AAPT=$(ls -d "$ANDROID_HOME"/build-tools/*/ | tail -1)aapt2
 ID=$("$AAPT" dump badging "$APK" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")

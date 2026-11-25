@@ -39,7 +39,7 @@ void main() {
       expect(c.x, 105);
     });
 
-    test('pasa por el formato de hoja (.sheet y por lo tanto .opennote)', () {
+    test('pasa por el formato de hoja (.sheet y por lo tanto .vynote)', () {
       final content = SheetContent(texts: [block(s: 2, a: pi / 2)]);
       final back = decodeSheet(encodeSheet(content));
       expect(back.texts.single.scale, 2);

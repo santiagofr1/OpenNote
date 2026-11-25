@@ -60,10 +60,10 @@ class MlKitHandwriting implements HandwritingRecognizer {
         try {
           if (await _models.isModelDownloaded(_lang)) return true;
           final ok = await _models.downloadModel(_lang, isWifiRequired: false);
-          if (!ok) debugPrint('OpenNote letra: no se pudo bajar el modelo $_lang');
+          if (!ok) debugPrint('Vynote letra: no se pudo bajar el modelo $_lang');
           return ok;
         } catch (e) {
-          debugPrint('OpenNote letra: error al bajar el modelo $e');
+          debugPrint('Vynote letra: error al bajar el modelo $e');
           return false;
         }
       });
@@ -71,7 +71,7 @@ class MlKitHandwriting implements HandwritingRecognizer {
   /// Tope para leer (con la bajada del modelo incluida); si vence, devuelve null y la bajada sigue en segundo plano.
   @override
   Future<String?> recognize(List<Stroke> strokes) => _read(strokes).timeout(_timeout, onTimeout: () {
-        debugPrint('OpenNote letra: venció el tiempo (${_timeout.inSeconds} s) leyendo; la bajada sigue en segundo plano');
+        debugPrint('Vynote letra: venció el tiempo (${_timeout.inSeconds} s) leyendo; la bajada sigue en segundo plano');
         return null;
       });
 
@@ -95,10 +95,10 @@ class MlKitHandwriting implements HandwritingRecognizer {
       rec = ml.DigitalInkRecognizer(languageCode: _lang);
       final out = await rec.recognize(ink);
       final text = out.isEmpty ? '' : out.first.text.trim();
-      if (text.isEmpty) debugPrint('OpenNote letra: sin candidatos (${ink.strokes.length} trazos)');
+      if (text.isEmpty) debugPrint('Vynote letra: sin candidatos (${ink.strokes.length} trazos)');
       return text.isEmpty ? null : text;
     } catch (e, st) {
-      debugPrint('OpenNote letra: error $e\n$st');
+      debugPrint('Vynote letra: error $e\n$st');
       return null;
     } finally {
       try {

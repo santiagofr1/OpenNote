@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Genera el icono adaptativo de OpenNote (opciones A/B/C).
+"""Genera el icono adaptativo de Vynote (opciones A/B/C).
 
 Uso:
   icon_tool.py svgs  <out_dir>            SVG fg/bg/mono de las 3 opciones

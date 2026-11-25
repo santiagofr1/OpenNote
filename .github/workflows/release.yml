@@ -123,13 +123,13 @@ jobs:
             --build-number="$VERSION_CODE" \
             $DART_DEFINES
           rm -f google_config.json android/key.properties android/app/release.jks
-          mv build/app/outputs/flutter-apk/app-release.apk "OpenNote-v${VERSION_NAME}.apk"
+          mv build/app/outputs/flutter-apk/app-release.apk "Vynote-v${VERSION_NAME}.apk"
 
       - name: Guardar el APK
         uses: actions/upload-artifact@v4
         with:
           name: apk
-          path: OpenNote-v${{ env.VERSION_NAME }}.apk
+          path: Vynote-v${{ env.VERSION_NAME }}.apk
           retention-days: 3
           if-no-files-found: error
 
@@ -182,7 +182,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: deb
-          path: dist/opennote_${{ env.VERSION_NAME }}_amd64.deb
+          path: dist/vynote_${{ env.VERSION_NAME }}_amd64.deb
           retention-days: 3
           if-no-files-found: error
 
@@ -238,13 +238,13 @@ jobs:
             choco install innosetup -y --no-progress
             export PATH="$PATH:/c/Program Files (x86)/Inno Setup 6"
           fi
-          iscc "//DAppVersion=${VERSION_NAME}" windows/installer/opennote.iss
+          iscc "//DAppVersion=${VERSION_NAME}" windows/installer/vynote.iss
 
       - name: Guardar el instalador
         uses: actions/upload-artifact@v4
         with:
           name: exe
-          path: dist/OpenNote-v${{ env.VERSION_NAME }}-windows-setup.exe
+          path: dist/Vynote-v${{ env.VERSION_NAME }}-windows-setup.exe
           retention-days: 3
           if-no-files-found: error
 
@@ -279,14 +279,14 @@ jobs:
           ls -l out
           {
             echo "FILES<<EOF"
-            echo "out/OpenNote-v${VERSION_NAME}.apk"
-            echo "out/opennote_${VERSION_NAME}_amd64.deb"
-            if [ -f "out/OpenNote-v${VERSION_NAME}-windows-setup.exe" ]; then
-              echo "out/OpenNote-v${VERSION_NAME}-windows-setup.exe"
+            echo "out/Vynote-v${VERSION_NAME}.apk"
+            echo "out/vynote_${VERSION_NAME}_amd64.deb"
+            if [ -f "out/Vynote-v${VERSION_NAME}-windows-setup.exe" ]; then
+              echo "out/Vynote-v${VERSION_NAME}-windows-setup.exe"
             fi
             echo "EOF"
           } >> "$GITHUB_ENV"
-          [ -f "out/OpenNote-v${VERSION_NAME}-windows-setup.exe" ] || echo "::warning::El instalador de Windows falló: la release sale sin el .exe."
+          [ -f "out/Vynote-v${VERSION_NAME}-windows-setup.exe" ] || echo "::warning::El instalador de Windows falló: la release sale sin el .exe."
 
       - name: Prepare release notes
         run: |
@@ -303,12 +303,12 @@ jobs:
             echo "RELEASE_BODY<<EOF"
             echo "$COMMITS"
             echo ""
-            echo "**APK:** OpenNote-v${VERSION_NAME}.apk"
+            echo "**APK:** Vynote-v${VERSION_NAME}.apk"
             echo "**Código de versión:** ${VERSION_CODE}"
             echo ""
-            echo "**Windows:** OpenNote-v${VERSION_NAME}-windows-setup.exe"
+            echo "**Windows:** Vynote-v${VERSION_NAME}-windows-setup.exe"
             echo ""
-            echo "**Linux (Debian/Ubuntu):** opennote_${VERSION_NAME}_amd64.deb"
+            echo "**Linux (Debian/Ubuntu):** vynote_${VERSION_NAME}_amd64.deb"
             echo ""
             echo "Desde el repo apt:"
             echo '```sh'
@@ -316,11 +316,11 @@ jobs:
             echo 'curl -fsSL https://santiagofr1.github.io/apt/key.asc | sudo gpg --dearmor -o /etc/apt/keyrings/santiagofr1.gpg'
             echo 'echo "deb [signed-by=/etc/apt/keyrings/santiagofr1.gpg] https://santiagofr1.github.io/apt stable main" | sudo tee /etc/apt/sources.list.d/santiagofr1.list'
             echo 'sudo apt update'
-            echo 'sudo apt install opennote'
+            echo 'sudo apt install vynote'
             echo '```'
             echo "O con el .deb suelto:"
             echo '```sh'
-            echo "sudo apt install ./opennote_${VERSION_NAME}_amd64.deb"
+            echo "sudo apt install ./vynote_${VERSION_NAME}_amd64.deb"
             echo '```'
             echo "EOF"
           } >> "$GITHUB_ENV"
@@ -329,7 +329,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.VERSION_NAME }}
-          name: OpenNote v${{ env.VERSION_NAME }}
+          name: Vynote v${{ env.VERSION_NAME }}
           body: ${{ env.RELEASE_BODY }}
           files: ${{ env.FILES }}
           fail_on_unmatched_files: true

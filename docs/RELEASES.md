@@ -1,4 +1,4 @@
-# OpenNote Releases
+# Vynote Releases
 
 Every push to `main` builds, tests and automatically publishes a signed APK to GitHub Releases.
 Pushes that only touch documentation (`**.md`, `docs/**` or `.github/ISSUE_TEMPLATE/**`) do not
@@ -13,25 +13,25 @@ The `.github/workflows/release.yml` workflow:
    - `versionName`: `1.0.<run_number>` (for example, `1.0.42`).
    - `versionCode`: `<run_number> + 100` (for example, `142`), always greater than the local `1`.
 3. Signs the APK with the release key stored in the repository secrets.
-4. Publishes the APK as `OpenNote-v1.0.<run_number>.apk` in a GitHub Release tagged
+4. Publishes the APK as `Vynote-v1.0.<run_number>.apk` in a GitHub Release tagged
    `v1.0.<run_number>`, using the commit subjects since the previous `v*` tag as the release notes.
 5. Marks that release as the latest (`make_latest`).
 
 Then the `linux` job runs (Ubuntu 24.04, `needs: release`): it runs `flutter build linux --release`, builds
-`opennote_<version>_amd64.deb` with `tool/build_deb.sh` (same version `1.0.<run_number>`, with the Google IDs
+`vynote_<version>_amd64.deb` with `tool/build_deb.sh` (same version `1.0.<run_number>`, with the Google IDs
 from the same secrets) and uploads it to the same release with `gh release upload`. If that job fails, the APK
 and the Android update notice keep working (the app only picks the `.apk` asset). The release notes include
 the installation instructions for Linux. At the end it notifies the apt repo (`santiagofr1/apt`) with a
 `repository_dispatch` event of type `publish`, which downloads the `.deb` from the Releases and republishes the
 index. The `APT_DISPATCH_TOKEN` secret is optional (a fine-grained token with *Contents: read and write* on
 `santiagofr1/apt`): without it the job does not fail, and the apt repo's hourly cron job picks the release up
-anyway. For apt to pick it up, `santiagofr1/OpenNote` must be listed in that repo's `apps.txt`.
+anyway. For apt to pick it up, `santiagofr1/Vynote` must be listed in that repo's `apps.txt`.
 
 The `windows` job (`windows-latest`, `needs: release`) follows the same pattern: it runs
 `flutter build windows --release` (`--build-name=1.0.<run_number>`, `--build-number=<run_number> + 100`, with the
-Google IDs from the same secrets), builds the installer with Inno Setup (`windows/installer/opennote.iss`, version
+Google IDs from the same secrets), builds the installer with Inno Setup (`windows/installer/vynote.iss`, version
 passed via `/DAppVersion=`; it uses `iscc` and, if that is missing, runs `choco install innosetup`) and uploads
-`OpenNote-v<version>-windows-setup.exe` to the same release with `softprops/action-gh-release@v2`. The installer's
+`Vynote-v<version>-windows-setup.exe` to the same release with `softprops/action-gh-release@v2`. The installer's
 `AppId` is fixed, so a new version installs over the previous one. If the job fails, the APK and the .deb are not
 affected. The installer is not signed (SmartScreen will warn). The release notes mention the Windows asset.
 
@@ -63,7 +63,7 @@ repository secret**:
 | --- | --- |
 | `ANDROID_KEYSTORE_BASE64` | The `release.jks` file encoded in base64. |
 | `ANDROID_KEYSTORE_PASSWORD` | The keystore password. |
-| `ANDROID_KEY_ALIAS` | The key alias (for example, `opennote`). |
+| `ANDROID_KEY_ALIAS` | The key alias (for example, `vynote`). |
 | `ANDROID_KEY_PASSWORD` | The key password. |
 
 ### 1. Create the keystore (first time only)
@@ -122,7 +122,7 @@ rejects the first release signed with the new key.
 Before installing that first release:
 
 1. Back up the notebooks from the app.
-2. Uninstall OpenNote on the tablet.
+2. Uninstall Vynote on the tablet.
 3. Install the release APK.
 
 Uninstalling deletes the app's local data, which is why the backup is mandatory. After this one-time

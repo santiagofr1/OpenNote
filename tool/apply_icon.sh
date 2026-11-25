@@ -8,7 +8,7 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 res="${2:-$root/android/app/src/main/res}"
 py=python3
 if ! python3 -c 'import cairosvg' 2>/dev/null; then
-  venv="${TMPDIR:-/tmp}/opennote-icon-venv"
+  venv="${TMPDIR:-/tmp}/vynote-icon-venv"
   [ -x "$venv/bin/python" ] || { python3 -m venv "$venv"; "$venv/bin/pip" -q install cairosvg; }
   py="$venv/bin/python"
 fi

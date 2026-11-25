@@ -34,7 +34,7 @@ What is in the code (`lib/data/storage.dart`, `lib/data/sheet_codec.dart`) and c
 
 ### 1.1 Input: stylus, mouse and tablets
 
-The critical point for OpenNote is that the stylus of a Wacom/Huion tablet on PC arrives as
+The critical point for Vynote is that the stylus of a Wacom/Huion tablet on PC arrives as
 `PointerDeviceKind.stylus` and with pressure. Today on Android it works because `ink.dart` decides by that type.
 
 **Linux (improved a lot in 2026).**
@@ -173,7 +173,7 @@ establish the connection.
   describe the receiver verifying the fingerprint [11]. That is: it encrypts, but does not bind the identity.
 - Lesson: fingerprint verification must be done on both sides. There is an optional PIN for transfers [11].
 
-### 2.2 Proposed design for OpenNote
+### 2.2 Proposed design for Vynote
 
 **Identity (once per installation).**
 - A self-signed X.509 certificate is generated with `basic_utils`, which generates RSA and EC self-signed
@@ -282,14 +282,14 @@ clouds, and on them end-to-end encryption is needed.
   content.
 
 **Syncthing installed separately.**
-- OpenNote only uses one folder; Syncthing syncs between machines with TLS and an ID list [10].
+- Vynote only uses one folder; Syncthing syncs between machines with TLS and an ID list [10].
 - There is no cloud in between, so E2E is not needed. Syncthing has an "untrusted" device mode with encryption
   **(unconfirmed: I did not read it)**.
-- Cons: it must be configured on each machine. On Android it runs as a separate app **(unconfirmed how it behaves in the background)**. OpenNote's private folder on Android
+- Cons: it must be configured on each machine. On Android it runs as a separate app **(unconfirmed how it behaves in the background)**. Vynote's private folder on Android
   may not be accessible from another app **(unconfirmed: it
   must be tested with the current path)**.
 - Conflicts: when two machines change the same file, Syncthing keeps a copy named `*.sync-conflict-*`
-  **(unconfirmed: I did not read the conflicts docs)**. OpenNote would
+  **(unconfirmed: I did not read the conflicts docs)**. Vynote would
   have to ignore them or handle them (section 4).
 
 ### 3.2 End-to-end encryption for Drive and WebDAV
@@ -382,11 +382,11 @@ handling Syncthing's `*.sync-conflict-*` files **(unconfirmed)**.
 
 | Option | Security | Convenience | Effort | Dependencies and risks |
 |---|---|---|---|---|
-| **Folder + Syncthing** (installed separately) | High: TLS and ID list [10]. Visible that the machine runs Syncthing. | Medium: pair once in Syncthing, no accounts. Outside the home, depends on the machines finding each other **(unconfirmed)**. | Small to medium (OpenNote: choose folder and conflicts). | Syncthing on all machines. Folder accessible from Android **(unconfirmed)**. |
+| **Folder + Syncthing** (installed separately) | High: TLS and ID list [10]. Visible that the machine runs Syncthing. | Medium: pair once in Syncthing, no accounts. Outside the home, depends on the machines finding each other **(unconfirmed)**. | Small to medium (Vynote: choose folder and conflicts). | Syncthing on all machines. Folder accessible from Android **(unconfirmed)**. |
 | **Own LAN** (QR + mutual TLS + mDNS) | High if done well. The weak point is the first pairing (CVE-2020-26164 [8]). | High: QR once, no accounts. Only on the same network and with the app open. | Large. | `bonsoir`, `basic_utils`, `crypto` or `cryptography`, `dart:io`, `mobile_scanner` (does not scan on PC), `qr_flutter`. |
 | **Google Drive + E2E** | Google cannot read the content; it does see metadata. | High: no server, sign in with Google. | Large. | `googleapis`; own login on PC; `cryptography`. |
 | **WebDAV (Nextcloud) + E2E** | Same as Drive, but the server is our own. | Medium: you need a server. | Large. | `webdav_client` (little maintained) or direct HTTP. |
-| **Export/import `.opennote`** | High: local file, no network. | Low: manual. | Medium. | ZIP. Complements the others, does not replace them. |
+| **Export/import `.vynote`** | High: local file, no network. | Low: manual. | Medium. | ZIP. Complements the others, does not replace them. |
 
 ---
 
@@ -400,7 +400,7 @@ Small steps, each deliverable on its own.
    Before: fix `share_plus` and `record` on Linux, or disable those features there.
 
 2. **Step 2: sync folder + conflicts (small to medium effort).** The user chooses the data folder (on PC, by default
-   `Documentos/apuntes`). It is synced by Syncthing, or by the Drive or Nextcloud client, outside the app. OpenNote adds
+   `Documentos/apuntes`). It is synced by Syncthing, or by the Drive or Nextcloud client, outside the app. Vynote adds
    the per-sheet base and the conflict copy. This already covers "at home" and "outside the home" with proven transport,
    without writing our own cryptography.
    Before: test on the tablet whether the folder is accessible from Syncthing (unconfirmed).
@@ -431,7 +431,7 @@ talks to the `RemoteStore` interface (`remote_store.dart`), which has an in-memo
 
 ### Remote structure
 
-It is the same structure as on disk, under `OpenNote/` in "Mi unidad" (My Drive):
+It is the same structure as on disk, under `OpenNote/` in "Mi unidad" (My Drive). The folder keeps the name `OpenNote` from before the app was renamed to Vynote, so existing clouds keep syncing:
 
 ```
 OpenNote/
@@ -727,7 +727,7 @@ never touched.
 Done once. Users do none of this. Nobody has run these steps yet: the app compiles without them and warns that setup is
 missing.
 
-1. At <https://console.cloud.google.com/> create a project (for example "OpenNote").
+1. At <https://console.cloud.google.com/> create a project (for example "Vynote").
 2. **"APIs y servicios" (APIs & Services) > "Biblioteca" (Library):** enable **Google Drive API**.
 3. **"Pantalla de consentimiento OAuth" (OAuth consent screen):** user type **External**; app name, support email; add the
    scope `.../auth/drive.file`.
@@ -738,9 +738,9 @@ missing.
    user can continue with "Avanzado" (Advanced).
 5. **"Credenciales" (Credentials) > "Crear credenciales" (Create credentials) > "ID de cliente de OAuth" (OAuth client ID)**,
    three clients:
-   - **Android** `com.apuntes.apuntes` with the **SHA-1 of the release key** (the keystore from the repo secrets; the owner
+   - **Android** `io.github.santiagofr1.vynote` with the **SHA-1 of the release key** (the keystore from the repo secrets; the owner
      adds it: `keytool -list -v -keystore release.jks`).
-   - **Android** `com.apuntes.apuntes.test` with the debug SHA-1:
+   - **Android** `io.github.santiagofr1.vynote.test` with the debug SHA-1:
      `F5:83:13:66:18:80:5D:F9:69:D6:EE:D9:C3:EA:82:AC:07:E2:FF:56`.
    - **"Aplicación web" (Web application)** (`google_sign_in` asks for it on Android as `serverClientId`; it is not used for
      anything else).

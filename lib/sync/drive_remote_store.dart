@@ -55,6 +55,7 @@ class DriveRemoteStore implements RemoteStore, PurgingRemoteStore {
   DriveRemoteStore(http.Client client, {this.rootName = kDefaultRoot}) : _api = drive.DriveApi(client);
 
   /// La carpeta de Drive. Los builds de desarrollo (debug, como "OpenNote Test") usan otra para no tocar los cuadernos reales.
+  // La carpeta conserva el nombre viejo a propósito: así las nubes que ya existen siguen sincronizando.
   static const kDefaultRoot = bool.fromEnvironment('dart.vm.product') ? 'OpenNote' : 'OpenNote Test';
   final drive.DriveApi _api;
   final String rootName;

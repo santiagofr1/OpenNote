@@ -7,7 +7,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import '../../data/export.dart';
 import '../../data/media_import.dart';
-import '../../data/opennote_file.dart';
+import '../../data/vynote_file.dart';
 import '../../data/storage.dart';
 import '../../data/updates.dart';
 import '../../domain/domain.dart';
@@ -315,7 +315,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
             for (final (key, icon, label) in [
               ('newNotebook', Symbols.note_add, 'Cuaderno nuevo'),
               ('newFolder', Symbols.create_new_folder, 'Carpeta nueva'),
-              ('importNotebook', Symbols.upload_file, 'Importar cuaderno .opennote'),
+              ('importNotebook', Symbols.upload_file, 'Importar cuaderno .vynote'),
             ])
               ListTile(
                 key: Key(key),
@@ -331,13 +331,13 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     if (!mounted) return;
     if (v == 'newNotebook') await _createNotebook();
     if (v == 'newFolder') await _createFolder();
-    if (v == 'importNotebook') await importOpennote();
+    if (v == 'importNotebook') await importVynote();
   }
 
-  /// Elige un `.opennote` y lo agrega como cuaderno nuevo (en la carpeta actual). También lo usan los tests.
-  Future<void> importOpennote() async {
+  /// Elige un `.vynote` y lo agrega como cuaderno nuevo (en la carpeta actual). También lo usan los tests.
+  Future<void> importVynote() async {
     try {
-      final bytes = await Pickers.opennote();
+      final bytes = await Pickers.vynote();
       if (bytes == null || !mounted) return;
       final nb = await importNotebookBytes(store, bytes, taken: {for (final n in index!.notebooks) n.name}, folder: current);
       index!.notebooks.add(nb);
@@ -348,18 +348,18 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
         if (t != null) thumbs[nb.id] = t;
       });
       snack(context, 'Importado como "${nb.name}"');
-    } on OpennoteException catch (e) {
+    } on VynoteException catch (e) {
       if (mounted) snack(context, 'No se pudo importar: ${e.message}');
     } catch (e) {
       if (mounted) snack(context, 'No se pudo importar: $e');
     }
   }
 
-  /// Exporta el cuaderno entero como `.opennote` (copia los archivos de disco: no carga nada).
-  Future<void> _exportOpennote(Notebook nb) async {
+  /// Exporta el cuaderno entero como `.vynote` (copia los archivos de disco: no carga nada).
+  Future<void> _exportVynote(Notebook nb) async {
     try {
       final bytes = await exportNotebookBytes(store, nb);
-      final ok = await saveOpennote(bytes, nb.name);
+      final ok = await saveVynote(bytes, nb.name);
       if (ok && mounted) snack(context, 'Cuaderno "${nb.name}" guardado');
     } catch (e) {
       if (mounted) snack(context, 'No se pudo exportar: $e');
@@ -422,8 +422,8 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
         // solo una hoja queda cargada; las demás (y las de las otras secciones) se leen de disco de a una
         final doc = await store.openNotebook(nb, radius: 0);
         if (mounted) await exportPngFlow(context, store, doc, sections: secs);
-      case 'opennote':
-        await _exportOpennote(nb);
+      case 'vynote':
+        await _exportVynote(nb);
     }
   }
 

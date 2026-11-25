@@ -387,7 +387,7 @@ class Storage {
   /// Espera a que termine el guardado en curso de [nbId] (para leer sus archivos al exportar).
   Future<void> settle(String nbId) => _idle(nbId);
 
-  /// Escribe en disco un cuaderno que viene de afuera (importar un `.opennote`): los archivos de las hojas tal cual
+  /// Escribe en disco un cuaderno que viene de afuera (importar un `.vynote`): los archivos de las hojas tal cual
   /// ([sheetFiles]: id de hoja → bytes) y su notebook.json. Si algo falla borra lo escrito.
   Future<void> writeImportedNotebook(Notebook nb, Map<String, Uint8List> sheetFiles) async {
     try {

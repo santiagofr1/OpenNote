@@ -14,7 +14,7 @@ if (hasReleaseSigning) {
 }
 
 android {
-    namespace = "com.apuntes.apuntes"
+    namespace = "io.github.santiagofr1.vynote"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -24,8 +24,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.apuntes.apuntes"
+        applicationId = "io.github.santiagofr1.vynote"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -57,10 +56,10 @@ android {
         debug {
             // La app de debug/tests es otra app: sus datos y su desinstalación no tocan la real.
             applicationIdSuffix = ".test"
-            resValue("string", "app_name", "OpenNote Test")
+            resValue("string", "app_name", "Vynote Test")
         }
         release {
-            resValue("string", "app_name", "OpenNote")
+            resValue("string", "app_name", "Vynote")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // Sin key.properties se firma con debug para que el desarrollo local siga funcionando.
             // CI siempre escribe key.properties y falla si falta el keystore.
@@ -74,7 +73,7 @@ android {
         // Solo se usa para medir rendimiento (tool/perf.sh): también es otra app, igual que debug.
         getByName("profile") {
             applicationIdSuffix = ".test"
-            resValue("string", "app_name", "OpenNote Test")
+            resValue("string", "app_name", "Vynote Test")
         }
     }
 }

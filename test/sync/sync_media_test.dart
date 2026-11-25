@@ -58,10 +58,10 @@ void main() {
 
   group('nombres de los archivos de media', () {
     // Causa 1: la extensión salía de lo que viniera después del último punto de la RUTA entera. Con un nombre sin
-    // extensión dentro de una carpeta con punto (el paquete de Android es `com.apuntes.apuntes`), o con espacios, el
+    // extensión dentro de una carpeta con punto (el paquete de Android es `io.github.santiagofr1.vynote`), o con espacios, el
     // archivo quedaba con un nombre que el motor no reconoce (silenciosamente no se sube) o directamente no se copiaba.
     final raros = {
-      'sin extensión, carpeta con punto': ('com.apuntes.apuntes/cache/file_picker/17000', 'Nota de voz'),
+      'sin extensión, carpeta con punto': ('io.github.santiagofr1.vynote/cache/file_picker/17000', 'Nota de voz'),
       'extensión con espacio': ('cache', 'clase.m4a copia'),
       'fecha con puntos y letras': ('cache', 'Grabación 21.11.2026 de la mañana'),
       'extensión en mayúsculas': ('cache', 'CLASE.M4A'),

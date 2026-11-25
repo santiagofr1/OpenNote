@@ -17,9 +17,9 @@ for _ in $(seq 1 600); do
 done
 grep -q 'PCSHOT READY' "$LOG" || { cat "$LOG"; echo "ERROR: no apareció PCSHOT READY"; exit 1; }
 sleep 1
-# la ventana interna "OpenNote" (no la de mutter-x11-frames)
-WID=$(xwininfo -root -tree | grep '"OpenNote"' | grep -v 'mutter' | head -1 | awk '{print $1}')
-[ -n "$WID" ] || { echo "ERROR: no encontré la ventana de OpenNote"; exit 1; }
+# la ventana interna "Vynote" (no la de mutter-x11-frames)
+WID=$(xwininfo -root -tree | grep '"Vynote"' | grep -v 'mutter' | head -1 | awk '{print $1}')
+[ -n "$WID" ] || { echo "ERROR: no encontré la ventana de Vynote"; exit 1; }
 GDK_BACKEND=x11 python3 - "$WID" "$OUT" <<'EOF'
 import sys, gi
 gi.require_version('Gdk', '3.0'); gi.require_version('GdkX11', '3.0')

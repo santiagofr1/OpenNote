@@ -8,7 +8,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../data/export.dart';
 import '../../data/media_import.dart';
-import '../../data/opennote_file.dart';
+import '../../data/vynote_file.dart';
 import '../../data/storage.dart';
 import '../../data/templates.dart';
 import '../../domain/domain.dart';
@@ -711,13 +711,13 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     if (mounted) snack(context, 'Cuaderno bloqueado: se pide el PIN al abrirlo');
   }
 
-  /// Exporta el cuaderno entero como `.opennote`: guarda lo pendiente y copia los archivos de disco.
-  Future<void> _exportOpennote() async {
+  /// Exporta el cuaderno entero como `.vynote`: guarda lo pendiente y copia los archivos de disco.
+  Future<void> _exportVynote() async {
     if (doc == null) return;
     try {
       await _flush();
       final bytes = await exportNotebookBytes(store, nb);
-      final ok = await saveOpennote(bytes, nb.name);
+      final ok = await saveVynote(bytes, nb.name);
       if (ok && mounted) snack(context, 'Cuaderno guardado');
     } catch (e) {
       if (mounted) snack(context, 'No se pudo exportar: $e');
@@ -743,8 +743,8 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
       case 'sheetpng':
         final ok = await saveSheetPng(store, d, k, '${nb.name} - hoja ${k + 1}', background: await exportBackgroundPref(store));
         if (ok && mounted) snack(context, 'Imagen guardada');
-      case 'opennote':
-        await _exportOpennote();
+      case 'vynote':
+        await _exportVynote();
     }
   }
 

@@ -1,17 +1,17 @@
-# OpenNote
+# Vynote
 
 **English** · [Español](README.es.md)
 
 **Take handwritten notes on your tablet, free and without strings attached.**
 
-[![Release](https://img.shields.io/github/v/release/santiagofr1/OpenNote?color=brightgreen)](https://github.com/santiagofr1/OpenNote/releases/latest)
-[![Release workflow](https://github.com/santiagofr1/OpenNote/actions/workflows/release.yml/badge.svg)](https://github.com/santiagofr1/OpenNote/actions/workflows/release.yml)
+[![Release](https://img.shields.io/github/v/release/santiagofr1/Vynote?color=brightgreen)](https://github.com/santiagofr1/Vynote/releases/latest)
+[![Release workflow](https://github.com/santiagofr1/Vynote/actions/workflows/release.yml/badge.svg)](https://github.com/santiagofr1/Vynote/actions/workflows/release.yml)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
-[![Platform: Android](https://img.shields.io/badge/platform-Android-3DDC84.svg?logo=android&logoColor=white)](https://github.com/santiagofr1/OpenNote/releases/latest)
+[![Platform: Android](https://img.shields.io/badge/platform-Android-3DDC84.svg?logo=android&logoColor=white)](https://github.com/santiagofr1/Vynote/releases/latest)
 [![Made with Flutter](https://img.shields.io/badge/made%20with-Flutter-02569B.svg?logo=flutter&logoColor=white)](https://flutter.dev)
 
-OpenNote is a handwriting note-taking app with the S Pen (and with the keyboard too) for Android tablets.
+Vynote is a handwriting note-taking app with the S Pen (and with the keyboard too) for Android tablets.
 It's free, it's open source, it works offline, and your notes are yours: they're stored on your device,
 with no accounts and no servers of our own. If you want, you can sync them between your tablet and your PC with your own Google Drive.
 
@@ -44,10 +44,10 @@ with no accounts and no servers of our own. If you want, you can sync them betwe
 - **Organized library**: nested folders, favorites, name search that ignores case and accents, and notebooks protected with a PIN.
 - **Reading mode**: read without touching anything by mistake.
 - **Export and import**: with a single **"Exportar"** (Export) option, you can take notebooks out as PDF or PNG, or whole as an
-  `.opennote` file to back them up or move them to another tablet. You can import `.opennote`, PDF, images and audio.
+  `.vynote` file to back them up or move them to another tablet. You can import `.vynote`, PDF, images and audio (old `.opennote` files from before the rename still import).
   An imported PDF goes into the page you're looking at, and its pages open instantly, ready to write on top of.
 - **Google Drive sync (optional)**: connect once with your Google account, and the tablet and the PC apps (Linux and
-  Windows) stay in sync on their own. The app only sees its own "OpenNote" folder in your Drive, changes made on two
+  Windows) stay in sync on their own. The app only sees its own "OpenNote" folder in your Drive (it keeps that name for compatibility), changes made on two
   devices are merged page by page, and you can turn on end-to-end encryption with a passphrase so nobody else can read
   your notes, not even Google.
 - **PC app**: the same app for Linux and Windows, with your synced notebooks. Install it from the apt repo or the
@@ -74,7 +74,7 @@ with no accounts and no servers of our own. If you want, you can sync them betwe
 
 ### From the APK (easiest)
 
-1. Download the `.apk` file from the [latest release](https://github.com/santiagofr1/OpenNote/releases/latest).
+1. Download the `.apk` file from the [latest release](https://github.com/santiagofr1/Vynote/releases/latest).
 2. Open it on your tablet. If Android asks, enable **"Instalar apps desconocidas"** (Install unknown apps) for the browser
    or file manager you use.
 3. Follow the installer's steps.
@@ -83,7 +83,7 @@ The app updates itself: when you open it, it looks for a new version on GitHub, 
 you want to install it. It never touches your notebooks.
 
 > If you already installed a version you compiled yourself (signed with the debug key), the first release signed with
-> the official key can't be installed on top of it. Back up your notebooks, uninstall OpenNote once, and install the APK.
+> the official key can't be installed on top of it. Back up your notebooks, uninstall Vynote once, and install the APK.
 > After that, updates work normally. Details in [docs/RELEASES.md](docs/RELEASES.md).
 
 ### On Linux (Debian/Ubuntu)
@@ -95,21 +95,21 @@ sudo install -d -m 0755 /etc/apt/keyrings
 curl -fsSL https://santiagofr1.github.io/apt/key.asc | sudo gpg --dearmor -o /etc/apt/keyrings/santiagofr1.gpg
 echo "deb [signed-by=/etc/apt/keyrings/santiagofr1.gpg] https://santiagofr1.github.io/apt stable main" | sudo tee /etc/apt/sources.list.d/santiagofr1.list
 sudo apt update
-sudo apt install opennote
+sudo apt install vynote
 ```
 
-Or by downloading the `.deb` from the [latest release](https://github.com/santiagofr1/OpenNote/releases/latest):
+Or by downloading the `.deb` from the [latest release](https://github.com/santiagofr1/Vynote/releases/latest):
 
 ```sh
-sudo apt install ./opennote_<version>_amd64.deb
+sudo apt install ./vynote_<version>_amd64.deb
 ```
 
-Then open it from the applications menu or with `opennote`. To build the `.deb` yourself: `tool/build_deb.sh <version>`.
+Then open it from the applications menu or with `vynote`. To build the `.deb` yourself: `tool/build_deb.sh <version>`.
 
 ### On Windows
 
-Download `OpenNote-v<version>-windows-setup.exe` from the [latest release](https://github.com/santiagofr1/OpenNote/releases/latest)
-and run it (Windows 10 or 11, 64-bit). It installs to `Program Files\OpenNote`, creates a Start menu shortcut (and a
+Download `Vynote-v<version>-windows-setup.exe` from the [latest release](https://github.com/santiagofr1/Vynote/releases/latest)
+and run it (Windows 10 or 11, 64-bit). It installs to `Program Files\Vynote`, creates a Start menu shortcut (and a
 desktop one if you choose), and uninstalls from **"Aplicaciones instaladas"** (Installed apps). The installer comes out
 a few minutes after the APK and is not signed: Windows SmartScreen may warn you, so pick **"Más información"** (More info)
 and then **"Ejecutar de todas formas"** (Run anyway). No background sync (same as Linux); Google login opens your browser.
@@ -119,8 +119,8 @@ and then **"Ejecutar de todas formas"** (Run anyway). No background sync (same a
 You need [Flutter](https://flutter.dev) on the *stable* channel:
 
 ```sh
-git clone https://github.com/santiagofr1/OpenNote
-cd OpenNote
+git clone https://github.com/santiagofr1/Vynote
+cd Vynote
 flutter pub get
 flutter run                # on a connected tablet or emulator
 flutter build apk          # builds the APK into build/app/outputs/flutter-apk/
@@ -142,7 +142,7 @@ To build for the tablet you also need the Android SDK and JDK 21. The full steps
 
 ## Compatibility
 
-OpenNote was tested on a **Samsung Galaxy Tab S6 Lite (SM-P620) with Android 16** and the S Pen.
+Vynote was tested on a **Samsung Galaxy Tab S6 Lite (SM-P620) with Android 16** and the S Pen.
 
 It should work on other Android tablets with an active pen, like the Galaxy Tab S line or tablets with USI pens, but we
 haven't tested those yet. If you have one and try it, let us know in an issue: it really helps to know what works and
@@ -168,7 +168,7 @@ Each layer only uses the ones above it: `domain` knows nothing about Flutter, an
 
 ## Contributing
 
-OpenNote is **free software** under the GPL v3 or later. You can use, copy, modify and redistribute it, as long as
+Vynote is **free software** under the GPL v3 or later. You can use, copy, modify and redistribute it, as long as
 whatever you distribute stays free.
 
 Free software works because people dive in. You don't need to be a Flutter expert or ask for permission:
@@ -177,12 +177,12 @@ Free software works because people dive in. You don't need to be a Flutter exper
 - **Send a PR**, however small. Fixing a text, adding a background or running a test counts too.
 - **Open an issue** if something doesn't work on your tablet or with your pen. With so many different models and brands,
   your report is what makes it work for everyone.
-- **Suggest ideas**: [New issue](https://github.com/santiagofr1/OpenNote/issues/new/choose) has templates for reporting
+- **Suggest ideas**: [New issue](https://github.com/santiagofr1/Vynote/issues/new/choose) has templates for reporting
   a bug and proposing an improvement.
 
 Some good first contributions:
 
-- [ ] Try OpenNote on another tablet or with another pen (USI, newer Galaxy Tab S) and report what works
+- [ ] Try Vynote on another tablet or with another pen (USI, newer Galaxy Tab S) and report what works
 - [ ] Translate the interface text into English (right now everything is in Spanish)
 - [ ] New page backgrounds or templates (`lib/domain/paper_layout.dart`, `lib/widgets/backgrounds.dart`)
 - [ ] New pen tips (`lib/domain/tools.dart`, drawing in `lib/domain/stroke_mesh.dart`)

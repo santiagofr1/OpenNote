@@ -1,12 +1,12 @@
-# How to Contribute to OpenNote
+# How to Contribute to Vynote
 
 Thanks for pitching in! Every contribution counts: code, issues, ideas, documentation, tests on other tablets or translations.
 
 ## Getting Started
 
 ```sh
-git clone https://github.com/<your-username>/OpenNote   # your fork
-cd OpenNote
+git clone https://github.com/<your-username>/Vynote   # your fork
+cd Vynote
 flutter pub get            # installs dependencies
 flutter run                # runs the app on a connected tablet or emulator
 flutter test               # pure-logic tests, on the PC
@@ -40,7 +40,7 @@ You need Flutter on the *stable* channel. To build for the tablet you also need 
 BACKUP=1 ./run_tests.sh    # same, but also downloads a copy of your real notebooks
 ```
 
-`./run_tests.sh` installs a separate app, **"OpenNote Test"** (`com.apuntes.apuntes.test`), with its own data.
+`./run_tests.sh` installs a separate app, **"Vynote Test"** (`io.github.santiagofr1.vynote.test`), with its own data.
 It never touches the real app or your notebooks: at the end, it checks that the real app and its files are still the same.
 
 Rule for new features: **every new feature adds a case to `integration_test/app_test.dart`.** If needed, also add a
@@ -89,11 +89,11 @@ put it there and cover it with tests.
 
 ## Reporting a Bug
 
-Use the [bug report template](https://github.com/santiagofr1/OpenNote/issues/new/choose). Include:
+Use the [bug report template](https://github.com/santiagofr1/Vynote/issues/new/choose). Include:
 
 - **Tablet model** (for example, Galaxy Tab S6 Lite SM-P620) and **pen** (S Pen, USI or other).
 - **Android version**.
-- **OpenNote version**: the release tag (for example, `v1.0.42`) or the commit if you built it yourself.
+- **Vynote version**: the release tag (for example, `v1.0.42`) or the commit if you built it yourself.
 - What you did, what you expected and what happened. If it crashed, tell us whether it happened when opening a notebook
   or while writing.
 
