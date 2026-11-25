@@ -47,6 +47,10 @@ It never touches the real app or your notebooks: at the end, it checks that the 
 `layout_sizes_test.dart`) in the Linux app, simulating the tablet screen; whatever needs the real pen, ML Kit or the
 background sync still needs a device. The app runs on a virtual display (Xvfb) so no window pops up; use `VER=1` to see it.
 
+Without a tablet you can also use an Android emulator that mimics it (1200 x 2000 at 240 dpi, landscape, 110 % font
+size): `tool/emulador.sh` creates and boots it headless (it needs KVM), then `DEV=emulator-5554 ./run_tests.sh` runs the
+full suite on it, and `tool/emulador.sh parar` shuts it down.
+
 Rule for new features: **every new feature adds a case to `integration_test/app_test.dart`.** If needed, also add a
 pure-logic test in `test/`.
 

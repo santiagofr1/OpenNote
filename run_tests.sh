@@ -7,6 +7,8 @@
 #   NOMBRE='texto' ./run_tests.sh   -> solo los casos cuyo nombre contiene ese texto
 #   FILTRO='regex' ./run_tests.sh   -> solo los casos cuyo nombre encaja con la expresión regular
 #   NUEVOS=1 ./run_tests.sh   -> solo los casos de las funciones de esta tanda (ver NUEVOS_RE más abajo)
+#   DEV=emulator-5554 ./run_tests.sh -> en la tablet virtual (arrancala antes con tool/emulador.sh); sin DEV usa el primer
+#                                     dispositivo de `adb devices`
 # Muestra los pasos y una barra de avance; el log entero queda en test_tablet.log y al terminar avisa con una
 # notificación en la PC (si hay notify-send).
 set -e
@@ -29,7 +31,9 @@ snapshot() { # lista de archivos (tamaño, fecha, ruta) de los cuadernos reales
 }
 instalada() { adb -s "$DEV" shell pm list packages "$PKG" | tr -d '\r' | grep -qx "package:$PKG"; }
 
-instalada || { echo "ERROR: la app real ($PKG) no está instalada; no corro nada."; exit 1; }
+# en el emulador (tool/emulador.sh) no hay app real ni cuadernos que cuidar
+EMU=0; case "$DEV" in emulator-*) EMU=1 ;; esac
+instalada || [ $EMU = 1 ] || { echo "ERROR: la app real ($PKG) no está instalada; no corro nada."; exit 1; }
 
 # 1) Solo si la tablet está en el inicio o en Vynote (nunca encima de otra app).
 FOCO=$(adb -s "$DEV" shell dumpsys window | grep mCurrentFocus | tr -d '\r')
@@ -88,7 +92,7 @@ set -e
 paso 3 "Verificando que la app real y tus cuadernos sigan intactos…"
 
 FALLO=0
-if ! instalada; then
+if [ $EMU = 0 ] && ! instalada; then
   echo "ERROR: la app real ($PKG) DESAPARECIÓ"; FALLO=1
 fi
 DESPUES=$(snapshot)
