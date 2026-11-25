@@ -10,162 +10,162 @@ class LEn extends L {
   LEn([String locale = 'en']) : super(locale);
 
   @override
-  String get commonCancel => 'Cancelar';
+  String get commonCancel => 'Cancel';
 
   @override
-  String get commonDone => 'Listo';
+  String get commonDone => 'Done';
 
   @override
-  String get commonCreate => 'Crear';
+  String get commonCreate => 'Create';
 
   @override
-  String get commonDelete => 'Borrar';
+  String get commonDelete => 'Delete';
 
   @override
-  String get commonClose => 'Cerrar';
+  String get commonClose => 'Close';
 
   @override
-  String get commonLater => 'Después';
+  String get commonLater => 'Later';
 
   @override
-  String get commonNotNow => 'Ahora no';
+  String get commonNotNow => 'Not now';
 
   @override
-  String get paperLined => 'Rayado';
+  String get paperLined => 'Lined';
 
   @override
-  String get paperGrid => 'Cuadriculado';
+  String get paperGrid => 'Grid';
 
   @override
-  String get paperDots => 'Puntos';
+  String get paperDots => 'Dots';
 
   @override
-  String get paperMm => 'Milimetrado';
+  String get paperMm => 'Millimeter';
 
   @override
-  String get paperAxes => 'Ejes cartesianos';
+  String get paperAxes => 'Cartesian axes';
 
   @override
-  String get paperBlank => 'Liso';
+  String get paperBlank => 'Blank';
 
   @override
   String get paperCornell => 'Cornell';
 
   @override
-  String get paperTodo => 'Lista de tareas';
+  String get paperTodo => 'To-do list';
 
   @override
-  String get paperStaff => 'Pentagrama';
+  String get paperStaff => 'Staff';
 
   @override
-  String get paperWeekly => 'Agenda semanal';
+  String get paperWeekly => 'Weekly agenda';
 
   @override
-  String get paperMonthly => 'Calendario mensual';
+  String get paperMonthly => 'Monthly calendar';
 
   @override
-  String get shortcutBold => 'Negrita';
+  String get shortcutBold => 'Bold';
 
   @override
-  String get shortcutItalic => 'Cursiva';
+  String get shortcutItalic => 'Italic';
 
   @override
-  String get shortcutUnderline => 'Subrayado';
+  String get shortcutUnderline => 'Underline';
 
   @override
-  String get shortcutStrike => 'Tachado';
+  String get shortcutStrike => 'Strikethrough';
 
   @override
-  String get shortcutHighlight => 'Resaltado (poner / sacar)';
+  String get shortcutHighlight => 'Highlight (apply / remove)';
 
   @override
-  String get shortcutFontUp => 'Agrandar letra';
+  String get shortcutFontUp => 'Increase font size';
 
   @override
-  String get shortcutFontDown => 'Achicar letra';
+  String get shortcutFontDown => 'Decrease font size';
 
   @override
-  String get shortcutBullets => 'Viñetas';
+  String get shortcutBullets => 'Bulleted list';
 
   @override
-  String get shortcutNumbered => 'Lista numerada';
+  String get shortcutNumbered => 'Numbered list';
 
   @override
-  String get shortcutTodo => 'Lista de tareas';
+  String get shortcutTodo => 'To-do list';
 
   @override
-  String get shortcutAlignLeft => 'Alinear a la izquierda';
+  String get shortcutAlignLeft => 'Align left';
 
   @override
-  String get shortcutCenter => 'Centrar';
+  String get shortcutCenter => 'Center';
 
   @override
-  String get shortcutAlignRight => 'Alinear a la derecha';
+  String get shortcutAlignRight => 'Align right';
 
   @override
-  String get shortcutJustify => 'Justificar';
+  String get shortcutJustify => 'Justify';
 
   @override
-  String get shortcutIndent => 'Más sangría';
+  String get shortcutIndent => 'Increase indent';
 
   @override
-  String get shortcutOutdent => 'Menos sangría';
+  String get shortcutOutdent => 'Decrease indent';
 
   @override
-  String get shortcutUndo => 'Deshacer';
+  String get shortcutUndo => 'Undo';
 
   @override
-  String get shortcutRedo => 'Rehacer';
+  String get shortcutRedo => 'Redo';
 
   @override
-  String get shortcutPencil => 'Lápiz';
+  String get shortcutPencil => 'Pen';
 
   @override
-  String get shortcutHighlighter => 'Resaltador';
+  String get shortcutHighlighter => 'Highlighter';
 
   @override
-  String get shortcutText => 'Texto (abre un bloque)';
+  String get shortcutText => 'Text (opens a block)';
 
   @override
-  String get shortcutSelect => 'Seleccionar';
+  String get shortcutSelect => 'Select';
 
   @override
   String get shortcutZoom => 'Zoom';
 
   @override
-  String get shortcutHelp => 'Ver estos atajos';
+  String get shortcutHelp => 'Show these shortcuts';
 
   @override
-  String get shortcutZoomKeys => 'Ctrl + rueda del mouse';
+  String get shortcutZoomKeys => 'Ctrl + mouse wheel';
 
   @override
-  String get shortcutsTitle => 'Atajos de teclado';
+  String get shortcutsTitle => 'Keyboard shortcuts';
 
   @override
-  String get shortcutsTyping => 'Escribiendo';
+  String get shortcutsTyping => 'Typing';
 
   @override
-  String get shortcutsSheet => 'En la hoja';
+  String get shortcutsSheet => 'On the page';
 
   @override
-  String get newNotebookHint => 'Ej: Análisis II';
+  String get newNotebookHint => 'E.g.: Analysis II';
 
   @override
-  String get newNotebookTitle => 'Nuevo cuaderno';
+  String get newNotebookTitle => 'New notebook';
 
   @override
-  String get newNotebookSheets => 'Hojas';
+  String get newNotebookSheets => 'Pages';
 
   @override
-  String get newNotebookCanvas => 'Lienzo infinito';
+  String get newNotebookCanvas => 'Infinite canvas';
 
   @override
   String get newNotebookCanvasHint =>
-      'Sin cortes, crece mientras escribís. Para mapas conceptuales y diagramas';
+      'No breaks, it grows as you write. For concept maps and diagrams';
 
   @override
   String deleteNotebookTitle(String name) {
-    return 'Borrar \"$name\"';
+    return 'Delete \"$name\"';
   }
 
   @override
@@ -173,241 +173,241 @@ class LEn extends L {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count hojas',
-      one: '1 hoja',
+      other: '$count pages',
+      one: '1 page',
     );
-    return 'Se borran sus $_temp0. No se puede deshacer.';
+    return 'Its $_temp0 will be deleted. This can\'t be undone.';
   }
 
   @override
   String get pinHint => 'PIN';
 
   @override
-  String get updateAvailableTitle => 'Hay una versión nueva de Vynote';
+  String get updateAvailableTitle => 'A new version of Vynote is available';
 
   @override
   String updateNewVersion(String version) {
-    return 'Versión nueva: $version';
+    return 'New version: $version';
   }
 
   @override
   String updateVersions(String installed, String version) {
-    return 'Tenés la $installed  →  nueva $version';
+    return 'You have $installed  →  new $version';
   }
 
   @override
-  String get updateNotesTitle => 'Novedades';
+  String get updateNotesTitle => 'What\'s new';
 
   @override
-  String get updateNotesDefault => 'Mejoras y arreglos varios.';
+  String get updateNotesDefault => 'Improvements and miscellaneous fixes.';
 
   @override
   String get updateSourceInfo =>
-      'Se baja de la página oficial del proyecto en GitHub. Tus cuadernos no se tocan: solo se actualiza la app.';
+      'It\'s downloaded from the project\'s official page on GitHub. Your notebooks aren\'t touched: only the app is updated.';
 
   @override
-  String get updateSkip => 'Omitir esta versión';
+  String get updateSkip => 'Skip this version';
 
   @override
-  String get updateInstall => 'Actualizar';
+  String get updateInstall => 'Update';
 
   @override
-  String get updateDownloading => 'Bajando la versión nueva';
+  String get updateDownloading => 'Downloading the new version';
 
   @override
-  String get updateConnecting => 'Conectando…';
+  String get updateConnecting => 'Connecting…';
 
   @override
   String get updateDownloadFailed =>
-      'No pudimos bajar la actualización. Probá de nuevo en un rato.';
+      'We couldn\'t download the update. Try again in a while.';
 
   @override
-  String get updateStepTitle => 'Un paso más';
+  String get updateStepTitle => 'One more step';
 
   @override
   String get updatePermissionBody =>
-      'Android pide que le des permiso a Vynote para instalar su propia actualización. Es una sola vez. Te llevamos a los ajustes: activá \"Permitir de esta fuente\", volvé y tocá Actualizar de nuevo.';
+      'Android needs you to allow Vynote to install its own update. It\'s only needed once. We\'ll take you to settings: turn on \"Allow from this source\", come back and tap Update again.';
 
   @override
-  String get updateGoToSettings => 'Ir a ajustes';
+  String get updateGoToSettings => 'Go to settings';
 
   @override
-  String get updateDoneTitle => 'Vynote se actualizó';
+  String get updateDoneTitle => 'Vynote was updated';
 
   @override
   String updateDoneBody(String version) {
-    return 'Ya quedó instalada la $version. Reiniciá la app para usarla.';
+    return 'Version $version is installed. Restart the app to use it.';
   }
 
   @override
-  String get updateRestartNow => 'Reiniciar ahora';
+  String get updateRestartNow => 'Restart now';
 
   @override
-  String get updateCancelled => 'Actualización cancelada.';
+  String get updateCancelled => 'Update cancelled.';
 
   @override
-  String get updateManualTitle => 'Instalala a mano';
+  String get updateManualTitle => 'Install it manually';
 
   @override
   String get updateManualBody =>
-      'No encontramos cómo pedir permisos de administrador. Abrí una terminal y corré:';
+      'We couldn\'t find a way to request administrator permissions. Open a terminal and run:';
 
   @override
-  String get updateCommandCopied => 'Comando copiado';
+  String get updateCommandCopied => 'Command copied';
 
   @override
-  String get commonCopy => 'Copiar';
+  String get commonCopy => 'Copy';
 
   @override
   String get updateInstallerFailed =>
-      'No pudimos abrir el instalador. Probá de nuevo en un rato.';
+      'We couldn\'t open the installer. Try again in a while.';
 
   @override
   String get updateInstallFailed =>
-      'No se pudo instalar la actualización. Probá de nuevo en un rato.';
+      'The update couldn\'t be installed. Try again in a while.';
 
   @override
   String exportPdfSaved(String name) {
-    return 'PDF de \"$name\" guardado';
+    return 'PDF of \"$name\" saved';
   }
 
   @override
-  String get exportPdfGenerating => 'Generando PDF';
+  String get exportPdfGenerating => 'Generating PDF';
 
   @override
   String exportSheetProgress(int done, int total) {
-    return 'Hoja $done de $total';
+    return 'Page $done of $total';
   }
 
   @override
   String exportPdfFailed(String error) {
-    return 'No se pudo generar el PDF: $error';
+    return 'The PDF couldn\'t be generated: $error';
   }
 
   @override
-  String get exportImagesGenerating => 'Generando imágenes';
+  String get exportImagesGenerating => 'Generating images';
 
   @override
   String exportImagesFailed(String error) {
-    return 'No se pudieron generar las imágenes: $error';
+    return 'The images couldn\'t be generated: $error';
   }
 
   @override
-  String get exportImagesSaved => 'Imágenes guardadas';
+  String get exportImagesSaved => 'Images saved';
 
   @override
-  String get exportImageSaved => 'Imagen guardada';
+  String get exportImageSaved => 'Image saved';
 
   @override
-  String get exportFolderTitle => 'Exportando carpeta';
+  String get exportFolderTitle => 'Exporting folder';
 
   @override
   String exportFolderProgress(int done, int total) {
-    return 'Cuaderno $done de $total';
+    return 'Notebook $done of $total';
   }
 
   @override
-  String get exportFolderDone => 'Carpeta exportada';
+  String get exportFolderDone => 'Folder exported';
 
   @override
   String exportFolderFailed(String error) {
-    return 'No se pudo exportar la carpeta: $error';
+    return 'The folder couldn\'t be exported: $error';
   }
 
   @override
   String get errImportNotReadable =>
-      'El archivo no es un cuaderno de Vynote (no se puede leer).';
+      'The file isn\'t a Vynote notebook (it can\'t be read).';
 
   @override
-  String get errImportNotVynote => 'El archivo no es un cuaderno de Vynote.';
+  String get errImportNotVynote => 'The file isn\'t a Vynote notebook.';
 
   @override
   String get errImportNewerVersion =>
-      'El archivo es de una versión más nueva de Vynote. Actualizá la app para abrirlo.';
+      'The file is from a newer version of Vynote. Update the app to open it.';
 
   @override
-  String get errImportBrokenSheetList => 'La lista de hojas está rota.';
+  String get errImportBrokenSheetList => 'The page list is broken.';
 
   @override
-  String get errImportNoSheets => 'El cuaderno no tiene hojas.';
+  String get errImportNoSheets => 'The notebook has no pages.';
 
   @override
-  String get errImportBrokenSheetAny => 'Una hoja del archivo está rota.';
+  String get errImportBrokenSheetAny => 'A page in the file is broken.';
 
   @override
-  String get errImportInvalidNames => 'El archivo tiene nombres no válidos.';
+  String get errImportInvalidNames => 'The file has invalid names.';
 
   @override
-  String get errImportNotZip => 'El archivo no es un .zip.';
+  String get errImportNotZip => 'The file isn\'t a .zip.';
 
   @override
   String get errImportNoNotebooks =>
-      'El .zip no tiene cuadernos de Vynote. ¿Lo exportaste en PDF o PNG?';
+      'The .zip has no Vynote notebooks. Did you export it as PDF or PNG?';
 
   @override
   String errImportMissingFile(String name) {
-    return 'Al archivo le falta $name: está roto o no es de Vynote.';
+    return 'The file is missing $name: it\'s broken or isn\'t from Vynote.';
   }
 
   @override
   String errImportBrokenFile(String name) {
-    return '$name está roto.';
+    return '$name is broken.';
   }
 
   @override
   String errImportBrokenSheet(String name) {
-    return 'La hoja $name está rota.';
+    return 'The page $name is broken.';
   }
 
   @override
-  String get libraryTitle => 'Cuadernos';
+  String get libraryTitle => 'Notebooks';
 
   @override
-  String get libraryHome => 'Inicio';
+  String get libraryHome => 'Home';
 
   @override
-  String get libraryNew => 'Nuevo';
+  String get libraryNew => 'New';
 
   @override
-  String get libraryNewNotebook => 'Cuaderno nuevo';
+  String get libraryNewNotebook => 'New notebook';
 
   @override
-  String get libraryNewFolder => 'Carpeta nueva';
+  String get libraryNewFolder => 'New folder';
 
   @override
-  String get libraryImportNotebook => 'Importar cuaderno .vynote';
+  String get libraryImportNotebook => 'Import .vynote notebook';
 
   @override
-  String get libraryImportFolder => 'Importar carpeta (.zip)';
+  String get libraryImportFolder => 'Import folder (.zip)';
 
   @override
-  String get libraryMenuTooltip => 'Más opciones';
+  String get libraryMenuTooltip => 'More options';
 
   @override
-  String get libraryUpTooltip => 'Subir una carpeta';
+  String get libraryUpTooltip => 'Go up one folder';
 
   @override
-  String get librarySearchHint => 'Buscar cuadernos y carpetas';
+  String get librarySearchHint => 'Search notebooks and folders';
 
   @override
-  String get librarySearchClear => 'Borrar búsqueda';
+  String get librarySearchClear => 'Clear search';
 
   @override
-  String get libraryEmptyNoResults => 'Sin resultados';
+  String get libraryEmptyNoResults => 'No results';
 
   @override
-  String get libraryEmptyNone => 'Todavía no hay cuadernos';
+  String get libraryEmptyNone => 'There are no notebooks yet';
 
   @override
-  String get libraryEmptyFolder => 'Esta carpeta está vacía';
+  String get libraryEmptyFolder => 'This folder is empty';
 
   @override
   String libraryNotebookCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count cuadernos',
-      one: '$count cuaderno',
+      other: '$count notebooks',
+      one: '$count notebook',
     );
     return '$_temp0';
   }
@@ -417,436 +417,435 @@ class LEn extends L {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count carpetas',
-      one: '$count carpeta',
+      other: '$count folders',
+      one: '$count folder',
     );
     return '$_temp0';
   }
 
   @override
-  String get libraryHeaderFirst => 'Creá el primero para empezar';
+  String get libraryHeaderFirst => 'Create the first one to get started';
 
   @override
   String libraryHeaderHint(String parts) {
-    return '$parts · mantené uno apretado para opciones o arrastralo a una carpeta';
+    return '$parts · press and hold one for options, or drag it into a folder';
   }
 
   @override
-  String get libraryResultsEverywhere => 'Resultados en todas las carpetas';
+  String get libraryResultsEverywhere => 'Results from all folders';
 
   @override
-  String get libraryNotebookDeleted => 'Cuaderno borrado';
+  String get libraryNotebookDeleted => 'Notebook deleted';
 
   @override
-  String get libraryNotebookGone => 'El cuaderno ya no existe';
+  String get libraryNotebookGone => 'The notebook no longer exists';
 
   @override
-  String get libraryLockedNotebook => 'Este cuaderno está bloqueado';
+  String get libraryLockedNotebook => 'This notebook is locked';
 
   @override
-  String get libraryWrongPin => 'PIN incorrecto';
+  String get libraryWrongPin => 'Wrong PIN';
 
   @override
   String libraryImportedAs(String name) {
-    return 'Importado como \"$name\"';
+    return 'Imported as \"$name\"';
   }
 
   @override
   String libraryImportFailed(String error) {
-    return 'No se pudo importar: $error';
+    return 'Couldn\'t import: $error';
   }
 
   @override
-  String get libraryImportingFolder => 'Importando carpeta';
+  String get libraryImportingFolder => 'Importing folder';
 
   @override
-  String get libraryImportCancelled => 'Importación cancelada';
+  String get libraryImportCancelled => 'Import cancelled';
 
   @override
   String libraryImportUnreadable(int count) {
-    return ' ($count no se pudieron leer)';
+    return ' ($count couldn\'t be read)';
   }
 
   @override
   String libraryImportedMany(int count, String fail) {
-    return 'Importados $count cuadernos$fail';
+    return '$count notebooks imported$fail';
   }
 
   @override
   String libraryImportedFolder(String name, int count, String fail) {
-    return 'Carpeta \"$name\" importada: $count cuadernos$fail';
+    return 'Folder \"$name\" imported: $count notebooks$fail';
   }
 
   @override
   String libraryExportDone(String name) {
-    return 'Cuaderno \"$name\" guardado';
+    return 'Notebook \"$name\" saved';
   }
 
   @override
   String libraryExportFailed(String error) {
-    return 'No se pudo exportar: $error';
+    return 'Couldn\'t export: $error';
   }
 
   @override
-  String get libraryFolderHint => 'Ej: Facultad';
+  String get libraryFolderHint => 'E.g.: University';
 
   @override
-  String get libraryRenameNotebook => 'Renombrar cuaderno';
+  String get libraryRenameNotebook => 'Rename notebook';
 
   @override
-  String get libraryRenameFolder => 'Renombrar carpeta';
+  String get libraryRenameFolder => 'Rename folder';
 
   @override
   String libraryCopySuffix(String name) {
-    return '$name (copia)';
+    return '$name (copy)';
   }
 
   @override
-  String get libraryDuplicated => 'Cuaderno duplicado';
+  String get libraryDuplicated => 'Notebook duplicated';
 
   @override
-  String get libraryFolderEmptyExport => 'La carpeta está vacía';
+  String get libraryFolderEmptyExport => 'The folder is empty';
 
   @override
   String libraryMoveTitle(String name) {
-    return 'Mover \"$name\" a…';
+    return 'Move \"$name\" to…';
   }
 
   @override
   String libraryMovedTo(String path) {
-    return 'Movido a $path';
+    return 'Moved to $path';
   }
 
   @override
   String libraryMovedFolderTo(String path) {
-    return 'Movida a $path';
+    return 'Moved to $path';
   }
 
   @override
-  String get libraryUndo => 'Deshacer';
+  String get libraryUndo => 'Undo';
 
   @override
-  String get libraryFolderEmptyBody => 'La carpeta está vacía.';
+  String get libraryFolderEmptyBody => 'The folder is empty.';
 
   @override
-  String get libraryDeleteAllTitle => 'Borrar todo';
+  String get libraryDeleteAllTitle => 'Delete everything';
 
   @override
   String libraryDeleteAllBody(String name, int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count cuadernos',
-      one: '1 cuaderno',
+      other: '$count notebooks',
+      one: '1 notebook',
     );
-    return 'Se borran la carpeta \"$name\", sus subcarpetas y $_temp0 con todas sus hojas. No se puede deshacer.';
+    return 'The folder \"$name\", its subfolders and $_temp0 with all their pages will be deleted. This can\'t be undone.';
   }
 
   @override
-  String get libraryFolderWhatToDo => '¿Qué hacemos con lo que tiene adentro?';
+  String get libraryFolderWhatToDo => 'What should we do with what\'s inside?';
 
   @override
   String libraryFolderKeep(String parent) {
-    return 'Sacar los cuadernos a $parent';
+    return 'Move the notebooks to $parent';
   }
 
   @override
-  String get libraryOptRename => 'Renombrar';
+  String get libraryOptRename => 'Rename';
 
   @override
-  String get libraryOptMove => 'Mover a…';
+  String get libraryOptMove => 'Move to…';
 
   @override
-  String get libraryOptExport => 'Exportar';
+  String get libraryOptExport => 'Export';
 
   @override
-  String get libraryOptDelete => 'Borrar';
+  String get libraryOptDelete => 'Delete';
 
   @override
-  String get libraryOptOpen => 'Abrir';
+  String get libraryOptOpen => 'Open';
 
   @override
-  String get libraryOptDuplicate => 'Duplicar';
+  String get libraryOptDuplicate => 'Duplicate';
 
   @override
   String librarySheetCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count hojas',
-      one: '$count hoja',
+      other: '$count pages',
+      one: '$count page',
     );
     return '$_temp0';
   }
 
   @override
-  String get moveHere => 'acá';
+  String get moveHere => 'here';
 
   @override
-  String get syncIndicatorSynced => 'Sincronizado';
+  String get syncIndicatorSynced => 'Synced';
 
   @override
-  String get syncIndicatorSyncing => 'Sincronizando';
+  String get syncIndicatorSyncing => 'Syncing';
 
   @override
-  String get syncIndicatorPending => 'Cambios por subir';
+  String get syncIndicatorPending => 'Changes to upload';
 
   @override
-  String get syncIndicatorOffline => 'Sin conexión';
+  String get syncIndicatorOffline => 'No connection';
 
   @override
-  String get syncIndicatorError => 'Error de sincronización';
+  String get syncIndicatorError => 'Sync error';
 
   @override
   String dateToday(String time) {
-    return 'hoy $time';
+    return 'Today $time';
   }
 
   @override
   String dateYesterday(String time) {
-    return 'ayer $time';
+    return 'Yesterday $time';
   }
 
   @override
-  String get datePatternTime => 'HH:mm';
+  String get datePatternTime => 'h:mm a';
 
   @override
-  String get datePatternDayMonth => 'dd/MM';
+  String get datePatternDayMonth => 'MMM d';
 
   @override
-  String get datePatternDayMonthYear => 'dd/MM/yyyy';
+  String get datePatternDayMonthYear => 'MMM d, y';
 
   @override
-  String get syncErrOffline => 'Sin conexión';
+  String get syncErrOffline => 'No connection';
 
   @override
   String get syncErrAuthExpired =>
-      'La sesión de Google venció. Volvé a conectar.';
+      'Your Google session expired. Connect again.';
 
   @override
   String get syncErrConflict =>
-      'El archivo cambió en la nube mientras se subía; se reintenta';
+      'The file changed in the cloud while it was uploading; it will be retried';
 
   @override
-  String get syncErrNotFound => 'No existe en la nube';
+  String get syncErrNotFound => 'It doesn\'t exist in the cloud';
 
   @override
-  String get syncErrVaultChanged =>
-      'Cambió la configuración de cifrado de la nube';
+  String get syncErrVaultChanged => 'The cloud encryption settings changed';
 
   @override
   String get syncErrCryptoLocked =>
-      'La nube está cifrada: ingresá la frase en Sincronización > Cifrado';
+      'The cloud is encrypted: enter the passphrase in Sync > Encryption';
 
   @override
-  String get syncErrWrongPassphrase => 'La frase de cifrado es incorrecta';
+  String get syncErrWrongPassphrase => 'The passphrase is wrong';
 
   @override
   String get syncErrCryptoOtherDevice =>
-      'Otro dispositivo activó el cifrado al mismo tiempo. Ingresá su frase.';
+      'Another device turned on encryption at the same time. Enter its passphrase.';
 
   @override
-  String get syncErrCloudNotEncrypted => 'La nube no está cifrada';
+  String get syncErrCloudNotEncrypted => 'The cloud isn\'t encrypted';
 
   @override
-  String get syncErrConnectFirst => 'Conectá con Google primero';
+  String get syncErrConnectFirst => 'Connect with Google first';
 
   @override
   String get syncErrBackgroundBusy =>
-      'Hay una sincronización en segundo plano en curso; probá de nuevo en unos segundos';
+      'A background sync is in progress; try again in a few seconds';
 
   @override
   String syncErrFilesFailed(String count) {
-    return '$count archivo(s) no se pudieron sincronizar; se reintenta en la próxima pasada';
+    return '$count file(s) couldn\'t be synced; it will be retried on the next pass';
   }
 
   @override
   String syncErrCouldNotSync(String detail) {
-    return 'No se pudo sincronizar: $detail';
+    return 'Couldn\'t sync: $detail';
   }
 
   @override
-  String get syncAgoNow => 'hace un momento';
+  String get syncAgoNow => 'just now';
 
   @override
   String syncAgoMinutes(int count) {
-    return 'hace $count min';
+    return '$count min ago';
   }
 
   @override
   String syncAgoHours(int count) {
-    return 'hace $count h';
+    return '$count h ago';
   }
 
   @override
   String syncAgoDays(int count) {
-    return 'hace $count d';
+    return '$count d ago';
   }
 
   @override
   String syncNotConfigured(String missing) {
-    return 'Esta versión no tiene configurado el acceso a Google (falta: $missing). Las notas siguen guardándose en este dispositivo.';
+    return 'This version doesn\'t have Google access configured (missing: $missing). Notes are still saved on this device.';
   }
 
   @override
   String get syncDisconnectedStatus =>
-      'Sin conectar. Los cuadernos se guardan solo en este dispositivo.';
+      'Not connected. Notebooks are saved only on this device.';
 
   @override
-  String get syncConnecting => 'Conectando con Google…';
+  String get syncConnecting => 'Connecting to Google…';
 
   @override
-  String get syncSyncing => 'Sincronizando…';
+  String get syncSyncing => 'Syncing…';
 
   @override
   String syncConnectedAs(String account, String last) {
-    return 'Conectado como $account\n$last';
+    return 'Connected as $account\n$last';
   }
 
   @override
-  String get syncNever => 'Todavía no se sincronizó';
+  String get syncNever => 'Not synced yet';
 
   @override
   String syncLast(String ago) {
-    return 'Última sincronización: $ago';
+    return 'Last sync: $ago';
   }
 
   @override
-  String get syncTitle => 'Sincronización con Google Drive';
+  String get syncTitle => 'Sync with Google Drive';
 
   @override
   String syncConflicts(int count) {
-    return 'Hubo $count conflicto(s): buscá las hojas \"(conflicto)\" y quedate con la que sirva.';
+    return 'There were $count conflict(s): look for the pages \"(conflict)\" and keep the one that works.';
   }
 
   @override
-  String get syncBackgroundTitle => 'Sincronizar en segundo plano';
+  String get syncBackgroundTitle => 'Sync in the background';
 
   @override
   String get syncBackgroundSubtitle =>
-      'Cada 15 minutos con red, aunque la app esté cerrada.';
+      'Every 15 minutes when there\'s a connection, even if the app is closed.';
 
   @override
-  String get syncConnect => 'Conectar con Google';
+  String get syncConnect => 'Connect with Google';
 
   @override
-  String get syncNow => 'Sincronizar ahora';
+  String get syncNow => 'Sync now';
 
   @override
-  String get syncDisconnect => 'Desconectar';
+  String get syncDisconnect => 'Disconnect';
 
   @override
   String get cryptoStatusUnknown =>
-      'Todavía no se sabe: se ve en la próxima sincronización.';
+      'Not known yet: it will show at the next sync.';
 
   @override
   String get cryptoStatusOff =>
-      'Desactivado: Google puede leer lo que se sube a tu Drive.';
+      'Off: Google can read what is uploaded to your Drive.';
 
   @override
   String get cryptoStatusOn =>
-      'Activado: en Drive solo hay archivos cifrados con tu frase.';
+      'On: the Drive only holds files encrypted with your passphrase.';
 
   @override
   String get cryptoStatusLocked =>
-      'La nube está cifrada. Ingresá la frase para poder sincronizar.';
+      'The cloud is encrypted. Enter the passphrase to sync.';
 
   @override
-  String get cryptoTitle => 'Cifrado';
+  String get cryptoTitle => 'Encryption';
 
   @override
   String get cryptoWarning =>
-      'Si olvidás la frase no hay forma de recuperar lo que está en la nube (lo de este dispositivo no se pierde). Los nombres de archivo en Drive son códigos al azar y siguen a la vista.';
+      'If you forget the passphrase, there\'s no way to recover what\'s in the cloud (what\'s on this device is not lost). File names on Drive are random codes and stay visible.';
 
   @override
-  String get cryptoEnable => 'Activar cifrado';
+  String get cryptoEnable => 'Turn on encryption';
 
   @override
-  String get cryptoEnterPass => 'Ingresar frase';
+  String get cryptoEnterPass => 'Enter passphrase';
 
   @override
-  String get cryptoDisableTitle => '¿Desactivar el cifrado?';
+  String get cryptoDisableTitle => 'Turn off encryption?';
 
   @override
   String get cryptoDisableBody =>
-      'Se vuelve a subir todo sin cifrar y se borra lo cifrado de Drive. Puede tardar si hay muchos archivos.';
+      'Everything is uploaded again unencrypted and the encrypted data is deleted from Drive. It may take a while if there are many files.';
 
   @override
-  String get cryptoDisableConfirm => 'Desactivar';
+  String get cryptoDisableConfirm => 'Turn off';
 
   @override
-  String get cryptoDisable => 'Desactivar cifrado';
+  String get cryptoDisable => 'Turn off encryption';
 
   @override
-  String get cryptoPassTitle => 'Frase de cifrado';
+  String get cryptoPassTitle => 'Passphrase';
 
   @override
   String get cryptoPassIntro =>
-      'Elegí una frase y anotala en un lugar seguro. Si la olvidás no hay forma de recuperar lo que está en la nube (lo de este dispositivo no se pierde). Se va a subir todo cifrado y borrar lo anterior de Drive.';
+      'Choose a passphrase and write it down somewhere safe. If you forget it, there\'s no way to recover what\'s in the cloud (what\'s on this device is not lost). Everything will be uploaded encrypted and the previous data deleted from Drive.';
 
   @override
-  String get cryptoPassLabel => 'Frase';
+  String get cryptoPassLabel => 'Passphrase';
 
   @override
-  String get cryptoPassRepeat => 'Repetí la frase';
+  String get cryptoPassRepeat => 'Repeat the passphrase';
 
   @override
-  String get cryptoPassMismatch => 'Las dos frases no coinciden.';
+  String get cryptoPassMismatch => 'The two passphrases don\'t match.';
 
   @override
-  String get cryptoActivate => 'Activar';
+  String get cryptoActivate => 'Turn on';
 
   @override
-  String get cryptoUnlock => 'Desbloquear';
+  String get cryptoUnlock => 'Unlock';
 
   @override
   String cryptoPassShort(int min) {
-    return 'La frase tiene que tener al menos $min caracteres.';
+    return 'The passphrase must be at least $min characters long.';
   }
 
   @override
   String get cryptoStepDeriving =>
-      'Derivando la clave (puede tardar unos segundos)…';
+      'Deriving the key (this may take a few seconds)…';
 
   @override
-  String get cryptoStepSyncBeforeEncrypt => 'Sincronizando antes de cifrar…';
+  String get cryptoStepSyncBeforeEncrypt => 'Syncing before encrypting…';
 
   @override
-  String get cryptoStepSyncBeforeDecrypt => 'Sincronizando antes de descifrar…';
+  String get cryptoStepSyncBeforeDecrypt => 'Syncing before decrypting…';
 
   @override
   String cryptoStepEncrypting(int done, int total) {
-    return 'Cifrando $done/$total…';
+    return 'Encrypting $done/$total…';
   }
 
   @override
   String cryptoStepDecrypting(int done, int total) {
-    return 'Descifrando $done/$total…';
+    return 'Decrypting $done/$total…';
   }
 
   @override
-  String get commonRename => 'Renombrar';
+  String get commonRename => 'Rename';
 
   @override
-  String get commonExport => 'Exportar';
+  String get commonExport => 'Export';
 
   @override
-  String get commonSave => 'Guardar';
+  String get commonSave => 'Save';
 
   @override
-  String get commonUpdate => 'Actualizar';
+  String get commonUpdate => 'Update';
 
   @override
-  String get commonSearch => 'Buscar';
+  String get commonSearch => 'Search';
 
   @override
   String sheetLabel(int n) {
-    return 'Hoja $n';
+    return 'Page $n';
   }
 
   @override
   String sheetLabelTitled(int n, String title) {
-    return 'Hoja $n · $title';
+    return 'Page $n · $title';
   }
 
   @override
@@ -854,8 +853,8 @@ class LEn extends L {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count hojas',
-      one: '$count hoja',
+      other: '$count pages',
+      one: '$count page',
     );
     return '$_temp0';
   }
@@ -864,348 +863,345 @@ class LEn extends L {
   String get menuInsertPdf => 'PDF';
 
   @override
-  String get menuInsertVoice => 'Grabación de voz';
+  String get menuInsertVoice => 'Voice recording';
 
   @override
-  String get menuInsertImage => 'Imagen';
+  String get menuInsertImage => 'Image';
 
   @override
-  String get menuInsertCamera => 'Cámara';
+  String get menuInsertCamera => 'Camera';
 
   @override
-  String get menuInsertAudio => 'Archivo de audio';
+  String get menuInsertAudio => 'Audio file';
 
   @override
-  String get menuInsertSticky => 'Nota adhesiva';
+  String get menuInsertSticky => 'Sticky note';
 
   @override
-  String get menuInsertSheet => 'Hoja nueva';
+  String get menuInsertSheet => 'New page';
 
   @override
-  String get menuMoreReadingExit => 'Salir del modo lectura';
+  String get menuMoreReadingExit => 'Exit reading mode';
 
   @override
-  String get menuMoreReading => 'Modo lectura';
+  String get menuMoreReading => 'Reading mode';
 
   @override
-  String get menuMoreBookmarkRemove => 'Quitar marcador';
+  String get menuMoreBookmarkRemove => 'Remove bookmark';
 
   @override
-  String get menuMoreBookmarkAdd => 'Marcar esta hoja';
+  String get menuMoreBookmarkAdd => 'Bookmark this page';
 
   @override
-  String get menuMoreFullscreen => 'Pantalla completa';
+  String get menuMoreFullscreen => 'Full screen';
 
   @override
-  String get menuMoreStyle => 'Estilo de hoja';
+  String get menuMoreStyle => 'Page style';
 
   @override
-  String get menuMorePaperColor => 'Color del papel';
+  String get menuMorePaperColor => 'Paper color';
 
   @override
-  String get menuMoreShortcuts => 'Atajos de teclado';
+  String get menuMoreShortcuts => 'Keyboard shortcuts';
 
   @override
-  String get menuMoreFavoriteRemove => 'Quitar de favoritos';
+  String get menuMoreFavoriteRemove => 'Remove from favorites';
 
   @override
-  String get menuMoreFavoriteAdd => 'Favorito';
+  String get menuMoreFavoriteAdd => 'Favorite';
 
   @override
-  String get menuMoreLockRemove => 'Quitar bloqueo';
+  String get menuMoreLockRemove => 'Remove lock';
 
   @override
-  String get menuMoreLockAdd => 'Bloquear con PIN';
+  String get menuMoreLockAdd => 'Lock with PIN';
 
   @override
-  String get menuMoreShare => 'Compartir';
+  String get menuMoreShare => 'Share';
 
   @override
-  String get menuMorePrint => 'Imprimir';
+  String get menuMorePrint => 'Print';
 
   @override
-  String get menuMoreDeleteNotebook => 'Borrar cuaderno';
+  String get menuMoreDeleteNotebook => 'Delete notebook';
 
   @override
-  String get menuExportFolderTitle => 'Exportar carpeta';
+  String get menuExportFolderTitle => 'Export folder';
 
   @override
-  String get menuExportFolderPdf => 'Un PDF por cuaderno';
+  String get menuExportFolderPdf => 'One PDF per notebook';
 
   @override
   String get menuExportFolderPng =>
-      'Una carpeta por cuaderno con una imagen por hoja';
+      'One folder per notebook, with one image per page';
 
   @override
   String get menuExportFolderVynote =>
-      'Un .vynote por cuaderno, para pasarlo a otro dispositivo';
+      'One .vynote per notebook, to move to another device';
 
   @override
   String get menuExportFormatPdf => 'PDF';
 
   @override
-  String get menuExportFormatPng => 'Imágenes (PNG)';
+  String get menuExportFormatPng => 'Images (PNG)';
 
   @override
   String get menuExportFormatVynote => 'Vynote';
 
   @override
-  String get menuExportBackground => 'Incluir el fondo de la hoja';
+  String get menuExportBackground => 'Include the page background';
 
   @override
-  String get menuExportBackgroundOff =>
-      'Apagado: solo lo escrito, sobre blanco';
+  String get menuExportBackgroundOff => 'Off: only what\'s written, on white';
 
   @override
-  String get menuExportAllPdf => 'Todo el cuaderno';
+  String get menuExportAllPdf => 'Whole notebook';
 
   @override
-  String get menuExportAllPng => 'Todas las hojas, en un .zip';
+  String get menuExportAllPng => 'All pages, in a .zip';
 
   @override
-  String get menuExportVynoteTitle => 'Cuaderno de Vynote (.vynote)';
+  String get menuExportVynoteTitle => 'Vynote notebook (.vynote)';
 
   @override
   String get menuExportVynoteHint =>
-      'Para pasarlo a otro dispositivo o hacer copia';
+      'To move to another device or make a backup';
 
   @override
-  String get menuExportSheetPdf => 'PDF de esta hoja';
+  String get menuExportSheetPdf => 'PDF of this page';
 
   @override
-  String get menuExportSheetPng => 'Imagen de esta hoja (PNG)';
+  String get menuExportSheetPng => 'Image of this page (PNG)';
 
   @override
-  String get sectionNew => 'Nueva sección';
+  String get sectionNew => 'New section';
 
   @override
-  String get sectionOptions => 'Opciones de la sección';
+  String get sectionOptions => 'Section options';
 
   @override
-  String get sectionUp => 'Subir';
+  String get sectionUp => 'Up';
 
   @override
-  String get sectionDown => 'Bajar';
+  String get sectionDown => 'Down';
 
   @override
-  String get sectionExportTitle => '¿Qué secciones exportar?';
+  String get sectionExportTitle => 'Which sections to export?';
 
   @override
-  String get sectionAll => 'Todas';
+  String get sectionAll => 'All';
 
   @override
-  String get indexTitle => 'Índice';
+  String get indexTitle => 'Index';
 
   @override
   String get indexEmpty =>
-      'Todavía no hay títulos.\nUsá la herramienta Título de la barra para marcar lo que escribiste.';
+      'There are no titles yet.\nUse the Title tool in the toolbar to mark what you wrote.';
 
   @override
   String indexLevelUp(int level) {
-    return 'Pasar a Título $level';
+    return 'Change to Title $level';
   }
 
   @override
   String indexLevelDown(int level) {
-    return 'Pasar a Título $level';
+    return 'Change to Title $level';
   }
 
   @override
-  String get indexRemove => 'Quitar del índice';
+  String get indexRemove => 'Remove from index';
 
   @override
-  String get indexRenameTitle => 'Renombrar título';
+  String get indexRenameTitle => 'Rename title';
 
   @override
-  String get searchHint =>
-      'Buscá en los textos, notas adhesivas y títulos de hojas';
+  String get searchHint => 'Search texts, sticky notes and page titles';
 
   @override
   String searchNone(String query) {
-    return 'Sin resultados para \"$query\"';
+    return 'No results for \"$query\"';
   }
 
   @override
   String searchTitleSnippet(String title) {
-    return 'Título: $title';
+    return 'Title: $title';
   }
 
   @override
-  String get paperColorIvory => 'Marfil';
+  String get paperColorIvory => 'Ivory';
 
   @override
-  String get paperColorWhite => 'Blanco';
+  String get paperColorWhite => 'White';
 
   @override
-  String get paperColorCream => 'Crema';
+  String get paperColorCream => 'Cream';
 
   @override
-  String get paperColorGray => 'Gris';
+  String get paperColorGray => 'Gray';
 
   @override
-  String get paperColorLightBlue => 'Celeste';
+  String get paperColorLightBlue => 'Light blue';
 
   @override
-  String get paperColorGreen => 'Verde';
+  String get paperColorGreen => 'Green';
 
   @override
   String styleDeleteTemplate(String name) {
-    return '¿Borrar la plantilla «$name»?';
+    return 'Delete the template «$name»?';
   }
 
   @override
-  String get styleSize => 'Tamaño';
+  String get styleSize => 'Size';
 
   @override
-  String get styleBackground => 'Fondo';
+  String get styleBackground => 'Background';
 
   @override
-  String get styleTemplates => 'Plantillas';
+  String get styleTemplates => 'Templates';
 
   @override
-  String get styleMyTemplates => 'Mis plantillas';
+  String get styleMyTemplates => 'My templates';
 
   @override
-  String get styleFromImage => 'Desde una imagen…';
+  String get styleFromImage => 'From an image…';
 
   @override
-  String get styleSpacingLined => 'Interlineado';
+  String get styleSpacingLined => 'Line spacing';
 
   @override
-  String get styleSpacingGrid => 'Cuadrícula';
+  String get styleSpacingGrid => 'Grid';
 
   @override
-  String get styleApplyTo => 'Aplicar a';
+  String get styleApplyTo => 'Apply to';
 
   @override
-  String get styleThisSheet => 'Esta hoja';
+  String get styleThisSheet => 'This page';
 
   @override
-  String get styleWholeNotebook => 'Todo el cuaderno';
+  String get styleWholeNotebook => 'Whole notebook';
 
   @override
-  String get styleTitleNew => 'Hoja nueva';
+  String get styleTitleNew => 'New page';
 
   @override
-  String get styleTitle => 'Estilo de hoja';
+  String get styleTitle => 'Page style';
 
   @override
-  String get styleApply => 'Aplicar';
+  String get styleApply => 'Apply';
 
   @override
-  String get pagesAll => 'Ver todas';
+  String get pagesAll => 'See all';
 
   @override
-  String get pagesOnlyBookmarked => 'Solo marcadas';
+  String get pagesOnlyBookmarked => 'Bookmarked only';
 
   @override
-  String get pagesNewAfter => 'Hoja nueva después de la actual';
+  String get pagesNewAfter => 'New page after the current one';
 
   @override
-  String get pagesNoBookmarks => 'No hay hojas marcadas';
+  String get pagesNoBookmarks => 'There are no bookmarked pages';
 
   @override
   String get pagesNoBookmarksHint =>
-      'No hay hojas marcadas. Usá el marcador de arriba para marcar la hoja que estás viendo.';
+      'There are no bookmarked pages. Use the bookmark button above to mark the page you\'re viewing.';
 
   @override
-  String get pagesBookmark => 'Marcar';
+  String get pagesBookmark => 'Bookmark';
 
   @override
-  String get pagesDragToMove => 'Arrastrar para mover';
+  String get pagesDragToMove => 'Drag to move';
 
   @override
-  String get pagesNewAfterMenu => 'Hoja nueva después';
+  String get pagesNewAfterMenu => 'New page after';
 
   @override
-  String get pagesNewWithTemplate => 'Hoja nueva con plantilla…';
+  String get pagesNewWithTemplate => 'New page with template…';
 
   @override
-  String get pagesDuplicate => 'Duplicar';
+  String get pagesDuplicate => 'Duplicate';
 
   @override
-  String get pagesSaveTemplate => 'Guardar como plantilla';
+  String get pagesSaveTemplate => 'Save as template';
 
   @override
-  String get pagesMoveBefore => 'Mover antes';
+  String get pagesMoveBefore => 'Move before';
 
   @override
-  String get pagesMoveAfter => 'Mover después';
+  String get pagesMoveAfter => 'Move after';
 
   @override
   String notebookTemplateDefault(int n) {
-    return 'Plantilla $n';
+    return 'Template $n';
   }
 
   @override
   String notebookTemplateFailed(String error) {
-    return 'No se pudo guardar la plantilla: $error';
+    return 'The template couldn\'t be saved: $error';
   }
 
   @override
-  String get notebookTemplateSaved => 'Plantilla guardada';
+  String get notebookTemplateSaved => 'Template saved';
 
   @override
-  String get notebookTemplateName => 'Nombre';
+  String get notebookTemplateName => 'Name';
 
   @override
   String notebookSheetNameTitle(int n) {
-    return 'Nombre de la hoja $n';
+    return 'Name of page $n';
   }
 
   @override
-  String get notebookOptional => 'Opcional';
+  String get notebookOptional => 'Optional';
 
   @override
-  String get notebookLastSheet =>
-      'No se puede borrar la única hoja del cuaderno';
+  String get notebookLastSheet => 'The notebook\'s only page can\'t be deleted';
 
   @override
   String notebookDeleteSheetTitle(int n) {
-    return 'Borrar la hoja $n';
+    return 'Delete page $n';
   }
 
   @override
   String get notebookDeleteSheetBody =>
-      'Se borra la hoja con todo lo que tiene (se puede deshacer).';
+      'The page is deleted with everything on it (this can be undone).';
 
   @override
   String notebookSheetReadFailed(String error) {
-    return 'No se pudo leer la hoja: $error';
+    return 'The page couldn\'t be read: $error';
   }
 
   @override
-  String get notebookBookmarkTitle => 'Marcador';
+  String get notebookBookmarkTitle => 'Bookmark';
 
   @override
-  String get notebookBookmarkHint => 'Nombre (opcional)';
+  String get notebookBookmarkHint => 'Name (optional)';
 
   @override
-  String get notebookBookmarkNoName => 'Sin nombre';
+  String get notebookBookmarkNoName => 'Untitled';
 
   @override
   String notebookSectionOpenFailed(String error) {
-    return 'No se pudo abrir la sección: $error';
+    return 'The section couldn\'t be opened: $error';
   }
 
   @override
   String notebookSectionDefault(int n) {
-    return 'Sección $n';
+    return 'Section $n';
   }
 
   @override
-  String get notebookSectionHint => 'Ej: Práctica';
+  String get notebookSectionHint => 'E.g.: Practice';
 
   @override
-  String get notebookSectionRename => 'Renombrar sección';
+  String get notebookSectionRename => 'Rename section';
 
   @override
   String get notebookLastSection =>
-      'No se puede borrar la única sección del cuaderno';
+      'The notebook\'s only section can\'t be deleted';
 
   @override
   String notebookDeleteSectionTitle(String name) {
-    return 'Borrar la sección \"$name\"';
+    return 'Delete section \"$name\"';
   }
 
   @override
@@ -1213,136 +1209,137 @@ class LEn extends L {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'borran $count hojas con todo lo que tienen',
-      one: 'borra 1 hoja con todo lo que tiene',
+      other: '$count pages with everything on them will be deleted',
+      one: '1 page with everything on it will be deleted',
     );
-    return 'Se $_temp0. No se puede deshacer.';
+    return '$_temp0. This can\'t be undone.';
   }
 
   @override
   String notebookInsertFailed(String error) {
-    return 'No se pudo insertar: $error';
+    return 'Couldn\'t insert: $error';
   }
 
   @override
-  String get notebookRecordingBusy => 'Ya hay una grabación en curso';
+  String get notebookRecordingBusy => 'A recording is already in progress';
 
   @override
-  String get notebookImportingPdf => 'Importando PDF';
+  String get notebookImportingPdf => 'Importing PDF';
 
   @override
-  String get notebookPickFile => 'Elegí el archivo…';
+  String get notebookPickFile => 'Choose the file…';
 
   @override
   String notebookSheetsImported(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count hojas importadas',
-      one: '$count hoja importada',
+      other: '$count pages imported',
+      one: '$count page imported',
     );
     return '$_temp0';
   }
 
   @override
-  String get notebookFavoriteAdded => 'Agregado a favoritos';
+  String get notebookFavoriteAdded => 'Added to favorites';
 
   @override
-  String get notebookFavoriteRemoved => 'Quitado de favoritos';
+  String get notebookFavoriteRemoved => 'Removed from favorites';
 
   @override
-  String get notebookUnlockTitle => 'Quitar bloqueo';
+  String get notebookUnlockTitle => 'Remove lock';
 
   @override
-  String get notebookUnlockHint => 'Ingresá el PIN actual';
+  String get notebookUnlockHint => 'Enter the current PIN';
 
   @override
-  String get notebookUnlocked => 'Cuaderno desbloqueado';
+  String get notebookUnlocked => 'Notebook unlocked';
 
   @override
-  String get notebookLockTitle => 'Bloquear cuaderno';
+  String get notebookLockTitle => 'Lock notebook';
 
   @override
-  String get notebookLockHint => 'Elegí un PIN de 4 o más números';
+  String get notebookLockHint => 'Choose a PIN of 4 or more digits';
 
   @override
-  String get notebookPinShort => 'El PIN tiene que tener al menos 4 números';
+  String get notebookPinShort => 'The PIN must have at least 4 digits';
 
   @override
-  String get notebookPinRepeat => 'Repetí el PIN';
+  String get notebookPinRepeat => 'Repeat the PIN';
 
   @override
-  String get notebookPinMismatch => 'Los PIN no coinciden';
+  String get notebookPinMismatch => 'The PINs don\'t match';
 
   @override
-  String get notebookLocked => 'Cuaderno bloqueado: se pide el PIN al abrirlo';
+  String get notebookLocked =>
+      'Notebook locked: the PIN is asked for when it\'s opened';
 
   @override
-  String get notebookSaved => 'Cuaderno guardado';
+  String get notebookSaved => 'Notebook saved';
 
   @override
   String notebookExportFailed(String error) {
-    return 'No se pudo exportar: $error';
+    return 'Couldn\'t export: $error';
   }
 
   @override
   String notebookSheetFileName(String name, int n) {
-    return '$name - hoja $n';
+    return '$name - page $n';
   }
 
   @override
-  String get notebookImageSaved => 'Imagen guardada';
+  String get notebookImageSaved => 'Image saved';
 
   @override
-  String get notebookFullscreenExit => 'Salir de pantalla completa';
+  String get notebookFullscreenExit => 'Exit full screen';
 
   @override
-  String get notebookRecording => 'Grabando';
+  String get notebookRecording => 'Recording';
 
   @override
   String notebookRecordingNamed(String name) {
-    return 'Grabando · $name';
+    return 'Recording · $name';
   }
 
   @override
-  String get notebookRecordingStop => 'Parar y guardar';
+  String get notebookRecordingStop => 'Stop and save';
 
   @override
-  String get notebookRecordingCancel => 'Cancelar y descartar';
+  String get notebookRecordingCancel => 'Cancel and discard';
 
   @override
-  String get notebookLinkFailed => 'No se pudo abrir el link';
+  String get notebookLinkFailed => 'The link couldn\'t be opened';
 
   @override
-  String get notebookSheetGone => 'La hoja ya no existe';
+  String get notebookSheetGone => 'The page no longer exists';
 
   @override
-  String get notebookBack => 'Volver a los cuadernos';
+  String get notebookBack => 'Back to notebooks';
 
   @override
-  String get notebookSearchClose => 'Cerrar búsqueda';
+  String get notebookSearchClose => 'Close search';
 
   @override
-  String get notebookInsert => 'Insertar';
+  String get notebookInsert => 'Insert';
 
   @override
-  String get notebookIndexTooltip => 'Índice';
+  String get notebookIndexTooltip => 'Index';
 
   @override
-  String get notebookSections => 'Secciones';
+  String get notebookSections => 'Sections';
 
   @override
-  String get notebookPages => 'Hojas';
+  String get notebookPages => 'Pages';
 
   @override
-  String get notebookMore => 'Más opciones';
+  String get notebookMore => 'More options';
 
   @override
-  String get notebookRemoteChanges => 'Hay cambios de otro dispositivo';
+  String get notebookRemoteChanges => 'There are changes from another device';
 
   @override
   String notebookSearchIn(String name) {
-    return 'Buscar en \"$name\"';
+    return 'Search in \"$name\"';
   }
 
   @override
@@ -1354,162 +1351,162 @@ class LEn extends L {
   String get audioPrefix => 'Audio';
 
   @override
-  String get errVoiceBusy => 'Ya hay una grabación en curso';
+  String get errVoiceBusy => 'A recording is already in progress';
 
   @override
-  String get errVoiceNoPermission => 'Sin permiso para usar el micrófono';
+  String get errVoiceNoPermission => 'No permission to use the microphone';
 
   @override
   String errVoiceFailed(String detail) {
-    return 'No se pudo grabar: $detail';
+    return 'Couldn\'t record: $detail';
   }
 
   @override
-  String get headingTitle => 'Agregar al índice';
+  String get headingTitle => 'Add to index';
 
   @override
-  String get headingFailed => 'No se pudo leer: escribí el nombre';
+  String get headingFailed => 'Couldn\'t read it: type the name';
 
   @override
-  String get headingHint => 'Nombre';
+  String get headingHint => 'Name';
 
   @override
   String get headingDownloading =>
-      'Bajando el reconocimiento de letra, solo la primera vez (podés escribir el nombre mientras tanto)…';
+      'Downloading the handwriting recognizer, only the first time (you can type the name in the meantime)…';
 
   @override
   String get headingReading =>
-      'Leyendo la letra… (podés escribir el nombre mientras tanto)';
+      'Reading the handwriting… (you can type the name in the meantime)';
 
   @override
-  String get headingMoreImportant => 'Más importante';
+  String get headingMoreImportant => 'More important';
 
   @override
-  String get headingLessImportant => 'Menos importante';
+  String get headingLessImportant => 'Less important';
 
   @override
   String headingLevel(int level) {
-    return 'Título $level';
+    return 'Title $level';
   }
 
   @override
-  String get headingAdd => 'Agregar';
+  String get headingAdd => 'Add';
 
   @override
-  String get formatBold => 'Negrita (Ctrl+B)';
+  String get formatBold => 'Bold (Ctrl+B)';
 
   @override
-  String get formatItalic => 'Cursiva (Ctrl+I)';
+  String get formatItalic => 'Italic (Ctrl+I)';
 
   @override
-  String get formatUnderline => 'Subrayado (Ctrl+U)';
+  String get formatUnderline => 'Underline (Ctrl+U)';
 
   @override
-  String get formatStrike => 'Tachado (Alt+Shift+5)';
+  String get formatStrike => 'Strikethrough (Alt+Shift+5)';
 
   @override
-  String get formatColor => 'Color del texto';
+  String get formatColor => 'Text color';
 
   @override
-  String get formatHighlight => 'Resaltado (Ctrl+Shift+H)';
+  String get formatHighlight => 'Highlight (Ctrl+Shift+H)';
 
   @override
   String get formatNormal => 'Normal';
 
   @override
-  String get formatTitle => 'Título';
+  String get formatTitle => 'Title';
 
   @override
-  String get formatSubtitle => 'Subtítulo';
+  String get formatSubtitle => 'Subtitle';
 
   @override
-  String get formatBullets => 'Viñetas (Ctrl+Shift+8)';
+  String get formatBullets => 'Bulleted (Ctrl+Shift+8)';
 
   @override
-  String get formatNumbered => 'Numerada (Ctrl+Shift+7)';
+  String get formatNumbered => 'Numbered (Ctrl+Shift+7)';
 
   @override
-  String get formatTodo => 'Lista de tareas (Ctrl+Shift+9)';
+  String get formatTodo => 'To-do list (Ctrl+Shift+9)';
 
   @override
-  String get formatOutdent => 'Menos sangría (Shift+Tab)';
+  String get formatOutdent => 'Decrease indent (Shift+Tab)';
 
   @override
-  String get formatIndent => 'Más sangría (Tab)';
+  String get formatIndent => 'Increase indent (Tab)';
 
   @override
-  String get formatAlignLeft => 'Alinear a la izquierda (Ctrl+L)';
+  String get formatAlignLeft => 'Align left (Ctrl+L)';
 
   @override
-  String get formatCenter => 'Centrar (Ctrl+E)';
+  String get formatCenter => 'Center (Ctrl+E)';
 
   @override
-  String get formatAlignRight => 'Alinear a la derecha (Ctrl+R)';
+  String get formatAlignRight => 'Align right (Ctrl+R)';
 
   @override
-  String get formatJustify => 'Justificar (Ctrl+J)';
+  String get formatJustify => 'Justify (Ctrl+J)';
 
   @override
-  String get formatSizeDown => 'Achicar letra (Ctrl+[)';
+  String get formatSizeDown => 'Decrease font size (Ctrl+[)';
 
   @override
-  String get formatSizeUp => 'Agrandar letra (Ctrl+])';
+  String get formatSizeUp => 'Increase font size (Ctrl+])';
 
   @override
-  String get formatSizeAuto => 'Automático';
+  String get formatSizeAuto => 'Automatic';
 
   @override
-  String get formatCut => 'Cortar';
+  String get formatCut => 'Cut';
 
   @override
-  String get pullDone => 'Hoja agregada';
+  String get pullDone => 'Page added';
 
   @override
-  String get pullHold => 'Mantené para agregar una hoja';
+  String get pullHold => 'Hold to add a page';
 
   @override
-  String get toolPen => 'Lápiz · tocá de nuevo para opciones';
+  String get toolPen => 'Pen · tap again for options';
 
   @override
-  String get toolHighlighter => 'Resaltador · tocá de nuevo para opciones';
+  String get toolHighlighter => 'Highlighter · tap again for options';
 
   @override
-  String get toolPaint => 'Decorador · tocá de nuevo para opciones';
+  String get toolPaint => 'Decorator · tap again for options';
 
   @override
-  String get toolShapes => 'Formas · tocá de nuevo para opciones';
+  String get toolShapes => 'Shapes · tap again for options';
 
   @override
-  String get toolText => 'Texto con teclado';
+  String get toolText => 'Text with keyboard';
 
   @override
-  String get toolSelect => 'Seleccionar';
+  String get toolSelect => 'Select';
 
   @override
-  String get toolTitle => 'Título para el índice';
+  String get toolTitle => 'Title for the index';
 
   @override
-  String get toolUndo => 'Deshacer';
+  String get toolUndo => 'Undo';
 
   @override
-  String get toolRedo => 'Rehacer';
+  String get toolRedo => 'Redo';
 
   @override
   String toolZoomLocked(int percent) {
-    return 'Zoom fijo ($percent%) · tocá para soltarlo';
+    return 'Zoom locked ($percent%) · tap to release';
   }
 
   @override
-  String get toolZoomLock => 'Fijar el zoom';
+  String get toolZoomLock => 'Lock zoom';
 
   @override
-  String get toolMoreColors => 'Más colores';
+  String get toolMoreColors => 'More colors';
 
   @override
-  String get toolPenOptions => 'Punta, grosor y opacidad';
+  String get toolPenOptions => 'Tip, width and opacity';
 
   @override
-  String get toolDragBar => 'Arrastrá para mover la barra';
+  String get toolDragBar => 'Drag to move the bar';
 
   @override
   String zoomIndicator(int percent) {
@@ -1518,390 +1515,387 @@ class LEn extends L {
 
   @override
   String zoomIndicatorLocked(int percent) {
-    return '$percent% · fijo';
+    return '$percent% · locked';
   }
 
   @override
-  String get selOrder => 'Orden';
+  String get selOrder => 'Order';
 
   @override
-  String get selFront => 'Traer al frente';
+  String get selFront => 'Bring to front';
 
   @override
-  String get selUp => 'Subir uno';
+  String get selUp => 'Move up one';
 
   @override
-  String get selDown => 'Bajar uno';
+  String get selDown => 'Move down one';
 
   @override
-  String get selBack => 'Enviar al fondo';
+  String get selBack => 'Send to back';
 
   @override
-  String get selDuplicate => 'Duplicar';
+  String get selDuplicate => 'Duplicate';
 
   @override
   String get selLink => 'Link';
 
   @override
-  String get selEditLink => 'Editar link';
+  String get selEditLink => 'Edit link';
 
   @override
-  String get selRemoveLink => 'Quitar link';
+  String get selRemoveLink => 'Remove link';
 
   @override
-  String get selStraighten => 'Enderezar';
+  String get selStraighten => 'Straighten';
 
   @override
-  String get selDelete => 'Eliminar';
+  String get selDelete => 'Delete';
 
   @override
-  String get selDeselect => 'Deseleccionar';
+  String get selDeselect => 'Deselect';
 
   @override
-  String get sheetMenuPaste => 'Pegar acá';
+  String get sheetMenuPaste => 'Paste here';
 
   @override
   String get linkTitle => 'Link';
 
   @override
-  String get linkTitleEdit => 'Editar link';
+  String get linkTitleEdit => 'Edit link';
 
   @override
-  String get linkKindWeb => 'Página web';
+  String get linkKindWeb => 'Web page';
 
   @override
-  String get linkKindSheet => 'Hoja';
+  String get linkKindSheet => 'Page';
 
   @override
-  String get linkKindNotebook => 'Cuaderno';
+  String get linkKindNotebook => 'Notebook';
 
   @override
-  String get linkUrlHint => 'dirección, ej. es.wikipedia.org';
+  String get linkUrlHint => 'address, e.g. en.wikipedia.org';
 
   @override
-  String get linkNoSheets => 'No hay hojas.';
+  String get linkNoSheets => 'There are no pages.';
 
   @override
-  String get linkNoNotebooks => 'No hay otros cuadernos.';
+  String get linkNoNotebooks => 'There are no other notebooks.';
 
   @override
-  String get stickyHint => 'Nota…';
+  String get stickyHint => 'Note…';
 
   @override
-  String get editorLinkMissingPage => 'Esa página no está en el cuaderno';
+  String get editorLinkMissingPage => 'That page isn\'t in the notebook';
 
   @override
-  String get editorRenameAudio => 'Renombrar audio';
+  String get editorRenameAudio => 'Rename audio';
 
   @override
-  String get editorPullHint =>
-      'Al final, deslizá hacia arriba y mantené para agregar una hoja';
+  String get editorPullHint => 'At the end, swipe up and hold to add a page';
 
   @override
   String editorScrollerLabel(int n, int total) {
-    return 'Hoja $n de $total';
+    return 'Page $n of $total';
   }
 
   @override
-  String get editorCopied => 'Copiado';
+  String get editorCopied => 'Copied';
 
   @override
   String editorLoadingSheet(int n) {
-    return 'Cargando la hoja $n…';
+    return 'Loading page $n…';
   }
 
   @override
-  String get tipPen => 'Bolígrafo';
+  String get tipPen => 'Ballpoint';
 
   @override
-  String get tipFountain => 'Pluma';
+  String get tipFountain => 'Fountain pen';
 
   @override
-  String get tipPencil => 'Lápiz';
+  String get tipPencil => 'Pencil';
 
   @override
-  String get tipFine => 'Fibra';
+  String get tipFine => 'Fineliner';
 
   @override
-  String get tipCalligraphy => 'Caligrafía';
+  String get tipCalligraphy => 'Calligraphy';
 
   @override
-  String get paintStyleBrush => 'Pincel';
+  String get paintStyleBrush => 'Brush';
 
   @override
-  String get paintStyleHighlighter => 'Resaltador';
+  String get paintStyleHighlighter => 'Highlighter';
 
   @override
-  String get paintStyleMarker => 'Fibra';
+  String get paintStyleMarker => 'Marker';
 
   @override
-  String get paintShapeStars => 'Estrellas';
+  String get paintShapeStars => 'Stars';
 
   @override
-  String get paintShapeHearts => 'Corazones';
+  String get paintShapeHearts => 'Hearts';
 
   @override
-  String get paintShapeSparkles => 'Destellos';
+  String get paintShapeSparkles => 'Sparkles';
 
   @override
-  String get paintShapeMoons => 'Lunas';
+  String get paintShapeMoons => 'Moons';
 
   @override
-  String get paintShapeDots => 'Puntos';
+  String get paintShapeDots => 'Dots';
 
   @override
-  String get paintShapeCircles => 'Círculos';
+  String get paintShapeCircles => 'Circles';
 
   @override
-  String get paintShapeExclamations => 'Exclamaciones';
+  String get paintShapeExclamations => 'Exclamation marks';
 
   @override
-  String get paintShapeBolts => 'Rayos';
+  String get paintShapeBolts => 'Lightning bolts';
 
   @override
-  String get paintShapeTicks => 'Ticks';
+  String get paintShapeTicks => 'Checkmarks';
 
   @override
-  String get paintShapeCrosses => 'Cruces';
+  String get paintShapeCrosses => 'Crosses';
 
   @override
-  String get paintShapeClouds => 'Nubes';
+  String get paintShapeClouds => 'Clouds';
 
   @override
-  String get paintShapeBubbles => 'Globos';
+  String get paintShapeBubbles => 'Bubbles';
 
   @override
-  String get paintShapeLeaves => 'Hojas';
+  String get paintShapeLeaves => 'Leaves';
 
   @override
-  String get paintShapePaws => 'Huellas';
+  String get paintShapePaws => 'Paw prints';
 
   @override
-  String get paintShapeTriangles => 'Triángulos';
+  String get paintShapeTriangles => 'Triangles';
 
   @override
-  String get paintShapeSquares => 'Cuadrados';
+  String get paintShapeSquares => 'Squares';
 
   @override
-  String get paintShapeDiamonds => 'Rombos';
+  String get paintShapeDiamonds => 'Diamonds';
 
   @override
-  String get paintShapeFlowers => 'Flores';
+  String get paintShapeFlowers => 'Flowers';
 
   @override
-  String get paintShapeNotes => 'Notas';
+  String get paintShapeNotes => 'Music notes';
 
   @override
-  String get shapeKindLine => 'Recta';
+  String get shapeKindLine => 'Line';
 
   @override
-  String get shapeKindArrow => 'Flecha';
+  String get shapeKindArrow => 'Arrow';
 
   @override
-  String get shapeKindRectangle => 'Rectángulo';
+  String get shapeKindRectangle => 'Rectangle';
 
   @override
-  String get shapeKindCircle => 'Círculo';
+  String get shapeKindCircle => 'Circle';
 
   @override
-  String get shapeKindEllipse => 'Elipse';
+  String get shapeKindEllipse => 'Ellipse';
 
   @override
-  String get shapeKindTriangle => 'Triángulo';
+  String get shapeKindTriangle => 'Triangle';
 
   @override
-  String get penFavorites => 'Favoritos';
+  String get penFavorites => 'Favorites';
 
   @override
-  String get penFavEdit => 'Cambiar';
+  String get penFavEdit => 'Change';
 
   @override
   String get penFavHelpEditing =>
-      'Elegí un color de la paleta o del selector: se guarda en el favorito marcado.';
+      'Choose a color from the palette or the picker: it\'s saved to the marked favorite.';
 
   @override
   String get penFavHelp =>
-      'Tocá «Cambiar» o mantené apretado un favorito para elegir su color.';
+      'Tap \"Change\" or press and hold a favorite to choose its color.';
 
   @override
-  String get penPanelHighlighter => 'Resaltador';
+  String get penPanelHighlighter => 'Highlighter';
 
   @override
-  String get penPanelPencil => 'Lápiz';
+  String get penPanelPencil => 'Pen';
 
   @override
-  String get penTip => 'Punta';
+  String get penTip => 'Tip';
 
   @override
-  String get penWidth => 'Grosor';
+  String get penWidth => 'Width';
 
   @override
-  String get penOpacity => 'Opacidad';
+  String get penOpacity => 'Opacity';
 
   @override
-  String get penSmartShapes => 'Figuras inteligentes';
+  String get penSmartShapes => 'Smart shapes';
 
   @override
-  String get penSmartShapesHint =>
-      'Mantené el lápiz quieto al terminar una forma';
+  String get penSmartShapesHint => 'Hold the pen still at the end of a shape';
 
   @override
   String get penColor => 'Color';
 
   @override
-  String get penCustomColor => 'Color personalizado';
+  String get penCustomColor => 'Custom color';
 
   @override
-  String get penEraser => 'Goma (apretá el botón del lápiz)';
+  String get penEraser => 'Eraser (press the pen button)';
 
   @override
-  String get penEraserSmall => 'Chica';
+  String get penEraserSmall => 'Small';
 
   @override
-  String get penEraserMedium => 'Mediana';
+  String get penEraserMedium => 'Medium';
 
   @override
-  String get penEraserLarge => 'Grande';
+  String get penEraserLarge => 'Large';
 
   @override
-  String get shapesTitle => 'Formas';
+  String get shapesTitle => 'Shapes';
 
   @override
-  String get shapesBorder => 'Borde';
+  String get shapesBorder => 'Border';
 
   @override
-  String get shapesBorderHint => 'El borde usa el color y el grosor del lápiz.';
+  String get shapesBorderHint => 'The border uses the pen\'s color and width.';
 
   @override
-  String get shapesFill => 'Relleno';
+  String get shapesFill => 'Fill';
 
   @override
-  String get shapesNoFill => 'La recta y la flecha no se rellenan.';
+  String get shapesNoFill => 'Lines and arrows aren\'t filled.';
 
   @override
-  String get shapesSnapGrid => 'Pegar a la cuadrícula';
+  String get shapesSnapGrid => 'Snap to grid';
 
   @override
-  String get shapesSnapGridHint =>
-      'En hojas cuadriculadas, milimetradas, de puntos o con ejes';
+  String get shapesSnapGridHint => 'On grid, millimeter, dot or axis pages';
 
   @override
-  String get paintPanelTitle => 'Decorador';
+  String get paintPanelTitle => 'Decorator';
 
   @override
-  String get paintStroke => 'Trazo';
+  String get paintStroke => 'Stroke';
 
   @override
-  String get paintWidth => 'Ancho';
+  String get paintWidth => 'Width';
 
   @override
-  String get paintBackground => 'Fondo';
+  String get paintBackground => 'Background';
 
   @override
-  String get paintGlitter => 'Brillo';
+  String get paintGlitter => 'Shine';
 
   @override
-  String get paintAmount => 'Cantidad';
+  String get paintAmount => 'Amount';
 
   @override
   String get paintAuto => 'Auto';
 
   @override
-  String get paintSize => 'Tamaño';
+  String get paintSize => 'Size';
 
   @override
   String shapeMeasureTriangle(String base, String height) {
-    return 'base $base · alto $height mm';
+    return 'base $base · height $height mm';
   }
 
   @override
-  String get librarySampleNotebook => 'Mi cuaderno';
+  String get librarySampleNotebook => 'My notebook';
 
   @override
-  String get exportFileNotebook => 'Cuaderno';
+  String get exportFileNotebook => 'Notebook';
 
   @override
-  String get exportFileFolder => 'Carpeta';
+  String get exportFileFolder => 'Folder';
 
   @override
-  String get exportFileSection => 'Sección';
+  String get exportFileSection => 'Section';
 
   @override
-  String get exportFilePage => 'página';
+  String get exportFilePage => 'page';
 
   @override
-  String get exportFileSheet => 'hoja';
+  String get exportFileSheet => 'page';
 
   @override
-  String get exportSavePdf => 'Guardar PDF';
+  String get exportSavePdf => 'Save PDF';
 
   @override
-  String get exportSaveImage => 'Guardar imagen';
+  String get exportSaveImage => 'Save image';
 
   @override
-  String get exportSaveImages => 'Guardar imágenes';
+  String get exportSaveImages => 'Save images';
 
   @override
-  String get exportSaveNotebook => 'Guardar cuaderno';
+  String get exportSaveNotebook => 'Save notebook';
 
   @override
-  String get exportSaveFolder => 'Guardar carpeta';
+  String get exportSaveFolder => 'Save folder';
 
   @override
-  String get settingsTitle => 'Ajustes';
+  String get settingsTitle => 'Settings';
 
   @override
-  String get settingsSectionLanguage => 'Idioma';
+  String get settingsSectionLanguage => 'Language';
 
   @override
-  String get settingsAppLanguage => 'Idioma de la app';
+  String get settingsAppLanguage => 'App language';
 
   @override
-  String get settingsInkLanguage => 'Idioma de la escritura a mano';
+  String get settingsInkLanguage => 'Handwriting language';
 
   @override
-  String get settingsLanguageSystem => 'Como el sistema';
+  String get settingsLanguageSystem => 'Same as system';
 
   @override
-  String get settingsInkSameAsApp => 'Igual que la app';
+  String get settingsInkSameAsApp => 'Same as app';
 
   @override
   String get settingsInkHelp =>
-      'Se usa para leer los títulos que escribís a mano. Al cambiarlo se baja el modelo nuevo (unos 20 MB) y se borra el anterior.';
+      'It\'s used to read the titles you write by hand. When you change it, the new model is downloaded (about 20 MB) and the previous one is deleted.';
 
   @override
-  String get settingsSectionUpdates => 'Actualizaciones';
+  String get settingsSectionUpdates => 'Updates';
 
   @override
-  String get settingsCheckUpdates => 'Buscar actualizaciones';
+  String get settingsCheckUpdates => 'Check for updates';
 
   @override
-  String get settingsAutoUpdates => 'Buscar actualizaciones automáticamente';
+  String get settingsAutoUpdates => 'Check for updates automatically';
 
   @override
-  String get settingsSectionAbout => 'Acerca de';
+  String get settingsSectionAbout => 'About';
 
   @override
-  String get settingsVersion => 'Versión';
+  String get settingsVersion => 'Version';
 
   @override
-  String get settingsSource => 'Código fuente';
+  String get settingsSource => 'Source code';
 
   @override
-  String get settingsLicense => 'Licencia';
+  String get settingsLicense => 'License';
 
   @override
-  String get settingsLicenseValue => 'GPL v3 o posterior';
+  String get settingsLicenseValue => 'GPL v3 or later';
 
   @override
-  String get settingsPrivacy => 'Política de privacidad';
+  String get settingsPrivacy => 'Privacy policy';
 
   @override
-  String get updateChecking => 'Buscando actualizaciones…';
+  String get updateChecking => 'Checking for updates…';
 
   @override
-  String get updateCheckFailed => 'No se pudo buscar actualizaciones ahora';
+  String get updateCheckFailed => 'Couldn\'t check for updates right now';
 
   @override
-  String get updateUpToDate => 'Ya tenés la última versión';
+  String get updateUpToDate => 'You have the latest version';
 }
