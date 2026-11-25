@@ -3772,6 +3772,51 @@ void main() {
     expect(ed.visibleSheet, 5);
   });
 
+
+  testWidgets('teléfono vertical: lectura, pantalla completa y marcador pasan al menú ⋮ y los paneles se abren encima', (t) async {
+    await start(t);
+    t.view.physicalSize = const Size(411, 890) * t.view.devicePixelRatio;
+    addTearDown(t.view.resetPhysicalSize);
+    await settle(t);
+    await createNotebook(t, 'Telefono');
+    final screen = Offset.zero & (t.view.physicalSize / t.view.devicePixelRatio);
+    expect(find.byKey(const Key('reading')), findsNothing);
+    expect(find.byKey(const Key('bookmarkSheet')), findsNothing);
+    final title = t.getRect(find.byKey(const Key('nbTitle')));
+    expect(screen.contains(title.topLeft) && screen.contains(title.bottomRight), isTrue, reason: 'el título se ve ($title)');
+
+    bool readOnly() => t.widget<PageEditor>(find.byType(PageEditor)).readOnly;
+    await t.tap(find.byKey(const Key('more')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('more-reading')));
+    await settle(t);
+    expect(readOnly(), isTrue);
+    await t.tap(find.byKey(const Key('more')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('more-reading')));
+    await settle(t);
+    expect(readOnly(), isFalse);
+
+    await t.tap(find.byKey(const Key('more')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('more-bookmark')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('bookmarkSave')));
+    await settle(t, 800);
+    expect(editor(t).doc.sheets[0].bookmark, isTrue);
+
+    await t.tap(find.byKey(const Key('pagesBtn')));
+    await settle(t, 800);
+    expect(find.byKey(const Key('panelScrim')), findsOneWidget);
+    expect((t.getRect(find.byType(PageEditor)).width - screen.width).abs(), lessThanOrEqualTo(1));
+    // el panel tapa el centro del fondo: se toca el tramo que sobra a la derecha
+    await t.tapAt(Offset(screen.width - 20, screen.height / 2));
+    await settle(t, 800);
+    expect(find.byKey(const Key('panelScrim')), findsNothing);
+    expect(t.takeException(), isNull);
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+  });
 }
 
 /// Reconocimiento de letra de mentira: siempre lee [text].

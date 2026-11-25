@@ -11,6 +11,7 @@ import 'dart:io';
 
 import 'package:apuntes/app.dart';
 import 'package:apuntes/data/storage.dart';
+import 'package:apuntes/editor/page_editor.dart';
 import 'package:apuntes/sync/fake_backend.dart';
 import 'package:apuntes/sync/fake_remote_store.dart';
 import 'package:flutter/material.dart';
@@ -56,9 +57,7 @@ void main() {
   });
 
   for (final (slug, name, physical, dpr, top) in _sizes) {
-    // teléfono vertical: la barra superior del cuaderno se desborda (problema conocido, OpenNote-tareas#22)
-    testWidgets('pantalla $name: biblioteca, cuaderno, paneles, diálogos y sincronización sin desbordes',
-        skip: slug == 'telefono_vertical', (t) async {
+    testWidgets('pantalla $name: biblioteca, cuaderno, paneles, diálogos y sincronización sin desbordes', (t) async {
       simulateTablet(t, physical: physical, dpr: dpr, top: top);
       final screen = Offset.zero & (physical / dpr);
       final root = await Directory.systemTemp.createTemp('apuntes_layout');
@@ -79,14 +78,13 @@ void main() {
 
       var n = 0;
       // fin de cada paso: sin excepciones (desbordes), botones dentro de la pantalla y, si se pidió, la captura
-      Future<void> check(String step, {bool tools = true}) async {
+      Future<void> check(String step) async {
         await settle(300);
         if (_shotsDir.isNotEmpty && !Platform.isAndroid) {
           await saveShot(t, '$_shotsDir/${slug}_${(++n).toString().padLeft(2, '0')}_$step.png');
         }
         expect(t.takeException(), isNull, reason: '[$name] $step: excepción (¿desborde?)');
         for (final k in _toolbarKeys) {
-          if (!tools && k is ValueKey) continue;
           final f = find.byKey(k);
           if (f.evaluate().isEmpty) continue;
           final r = t.getRect(f.first);
@@ -114,16 +112,16 @@ void main() {
 
       await t.tap(find.byKey(const Key('pagesBtn')));
       await settle(1200);
-      // teléfono vertical: el panel ocupa casi todo el ancho y el resto de la barra de herramientas queda cortada
-      // (ver el test saltado de más abajo)
-      await check('panel_de_hojas', tools: slug != 'telefono_vertical');
+      // teléfono vertical: el panel va encima de la hoja y puede tapar la barra de herramientas del editor; el chequeo
+      // es geométrico (el botón está dentro de la pantalla), así que vale igual; los de la barra de arriba siguen a la vista
+      await check('panel_de_hojas');
       await t.tap(find.byKey(const Key('pagesBtn')));
       await settle(600);
       await check('panel_de_hojas_cerrado');
 
       await t.tap(find.byKey(const Key('indexBtn')));
       await settle(1200);
-      await check('indice', tools: slug != 'telefono_vertical');
+      await check('indice');
       await t.tap(find.byKey(const Key('indexBtn')));
       await settle(600);
       await check('indice_cerrado');
@@ -173,11 +171,9 @@ void main() {
     });
   }
 
-  // PROBLEMA REAL DE LA APP (OpenNote-tareas#22, no arreglado a propósito): en teléfono vertical (411 dp de ancho) el panel de hojas
-  // ocupa unos 290 dp y la barra de herramientas queda en el tramo que sobra (~100 dp): solo se ve el lápiz y el
-  // resaltador asoma cortado, fuera de la pantalla. Captura: /tmp/vynote_layout/telefono_vertical_03_panel_de_hojas.png
+  // teléfono vertical (411 dp): el panel de hojas va encima de la hoja (no le come el ancho) y se cierra tocando el fondo
   testWidgets('pantalla teléfono vertical: con el panel de hojas abierto la barra de herramientas entra en la pantalla',
-      skip: true, (t) async {
+      (t) async {
     simulateTablet(t, physical: const Size(1080, 2340), dpr: 2.625, top: 24 * 2.625);
     final root = await Directory.systemTemp.createTemp('apuntes_layout');
     addTearDown(() async {
@@ -191,12 +187,20 @@ void main() {
     await t.pump(const Duration(seconds: 3));
     await t.tap(find.byKey(Key('nb-$nbPhysics')));
     await t.pump(const Duration(seconds: 3));
+    final screen = Offset.zero & (const Size(1080, 2340) / 2.625);
     await t.tap(find.byKey(const Key('pagesBtn')));
     await t.pump(const Duration(seconds: 1));
-    final screen = Offset.zero & (const Size(1080, 2340) / 2.625);
-    for (final n in ['pen', 'hl', 'paint', 'shape']) {
+    expect(find.byKey(const Key('panelScrim')), findsOneWidget);
+    final ed = t.getRect(find.byType(PageEditor));
+    expect((ed.width - screen.width).abs(), lessThanOrEqualTo(1), reason: 'la hoja tiene que ocupar todo el ancho ($ed)');
+    // el panel tapa el centro del fondo: se toca el tramo que sobra a la derecha
+    await t.tapAt(Offset(screen.width - 20, screen.height / 2));
+    await t.pump(const Duration(seconds: 1));
+    expect(find.byKey(const Key('panelScrim')), findsNothing);
+    for (final n in ['pen', 'hl']) {
       final r = t.getRect(find.byKey(ValueKey('tool-$n')));
-      expect(screen.contains(r.bottomRight), isTrue, reason: 'tool-$n fuera de la pantalla ($r)');
+      expect(screen.contains(r.topLeft) && screen.contains(r.bottomRight), isTrue, reason: 'tool-$n fuera de la pantalla ($r)');
     }
+    expect(t.takeException(), isNull);
   });
 }

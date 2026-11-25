@@ -26,10 +26,25 @@ Future<String?> showInsertMenu(BuildContext context, Offset at, {bool canvas = f
     );
 
 /// Menú ⋮ anclado en [at]. Abajo, una fila de íconos con keys `more-<valor>`.
-Future<String?> showMoreMenu(BuildContext context, Offset at, Notebook nb) => showMenu<String>(
+/// Con [compact] (teléfono vertical) arriba van lectura, marcador y pantalla completa, que no entran en la barra.
+Future<String?> showMoreMenu(BuildContext context, Offset at, Notebook nb, {({bool reading, bool bookmark})? compact}) =>
+    showMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(at.dx - 260, at.dy, at.dx, at.dy),
       items: [
+        if (compact != null) ...[
+          PopupMenuItem(
+              value: 'reading',
+              key: const Key('more-reading'),
+              child: MenuRow(Symbols.menu_book, compact.reading ? 'Salir del modo lectura' : 'Modo lectura')),
+          PopupMenuItem(
+              value: 'bookmark',
+              key: const Key('more-bookmark'),
+              child: MenuRow(Symbols.bookmark, compact.bookmark ? 'Quitar marcador' : 'Marcar esta hoja')),
+          const PopupMenuItem(
+              value: 'fullscreen', key: Key('more-fullscreen'), child: MenuRow(Symbols.open_in_full, 'Pantalla completa')),
+          const PopupMenuDivider(),
+        ],
         const PopupMenuItem(value: 'search', child: MenuRow(Symbols.search, 'Buscar')),
         PopupMenuItem(value: 'style', child: MenuRow(Symbols.palette, nb.canvas ? 'Color del papel' : 'Estilo de hoja')),
         const PopupMenuItem(value: 'shortcuts', child: MenuRow(Symbols.keyboard, 'Atajos de teclado')),

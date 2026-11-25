@@ -179,6 +179,9 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     if (mounted) Navigator.of(context).pop(result);
   }
 
+  /// Teléfono vertical: la barra de arriba se achica y los paneles van encima de la hoja.
+  bool get _compact => MediaQuery.sizeOf(context).width < 640;
+
   // ================= hojas =================
   int get curSheet => doc == null ? 0 : sheetNotifier.value.clamp(0, doc!.sheetCount - 1);
 
@@ -646,6 +649,12 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
   /// También lo usan los tests.
   Future<void> runMore(String v) async {
     switch (v) {
+      case 'reading':
+        setState(() => reading = !reading);
+      case 'bookmark':
+        if (doc != null) await _bookmarkCurrent();
+      case 'fullscreen':
+        _toggleFullscreen();
       case 'search':
         setState(() {
           searching = true;
@@ -910,11 +919,11 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
               if (!fullscreen) _topBar(cs),
               if (!fullscreen && widget.sync != null) _remoteBanner(cs),
               Expanded(
-                child: Row(children: [
+                child: _overPanels(Row(children: [
                   AnimatedSize(
                     duration: const Duration(milliseconds: 240),
                     curve: Curves.easeOutQuart,
-                    child: panel && !fullscreen && !nb.canvas ? _pagesPanel() : const SizedBox(width: 0),
+                    child: !_compact && panel && !fullscreen && !nb.canvas ? _pagesPanel() : const SizedBox(width: 0),
                   ),
                   Expanded(
                     child: doc == null
@@ -940,9 +949,9 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
                   AnimatedSize(
                     duration: const Duration(milliseconds: 240),
                     curve: Curves.easeOutQuart,
-                    child: indexOpen && !fullscreen ? _indexPanel() : const SizedBox(width: 0),
+                    child: !_compact && indexOpen && !fullscreen ? _indexPanel() : const SizedBox(width: 0),
                   ),
-                ]),
+                ])),
               ),
             ]),
             if (searching && !fullscreen)
@@ -1026,6 +1035,28 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         },
       );
 
+  /// En modo compacto los paneles de hojas e índice van encima de la hoja, con un fondo oscuro que los cierra al tocarlo.
+  Widget _overPanels(Widget row) {
+    if (!_compact) return row;
+    final pages = panel && !fullscreen && !nb.canvas, index = indexOpen && !fullscreen;
+    return Stack(children: [
+      row,
+      if (pages || index)
+        Positioned.fill(
+          child: GestureDetector(
+            key: const Key('panelScrim'),
+            onTap: () => setState(() {
+              panel = false;
+              indexOpen = false;
+            }),
+            child: const ColoredBox(color: Colors.black54),
+          ),
+        ),
+      if (pages) Positioned(left: 0, top: 0, bottom: 0, child: Material(elevation: 8, child: _pagesPanel())),
+      if (index) Positioned(right: 0, top: 0, bottom: 0, child: Material(elevation: 8, child: _indexPanel())),
+    ]);
+  }
+
   // (mientras se cambia de sección no hay documento: el panel deja su lugar vacío)
   Widget _pagesPanel() => doc == null ? const SizedBox(width: 300) : PagesPanel(
         doc: doc!,
@@ -1037,7 +1068,10 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         onToggleBookmarksFilter: () => setState(() => onlyBookmarks = !onlyBookmarks),
         onSearch: () => setState(() => searching = true),
         onAdd: () => _addSheetAfter(curSheet),
-        onOpen: _goTo,
+        onOpen: (k) {
+          _goTo(k);
+          if (_compact && panel) setState(() => panel = false);
+        },
         onToggleBookmark: _toggleBookmark,
         onAction: _sheetAction,
         onMove: _moveSheet,
@@ -1103,6 +1137,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     }
     sheetNotifier.value = e.sheet;
     editorKey.currentState?.scrollToSheetY(e.sheet, e.y);
+    if (_compact && indexOpen) setState(() => indexOpen = false);
   }
 
   /// Renombrar, cambiar de nivel o quitar un título desde el panel (puede ser de cualquier sección).
@@ -1168,19 +1203,27 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
           act(Symbols.close, 'Cerrar búsqueda', _closeSearch)
         else ...[
           if (widget.sync != null && widget.onOpenSync != null) SyncIndicator(sync: widget.sync!, onTap: widget.onOpenSync!),
-          act(Symbols.menu_book, reading ? 'Salir del modo lectura' : 'Modo lectura', () => setState(() => reading = !reading),
-              on: reading, key: const Key('reading')),
+          if (!_compact)
+            act(Symbols.menu_book, reading ? 'Salir del modo lectura' : 'Modo lectura', () => setState(() => reading = !reading),
+                on: reading, key: const Key('reading')),
           menuBtn(Symbols.add, 'Insertar', const Key('insert'), (at) async {
             final v = await showInsertMenu(context, at, canvas: nb.canvas);
             if (v != null && mounted) await runInsert(v);
           }),
-          act(Symbols.toc, 'Índice', () => setState(() => indexOpen = !indexOpen), on: indexOpen, key: const Key('indexBtn')),
+          act(Symbols.toc, 'Índice', () => setState(() {
+                indexOpen = !indexOpen;
+                if (_compact && indexOpen) panel = false;
+              }), on: indexOpen, key: const Key('indexBtn')),
           if (nb.canvas)
             // sin panel de hojas: las secciones (cada una es otro lienzo) se abren desde acá
             menuBtn(Symbols.layers, 'Secciones', const Key('sectionsBtn'), (at) => _sectionsList(Rect.fromLTWH(at.dx - 40, at.dy - 40, 40, 40)))
           else
-            act(Symbols.view_sidebar, 'Hojas', () => setState(() => panel = !panel), on: panel, key: const Key('pagesBtn')),
-          act(Symbols.open_in_full, 'Pantalla completa', _toggleFullscreen),
+            act(Symbols.view_sidebar, 'Hojas', () => setState(() {
+                  panel = !panel;
+                  if (_compact && panel) indexOpen = false;
+                }), on: panel, key: const Key('pagesBtn')),
+          if (!_compact) act(Symbols.open_in_full, 'Pantalla completa', _toggleFullscreen),
+          if (!_compact)
           ListenableBuilder(
             listenable: Listenable.merge([sheetNotifier, _structure]),
             builder: (_, _) {
@@ -1198,7 +1241,8 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
             },
           ),
           menuBtn(Symbols.more_vert, 'Más opciones', const Key('more'), (at) async {
-            final v = await showMoreMenu(context, at, nb);
+            final v = await showMoreMenu(context, at, nb,
+                compact: _compact ? (reading: reading, bookmark: doc != null && doc!.sheets[curSheet].bookmark) : null);
             if (v != null && mounted) await runMore(v);
           }),
         ],
