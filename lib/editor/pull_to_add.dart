@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import '../l10n/l10n.dart';
 
 /// Hoja nueva: al final de la página, tirar hacia arriba y mantener hasta que se llene el círculo.
 class PullToAddSheet {
@@ -117,7 +118,7 @@ class PullIndicator extends StatelessWidget {
                     ),
                     const SizedBox(width: 10),
                     Text(
-                      done ? 'Hoja agregada' : 'Mantené para agregar una hoja',
+                      done ? context.l10n.pullDone : context.l10n.pullHold,
                       style: TextStyle(color: cs.onSurface, fontSize: 14),
                     ),
                   ]),

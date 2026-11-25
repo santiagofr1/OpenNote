@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../domain/domain.dart';
+import '../l10n/l10n.dart';
 
 /// Barra de herramientas del editor. Zonas de tamaño fijo para que nada salte al cambiar de herramienta.
 /// Arriba:   [mover][herramientas] | [colores][más colores][grosor] | [deshacer][rehacer][candado]
@@ -49,27 +50,27 @@ class EditorToolbar extends StatelessWidget {
       final children = <Widget>[
         grip,
         if (vertical) const SizedBox(height: 4),
-        _toolBtn(cs, Tool.pen, Symbols.stylus, 'Lápiz · tocá de nuevo para opciones', ts.pen),
-        _toolBtn(cs, Tool.hl, Symbols.ink_highlighter, 'Resaltador · tocá de nuevo para opciones', ts.hl),
-        _toolBtn(cs, Tool.paint, Symbols.brush, 'Decorador · tocá de nuevo para opciones', ts.paint),
-        _toolBtn(cs, Tool.shape, Symbols.shapes, 'Formas · tocá de nuevo para opciones', ts.pen),
-        _toolBtn(cs, Tool.text, Symbols.keyboard, 'Texto con teclado', null),
-        _toolBtn(cs, Tool.select, Symbols.highlight_alt, 'Seleccionar', null),
-        _toolBtn(cs, Tool.title, Symbols.format_list_numbered, 'Título para el índice', null),
+        _toolBtn(cs, Tool.pen, Symbols.stylus, context.l10n.toolPen, ts.pen),
+        _toolBtn(cs, Tool.hl, Symbols.ink_highlighter, context.l10n.toolHighlighter, ts.hl),
+        _toolBtn(cs, Tool.paint, Symbols.brush, context.l10n.toolPaint, ts.paint),
+        _toolBtn(cs, Tool.shape, Symbols.shapes, context.l10n.toolShapes, ts.pen),
+        _toolBtn(cs, Tool.text, Symbols.keyboard, context.l10n.toolText, null),
+        _toolBtn(cs, Tool.select, Symbols.highlight_alt, context.l10n.toolSelect, null),
+        _toolBtn(cs, Tool.title, Symbols.format_list_numbered, context.l10n.toolTitle, null),
         _divider(cs),
         AnimatedOpacity(
           opacity: drawing ? 1 : .38,
           duration: const Duration(milliseconds: 160),
           child: Flex(direction: axis, mainAxisSize: MainAxisSize.min, children: [
             for (final (i, c) in ts.favorites.take(nColors).indexed) _swatch(cs, c, drawing && cur.color == c, slot: i),
-            _moreColors(cs, drawing && !ts.favorites.contains(cur.color), cur.color),
-            _widthBtn(cs, cur),
+            _moreColors(context, cs, drawing && !ts.favorites.contains(cur.color), cur.color),
+            _widthBtn(context, cs, cur),
           ]),
         ),
         _divider(cs),
-        _icon(cs, Symbols.undo, 'Deshacer', canUndo ? onUndo : null),
-        _icon(cs, Symbols.redo, 'Rehacer', canRedo ? onRedo : null),
-        _lockBtn(cs),
+        _icon(cs, Symbols.undo, context.l10n.toolUndo, canUndo ? onUndo : null),
+        _icon(cs, Symbols.redo, context.l10n.toolRedo, canRedo ? onRedo : null),
+        _lockBtn(context, cs),
       ];
       return Container(
         width: vertical ? 60 : null,
@@ -101,10 +102,10 @@ class EditorToolbar extends StatelessWidget {
   /// Ancho (dp) de la barra horizontal sin los colores favoritos. Medido: 676 con fondo y pegar, menos 44 de Pegar y 48 del fondo, más 46 de Formas.
   static const _fixedWidth = 632.0;
 
-  Widget _lockBtn(ColorScheme cs) {
+  Widget _lockBtn(BuildContext context, ColorScheme cs) {
     final on = ts.zoomLocked;
     return Tooltip(
-      message: on ? 'Zoom fijo (${(ts.zoom * 100).round()}%) · tocá para soltarlo' : 'Fijar el zoom',
+      message: on ? context.l10n.toolZoomLocked((ts.zoom * 100).round()) : context.l10n.toolZoomLock,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: onToggleZoomLock,
@@ -214,8 +215,8 @@ class EditorToolbar extends StatelessWidget {
         ),
       );
 
-  Widget _moreColors(ColorScheme cs, bool on, String color) => Tooltip(
-        message: 'Más colores',
+  Widget _moreColors(BuildContext context, ColorScheme cs, bool on, String color) => Tooltip(
+        message: context.l10n.toolMoreColors,
         child: InkWell(
           key: const ValueKey('moreColors'),
           customBorder: const CircleBorder(),
@@ -247,11 +248,11 @@ class EditorToolbar extends StatelessWidget {
   ]);
 
   /// Muestra el grosor actual: punto para el lápiz, barrita para el resaltador.
-  Widget _widthBtn(ColorScheme cs, PenPreset p) {
+  Widget _widthBtn(BuildContext context, ColorScheme cs, PenPreset p) {
     final hl = ts.tool == Tool.hl || ts.tool == Tool.paint;
     final d = hl ? (p.width / 60 * 18).clamp(5.0, 18.0) : p.width.clamp(2.5, 16.0);
     return Tooltip(
-      message: 'Punta, grosor y opacidad',
+      message: context.l10n.toolPenOptions,
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
         onTap: onOpenPanel,

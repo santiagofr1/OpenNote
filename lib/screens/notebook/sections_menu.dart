@@ -3,6 +3,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import '../../domain/domain.dart';
 import '../../widgets/menu_row.dart';
+import '../../l10n/l10n.dart';
 
 /// Qué se pidió en la lista de secciones.
 enum SectionAction { open, create, rename, moveUp, moveDown, delete }
@@ -41,7 +42,7 @@ Future<SectionPick?> showSectionsList(BuildContext context, Rect anchor, Noteboo
                     key: const Key('newSection'),
                     dense: true,
                     leading: Icon(Symbols.add, weight: 300, color: cs.primary),
-                    title: Text('Nueva sección', style: TextStyle(color: cs.primary)),
+                    title: Text(ctx.l10n.sectionNew, style: TextStyle(color: cs.primary)),
                     onTap: () => Navigator.pop(ctx, (action: SectionAction.create, id: null)),
                   ),
                 ]),
@@ -63,27 +64,27 @@ Widget _row(BuildContext ctx, ColorScheme cs, Notebook nb, int i) {
     selectedColor: cs.onSecondaryContainer,
     leading: Icon(isActive ? Symbols.folder_open : Symbols.folder, weight: 300, fill: isActive ? 1 : 0),
     title: Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-    subtitle: Text('$n ${n == 1 ? 'hoja' : 'hojas'}'),
+    subtitle: Text(ctx.l10n.sheetCountPlural(n)),
     trailing: PopupMenuButton<SectionAction>(
       key: Key('sectionMenu-${s.id}'),
-      tooltip: 'Opciones de la sección',
+      tooltip: ctx.l10n.sectionOptions,
       icon: Icon(Symbols.more_vert, weight: 300, color: cs.onSurfaceVariant),
       onSelected: (a) => Navigator.pop(ctx, (action: a, id: s.id)),
       itemBuilder: (_) => [
-        const PopupMenuItem(value: SectionAction.rename, key: Key('sectionRename'), child: MenuRow(Symbols.edit, 'Renombrar')),
+        PopupMenuItem(value: SectionAction.rename, key: const Key('sectionRename'), child: MenuRow(Symbols.edit, ctx.l10n.commonRename)),
         PopupMenuItem(
-            value: SectionAction.moveUp, key: const Key('sectionUp'), enabled: i > 0, child: const MenuRow(Symbols.arrow_upward, 'Subir')),
+            value: SectionAction.moveUp, key: const Key('sectionUp'), enabled: i > 0, child: MenuRow(Symbols.arrow_upward, ctx.l10n.sectionUp)),
         PopupMenuItem(
             value: SectionAction.moveDown,
             key: const Key('sectionDown'),
             enabled: i < nb.sections.length - 1,
-            child: const MenuRow(Symbols.arrow_downward, 'Bajar')),
+            child: MenuRow(Symbols.arrow_downward, ctx.l10n.sectionDown)),
         const PopupMenuDivider(),
         PopupMenuItem(
             value: SectionAction.delete,
             key: const Key('sectionDelete'),
             enabled: !only,
-            child: const MenuRow(Symbols.delete, 'Borrar', danger: true)),
+            child: MenuRow(Symbols.delete, ctx.l10n.commonDelete, danger: true)),
       ],
     ),
     onTap: () => Navigator.pop(ctx, (action: SectionAction.open, id: s.id)),
@@ -103,7 +104,7 @@ Future<Set<String>?> askExportSections(BuildContext context, Notebook nb) async 
         final all = picked.length == nb.sections.length;
         return AlertDialog(
           scrollable: true,
-          title: const Text('¿Qué secciones exportar?'),
+          title: Text(ctx.l10n.sectionExportTitle),
           contentPadding: const EdgeInsets.fromLTRB(8, 12, 8, 0),
           content: SizedBox(
             width: 360,
@@ -112,7 +113,7 @@ Future<Set<String>?> askExportSections(BuildContext context, Notebook nb) async 
                 key: const Key('exportSectionsAll'),
                 dense: true,
                 value: all,
-                title: const Text('Todas'),
+                title: Text(ctx.l10n.sectionAll),
                 onChanged: (v) => setState(() {
                   picked.clear();
                   if (v ?? false) picked.addAll(nb.sections.map((s) => s.id));
@@ -125,17 +126,17 @@ Future<Set<String>?> askExportSections(BuildContext context, Notebook nb) async 
                   dense: true,
                   value: picked.contains(s.id),
                   title: Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                  subtitle: Text('${nb.sheetCountOf(s.id)} ${nb.sheetCountOf(s.id) == 1 ? 'hoja' : 'hojas'}'),
+                  subtitle: Text(ctx.l10n.sheetCountPlural(nb.sheetCountOf(s.id))),
                   onChanged: (v) => setState(() => (v ?? false) ? picked.add(s.id) : picked.remove(s.id)),
                 ),
             ]),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(ctx.l10n.commonCancel)),
             FilledButton(
                 key: const Key('exportSectionsOk'),
                 onPressed: picked.isEmpty ? null : () => Navigator.pop(ctx, Set.of(picked)),
-                child: const Text('Exportar')),
+                child: Text(ctx.l10n.commonExport)),
           ],
         );
       },

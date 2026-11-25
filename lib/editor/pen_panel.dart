@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart' show EagerGestureRecognizer;
 import 'package:flutter/material.dart';
 
 import '../domain/domain.dart';
+import '../l10n/l10n.dart';
 import '../rendering/stroke_painter.dart';
 import '../theme/colors.dart';
 
@@ -97,14 +98,14 @@ mixin _PanelParts<T extends StatefulWidget> on State<T> {
 
   /// Rótulo "Favoritos" con el botón Cambiar / Listo.
   Widget _favHeader(bool editing, VoidCallback onToggle) => Row(children: [
-        Expanded(child: _label('Favoritos')),
-        TextButton(key: const Key('favEdit'), onPressed: onToggle, child: Text(editing ? 'Listo' : 'Cambiar')),
+        Expanded(child: _label(context.l10n.penFavorites)),
+        TextButton(key: const Key('favEdit'), onPressed: onToggle, child: Text(editing ? context.l10n.commonDone : context.l10n.penFavEdit)),
       ]);
 
   Widget _favHelp(bool editing) => Text(
         editing
-            ? 'Elegí un color de la paleta o del selector: se guarda en el favorito marcado.'
-            : 'Tocá «Cambiar» o mantené apretado un favorito para elegir su color.',
+            ? context.l10n.penFavHelpEditing
+            : context.l10n.penFavHelp,
         style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
       );
 
@@ -198,12 +199,12 @@ class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(isHl ? 'Resaltador' : 'Lápiz', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+        Text(isHl ? context.l10n.penPanelHighlighter : context.l10n.penPanelPencil, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
         const SizedBox(height: 12),
 
         if (!isHl) ...[
-          _label('Punta'),
-          Row(children: [for (final (id, name) in tips) _tipCell(p, id, name)]),
+          _label(context.l10n.penTip),
+          Row(children: [for (final (id, name) in tips) _tipCell(p, id, name(context.l10n))]),
           const SizedBox(height: 10),
           const SizedBox(height: 14),
         ],
@@ -216,13 +217,13 @@ class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
         ),
         const SizedBox(height: 10),
 
-        _sliderRow('Grosor', p.width.toStringAsFixed(p.width < 10 ? 1 : 0), Slider(
+        _sliderRow(context.l10n.penWidth, p.width.toStringAsFixed(p.width < 10 ? 1 : 0), Slider(
           value: p.width.clamp(minW, maxW),
           min: minW,
           max: maxW,
           onChanged: (v) => _set(() => p.width = (v * 10).round() / 10),
         )),
-        _sliderRow('Opacidad', '${(p.opacity * 100).round()}%', Slider(
+        _sliderRow(context.l10n.penOpacity, '${(p.opacity * 100).round()}%', Slider(
           value: p.opacity,
           min: .1,
           max: 1,
@@ -233,8 +234,8 @@ class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
         Row(children: [
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              _label('Figuras inteligentes'),
-              Text('Mantené el lápiz quieto al terminar una forma',
+              _label(context.l10n.penSmartShapes),
+              Text(context.l10n.penSmartShapesHint,
                   style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
             ]),
           ),
@@ -250,7 +251,7 @@ class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
         const SizedBox(height: 4),
         _favHelp(editFav != null),
         const SizedBox(height: 10),
-        _label('Color'),
+        _label(context.l10n.penColor),
         if (isHl)
           Wrap(spacing: 6, runSpacing: 6, children: [for (final c in hlPalette) _swatch(c, c == p.color)])
         else ...[
@@ -269,7 +270,7 @@ class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
         TextButton.icon(
           onPressed: () => setState(() => custom = !custom),
           icon: Icon(custom ? Icons.expand_less : Icons.palette_outlined, size: 18),
-          label: const Text('Color personalizado'),
+          label: Text(context.l10n.penCustomColor),
         ),
         if (custom) _ColorPicker(color: p.color, onChanged: (hex) => _choose(hex, remember: false)),
 
@@ -277,13 +278,13 @@ class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
           const SizedBox(height: 14),
           const Divider(height: 1),
           const SizedBox(height: 12),
-          _label('Goma (apretá el botón del lápiz)'),
+          _label(context.l10n.penEraser),
           Row(children: [
             for (var i = 0; i < 3; i++)
               Padding(
                 padding: const EdgeInsets.only(right: 8),
                 child: ChoiceChip(
-                  label: Text(['Chica', 'Mediana', 'Grande'][i]),
+                  label: Text([context.l10n.penEraserSmall, context.l10n.penEraserMedium, context.l10n.penEraserLarge][i]),
                   selected: ts.eraserSize == i,
                   onSelected: (_) => _set(() => ts.eraserSize = i),
                 ),
@@ -364,20 +365,20 @@ class _ShapePanelState extends State<_ShapePanel> with _PanelParts<_ShapePanel> 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('Formas', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+        Text(context.l10n.shapesTitle, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
         const SizedBox(height: 12),
-        Row(children: [for (final (id, name) in shapeKinds) _kindCell(cs, id, name)]),
+        Row(children: [for (final (id, name) in shapeKinds) _kindCell(cs, id, name(context.l10n))]),
         const SizedBox(height: 14),
-        _label('Borde'),
-        Text('El borde usa el color y el grosor del lápiz.', style: sub),
+        _label(context.l10n.shapesBorder),
+        Text(context.l10n.shapesBorderHint, style: sub),
         const SizedBox(height: 8),
         Wrap(spacing: 6, runSpacing: 6, children: [for (final c in ts.penFav) _dot(c, c == ts.pen.color, () => _set(() => ts.pickColor(c)), key: Key('shapePen-${c.substring(1)}'))]),
         const Divider(height: 24),
         Row(children: [
-          Expanded(child: _label('Relleno')),
+          Expanded(child: _label(context.l10n.shapesFill)),
           Switch(key: const Key('shapeFillSwitch'), value: ts.shapeFill, onChanged: (v) => _set(() => ts.shapeFill = v)),
         ]),
-        if (!shapeFillable(ts.shapeKind)) Text('La recta y la flecha no se rellenan.', style: sub),
+        if (!shapeFillable(ts.shapeKind)) Text(context.l10n.shapesNoFill, style: sub),
         if (ts.shapeFill) ...[
           const SizedBox(height: 6),
           Wrap(spacing: 6, runSpacing: 6, children: [for (final c in fills) _dot(c, c == ts.shapeFillColor, () => _set(() => ts.shapeFillColor = c), key: Key('shapeFill-${c.substring(1)}'))]),
@@ -385,7 +386,7 @@ class _ShapePanelState extends State<_ShapePanel> with _PanelParts<_ShapePanel> 
             key: const Key('shapeFillCustom'),
             onPressed: () => setState(() => custom = !custom),
             icon: Icon(custom ? Icons.expand_less : Icons.palette_outlined, size: 18),
-            label: const Text('Color personalizado'),
+            label: Text(context.l10n.penCustomColor),
           ),
           if (custom) _ColorPicker(color: ts.shapeFillColor, onChanged: (hex) => _set(() => ts.shapeFillColor = hex)),
         ],
@@ -393,8 +394,8 @@ class _ShapePanelState extends State<_ShapePanel> with _PanelParts<_ShapePanel> 
         Row(children: [
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              _label('Pegar a la cuadrícula'),
-              Text('En hojas cuadriculadas, milimetradas, de puntos o con ejes', style: sub),
+              _label(context.l10n.shapesSnapGrid),
+              Text(context.l10n.shapesSnapGridHint, style: sub),
             ]),
           ),
           Switch(key: const Key('shapeGridSwitch'), value: ts.shapeGrid, onChanged: (v) => _set(() => ts.shapeGrid = v)),
@@ -689,7 +690,7 @@ class _PaintPanelState extends State<_PaintPanel> with _PanelParts<_PaintPanel> 
       Padding(
         padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Decorador', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+          Text(context.l10n.paintPanelTitle, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
           const SizedBox(height: 10),
           Container(
             key: const Key('paintPreview'),
@@ -705,17 +706,17 @@ class _PaintPanelState extends State<_PaintPanel> with _PanelParts<_PaintPanel> 
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            _label('Trazo'),
-            Row(children: [for (final (id, name) in paintStyles) _styleCell(scheme, id, name)]),
+            _label(context.l10n.paintStroke),
+            Row(children: [for (final (id, name) in paintStyles) _styleCell(scheme, id, name(context.l10n))]),
             const SizedBox(height: 10),
-            _sliderRow('Ancho', p.width.round().toString(), Slider(
+            _sliderRow(context.l10n.paintWidth, p.width.round().toString(), Slider(
               value: p.width.clamp(16.0, 70.0),
               min: 16,
               max: 70,
               onChanged: (v) => _set(() => p.width = v.roundToDouble()),
             )),
             const Divider(height: 20),
-            _switchRow('Fondo', const Key('paintBgSwitch'), pp.bg, _canOff(false, true, true), (on) => _pp((q) => q.copyWith(bg: on))),
+            _switchRow(context.l10n.paintBackground, const Key('paintBgSwitch'), pp.bg, _canOff(false, true, true), (on) => _pp((q) => q.copyWith(bg: on))),
             if (pp.bg) ...[
               _favHeader(editFav != null, _toggleEdit),
               Wrap(spacing: 6, runSpacing: 6, children: [
@@ -732,11 +733,11 @@ class _PaintPanelState extends State<_PaintPanel> with _PanelParts<_PaintPanel> 
                 key: const Key('paintBgCustom'),
                 onPressed: () => setState(() => bgCustom = !bgCustom),
                 icon: Icon(bgCustom ? Icons.expand_less : Icons.palette_outlined, size: 18),
-                label: const Text('Color personalizado'),
+                label: Text(context.l10n.penCustomColor),
               ),
               if (bgCustom) _ColorPicker(color: p.color, onChanged: (hex) => _choose(hex, remember: false)),
               const SizedBox(height: 4),
-              _sliderRow('Opacidad', '${(p.opacity * 100).round()}%', Slider(
+              _sliderRow(context.l10n.penOpacity, '${(p.opacity * 100).round()}%', Slider(
                 value: p.opacity.clamp(.2, 1.0),
                 min: .2,
                 max: 1,
@@ -744,15 +745,15 @@ class _PaintPanelState extends State<_PaintPanel> with _PanelParts<_PaintPanel> 
               )),
             ],
             const Divider(height: 20),
-            _switchRow('Brillo', const Key('paintGlitterSwitch'), _glitterOn, _canOff(true, false, true), (on) => _pp((q) => q.copyWith(glitter: on ? .5 : 0))),
+            _switchRow(context.l10n.paintGlitter, const Key('paintGlitterSwitch'), _glitterOn, _canOff(true, false, true), (on) => _pp((q) => q.copyWith(glitter: on ? .5 : 0))),
             if (_glitterOn)
-              _sliderRow('Cantidad', '${(pp.glitter * 100).round()}%', Slider(
+              _sliderRow(context.l10n.paintAmount, '${(pp.glitter * 100).round()}%', Slider(
                 value: pp.glitter,
                 min: .05,
                 onChanged: (v) => _pp((q) => q.copyWith(glitter: (v * 100).round() / 100)),
               )),
             const Divider(height: 20),
-            _switchRow('Formas', const Key('paintShapesSwitch'), pp.shapes, _canOff(true, true, false), (on) => _pp((q) => q.copyWith(shapes: on))),
+            _switchRow(context.l10n.shapesTitle, const Key('paintShapesSwitch'), pp.shapes, _canOff(true, true, false), (on) => _pp((q) => q.copyWith(shapes: on))),
             if (pp.shapes) ..._shapeOptions(scheme),
           ]),
         ),
@@ -816,7 +817,7 @@ class _PaintPanelState extends State<_PaintPanel> with _PanelParts<_PaintPanel> 
                 SizedBox(height: 28, width: 28, child: CustomPaint(painter: _ShapePainter(id.substring(6), scheme.onSurface.withValues(alpha: .75)))),
                 const SizedBox(height: 2),
                 Flexible(
-                  child: Text(name, style: TextStyle(fontSize: 10.5, color: p.tip == id ? scheme.primary : scheme.onSurface), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  child: Text(name(context.l10n), style: TextStyle(fontSize: 10.5, color: p.tip == id ? scheme.primary : scheme.onSurface), maxLines: 1, overflow: TextOverflow.ellipsis),
                 ),
               ]),
             ),
@@ -834,7 +835,7 @@ class _PaintPanelState extends State<_PaintPanel> with _PanelParts<_PaintPanel> 
               borderRadius: BorderRadius.circular(15),
               border: Border.all(color: pp.shapeColor == null ? kAccent : const Color(0x33000000), width: pp.shapeColor == null ? 2 : 1),
             ),
-            child: const Text('Auto', style: TextStyle(fontSize: 12)),
+            child: Text(context.l10n.paintAuto, style: const TextStyle(fontSize: 12)),
           ),
         ),
         for (final c in paintShapeColors) _dot(_shapeSwatch(c), c == pp.shapeColor, () => _pp((q) => q.copyWith(shapeColor: c)), key: Key('shapeColor-$c')),
@@ -845,15 +846,15 @@ class _PaintPanelState extends State<_PaintPanel> with _PanelParts<_PaintPanel> 
         key: const Key('paintShapeCustom'),
         onPressed: () => setState(() => shapeCustom = !shapeCustom),
         icon: Icon(shapeCustom ? Icons.expand_less : Icons.palette_outlined, size: 18),
-        label: const Text('Color personalizado'),
+        label: Text(context.l10n.penCustomColor),
       ),
       if (shapeCustom) _ColorPicker(color: custom, onChanged: (hex) => _pp((q) => q.copyWith(shapeColor: hex))),
       const SizedBox(height: 6),
-      _sliderRow('Cantidad', '${(pp.density * 100).round()}%', Slider(
+      _sliderRow(context.l10n.paintAmount, '${(pp.density * 100).round()}%', Slider(
         value: pp.density,
         onChanged: (v) => _pp((q) => q.copyWith(density: (v * 100).round() / 100)),
       )),
-      _sliderRow('Tamaño', '${(pp.size * 100).round()}%', Slider(
+      _sliderRow(context.l10n.paintSize, '${(pp.size * 100).round()}%', Slider(
         value: pp.size,
         onChanged: (v) => _pp((q) => q.copyWith(size: (v * 100).round() / 100)),
       )),

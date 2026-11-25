@@ -4,6 +4,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../../data/storage.dart';
 import '../../domain/domain.dart';
 import '../../widgets/sheet_thumb.dart';
+import '../../l10n/l10n.dart';
 
 /// Tarjeta de un cuaderno en la biblioteca: miniatura de la primera hoja, nombre y fecha.
 /// Quien la arma le pone la key `nb-<nombre>` (la usan los tests).
@@ -74,7 +75,7 @@ class NotebookCard extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15, color: cs.onSurface)),
           const SizedBox(height: 2),
           Text(
-            location ?? '$n ${n == 1 ? 'hoja' : 'hojas'}${nb.updated > 0 ? ' · ${fmtDate(nb.updated)}' : ''}',
+            location ?? '${context.l10n.librarySheetCount(n)}${nb.updated > 0 ? ' · ${fmtDate(context.l10n, nb.updated)}' : ''}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(fontSize: 12.5, color: cs.onSurfaceVariant),

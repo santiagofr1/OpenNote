@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../domain/domain.dart';
+import '../l10n/l10n.dart';
 
 // Diálogos compartidos entre la biblioteca y el cuaderno.
 
@@ -17,7 +18,7 @@ Future<T?> showSafeSheet<T>(BuildContext context, Widget Function(BuildContext) 
       ),
     );
 
-Future<String?> askText(BuildContext context, String title, {String initial = '', String hint = '', String ok = 'Listo'}) {
+Future<String?> askText(BuildContext context, String title, {String initial = '', String hint = '', String? ok}) {
   final c = TextEditingController(text: initial)..selection = TextSelection(baseOffset: 0, extentOffset: initial.length);
   return showDialog<String>(
     context: context,
@@ -36,15 +37,15 @@ Future<String?> askText(BuildContext context, String title, {String initial = ''
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-        FilledButton(key: const Key('askOk'), onPressed: () => Navigator.pop(ctx, c.text), child: Text(ok)),
+        TextButton(onPressed: () => Navigator.pop(ctx), child: Text(ctx.l10n.commonCancel)),
+        FilledButton(key: const Key('askOk'), onPressed: () => Navigator.pop(ctx, c.text), child: Text(ok ?? ctx.l10n.commonDone)),
       ],
     ),
   );
 }
 
 /// Nombre y tipo de un cuaderno nuevo: hojas (por defecto) o lienzo infinito. null si se cancela.
-Future<({String name, bool canvas})?> askNewNotebook(BuildContext context, {String hint = 'Ej: Análisis II'}) {
+Future<({String name, bool canvas})?> askNewNotebook(BuildContext context, {String? hint}) {
   final c = TextEditingController();
   var canvas = false;
   return showDialog<({String name, bool canvas})>(
@@ -73,7 +74,7 @@ Future<({String name, bool canvas})?> askNewNotebook(BuildContext context, {Stri
           );
       return AlertDialog(
         scrollable: true,
-        title: const Text('Nuevo cuaderno'),
+        title: Text(ctx.l10n.newNotebookTitle),
         content: SizedBox(
           width: 420,
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -82,21 +83,21 @@ Future<({String name, bool canvas})?> askNewNotebook(BuildContext context, {Stri
               controller: c,
               autofocus: true,
               textCapitalization: TextCapitalization.sentences,
-              decoration: InputDecoration(hintText: hint),
+              decoration: InputDecoration(hintText: hint ?? ctx.l10n.newNotebookHint),
               onSubmitted: (v) => Navigator.pop(ctx, (name: v, canvas: canvas)),
             ),
             const SizedBox(height: 16),
             Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              kind(const Key('nbKindSheets'), Symbols.description, 'Hojas', '', false),
+              kind(const Key('nbKindSheets'), Symbols.description, ctx.l10n.newNotebookSheets, '', false),
               const SizedBox(width: 10),
-              kind(const Key('nbKindCanvas'), Symbols.gesture, 'Lienzo infinito',
-                  'Sin cortes, crece mientras escribís. Para mapas conceptuales y diagramas', true),
+              kind(const Key('nbKindCanvas'), Symbols.gesture, ctx.l10n.newNotebookCanvas,
+                  ctx.l10n.newNotebookCanvasHint, true),
             ]),
           ]),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-          FilledButton(key: const Key('askOk'), onPressed: () => Navigator.pop(ctx, (name: c.text, canvas: canvas)), child: const Text('Crear')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(ctx.l10n.commonCancel)),
+          FilledButton(key: const Key('askOk'), onPressed: () => Navigator.pop(ctx, (name: c.text, canvas: canvas)), child: Text(ctx.l10n.commonCreate)),
         ],
       );
     }),
@@ -114,12 +115,12 @@ Future<bool> confirmDelete(BuildContext context, String title, String msg) async
           title: Text(title),
           content: Text(msg, style: TextStyle(color: cs.onSurfaceVariant)),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.l10n.commonCancel)),
             FilledButton(
               key: const Key('confirmDelete'),
               style: FilledButton.styleFrom(backgroundColor: cs.error, foregroundColor: cs.onError),
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Borrar'),
+              child: Text(ctx.l10n.commonDelete),
             ),
           ],
         );
@@ -128,7 +129,7 @@ Future<bool> confirmDelete(BuildContext context, String title, String msg) async
     false;
 
 Future<bool> confirmDeleteNotebook(BuildContext context, Notebook nb) =>
-    confirmDelete(context, 'Borrar "${nb.name}"', 'Se borran sus ${nb.totalSheets} ${nb.totalSheets == 1 ? 'hoja' : 'hojas'}. No se puede deshacer.');
+    confirmDelete(context, context.l10n.deleteNotebookTitle(nb.name), context.l10n.deleteNotebookBody(nb.totalSheets));
 
 Future<String?> askPin(BuildContext context, String title, {String? subtitle}) {
   final c = TextEditingController();
@@ -152,14 +153,14 @@ Future<String?> askPin(BuildContext context, String title, {String? subtitle}) {
               keyboardType: TextInputType.number,
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 24, letterSpacing: 8),
-              decoration: const InputDecoration(hintText: 'PIN'),
+              decoration: InputDecoration(hintText: ctx.l10n.pinHint),
               onSubmitted: (v) => Navigator.pop(ctx, v),
             ),
           ]),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-          FilledButton(key: const Key('pinOk'), onPressed: () => Navigator.pop(ctx, c.text), child: const Text('Listo')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(ctx.l10n.commonCancel)),
+          FilledButton(key: const Key('pinOk'), onPressed: () => Navigator.pop(ctx, c.text), child: Text(ctx.l10n.commonDone)),
         ],
       );
     },

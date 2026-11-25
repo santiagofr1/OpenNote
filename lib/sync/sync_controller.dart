@@ -80,6 +80,14 @@ class SyncController extends ChangeNotifier {
   String? account;
   DateTime? lastSync;
   String? error;
+
+  /// Tipo y dato de [error] para mostrarlo traducido (solo vale mientras [error] no cambie).
+  SyncError? errorKind;
+  String? errorArg;
+
+  /// Tipo y dato del último problema que devolvió una operación de cifrado (ver [enableEncryption]).
+  SyncError? problemKind;
+  String? problemArg;
   SyncReport? lastReport;
   int conflictCount = 0;
 
@@ -160,7 +168,7 @@ class SyncController extends ChangeNotifier {
       _attach(s);
       unawaited(syncNow());
     } catch (e) {
-      error = _msg(e);
+      _fail(e);
       _set(SyncPhase.disconnected);
     }
   }
@@ -216,7 +224,7 @@ class SyncController extends ChangeNotifier {
       _attach(await backend.signIn());
       unawaited(syncNow(manual: true));
     } catch (e) {
-      error = _msg(e);
+      _fail(e);
       _set(SyncPhase.disconnected);
     }
   }
@@ -237,7 +245,7 @@ class SyncController extends ChangeNotifier {
       await backend.signOut();
       await SyncState.clear(store); // la próxima conexión empieza de cero; los cuadernos de acá no se tocan
     } catch (e) {
-      error = _msg(e);
+      _fail(e);
     }
     lastSync = null;
     conflictCount = 0;
@@ -386,16 +394,20 @@ class SyncController extends ChangeNotifier {
       offline = false;
       _fails = 0;
       remoteWaiting = Set.of(rep.remoteWaiting);
-      if (rep.errors.isNotEmpty) error = '${rep.errors.length} archivo(s) no se pudieron sincronizar; se reintenta en la próxima pasada';
+      if (rep.errors.isNotEmpty) {
+        error = '${rep.errors.length} archivo(s) no se pudieron sincronizar; se reintenta en la próxima pasada';
+        errorKind = SyncError.filesFailed;
+        errorArg = '${rep.errors.length}';
+      }
       if (rep.localChanged) onSynced?.call(rep);
       _set(SyncPhase.idle);
       return true;
     } on CryptoLockedException catch (e) {
-      error = e.message; // falta la frase: no se reintenta solo, se pide en la pantalla de sincronización
+      _failWith(e); // falta la frase: no se reintenta solo, se pide en la pantalla de sincronización
       _set(SyncPhase.idle);
       return false;
     } on RemoteAuthException catch (e) {
-      error = e.message;
+      _failWith(e);
       _cancelTimers();
       _session = null;
       _pending = false;
@@ -403,7 +415,11 @@ class SyncController extends ChangeNotifier {
       _set(SyncPhase.disconnected);
       return false;
     } catch (e) {
-      error = e is RemoteOfflineException ? null : _msg(e);
+      if (e is RemoteOfflineException) {
+        error = null;
+      } else {
+        _fail(e);
+      }
       _failed(e is RemoteOfflineException);
       _set(SyncPhase.idle);
       return false;
@@ -443,10 +459,18 @@ class SyncController extends ChangeNotifier {
     if (c == null) return null;
     await whenIdle();
     final s = _session;
-    if (s == null) return 'Conectá con Google primero';
+    problemKind = null;
+    problemArg = null;
+    if (s == null) {
+      problemKind = SyncError.connectFirst;
+      return 'Conectá con Google primero';
+    }
     // la migración no se puede mezclar con una pasada de la tarea de fondo
     final l = lock;
-    if (l != null && !await l.tryAcquire()) return 'Hay una sincronización en segundo plano en curso; probá de nuevo en unos segundos';
+    if (l != null && !await l.tryAcquire()) {
+      problemKind = SyncError.backgroundBusy;
+      return 'Hay una sincronización en segundo plano en curso; probá de nuevo en unos segundos';
+    }
     final done = Completer<void>();
     _running = done.future; // los pedidos de pasada que lleguen mientras tanto esperan (_again)
     error = null;
@@ -456,8 +480,10 @@ class SyncController extends ChangeNotifier {
       await op(c, s);
     } catch (e) {
       problem = _msg(e);
+      problemKind = e is RemoteException ? e.kind : SyncError.couldNotSync;
+      problemArg = e is RemoteException ? e.arg : '$e';
       if (e is RemoteAuthException) {
-        error = e.message;
+        _failWith(e);
       }
     } finally {
       c.clearProgress();
@@ -472,6 +498,24 @@ class SyncController extends ChangeNotifier {
   }
 
   String _msg(Object e) => e is RemoteException ? e.message : 'No se pudo sincronizar: $e';
+
+  /// Deja [e] en [error] (con su tipo, para mostrarlo traducido).
+  void _fail(Object e) {
+    error = _msg(e);
+    if (e is RemoteException) {
+      errorKind = e.kind;
+      errorArg = e.arg;
+    } else {
+      errorKind = SyncError.couldNotSync;
+      errorArg = '$e';
+    }
+  }
+
+  void _failWith(RemoteException e) {
+    error = e.message;
+    errorKind = e.kind;
+    errorArg = e.arg;
+  }
 
   @override
   void dispose() {

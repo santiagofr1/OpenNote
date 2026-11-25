@@ -31,6 +31,9 @@ enum CryptoState {
 /// Cada pasada de sincronización pasa el remoto por [wrap]: devuelve el remoto que el motor tiene que usar (cifrado o
 /// no). Las operaciones largas ([enable], [disable], [unlock]) las corre el [SyncController] cuando no hay ninguna
 /// pasada en curso.
+/// Paso de una operación larga de cifrado (ver [SyncCrypto.step]).
+enum CryptoStep { deriving, syncBeforeEncrypt, syncBeforeDecrypt, encrypting, decrypting }
+
 class SyncCrypto extends ChangeNotifier {
   SyncCrypto({required this.store, TokenStore? tokens, this.kdf = KdfParams.standard})
       : tokens = tokens ?? const SecureTokenStore();
@@ -47,6 +50,11 @@ class SyncCrypto extends ChangeNotifier {
   /// Texto de avance de una operación larga (null: no hay).
   String? progress;
 
+  /// Paso de la operación larga en curso (para mostrarlo en el idioma de la app); [stepDone] de [stepTotal] al
+  /// cifrar o descifrar archivos.
+  CryptoStep? step;
+  int stepDone = 0, stepTotal = 0;
+
   Vault? _vault;
   VaultInfo? _info;
   String? _vaultMd5;
@@ -58,6 +66,7 @@ class SyncCrypto extends ChangeNotifier {
   void _set(CryptoState s, {String? progressText}) {
     state = s;
     progress = progressText;
+    step = null;
     notifyListeners();
   }
 
@@ -66,8 +75,11 @@ class SyncCrypto extends ChangeNotifier {
     if (progress != null) _progress(null);
   }
 
-  void _progress(String? t) {
+  void _progress(String? t, {CryptoStep? step, int done = 0, int total = 0}) {
     progress = t;
+    this.step = t == null ? null : step;
+    stepDone = done;
+    stepTotal = total;
     notifyListeners();
   }
 
@@ -160,9 +172,9 @@ class SyncCrypto extends ChangeNotifier {
     await _detect(raw);
     if (state == CryptoState.on) return;
     if (state == CryptoState.locked) throw const CryptoLockedException();
-    _progress('Derivando la clave (puede tardar unos segundos)…');
+    _progress('Derivando la clave (puede tardar unos segundos)…', step: CryptoStep.deriving);
     final (vault, info0) = await Vault.create(passphrase, kdf: kdf);
-    _progress('Sincronizando antes de cifrar…');
+    _progress('Sincronizando antes de cifrar…', step: CryptoStep.syncBeforeEncrypt);
     await syncPass(PlainRemoteStore(raw));
     final info = info0.withMigrating(CryptoMigration.encrypting);
     try {
@@ -170,7 +182,8 @@ class SyncCrypto extends ChangeNotifier {
       _vaultMd5 = rf.md5;
     } on RemoteConflictException {
       invalidate();
-      throw const RemoteException('Otro dispositivo activó el cifrado al mismo tiempo. Ingresá su frase.');
+      throw const RemoteException('Otro dispositivo activó el cifrado al mismo tiempo. Ingresá su frase.',
+          kind: SyncError.cryptoOtherDevice);
     }
     await tokens.write(keyName, base64Encode(vault.key));
     _vault = vault;
@@ -186,7 +199,7 @@ class SyncCrypto extends ChangeNotifier {
     await _detect(raw);
     if (state == CryptoState.off) return;
     if (state == CryptoState.locked) throw const CryptoLockedException();
-    _progress('Sincronizando antes de descifrar…');
+    _progress('Sincronizando antes de descifrar…', step: CryptoStep.syncBeforeDecrypt);
     await syncPass(await wrap(raw));
     final info = _info!.withMigrating(CryptoMigration.decrypting);
     final rf = await raw.upload(kCryptoFile, info.toBytes(), ifRemoteMd5: _vaultMd5);
@@ -198,9 +211,9 @@ class SyncCrypto extends ChangeNotifier {
   /// La nube está cifrada y se tiene la frase: arma la clave, la verifica y la guarda.
   Future<void> unlock(RemoteStore raw, String passphrase) async {
     await _detect(raw);
-    if (state == CryptoState.off) throw const RemoteException('La nube no está cifrada');
+    if (state == CryptoState.off) throw const RemoteException('La nube no está cifrada', kind: SyncError.cloudNotEncrypted);
     if (state == CryptoState.on) return;
-    _progress('Derivando la clave (puede tardar unos segundos)…');
+    _progress('Derivando la clave (puede tardar unos segundos)…', step: CryptoStep.deriving);
     final v = await Vault.open(_info!, passphrase); // WrongPassphraseException si no es
     await tokens.write(keyName, base64Encode(v.key));
     _vault = v;
@@ -222,7 +235,8 @@ class SyncCrypto extends ChangeNotifier {
       final paths = [for (final f in (await raw.changes(null)).files) if (isSyncPath(f.path)) f.path]..sort();
       for (var i = 0; i < paths.length; i++) {
         final p = paths[i];
-        _progress('${dir == CryptoMigration.encrypting ? 'Cifrando' : 'Descifrando'} ${i + 1}/${paths.length}…');
+        _progress('${dir == CryptoMigration.encrypting ? 'Cifrando' : 'Descifrando'} ${i + 1}/${paths.length}…',
+            step: dir == CryptoMigration.encrypting ? CryptoStep.encrypting : CryptoStep.decrypting, done: i + 1, total: paths.length);
         final bytes = await raw.download(p);
         final isEnc = hasEncryptedHeader(bytes);
         if (dir == CryptoMigration.encrypting) {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import '../l10n/l10n.dart';
 
 enum SheetMenuAction { paste }
 
@@ -15,7 +16,7 @@ Future<SheetMenuAction?> showSheetMenu(BuildContext context, Offset global) {
         child: Row(children: [
           Icon(Symbols.content_paste, size: 20, weight: 300, color: cs.onSurfaceVariant),
           const SizedBox(width: 12),
-          const Text('Pegar acá'),
+          Text(context.l10n.sheetMenuPaste),
         ]),
       ),
     ],

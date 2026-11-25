@@ -4,6 +4,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import '../../domain/domain.dart';
 import '../../widgets/menu_row.dart';
+import '../../l10n/l10n.dart';
 
 enum IndexAction { rename, levelUp, levelDown, remove }
 
@@ -31,9 +32,9 @@ class IndexPanel extends StatelessWidget {
         builder: (context, _) {
           final all = buildOutline(nb);
           return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Text('Índice', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Text(context.l10n.indexTitle, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
             ),
             Expanded(
               child: all.isEmpty
@@ -41,7 +42,7 @@ class IndexPanel extends StatelessWidget {
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 24),
                         child: Text(
-                          'Todavía no hay títulos.\nUsá la herramienta Título de la barra para marcar lo que escribiste.',
+                          context.l10n.indexEmpty,
                           textAlign: TextAlign.center,
                           style: TextStyle(fontSize: 14, height: 1.4, color: cs.onSurfaceVariant),
                         ),
@@ -114,11 +115,11 @@ class IndexPanel extends StatelessWidget {
       context: ctx,
       position: RelativeRect.fromRect(rect, Offset.zero & overlay.size),
       items: [
-        const PopupMenuItem(value: IndexAction.rename, child: MenuRow(Symbols.edit, 'Renombrar')),
-        PopupMenuItem(value: IndexAction.levelUp, enabled: e.level > 1, child: MenuRow(Symbols.format_indent_decrease, 'Pasar a Título ${e.level - 1}')),
-        PopupMenuItem(value: IndexAction.levelDown, enabled: e.level < 9, child: MenuRow(Symbols.format_indent_increase, 'Pasar a Título ${e.level + 1}')),
+        PopupMenuItem(value: IndexAction.rename, child: MenuRow(Symbols.edit, ctx.l10n.commonRename)),
+        PopupMenuItem(value: IndexAction.levelUp, enabled: e.level > 1, child: MenuRow(Symbols.format_indent_decrease, ctx.l10n.indexLevelUp(e.level - 1))),
+        PopupMenuItem(value: IndexAction.levelDown, enabled: e.level < 9, child: MenuRow(Symbols.format_indent_increase, ctx.l10n.indexLevelDown(e.level + 1))),
         const PopupMenuDivider(),
-        const PopupMenuItem(value: IndexAction.remove, child: MenuRow(Symbols.delete, 'Quitar del índice', danger: true)),
+        PopupMenuItem(value: IndexAction.remove, child: MenuRow(Symbols.delete, ctx.l10n.indexRemove, danger: true)),
       ],
     );
     if (v != null) onAction(e, v);

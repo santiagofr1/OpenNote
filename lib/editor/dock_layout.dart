@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import '../l10n/l10n.dart';
 
 /// Barra acoplable arriba / izquierda / derecha. Se mueve arrastrando su agarradera:
 /// mientras tanto se resalta dónde va a quedar y una mini barra sigue al dedo.
@@ -102,7 +103,7 @@ class _DockLayoutState extends State<DockLayout> {
   Widget _grip(bool vertical) {
     final cs = Theme.of(context).colorScheme;
     return Tooltip(
-      message: 'Arrastrá para mover la barra',
+      message: context.l10n.toolDragBar,
       waitDuration: const Duration(milliseconds: 600),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,

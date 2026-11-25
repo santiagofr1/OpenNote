@@ -79,14 +79,14 @@ Item makeAudioItem(String file, int dur, {String name = ''}) =>
 
 /// Nombre por defecto de un audio nuevo: "Audio N", con N = el mayor número de "Audio N" que ya hay en [items] + 1.
 /// Ve solo los elementos de las hojas cargadas (las otras no están en memoria).
-String nextAudioName(Iterable<Item> items) {
+String nextAudioName(Iterable<Item> items, {String prefix = 'Audio'}) {
   var top = 0;
   for (final it in items) {
     if (it.type != 'audio') continue;
-    final n = int.tryParse(RegExp(r'^Audio (\d+)$').firstMatch(it.text.trim())?.group(1) ?? '');
+    final n = int.tryParse(RegExp('^${RegExp.escape(prefix)} (\\d+)\$').firstMatch(it.text.trim())?.group(1) ?? '');
     if (n != null && n > top) top = n;
   }
-  return 'Audio ${top + 1}';
+  return '$prefix ${top + 1}';
 }
 
 /// Duración en ms (0 si no se puede leer).

@@ -19,7 +19,7 @@ Future<FolderImportResult> importFolderZip(Storage store, NotesIndex idx, Uint8L
   try {
     zip = ZipDecoder().decodeBytes(zipBytes);
   } catch (_) {
-    throw VynoteException('El archivo no es un .zip.');
+    throw VynoteException('El archivo no es un .zip.', kind: VynoteError.notZip);
   }
   final valid = <ArchiveFile>[];
   var skipped = 0;
@@ -34,7 +34,7 @@ Future<FolderImportResult> importFolderZip(Storage store, NotesIndex idx, Uint8L
     }
   }
   if (valid.isEmpty) {
-    throw VynoteException('El .zip no tiene cuadernos de Vynote. ¿Lo exportaste en PDF o PNG?');
+    throw VynoteException('El .zip no tiene cuadernos de Vynote. ¿Lo exportaste en PDF o PNG?', kind: VynoteError.noNotebooks);
   }
 
   final folders = <String, Folder>{}; // por ruta acumulada

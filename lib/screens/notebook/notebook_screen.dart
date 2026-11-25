@@ -12,6 +12,7 @@ import '../../data/vynote_file.dart';
 import '../../data/storage.dart';
 import '../../data/templates.dart';
 import '../../domain/domain.dart';
+import '../../l10n/l10n.dart';
 import '../../editor/history.dart';
 import '../../editor/link_open.dart';
 import '../../editor/page_editor.dart';
@@ -250,15 +251,15 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     final n = (await readTemplates(store)).length + 1;
     if (!mounted) return;
     final title = d.sheets[k].title;
-    final name = await _askTemplateName(title.isEmpty ? 'Plantilla $n' : title);
+    final name = await _askTemplateName(title.isEmpty ? context.l10n.notebookTemplateDefault(n) : title);
     if (name == null || !mounted) return;
     try {
-      await templateFromSheet(store, d, k, name.trim().isEmpty ? 'Plantilla $n' : name.trim());
+      await templateFromSheet(store, d, k, name.trim().isEmpty ? context.l10n.notebookTemplateDefault(n) : name.trim());
     } catch (e) {
-      if (mounted) snack(context, 'No se pudo guardar la plantilla: $e');
+      if (mounted) snack(context, context.l10n.notebookTemplateFailed(errText(context.l10n, e)));
       return;
     }
-    if (mounted) snack(context, 'Plantilla guardada');
+    if (mounted) snack(context, context.l10n.notebookTemplateSaved);
   }
 
   Future<String?> _askTemplateName(String initial) {
@@ -266,17 +267,17 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     return showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Guardar como plantilla'),
+        title: Text(ctx.l10n.pagesSaveTemplate),
         content: TextField(
           key: const Key('tplName'),
           controller: ctl,
           autofocus: true,
-          decoration: const InputDecoration(labelText: 'Nombre'),
+          decoration: InputDecoration(labelText: ctx.l10n.notebookTemplateName),
           onSubmitted: (v) => Navigator.pop(ctx, v),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-          FilledButton(key: const Key('tplSave'), onPressed: () => Navigator.pop(ctx, ctl.text), child: const Text('Guardar')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(ctx.l10n.commonCancel)),
+          FilledButton(key: const Key('tplSave'), onPressed: () => Navigator.pop(ctx, ctl.text), child: Text(ctx.l10n.commonSave)),
         ],
       ),
     );
@@ -284,7 +285,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
 
   Future<void> _renameSheet(int k) async {
     final m = doc!.sheets[k];
-    final n = await askText(context, 'Nombre de la hoja ${k + 1}', initial: m.title, hint: 'Opcional');
+    final n = await askText(context, context.l10n.notebookSheetNameTitle(k + 1), initial: m.title, hint: context.l10n.notebookOptional);
     if (n == null) return;
     m.title = n.trim();
     _metaChanged();
@@ -293,16 +294,16 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
   Future<void> _deleteSheet(int k) async {
     final d = doc!;
     if (d.sheetCount < 2) {
-      snack(context, 'No se puede borrar la única hoja del cuaderno');
+      snack(context, context.l10n.notebookLastSheet);
       return;
     }
-    if (!await confirmDelete(context, 'Borrar la hoja ${k + 1}', 'Se borra la hoja con todo lo que tiene (se puede deshacer).')) return;
+    if (!await confirmDelete(context, context.l10n.notebookDeleteSheetTitle(k + 1), context.l10n.notebookDeleteSheetBody)) return;
     // para poder restaurarla, la hoja tiene que estar en memoria: si no está cargada se lee de disco antes
     final id = d.sheets[k].id;
     try {
       await store.loadSheets(d, [id]);
     } catch (e) {
-      if (mounted) snack(context, 'No se pudo leer la hoja: $e');
+      if (mounted) snack(context, context.l10n.notebookSheetReadFailed(errText(context.l10n, e)));
       return;
     }
     final i = d.indexOfSheet(id);
@@ -316,7 +317,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     try {
       await store.loadSheets(d, [id]);
     } catch (e) {
-      if (mounted) snack(context, 'No se pudo leer la hoja: $e');
+      if (mounted) snack(context, context.l10n.notebookSheetReadFailed(errText(context.l10n, e)));
       return;
     }
     final i = d.indexOfSheet(id); // pudo moverse mientras se leía
@@ -346,17 +347,17 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     final r = await showDialog<({String? name})>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Marcador'),
+        title: Text(ctx.l10n.notebookBookmarkTitle),
         content: TextField(
           key: const Key('bookmarkName'),
           controller: ctl,
           autofocus: true,
-          decoration: const InputDecoration(hintText: 'Nombre (opcional)'),
+          decoration: InputDecoration(hintText: ctx.l10n.notebookBookmarkHint),
           onSubmitted: (_) => Navigator.pop(ctx, (name: ctl.text)),
         ),
         actions: [
-          TextButton(key: const Key('bookmarkNoName'), onPressed: () => Navigator.pop(ctx, (name: null)), child: const Text('Sin nombre')),
-          FilledButton(key: const Key('bookmarkSave'), onPressed: () => Navigator.pop(ctx, (name: ctl.text)), child: const Text('Guardar')),
+          TextButton(key: const Key('bookmarkNoName'), onPressed: () => Navigator.pop(ctx, (name: null)), child: Text(ctx.l10n.notebookBookmarkNoName)),
+          FilledButton(key: const Key('bookmarkSave'), onPressed: () => Navigator.pop(ctx, (name: ctl.text)), child: Text(ctx.l10n.commonSave)),
         ],
       ),
     );
@@ -430,7 +431,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
       try {
         d = await store.openSection(nb, id);
       } catch (e) {
-        if (mounted) snack(context, 'No se pudo abrir la sección: $e');
+        if (mounted) snack(context, context.l10n.notebookSectionOpenFailed(errText(context.l10n, e)));
         d = await store.openNotebook(nb, around: nb.last); // se vuelve a la que estaba
       }
       if (!mounted) return;
@@ -448,15 +449,15 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
 
   String _newSectionName() {
     var n = nb.sections.length + 1;
-    while (nb.sections.any((s) => s.name == 'Sección $n')) {
+    while (nb.sections.any((s) => s.name == context.l10n.notebookSectionDefault(n))) {
       n++;
     }
-    return 'Sección $n';
+    return context.l10n.notebookSectionDefault(n);
   }
 
   /// Nueva sección al final, con una hoja en blanco del estilo del cuaderno; se abre.
   Future<void> _newSection() async {
-    final n = (await askText(context, 'Nueva sección', initial: _newSectionName(), hint: 'Ej: Práctica', ok: 'Crear'))?.trim();
+    final n = (await askText(context, context.l10n.sectionNew, initial: _newSectionName(), hint: context.l10n.notebookSectionHint, ok: context.l10n.commonCreate))?.trim();
     if (n == null || n.isEmpty || !mounted) return;
     final s = nb.addSection(n); // todavía solo en memoria: la hoja en blanco se escribe al abrirla
     await _switchSection(s.id);
@@ -465,7 +466,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
   Future<void> _renameSection(String id) async {
     final s = nb.sectionById(id);
     if (s == null) return;
-    final n = (await askText(context, 'Renombrar sección', initial: s.name))?.trim();
+    final n = (await askText(context, context.l10n.notebookSectionRename, initial: s.name))?.trim();
     if (n == null || n.isEmpty || !mounted) return;
     nb.renameSection(id, n);
     await _saveSections();
@@ -493,12 +494,11 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     final s = nb.sectionById(id);
     if (s == null) return;
     if (nb.sections.length < 2) {
-      snack(context, 'No se puede borrar la única sección del cuaderno');
+      snack(context, context.l10n.notebookLastSection);
       return;
     }
     final n = nb.sheetCountOf(id);
-    if (!await confirmDelete(context, 'Borrar la sección "${s.name}"',
-        'Se ${n == 1 ? 'borra 1 hoja con todo lo que tiene' : 'borran $n hojas con todo lo que tienen'}. No se puede deshacer.')) {
+    if (!await confirmDelete(context, context.l10n.notebookDeleteSectionTitle(s.name), context.l10n.notebookDeleteSectionBody(n))) {
       return;
     }
     if (!mounted) return;
@@ -526,7 +526,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         case 'sticky':
           ed?.insertItem(makeSticky());
         case 'audio':
-          final it = await makeAudioFileItem(store, name: nextAudioName(doc!.items.values));
+          final it = await makeAudioFileItem(store, name: nextAudioName(doc!.items.values, prefix: context.l10n.audioPrefix));
           if (it != null) ed?.insertItem(it);
         case 'voice':
           await _startVoice();
@@ -536,7 +536,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
           await _importPdf();
       }
     } catch (e) {
-      if (mounted) snack(context, 'No se pudo insertar: $e');
+      if (mounted) snack(context, context.l10n.notebookInsertFailed(errText(context.l10n, e)));
     }
   }
 
@@ -544,14 +544,14 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
   /// se mueve, se elige, se deshace). Se sigue escribiendo mientras graba; para con el botón de la etiqueta (ver [stopVoice]).
   Future<void> _startVoice() async {
     if (recorder.busy) {
-      if (mounted) snack(context, 'Ya hay una grabación en curso');
+      if (mounted) snack(context, context.l10n.notebookRecordingBusy);
       return;
     }
-    final it = makeAudioItem('${newId('m')}.m4a', 0, name: nextAudioName(doc!.items.values));
+    final it = makeAudioItem('${newId('m')}.m4a', 0, name: nextAudioName(doc!.items.values, prefix: context.l10n.audioPrefix));
     try {
       await recorder.start(it.id, it.file!);
     } on VoiceException catch (e) {
-      if (mounted) snack(context, e.message);
+      if (mounted) snack(context, errText(context.l10n, e));
       return;
     }
     final ed = editorKey.currentState;
@@ -616,13 +616,13 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         context: context,
         barrierDismissible: false,
         builder: (ctx) => AlertDialog(
-          title: const Text('Importando PDF'),
+          title: Text(ctx.l10n.notebookImportingPdf),
           content: ValueListenableBuilder(
             valueListenable: progress,
             builder: (_, n, _) => Column(mainAxisSize: MainAxisSize.min, children: [
               const LinearProgressIndicator(),
               const SizedBox(height: 12),
-              Text(n == 0 ? 'Elegí el archivo…' : 'Hoja $n'),
+              Text(n == 0 ? ctx.l10n.notebookPickFile : ctx.l10n.sheetLabel(n)),
             ]),
           ),
         ),
@@ -642,7 +642,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
           for (var i = 0; i < sheets.length; i++)
             SheetPresenceOp.added(d, d.insertSheet(at + i, meta: sheets[i].$1, content: sheets[i].$2)),
         ], goTo: at);
-    if (mounted) snack(context, '${sheets.length} ${sheets.length == 1 ? 'hoja importada' : 'hojas importadas'}');
+    if (mounted) snack(context, context.l10n.notebookSheetsImported(sheets.length));
   }
 
   // ================= menú ⋮ =================
@@ -669,7 +669,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
       case 'fav':
         setState(() => nb.favorite = !nb.favorite);
         await _saveIndex();
-        if (mounted) snack(context, nb.favorite ? 'Agregado a favoritos' : 'Quitado de favoritos');
+        if (mounted) snack(context, nb.favorite ? context.l10n.notebookFavoriteAdded : context.l10n.notebookFavoriteRemoved);
       case 'lock':
         await _toggleLock();
       case 'share':
@@ -697,32 +697,32 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
 
   Future<void> _toggleLock() async {
     if (nb.pin != null) {
-      final p = await askPin(context, 'Quitar bloqueo', subtitle: 'Ingresá el PIN actual');
+      final p = await askPin(context, context.l10n.notebookUnlockTitle, subtitle: context.l10n.notebookUnlockHint);
       if (p == null) return;
       if (hashPin(p) != nb.pin) {
-        if (mounted) snack(context, 'PIN incorrecto');
+        if (mounted) snack(context, context.l10n.libraryWrongPin);
         return;
       }
       setState(() => nb.pin = null);
       await _saveIndex();
-      if (mounted) snack(context, 'Cuaderno desbloqueado');
+      if (mounted) snack(context, context.l10n.notebookUnlocked);
       return;
     }
-    final a = await askPin(context, 'Bloquear cuaderno', subtitle: 'Elegí un PIN de 4 o más números');
+    final a = await askPin(context, context.l10n.notebookLockTitle, subtitle: context.l10n.notebookLockHint);
     if (a == null || !mounted) return;
     if (a.length < 4) {
-      snack(context, 'El PIN tiene que tener al menos 4 números');
+      snack(context, context.l10n.notebookPinShort);
       return;
     }
-    final b = await askPin(context, 'Repetí el PIN');
+    final b = await askPin(context, context.l10n.notebookPinRepeat);
     if (b == null || !mounted) return;
     if (a != b) {
-      snack(context, 'Los PIN no coinciden');
+      snack(context, context.l10n.notebookPinMismatch);
       return;
     }
     setState(() => nb.pin = hashPin(a));
     await _saveIndex();
-    if (mounted) snack(context, 'Cuaderno bloqueado: se pide el PIN al abrirlo');
+    if (mounted) snack(context, context.l10n.notebookLocked);
   }
 
   /// Exporta el cuaderno entero como `.vynote`: guarda lo pendiente y copia los archivos de disco.
@@ -732,9 +732,9 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
       await _flush();
       final bytes = await exportNotebookBytes(store, nb);
       final ok = await saveVynote(bytes, nb.name);
-      if (ok && mounted) snack(context, 'Cuaderno guardado');
+      if (ok && mounted) snack(context, context.l10n.notebookSaved);
     } catch (e) {
-      if (mounted) snack(context, 'No se pudo exportar: $e');
+      if (mounted) snack(context, context.l10n.notebookExportFailed(errText(context.l10n, e)));
     }
   }
 
@@ -742,7 +742,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     final d = doc;
     if (d == null) return;
     final k = curSheet, meta = d.sheets[k];
-    final sheetName = 'Hoja ${k + 1}${meta.title.isEmpty ? '' : ' · ${meta.title}'}';
+    final sheetName = meta.title.isEmpty ? context.l10n.sheetLabel(k + 1) : context.l10n.sheetLabelTitled(k + 1, meta.title);
     final v = await showExportSheet(context, store, widget.tools, sheetName: nb.canvas ? null : sheetName);
     if (v == null || !mounted) return;
     switch (v) {
@@ -750,13 +750,13 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         final secs = await askExportSections(context, nb); // con varias secciones, cuáles
         if (secs != null && mounted) await exportPdfFlow(context, store, d, sections: secs);
       case 'sheet':
-        await exportPdfFlow(context, store, d, only: [k], name: '${nb.name} - hoja ${k + 1}');
+        await exportPdfFlow(context, store, d, only: [k], name: context.l10n.notebookSheetFileName(nb.name, k + 1));
       case 'png':
         final secs = await askExportSections(context, nb);
         if (secs != null && mounted) await exportPngFlow(context, store, d, sections: secs);
       case 'sheetpng':
-        final ok = await saveSheetPng(store, d, k, '${nb.name} - hoja ${k + 1}', background: await exportBackgroundPref(store));
-        if (ok && mounted) snack(context, 'Imagen guardada');
+        final ok = await saveSheetPng(store, d, k, context.l10n.notebookSheetFileName(nb.name, k + 1), background: await exportBackgroundPref(store));
+        if (ok && mounted) snack(context, context.l10n.notebookImageSaved);
       case 'vynote':
         await _exportVynote();
     }
@@ -825,7 +825,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
       try {
         await store.loadSheets(d, [h.meta.id]);
       } catch (e) {
-        if (mounted) snack(context, 'No se pudo leer la hoja: $e');
+        if (mounted) snack(context, context.l10n.notebookSheetReadFailed(errText(context.l10n, e)));
         return;
       }
       if (!mounted) return;
@@ -975,7 +975,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
                   color: cs.inverseSurface.withValues(alpha: .7),
                   shape: const CircleBorder(),
                   child: IconButton(
-                    tooltip: 'Salir de pantalla completa',
+                    tooltip: context.l10n.notebookFullscreenExit,
                     onPressed: _toggleFullscreen,
                     icon: Icon(Symbols.close_fullscreen, weight: 300, color: cs.onInverseSurface),
                   ),
@@ -1010,7 +1010,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
                     _PulsingDot(color: red),
                     const SizedBox(width: 10),
                     Text(
-                      'Grabando${name.isEmpty ? '' : ' · $name'}  ${fmtDuration(recorder.elapsedMs)}',
+                      '${name.isEmpty ? context.l10n.notebookRecording : context.l10n.notebookRecordingNamed(name)}  ${fmtDuration(recorder.elapsedMs)}',
                       style: TextStyle(fontSize: 15, color: cs.onSurface, fontFeatures: const [FontFeature.tabularFigures()]),
                     ),
                   ]),
@@ -1018,14 +1018,14 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
               ),
               IconButton(
                 key: const ValueKey('recIndicatorStop'),
-                tooltip: 'Parar y guardar',
+                tooltip: context.l10n.notebookRecordingStop,
                 onPressed: stopVoice,
                 style: IconButton.styleFrom(backgroundColor: red, foregroundColor: Colors.white),
                 icon: const Icon(Symbols.stop, size: 20, fill: 1),
               ),
               IconButton(
                 key: const ValueKey('recIndicatorCancel'),
-                tooltip: 'Cancelar y descartar',
+                tooltip: context.l10n.notebookRecordingCancel,
                 onPressed: cancelVoice,
                 icon: Icon(Symbols.close, size: 20, weight: 300, color: cs.onSurfaceVariant),
               ),
@@ -1097,12 +1097,12 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         try {
           ok = await linkLauncher(uri);
         } catch (_) {}
-        if (!ok && mounted) snack(context, 'No se pudo abrir el link');
+        if (!ok && mounted) snack(context, context.l10n.notebookLinkFailed);
       case LinkSheet(:final id):
         await _goToSheetId(id);
       case LinkNotebook(:final id):
         if (!widget.index.notebooks.any((n) => n.id == id)) {
-          snack(context, 'El cuaderno ya no existe');
+          snack(context, context.l10n.libraryNotebookGone);
           return;
         }
         await leave('open:$id');
@@ -1115,7 +1115,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     if (k >= 0) return _goTo(k);
     final other = nb.otherSheets.where((m) => m.id == id).firstOrNull;
     if (other == null) {
-      snack(context, 'La hoja ya no existe');
+      snack(context, context.l10n.notebookSheetGone);
       return;
     }
     final sec = other.section.isEmpty ? nb.sections.first.id : other.section;
@@ -1147,7 +1147,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     if (m == null || h == null) return;
     switch (a) {
       case IndexAction.rename:
-        final n = (await askText(context, 'Renombrar título', initial: h.title))?.trim();
+        final n = (await askText(context, context.l10n.indexRenameTitle, initial: h.title))?.trim();
         if (n == null || n.isEmpty || !mounted) return;
         h.title = n.length > 120 ? n.substring(0, 120) : n;
       case IndexAction.levelUp:
@@ -1193,36 +1193,36 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
       child: Row(children: [
         IconButton(
           key: const Key('back'),
-          tooltip: 'Volver a los cuadernos',
+          tooltip: context.l10n.notebookBack,
           onPressed: leave,
           icon: Icon(Symbols.arrow_back, weight: 300, color: cs.onSurface),
         ),
         const SizedBox(width: 4),
         Expanded(child: searching ? _searchField() : _title(cs)),
         if (searching)
-          act(Symbols.close, 'Cerrar búsqueda', _closeSearch)
+          act(Symbols.close, context.l10n.notebookSearchClose, _closeSearch)
         else ...[
           if (widget.sync != null && widget.onOpenSync != null) SyncIndicator(sync: widget.sync!, onTap: widget.onOpenSync!),
           if (!_compact)
-            act(Symbols.menu_book, reading ? 'Salir del modo lectura' : 'Modo lectura', () => setState(() => reading = !reading),
+            act(Symbols.menu_book, reading ? context.l10n.menuMoreReadingExit : context.l10n.menuMoreReading, () => setState(() => reading = !reading),
                 on: reading, key: const Key('reading')),
-          menuBtn(Symbols.add, 'Insertar', const Key('insert'), (at) async {
+          menuBtn(Symbols.add, context.l10n.notebookInsert, const Key('insert'), (at) async {
             final v = await showInsertMenu(context, at, canvas: nb.canvas);
             if (v != null && mounted) await runInsert(v);
           }),
-          act(Symbols.toc, 'Índice', () => setState(() {
+          act(Symbols.toc, context.l10n.notebookIndexTooltip, () => setState(() {
                 indexOpen = !indexOpen;
                 if (_compact && indexOpen) panel = false;
               }), on: indexOpen, key: const Key('indexBtn')),
           if (nb.canvas)
             // sin panel de hojas: las secciones (cada una es otro lienzo) se abren desde acá
-            menuBtn(Symbols.layers, 'Secciones', const Key('sectionsBtn'), (at) => _sectionsList(Rect.fromLTWH(at.dx - 40, at.dy - 40, 40, 40)))
+            menuBtn(Symbols.layers, context.l10n.notebookSections, const Key('sectionsBtn'), (at) => _sectionsList(Rect.fromLTWH(at.dx - 40, at.dy - 40, 40, 40)))
           else
-            act(Symbols.view_sidebar, 'Hojas', () => setState(() {
+            act(Symbols.view_sidebar, context.l10n.notebookPages, () => setState(() {
                   panel = !panel;
                   if (_compact && panel) indexOpen = false;
                 }), on: panel, key: const Key('pagesBtn')),
-          if (!_compact) act(Symbols.open_in_full, 'Pantalla completa', _toggleFullscreen),
+          if (!_compact) act(Symbols.open_in_full, context.l10n.menuMoreFullscreen, _toggleFullscreen),
           if (!_compact)
           ListenableBuilder(
             listenable: Listenable.merge([sheetNotifier, _structure]),
@@ -1232,7 +1232,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
                 padding: const EdgeInsets.symmetric(horizontal: 1),
                 child: IconButton(
                   key: const Key('bookmarkSheet'),
-                  tooltip: on ? 'Quitar marcador' : 'Marcar esta hoja',
+                  tooltip: on ? context.l10n.menuMoreBookmarkRemove : context.l10n.menuMoreBookmarkAdd,
                   onPressed: doc == null ? null : _bookmarkCurrent,
                   style: IconButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                   icon: Icon(Symbols.bookmark, size: 22, weight: on ? 400 : 300, fill: on ? 1 : 0, color: on ? cs.primary : cs.onSurfaceVariant),
@@ -1240,7 +1240,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
               );
             },
           ),
-          menuBtn(Symbols.more_vert, 'Más opciones', const Key('more'), (at) async {
+          menuBtn(Symbols.more_vert, context.l10n.notebookMore, const Key('more'), (at) async {
             final v = await showMoreMenu(context, at, nb,
                 compact: _compact ? (reading: reading, bookmark: doc != null && doc!.sheets[curSheet].bookmark) : null);
             if (v != null && mounted) await runMore(v);
@@ -1265,10 +1265,10 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
               Icon(Symbols.devices, size: 18, weight: 300, color: cs.onSecondaryContainer),
               const SizedBox(width: 10),
               Expanded(
-                child: Text('Hay cambios de otro dispositivo',
+                child: Text(context.l10n.notebookRemoteChanges,
                     maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, color: cs.onSecondaryContainer)),
               ),
-              TextButton(key: const Key('remoteRefresh'), onPressed: () => leave('refresh'), child: const Text('Actualizar')),
+              TextButton(key: const Key('remoteRefresh'), onPressed: () => leave('refresh'), child: Text(context.l10n.commonUpdate)),
             ]),
           );
         },
@@ -1279,7 +1279,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
         controller: searchCtrl,
         autofocus: true,
         decoration: InputDecoration(
-          hintText: 'Buscar en "${nb.name}"',
+          hintText: context.l10n.notebookSearchIn(nb.name),
           prefixIcon: const Icon(Symbols.search, weight: 300),
           isDense: true,
           contentPadding: const EdgeInsets.symmetric(vertical: 10),
@@ -1310,7 +1310,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
             listenable: Listenable.merge([sheetNotifier, _structure]),
             builder: (_, _) {
               final k = curSheet, t = doc!.sheets[k].title;
-              return Text('${t.isEmpty ? '' : '$t · '}${k + 1} / ${doc!.sheetCount}',
+              return Text(context.l10n.notebookSheetCounter(t.isEmpty ? '' : '$t · ', k + 1, doc!.sheetCount),
                   key: const Key('sheetCounter'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

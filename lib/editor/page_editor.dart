@@ -23,6 +23,7 @@ import '../rendering/text_layout.dart';
 import '../theme/colors.dart';
 import '../widgets/auto_scroller.dart';
 import '../widgets/dialogs.dart';
+import '../l10n/l10n.dart';
 import 'context_menu.dart';
 import 'dock_layout.dart';
 import 'fast_scroller.dart';
@@ -1476,7 +1477,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   List<({String id, String label})> get _sheetChoices => [
         for (var k = 0; k < doc.sheetCount; k++)
-          (id: doc.sheets[k].id, label: 'Hoja ${k + 1}${doc.sheets[k].title.isEmpty ? '' : ' · ${doc.sheets[k].title}'}')
+          (id: doc.sheets[k].id, label: doc.sheets[k].title.isEmpty ? context.l10n.sheetLabel(k + 1) : context.l10n.sheetLabelTitled(k + 1, doc.sheets[k].title))
       ];
 
   Future<String?> _askLink([String initial = '']) => showLinkDialog(context,
@@ -1591,7 +1592,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     if (target != null) {
       widget.onOpenLink?.call(target);
     } else if (missing) {
-      snack(context, 'Esa página no está en el cuaderno');
+      snack(context, context.l10n.editorLinkMissingPage);
     } else {
       fallback?.call();
     }
@@ -2508,7 +2509,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final it = sel.itemsOf(doc).singleOrNull;
     if (it == null || it.type != 'audio') return;
     // askText: el diálogo de siempre (no libera el controlador mientras se anima al cerrarse)
-    final name = await askText(context, 'Renombrar audio', initial: it.text, hint: 'Audio', ok: 'Guardar');
+    final name = await askText(context, context.l10n.editorRenameAudio, initial: it.text, hint: context.l10n.audioPrefix, ok: context.l10n.commonSave);
     if (!mounted) return;
     if (name != null) renameItem(it.id, name);
   }
@@ -2731,7 +2732,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
                             child: Padding(
                               padding: const EdgeInsets.fromLTRB(16, 22, 16, 70),
                               child: Text(
-                                'Al final, deslizá hacia arriba y mantené para agregar una hoja',
+                                context.l10n.editorPullHint,
                                 textAlign: TextAlign.center,
                                 style: TextStyle(color: cs.onSurfaceVariant.withValues(alpha: .7), fontSize: 13),
                               ),
@@ -2753,7 +2754,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             width: 200,
             child: FastScroller(
               controller: scroll,
-              label: doc.nb.canvas ? null : () => 'Hoja ${visibleSheet + 1} de ${doc.sheetCount}',
+              label: doc.nb.canvas ? null : () => context.l10n.editorScrollerLabel(visibleSheet + 1, doc.sheetCount),
             ),
           ),
           Positioned(left: 0, right: 0, bottom: 28, child: Center(child: PullIndicator(pull))),
@@ -2828,7 +2829,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             child: FittedBox(fit: BoxFit.scaleDown, child: SelectionMenu(
             onCopy: () {
               _copySel();
-              snack(context, 'Copiado', duration: const Duration(milliseconds: 1200), width: 260);
+              snack(context, context.l10n.editorCopied, duration: const Duration(milliseconds: 1200), width: 260);
             },
             onCut: () {
               _copySel();
@@ -3017,7 +3018,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         height: 120 * scale,
         child: IgnorePointer(
           child: Center(
-            child: Text('Cargando la hoja ${k + 1}…',
+            child: Text(context.l10n.editorLoadingSheet(k + 1),
                 style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: .55), fontSize: 14)),
           ),
         ),

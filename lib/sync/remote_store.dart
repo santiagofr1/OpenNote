@@ -22,31 +22,57 @@ class RemoteChanges {
   const RemoteChanges({required this.files, this.removed = const [], required this.nextToken, this.full = false});
 }
 
+/// Qué falló, para mostrarlo en el idioma de la app ([RemoteException.message] queda en español para los logs).
+enum SyncError {
+  offline,
+  authExpired,
+  conflict,
+  notFound,
+  vaultChanged,
+  cryptoLocked,
+  wrongPassphrase,
+  cryptoOtherDevice,
+  cloudNotEncrypted,
+  filesFailed,
+  couldNotSync,
+  connectFirst,
+  backgroundBusy,
+  other,
+}
+
 /// Falla del remoto. [message] se le puede mostrar al usuario.
 class RemoteException implements Exception {
   final String message;
-  const RemoteException(this.message);
+
+  /// Tipo del error ([SyncError.other] si no tiene una traducción propia) y su dato (cantidad, detalle…).
+  final SyncError kind;
+  final String? arg;
+  const RemoteException(this.message, {this.kind = SyncError.other, this.arg});
   @override
   String toString() => message;
 }
 
 /// Sin red (o el servidor no responde): la pasada se corta y se reintenta después.
 class RemoteOfflineException extends RemoteException {
-  const RemoteOfflineException([super.message = 'Sin conexión']);
+  const RemoteOfflineException([String? message])
+      : super(message ?? 'Sin conexión', kind: message == null ? SyncError.offline : SyncError.other);
 }
 
 /// La sesión venció o se revocó: hay que volver a conectar.
 class RemoteAuthException extends RemoteException {
-  const RemoteAuthException([super.message = 'La sesión de Google venció. Volvé a conectar.']);
+  const RemoteAuthException([String? message])
+      : super(message ?? 'La sesión de Google venció. Volvé a conectar.', kind: message == null ? SyncError.authExpired : SyncError.other);
 }
 
 /// El archivo cambió en el remoto desde lo que se creía (otro dispositivo escribió en el medio).
 class RemoteConflictException extends RemoteException {
-  const RemoteConflictException([super.message = 'El archivo cambió en la nube mientras se subía; se reintenta']);
+  const RemoteConflictException([String? message])
+      : super(message ?? 'El archivo cambió en la nube mientras se subía; se reintenta', kind: message == null ? SyncError.conflict : SyncError.other);
 }
 
 class RemoteNotFoundException extends RemoteException {
-  const RemoteNotFoundException([super.message = 'No existe en la nube']);
+  const RemoteNotFoundException([String? message])
+      : super(message ?? 'No existe en la nube', kind: message == null ? SyncError.notFound : SyncError.other);
 }
 
 /// El otro lado de la sincronización: un almacén de archivos por ruta. Nada acá sabe de Google (ver

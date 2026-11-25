@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../domain/domain.dart';
+import '../l10n/l10n.dart';
 import 'pdf_page_image.dart';
 import 'voice_recorder.dart';
 
@@ -140,7 +141,7 @@ class _StickyFieldState extends State<StickyField> {
           maxLines: null,
           expands: true,
           style: TextStyle(fontSize: widget.fontSize, height: 1.35, color: _stickyInk),
-          decoration: const InputDecoration.collapsed(hintText: 'Nota…', hintStyle: TextStyle(color: Color(0x662B2A27))),
+          decoration: InputDecoration.collapsed(hintText: context.l10n.stickyHint, hintStyle: const TextStyle(color: Color(0x662B2A27))),
           cursorColor: _stickyInk,
           onChanged: widget.onChanged,
         ),
@@ -217,7 +218,7 @@ class _AudioChipState extends State<AudioChip> {
             child: Text(
               playing || pos > Duration.zero
                   ? '${fmtDuration(pos.inMilliseconds)} / ${fmtDuration(widget.dur)}'
-                  : '${widget.name.isEmpty ? 'Audio' : widget.name} · ${fmtDuration(widget.dur)}',
+                  : '${widget.name.isEmpty ? context.l10n.audioPrefix : widget.name} · ${fmtDuration(widget.dur)}',
               maxLines: 1,
               overflow: TextOverflow.fade,
               style: TextStyle(fontSize: 19 * s, color: _stickyInk, fontFeatures: const [FontFeature.tabularFigures()]),
@@ -275,7 +276,7 @@ class _RecordingChipState extends State<RecordingChip> with SingleTickerProvider
         SizedBox(width: 12 * s),
         Expanded(
           child: Text(
-            'Grabando${widget.name.isEmpty ? '' : ' · ${widget.name}'}  ${fmtDuration(widget.recorder.elapsedMs)}',
+            '${widget.name.isEmpty ? context.l10n.notebookRecording : context.l10n.notebookRecordingNamed(widget.name)}  ${fmtDuration(widget.recorder.elapsedMs)}',
             key: const ValueKey('recordingTime'),
             maxLines: 1,
             overflow: TextOverflow.fade,

@@ -1,0 +1,2508 @@
+{
+  "@@locale": "es",
+  "commonCancel": "Cancelar",
+  "@commonCancel": {
+    "description": "Generic \"Cancel\" button in dialogs"
+  },
+  "commonDone": "Listo",
+  "@commonDone": {
+    "description": "Generic \"Done\" button in dialogs"
+  },
+  "commonCreate": "Crear",
+  "@commonCreate": {
+    "description": "Generic \"Create\" button in dialogs"
+  },
+  "commonDelete": "Borrar",
+  "@commonDelete": {
+    "description": "Generic \"Delete\" button in dialogs"
+  },
+  "commonClose": "Cerrar",
+  "@commonClose": {
+    "description": "Generic \"Close\" button in dialogs"
+  },
+  "commonLater": "Después",
+  "@commonLater": {
+    "description": "\"Later\" button in dialogs"
+  },
+  "commonNotNow": "Ahora no",
+  "@commonNotNow": {
+    "description": "\"Not now\" button in dialogs"
+  },
+  "paperLined": "Rayado",
+  "@paperLined": {
+    "description": "Lined paper name in the paper style dialog"
+  },
+  "paperGrid": "Cuadriculado",
+  "@paperGrid": {
+    "description": "Grid paper name in the paper style dialog"
+  },
+  "paperDots": "Puntos",
+  "@paperDots": {
+    "description": "Dotted paper name in the paper style dialog"
+  },
+  "paperMm": "Milimetrado",
+  "@paperMm": {
+    "description": "Millimeter graph paper name in the paper style dialog"
+  },
+  "paperAxes": "Ejes cartesianos",
+  "@paperAxes": {
+    "description": "Cartesian axes paper name in the paper style dialog"
+  },
+  "paperBlank": "Liso",
+  "@paperBlank": {
+    "description": "Blank paper name in the paper style dialog"
+  },
+  "paperCornell": "Cornell",
+  "@paperCornell": {
+    "description": "Cornell note-taking template name in the paper style dialog"
+  },
+  "paperTodo": "Lista de tareas",
+  "@paperTodo": {
+    "description": "To-do list template name in the paper style dialog"
+  },
+  "paperStaff": "Pentagrama",
+  "@paperStaff": {
+    "description": "Music staff template name in the paper style dialog"
+  },
+  "paperWeekly": "Agenda semanal",
+  "@paperWeekly": {
+    "description": "Weekly planner template name in the paper style dialog"
+  },
+  "paperMonthly": "Calendario mensual",
+  "@paperMonthly": {
+    "description": "Monthly calendar template name in the paper style dialog"
+  },
+  "shortcutBold": "Negrita",
+  "@shortcutBold": {
+    "description": "Keyboard shortcut description in the shortcuts dialog"
+  },
+  "shortcutItalic": "Cursiva",
+  "@shortcutItalic": {
+    "description": "Keyboard shortcut description in the shortcuts dialog"
+  },
+  "shortcutUnderline": "Subrayado",
+  "@shortcutUnderline": {
+    "description": "Keyboard shortcut description in the shortcuts dialog"
+  },
+  "shortcutStrike": "Tachado",
+  "@shortcutStrike": {
+    "description": "Keyboard shortcut description in the shortcuts dialog"
+  },
+  "shortcutHighlight": "Resaltado (poner / sacar)",
+  "@shortcutHighlight": {
+    "description": "Keyboard shortcut description in the shortcuts dialog"
+  },
+  "shortcutFontUp": "Agrandar letra",
+  "@shortcutFontUp": {
+    "description": "Keyboard shortcut description in the shortcuts dialog"
+  },
+  "shortcutFontDown": "Achicar letra",
+  "@shortcutFontDown": {
+    "description": "Keyboard shortcut description in the shortcuts dialog"
+  },
+  "shortcutBullets": "Viñetas",
+  "@shortcutBullets": {
+    "description": "Keyboard shortcut description in the shortcuts dialog"
+  },
+  "shortcutNumbered": "Lista numerada",
+  "@shortcutNumbered": {
+    "description": "Keyboard shortcut description in the shortcuts dialog"
+  },
+  "shortcutTodo": "Lista de tareas",
+  "@shortcutTodo": {
+    "description": "Keyboard shortcut description in the shortcuts dialog"
+  },
+  "shortcutAlignLeft": "Alinear a la izquierda",
+  "@shortcutAlignLeft": {
+    "description": "Keyboard shortcut description in the shortcuts dialog"
+  },
+  "shortcutCenter": "Centrar",
+  "@shortcutCenter": {
+    "description": "Keyboard shortcut description in the shortcuts dialog"
+  },
+  "shortcutAlignRight": "Alinear a la derecha",
+  "@shortcutAlignRight": {
+    "description": "Keyboard shortcut description in the shortcuts dialog"
+  },
+  "shortcutJustify": "Justificar",
+  "@shortcutJustify": {
+    "description": "Keyboard shortcut description in the shortcuts dialog"
+  },
+  "shortcutIndent": "Más sangría",
+  "@shortcutIndent": {
+    "description": "Keyboard shortcut description in the shortcuts dialog"
+  },
+  "shortcutOutdent": "Menos sangría",
+  "@shortcutOutdent": {
+    "description": "Keyboard shortcut description in the shortcuts dialog"
+  },
+  "shortcutUndo": "Deshacer",
+  "@shortcutUndo": {
+    "description": "Keyboard shortcut description in the shortcuts dialog"
+  },
+  "shortcutRedo": "Rehacer",
+  "@shortcutRedo": {
+    "description": "Keyboard shortcut description in the shortcuts dialog"
+  },
+  "shortcutPencil": "Lápiz",
+  "@shortcutPencil": {
+    "description": "Keyboard shortcut description in the shortcuts dialog"
+  },
+  "shortcutHighlighter": "Resaltador",
+  "@shortcutHighlighter": {
+    "description": "Keyboard shortcut description in the shortcuts dialog"
+  },
+  "shortcutText": "Texto (abre un bloque)",
+  "@shortcutText": {
+    "description": "Keyboard shortcut description in the shortcuts dialog"
+  },
+  "shortcutSelect": "Seleccionar",
+  "@shortcutSelect": {
+    "description": "Keyboard shortcut description in the shortcuts dialog"
+  },
+  "shortcutZoom": "Zoom",
+  "@shortcutZoom": {
+    "description": "Keyboard shortcut description in the shortcuts dialog"
+  },
+  "shortcutHelp": "Ver estos atajos",
+  "@shortcutHelp": {
+    "description": "Keyboard shortcut description in the shortcuts dialog"
+  },
+  "shortcutZoomKeys": "Ctrl + rueda del mouse",
+  "@shortcutZoomKeys": {
+    "description": "Keys to zoom the sheet in the shortcuts dialog"
+  },
+  "shortcutsTitle": "Atajos de teclado",
+  "@shortcutsTitle": {
+    "description": "Title of the keyboard shortcuts dialog"
+  },
+  "shortcutsTyping": "Escribiendo",
+  "@shortcutsTyping": {
+    "description": "Section title in the shortcuts dialog: shortcuts while typing in a text block"
+  },
+  "shortcutsSheet": "En la hoja",
+  "@shortcutsSheet": {
+    "description": "Section title in the shortcuts dialog: shortcuts on the sheet"
+  },
+  "newNotebookHint": "Ej: Análisis II",
+  "@newNotebookHint": {
+    "description": "Example name hint in the new notebook dialog"
+  },
+  "newNotebookTitle": "Nuevo cuaderno",
+  "@newNotebookTitle": {
+    "description": "Title of the new notebook dialog"
+  },
+  "newNotebookSheets": "Hojas",
+  "@newNotebookSheets": {
+    "description": "New notebook dialog: option for a notebook made of sheets"
+  },
+  "newNotebookCanvas": "Lienzo infinito",
+  "@newNotebookCanvas": {
+    "description": "New notebook dialog: option for an infinite canvas notebook"
+  },
+  "newNotebookCanvasHint": "Sin cortes, crece mientras escribís. Para mapas conceptuales y diagramas",
+  "@newNotebookCanvasHint": {
+    "description": "New notebook dialog: description of the infinite canvas option"
+  },
+  "deleteNotebookTitle": "Borrar \"{name}\"",
+  "@deleteNotebookTitle": {
+    "description": "Title of the confirmation dialog to delete a notebook or folder",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteNotebookBody": "Se borran sus {count, plural, =1{1 hoja} other{{count} hojas}}. No se puede deshacer.",
+  "@deleteNotebookBody": {
+    "description": "Body of the confirmation dialog to delete a notebook",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pinHint": "PIN",
+  "@pinHint": {
+    "description": "Hint of the PIN field"
+  },
+  "updateAvailableTitle": "Hay una versión nueva de Vynote",
+  "@updateAvailableTitle": {
+    "description": "Title of the dialog announcing a new app version"
+  },
+  "updateNewVersion": "Versión nueva: {version}",
+  "@updateNewVersion": {
+    "description": "Update dialog: new version number when the installed one is unknown",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "updateVersions": "Tenés la {installed}  →  nueva {version}",
+  "@updateVersions": {
+    "description": "Update dialog: installed version and new version",
+    "placeholders": {
+      "installed": {
+        "type": "String"
+      },
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "updateNotesTitle": "Novedades",
+  "@updateNotesTitle": {
+    "description": "Update dialog: heading of the release notes"
+  },
+  "updateNotesDefault": "Mejoras y arreglos varios.",
+  "@updateNotesDefault": {
+    "description": "Update dialog: release note shown when the release has none"
+  },
+  "updateSourceInfo": "Se baja de la página oficial del proyecto en GitHub. Tus cuadernos no se tocan: solo se actualiza la app.",
+  "@updateSourceInfo": {
+    "description": "Update dialog: where the update is downloaded from"
+  },
+  "updateSkip": "Omitir esta versión",
+  "@updateSkip": {
+    "description": "Update dialog: button to skip this version"
+  },
+  "updateInstall": "Actualizar",
+  "@updateInstall": {
+    "description": "Update dialog: button to download and install"
+  },
+  "updateDownloading": "Bajando la versión nueva",
+  "@updateDownloading": {
+    "description": "Title of the download progress dialog"
+  },
+  "updateConnecting": "Conectando…",
+  "@updateConnecting": {
+    "description": "Download progress dialog: shown before the first byte arrives"
+  },
+  "updateDownloadFailed": "No pudimos bajar la actualización. Probá de nuevo en un rato.",
+  "@updateDownloadFailed": {
+    "description": "Snackbar when the update download fails"
+  },
+  "updateStepTitle": "Un paso más",
+  "@updateStepTitle": {
+    "description": "Title of the dialog that asks for the install-unknown-apps permission"
+  },
+  "updatePermissionBody": "Android pide que le des permiso a Vynote para instalar su propia actualización. Es una sola vez. Te llevamos a los ajustes: activá \"Permitir de esta fuente\", volvé y tocá Actualizar de nuevo.",
+  "@updatePermissionBody": {
+    "description": "Body of the dialog that asks for the install permission on Android"
+  },
+  "updateGoToSettings": "Ir a ajustes",
+  "@updateGoToSettings": {
+    "description": "Button that opens the Android settings"
+  },
+  "updateDoneTitle": "Vynote se actualizó",
+  "@updateDoneTitle": {
+    "description": "Title of the dialog shown after the update installed"
+  },
+  "updateDoneBody": "Ya quedó instalada la {version}. Reiniciá la app para usarla.",
+  "@updateDoneBody": {
+    "description": "Body of the dialog shown after the update installed",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "updateRestartNow": "Reiniciar ahora",
+  "@updateRestartNow": {
+    "description": "Button to restart the app after updating"
+  },
+  "updateCancelled": "Actualización cancelada.",
+  "@updateCancelled": {
+    "description": "Snackbar when the user cancels the update"
+  },
+  "updateManualTitle": "Instalala a mano",
+  "@updateManualTitle": {
+    "description": "Title of the dialog that shows a terminal command to install the update"
+  },
+  "updateManualBody": "No encontramos cómo pedir permisos de administrador. Abrí una terminal y corré:",
+  "@updateManualBody": {
+    "description": "Body of the manual install dialog"
+  },
+  "updateCommandCopied": "Comando copiado",
+  "@updateCommandCopied": {
+    "description": "Snackbar after copying the install command"
+  },
+  "commonCopy": "Copiar",
+  "@commonCopy": {
+    "description": "Generic \"Copy\" button"
+  },
+  "updateInstallerFailed": "No pudimos abrir el instalador. Probá de nuevo en un rato.",
+  "@updateInstallerFailed": {
+    "description": "Snackbar when Android cannot open the installer"
+  },
+  "updateInstallFailed": "No se pudo instalar la actualización. Probá de nuevo en un rato.",
+  "@updateInstallFailed": {
+    "description": "Snackbar when the update cannot be installed on desktop"
+  },
+  "exportPdfSaved": "PDF de \"{name}\" guardado",
+  "@exportPdfSaved": {
+    "description": "Snackbar after saving a notebook PDF",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "exportPdfGenerating": "Generando PDF",
+  "@exportPdfGenerating": {
+    "description": "Title of the PDF generation progress dialog"
+  },
+  "exportSheetProgress": "Hoja {done} de {total}",
+  "@exportSheetProgress": {
+    "description": "Export progress: current sheet out of total",
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "exportPdfFailed": "No se pudo generar el PDF: {error}",
+  "@exportPdfFailed": {
+    "description": "Snackbar when the PDF could not be generated",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "exportImagesGenerating": "Generando imágenes",
+  "@exportImagesGenerating": {
+    "description": "Title of the image export progress dialog"
+  },
+  "exportImagesFailed": "No se pudieron generar las imágenes: {error}",
+  "@exportImagesFailed": {
+    "description": "Snackbar when the images could not be generated",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "exportImagesSaved": "Imágenes guardadas",
+  "@exportImagesSaved": {
+    "description": "Snackbar after saving several images"
+  },
+  "exportImageSaved": "Imagen guardada",
+  "@exportImageSaved": {
+    "description": "Snackbar after saving a single image"
+  },
+  "exportFolderTitle": "Exportando carpeta",
+  "@exportFolderTitle": {
+    "description": "Title of the folder export progress dialog"
+  },
+  "exportFolderProgress": "Cuaderno {done} de {total}",
+  "@exportFolderProgress": {
+    "description": "Folder export or import progress: current notebook out of total",
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "exportFolderDone": "Carpeta exportada",
+  "@exportFolderDone": {
+    "description": "Snackbar after exporting a folder"
+  },
+  "exportFolderFailed": "No se pudo exportar la carpeta: {error}",
+  "@exportFolderFailed": {
+    "description": "Snackbar when the folder could not be exported",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errImportNotReadable": "El archivo no es un cuaderno de Vynote (no se puede leer).",
+  "@errImportNotReadable": {
+    "description": "Import error: the file is not readable as a notebook"
+  },
+  "errImportNotVynote": "El archivo no es un cuaderno de Vynote.",
+  "@errImportNotVynote": {
+    "description": "Import error: the file is not a Vynote notebook"
+  },
+  "errImportNewerVersion": "El archivo es de una versión más nueva de Vynote. Actualizá la app para abrirlo.",
+  "@errImportNewerVersion": {
+    "description": "Import error: the file comes from a newer app version"
+  },
+  "errImportBrokenSheetList": "La lista de hojas está rota.",
+  "@errImportBrokenSheetList": {
+    "description": "Import error: the sheet list inside the file is corrupt"
+  },
+  "errImportNoSheets": "El cuaderno no tiene hojas.",
+  "@errImportNoSheets": {
+    "description": "Import error: the notebook has no sheets"
+  },
+  "errImportBrokenSheetAny": "Una hoja del archivo está rota.",
+  "@errImportBrokenSheetAny": {
+    "description": "Import error: one sheet is corrupt"
+  },
+  "errImportInvalidNames": "El archivo tiene nombres no válidos.",
+  "@errImportInvalidNames": {
+    "description": "Import error: the file has invalid file names"
+  },
+  "errImportNotZip": "El archivo no es un .zip.",
+  "@errImportNotZip": {
+    "description": "Import error: the file is not a zip"
+  },
+  "errImportNoNotebooks": "El .zip no tiene cuadernos de Vynote. ¿Lo exportaste en PDF o PNG?",
+  "@errImportNoNotebooks": {
+    "description": "Import error: the zip has no Vynote notebooks"
+  },
+  "errImportMissingFile": "Al archivo le falta {name}: está roto o no es de Vynote.",
+  "@errImportMissingFile": {
+    "description": "Import error: a required file is missing inside the notebook file",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "errImportBrokenFile": "{name} está roto.",
+  "@errImportBrokenFile": {
+    "description": "Import error: a file inside the notebook file is corrupt",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "errImportBrokenSheet": "La hoja {name} está rota.",
+  "@errImportBrokenSheet": {
+    "description": "Import error: a given sheet is corrupt",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryTitle": "Cuadernos",
+  "@libraryTitle": {
+    "description": "Title at the top of the library when no folder is open"
+  },
+  "libraryHome": "Inicio",
+  "@libraryHome": {
+    "description": "Name of the root of the library (home): breadcrumb, move dialog and path labels"
+  },
+  "libraryNew": "Nuevo",
+  "@libraryNew": {
+    "description": "Label of the floating button that creates a notebook or folder"
+  },
+  "libraryNewNotebook": "Cuaderno nuevo",
+  "@libraryNewNotebook": {
+    "description": "Library new menu: create a notebook"
+  },
+  "libraryNewFolder": "Carpeta nueva",
+  "@libraryNewFolder": {
+    "description": "Library new menu and dialog title: create a folder"
+  },
+  "libraryImportNotebook": "Importar cuaderno .vynote",
+  "@libraryImportNotebook": {
+    "description": "Library new menu: import a .vynote notebook file"
+  },
+  "libraryImportFolder": "Importar carpeta (.zip)",
+  "@libraryImportFolder": {
+    "description": "Library new menu: import a folder from a zip"
+  },
+  "libraryMenuTooltip": "Más opciones",
+  "@libraryMenuTooltip": {
+    "description": "Tooltip of the library overflow button"
+  },
+  "libraryUpTooltip": "Subir una carpeta",
+  "@libraryUpTooltip": {
+    "description": "Tooltip of the back arrow that goes up one folder"
+  },
+  "librarySearchHint": "Buscar cuadernos y carpetas",
+  "@librarySearchHint": {
+    "description": "Hint of the library search field"
+  },
+  "librarySearchClear": "Borrar búsqueda",
+  "@librarySearchClear": {
+    "description": "Tooltip of the button that clears the library search"
+  },
+  "libraryEmptyNoResults": "Sin resultados",
+  "@libraryEmptyNoResults": {
+    "description": "Library empty state when the search finds nothing"
+  },
+  "libraryEmptyNone": "Todavía no hay cuadernos",
+  "@libraryEmptyNone": {
+    "description": "Library empty state when there are no notebooks at all"
+  },
+  "libraryEmptyFolder": "Esta carpeta está vacía",
+  "@libraryEmptyFolder": {
+    "description": "Library empty state inside an empty folder"
+  },
+  "libraryNotebookCount": "{count, plural, =1{{count} cuaderno} other{{count} cuadernos}}",
+  "@libraryNotebookCount": {
+    "description": "Number of notebooks (library header and folder card)",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryFolderCount": "{count, plural, =1{{count} carpeta} other{{count} carpetas}}",
+  "@libraryFolderCount": {
+    "description": "Number of folders in the library header",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryHeaderFirst": "Creá el primero para empezar",
+  "@libraryHeaderFirst": {
+    "description": "Library header subtitle when there is nothing yet"
+  },
+  "libraryHeaderHint": "{parts} · mantené uno apretado para opciones o arrastralo a una carpeta",
+  "@libraryHeaderHint": {
+    "description": "Library header subtitle: counts followed by a usage hint",
+    "placeholders": {
+      "parts": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryResultsEverywhere": "Resultados en todas las carpetas",
+  "@libraryResultsEverywhere": {
+    "description": "Library header subtitle while searching"
+  },
+  "libraryNotebookDeleted": "Cuaderno borrado",
+  "@libraryNotebookDeleted": {
+    "description": "Snackbar when the open notebook was deleted from inside"
+  },
+  "libraryNotebookGone": "El cuaderno ya no existe",
+  "@libraryNotebookGone": {
+    "description": "Snackbar when a link points to a notebook that does not exist anymore"
+  },
+  "libraryLockedNotebook": "Este cuaderno está bloqueado",
+  "@libraryLockedNotebook": {
+    "description": "Subtitle of the PIN dialog when opening a locked notebook"
+  },
+  "libraryWrongPin": "PIN incorrecto",
+  "@libraryWrongPin": {
+    "description": "Snackbar when the PIN is wrong"
+  },
+  "libraryImportedAs": "Importado como \"{name}\"",
+  "@libraryImportedAs": {
+    "description": "Snackbar after importing a notebook",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryImportFailed": "No se pudo importar: {error}",
+  "@libraryImportFailed": {
+    "description": "Snackbar when an import failed",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryImportingFolder": "Importando carpeta",
+  "@libraryImportingFolder": {
+    "description": "Title of the folder import progress dialog"
+  },
+  "libraryImportCancelled": "Importación cancelada",
+  "@libraryImportCancelled": {
+    "description": "Snackbar when the user cancels a folder import"
+  },
+  "libraryImportUnreadable": " ({count} no se pudieron leer)",
+  "@libraryImportUnreadable": {
+    "description": "Suffix of the import result when some notebooks could not be read",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryImportedMany": "Importados {count} cuadernos{fail}",
+  "@libraryImportedMany": {
+    "description": "Snackbar after importing notebooks into the current folder",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "fail": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryImportedFolder": "Carpeta \"{name}\" importada: {count} cuadernos{fail}",
+  "@libraryImportedFolder": {
+    "description": "Snackbar after importing a folder",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      },
+      "fail": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryExportDone": "Cuaderno \"{name}\" guardado",
+  "@libraryExportDone": {
+    "description": "Snackbar after exporting a notebook as .vynote",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryExportFailed": "No se pudo exportar: {error}",
+  "@libraryExportFailed": {
+    "description": "Snackbar when the export failed",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryFolderHint": "Ej: Facultad",
+  "@libraryFolderHint": {
+    "description": "Hint of the new folder name field"
+  },
+  "libraryRenameNotebook": "Renombrar cuaderno",
+  "@libraryRenameNotebook": {
+    "description": "Title of the rename notebook dialog"
+  },
+  "libraryRenameFolder": "Renombrar carpeta",
+  "@libraryRenameFolder": {
+    "description": "Title of the rename folder dialog"
+  },
+  "libraryCopySuffix": "{name} (copia)",
+  "@libraryCopySuffix": {
+    "description": "Name given to a duplicated notebook",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryDuplicated": "Cuaderno duplicado",
+  "@libraryDuplicated": {
+    "description": "Snackbar after duplicating a notebook"
+  },
+  "libraryFolderEmptyExport": "La carpeta está vacía",
+  "@libraryFolderEmptyExport": {
+    "description": "Snackbar when trying to export an empty folder"
+  },
+  "libraryMoveTitle": "Mover \"{name}\" a…",
+  "@libraryMoveTitle": {
+    "description": "Title of the move dialog",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryMovedTo": "Movido a {path}",
+  "@libraryMovedTo": {
+    "description": "Snackbar after moving a notebook",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryMovedFolderTo": "Movida a {path}",
+  "@libraryMovedFolderTo": {
+    "description": "Snackbar after moving a folder",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryUndo": "Deshacer",
+  "@libraryUndo": {
+    "description": "Snackbar action that undoes a move"
+  },
+  "libraryFolderEmptyBody": "La carpeta está vacía.",
+  "@libraryFolderEmptyBody": {
+    "description": "Body of the delete confirmation for an empty folder"
+  },
+  "libraryDeleteAllTitle": "Borrar todo",
+  "@libraryDeleteAllTitle": {
+    "description": "Title of the confirmation to delete a folder with everything in it"
+  },
+  "libraryDeleteAllBody": "Se borran la carpeta \"{name}\", sus subcarpetas y {count, plural, =1{1 cuaderno} other{{count} cuadernos}} con todas sus hojas. No se puede deshacer.",
+  "@libraryDeleteAllBody": {
+    "description": "Body of the confirmation to delete a folder and its contents",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryFolderWhatToDo": "¿Qué hacemos con lo que tiene adentro?",
+  "@libraryFolderWhatToDo": {
+    "description": "Body of the dialog that asks what to do with a folder content when deleting it"
+  },
+  "libraryFolderKeep": "Sacar los cuadernos a {parent}",
+  "@libraryFolderKeep": {
+    "description": "Button that moves the notebooks out of the folder being deleted",
+    "placeholders": {
+      "parent": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryOptRename": "Renombrar",
+  "@libraryOptRename": {
+    "description": "Context menu item: rename"
+  },
+  "libraryOptMove": "Mover a…",
+  "@libraryOptMove": {
+    "description": "Context menu item: move to another folder"
+  },
+  "libraryOptExport": "Exportar",
+  "@libraryOptExport": {
+    "description": "Context menu item: export"
+  },
+  "libraryOptDelete": "Borrar",
+  "@libraryOptDelete": {
+    "description": "Context menu item: delete"
+  },
+  "libraryOptOpen": "Abrir",
+  "@libraryOptOpen": {
+    "description": "Context menu item: open a notebook"
+  },
+  "libraryOptDuplicate": "Duplicar",
+  "@libraryOptDuplicate": {
+    "description": "Context menu item: duplicate a notebook"
+  },
+  "librarySheetCount": "{count, plural, =1{{count} hoja} other{{count} hojas}}",
+  "@librarySheetCount": {
+    "description": "Number of sheets of a notebook (library card)",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "moveHere": "acá",
+  "@moveHere": {
+    "description": "Label next to the folder where the item currently is, in the move dialog"
+  },
+  "syncIndicatorSynced": "Sincronizado",
+  "@syncIndicatorSynced": {
+    "description": "Tooltip of the sync indicator: everything is synced"
+  },
+  "syncIndicatorSyncing": "Sincronizando",
+  "@syncIndicatorSyncing": {
+    "description": "Tooltip of the sync indicator: syncing now"
+  },
+  "syncIndicatorPending": "Cambios por subir",
+  "@syncIndicatorPending": {
+    "description": "Tooltip of the sync indicator: local changes waiting to upload"
+  },
+  "syncIndicatorOffline": "Sin conexión",
+  "@syncIndicatorOffline": {
+    "description": "Tooltip of the sync indicator: offline"
+  },
+  "syncIndicatorError": "Error de sincronización",
+  "@syncIndicatorError": {
+    "description": "Tooltip of the sync indicator: sync error"
+  },
+  "dateToday": "hoy {time}",
+  "@dateToday": {
+    "description": "Date of a notebook edited today, followed by the time",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "dateYesterday": "ayer {time}",
+  "@dateYesterday": {
+    "description": "Date of a notebook edited yesterday, followed by the time",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "datePatternTime": "HH:mm",
+  "@datePatternTime": {
+    "description": "DateFormat pattern for the time of day (24 h in Spanish)"
+  },
+  "datePatternDayMonth": "dd/MM",
+  "@datePatternDayMonth": {
+    "description": "DateFormat pattern for day and month of a date in the current year"
+  },
+  "datePatternDayMonthYear": "dd/MM/yyyy",
+  "@datePatternDayMonthYear": {
+    "description": "DateFormat pattern for day, month and year of a date in another year"
+  },
+  "syncErrOffline": "Sin conexión",
+  "@syncErrOffline": {
+    "description": "Sync error: no connection"
+  },
+  "syncErrAuthExpired": "La sesión de Google venció. Volvé a conectar.",
+  "@syncErrAuthExpired": {
+    "description": "Sync error: the Google session expired"
+  },
+  "syncErrConflict": "El archivo cambió en la nube mientras se subía; se reintenta",
+  "@syncErrConflict": {
+    "description": "Sync error: the file changed in the cloud while uploading"
+  },
+  "syncErrNotFound": "No existe en la nube",
+  "@syncErrNotFound": {
+    "description": "Sync error: the file does not exist in the cloud"
+  },
+  "syncErrVaultChanged": "Cambió la configuración de cifrado de la nube",
+  "@syncErrVaultChanged": {
+    "description": "Sync error: the cloud encryption setup changed"
+  },
+  "syncErrCryptoLocked": "La nube está cifrada: ingresá la frase en Sincronización > Cifrado",
+  "@syncErrCryptoLocked": {
+    "description": "Sync error: the cloud is encrypted and the passphrase is missing"
+  },
+  "syncErrWrongPassphrase": "La frase de cifrado es incorrecta",
+  "@syncErrWrongPassphrase": {
+    "description": "Sync error: wrong encryption passphrase"
+  },
+  "syncErrCryptoOtherDevice": "Otro dispositivo activó el cifrado al mismo tiempo. Ingresá su frase.",
+  "@syncErrCryptoOtherDevice": {
+    "description": "Sync error: another device enabled encryption at the same time"
+  },
+  "syncErrCloudNotEncrypted": "La nube no está cifrada",
+  "@syncErrCloudNotEncrypted": {
+    "description": "Sync error: the cloud is not encrypted"
+  },
+  "syncErrConnectFirst": "Conectá con Google primero",
+  "@syncErrConnectFirst": {
+    "description": "Sync error: not connected to Google yet"
+  },
+  "syncErrBackgroundBusy": "Hay una sincronización en segundo plano en curso; probá de nuevo en unos segundos",
+  "@syncErrBackgroundBusy": {
+    "description": "Sync error: a background sync is running"
+  },
+  "syncErrFilesFailed": "{count} archivo(s) no se pudieron sincronizar; se reintenta en la próxima pasada",
+  "@syncErrFilesFailed": {
+    "description": "Sync error: some files could not be synced",
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "syncErrCouldNotSync": "No se pudo sincronizar: {detail}",
+  "@syncErrCouldNotSync": {
+    "description": "Sync error: generic failure with its technical detail",
+    "placeholders": {
+      "detail": {
+        "type": "String"
+      }
+    }
+  },
+  "syncAgoNow": "hace un momento",
+  "@syncAgoNow": {
+    "description": "Relative time: just now"
+  },
+  "syncAgoMinutes": "hace {count} min",
+  "@syncAgoMinutes": {
+    "description": "Relative time: minutes ago",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncAgoHours": "hace {count} h",
+  "@syncAgoHours": {
+    "description": "Relative time: hours ago",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncAgoDays": "hace {count} d",
+  "@syncAgoDays": {
+    "description": "Relative time: days ago",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncNotConfigured": "Esta versión no tiene configurado el acceso a Google (falta: {missing}). Las notas siguen guardándose en este dispositivo.",
+  "@syncNotConfigured": {
+    "description": "Sync sheet status when the build has no Google credentials",
+    "placeholders": {
+      "missing": {
+        "type": "String"
+      }
+    }
+  },
+  "syncDisconnectedStatus": "Sin conectar. Los cuadernos se guardan solo en este dispositivo.",
+  "@syncDisconnectedStatus": {
+    "description": "Sync sheet status when not connected"
+  },
+  "syncConnecting": "Conectando con Google…",
+  "@syncConnecting": {
+    "description": "Sync sheet status while connecting"
+  },
+  "syncSyncing": "Sincronizando…",
+  "@syncSyncing": {
+    "description": "Sync sheet status while syncing"
+  },
+  "syncConnectedAs": "Conectado como {account}\n{last}",
+  "@syncConnectedAs": {
+    "description": "Sync sheet status when connected: account and last sync line",
+    "placeholders": {
+      "account": {
+        "type": "String"
+      },
+      "last": {
+        "type": "String"
+      }
+    }
+  },
+  "syncNever": "Todavía no se sincronizó",
+  "@syncNever": {
+    "description": "Sync sheet: the first sync did not happen yet"
+  },
+  "syncLast": "Última sincronización: {ago}",
+  "@syncLast": {
+    "description": "Sync sheet: when the last sync happened",
+    "placeholders": {
+      "ago": {
+        "type": "String"
+      }
+    }
+  },
+  "syncTitle": "Sincronización con Google Drive",
+  "@syncTitle": {
+    "description": "Title of the sync sheet and of the library menu item"
+  },
+  "syncConflicts": "Hubo {count} conflicto(s): buscá las hojas \"(conflicto)\" y quedate con la que sirva.",
+  "@syncConflicts": {
+    "description": "Sync sheet: warning about conflicting sheets",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncBackgroundTitle": "Sincronizar en segundo plano",
+  "@syncBackgroundTitle": {
+    "description": "Sync sheet switch title"
+  },
+  "syncBackgroundSubtitle": "Cada 15 minutos con red, aunque la app esté cerrada.",
+  "@syncBackgroundSubtitle": {
+    "description": "Sync sheet switch subtitle"
+  },
+  "syncConnect": "Conectar con Google",
+  "@syncConnect": {
+    "description": "Sync sheet button to sign in with Google"
+  },
+  "syncNow": "Sincronizar ahora",
+  "@syncNow": {
+    "description": "Sync sheet button to sync right now"
+  },
+  "syncDisconnect": "Desconectar",
+  "@syncDisconnect": {
+    "description": "Sync sheet button to disconnect the Google account"
+  },
+  "cryptoStatusUnknown": "Todavía no se sabe: se ve en la próxima sincronización.",
+  "@cryptoStatusUnknown": {
+    "description": "Encryption status: unknown until the next sync"
+  },
+  "cryptoStatusOff": "Desactivado: Google puede leer lo que se sube a tu Drive.",
+  "@cryptoStatusOff": {
+    "description": "Encryption status: off"
+  },
+  "cryptoStatusOn": "Activado: en Drive solo hay archivos cifrados con tu frase.",
+  "@cryptoStatusOn": {
+    "description": "Encryption status: on"
+  },
+  "cryptoStatusLocked": "La nube está cifrada. Ingresá la frase para poder sincronizar.",
+  "@cryptoStatusLocked": {
+    "description": "Encryption status: the cloud is encrypted and needs the passphrase"
+  },
+  "cryptoTitle": "Cifrado",
+  "@cryptoTitle": {
+    "description": "Title of the encryption section of the sync sheet"
+  },
+  "cryptoWarning": "Si olvidás la frase no hay forma de recuperar lo que está en la nube (lo de este dispositivo no se pierde). Los nombres de archivo en Drive son códigos al azar y siguen a la vista.",
+  "@cryptoWarning": {
+    "description": "Encryption section: warning about forgetting the passphrase"
+  },
+  "cryptoEnable": "Activar cifrado",
+  "@cryptoEnable": {
+    "description": "Button and dialog title to turn encryption on"
+  },
+  "cryptoEnterPass": "Ingresar frase",
+  "@cryptoEnterPass": {
+    "description": "Button to enter the passphrase of an encrypted cloud"
+  },
+  "cryptoDisableTitle": "¿Desactivar el cifrado?",
+  "@cryptoDisableTitle": {
+    "description": "Title of the confirmation to turn encryption off"
+  },
+  "cryptoDisableBody": "Se vuelve a subir todo sin cifrar y se borra lo cifrado de Drive. Puede tardar si hay muchos archivos.",
+  "@cryptoDisableBody": {
+    "description": "Body of the confirmation to turn encryption off"
+  },
+  "cryptoDisableConfirm": "Desactivar",
+  "@cryptoDisableConfirm": {
+    "description": "Confirm button to turn encryption off"
+  },
+  "cryptoDisable": "Desactivar cifrado",
+  "@cryptoDisable": {
+    "description": "Button to turn encryption off"
+  },
+  "cryptoPassTitle": "Frase de cifrado",
+  "@cryptoPassTitle": {
+    "description": "Title of the dialog that asks for the passphrase"
+  },
+  "cryptoPassIntro": "Elegí una frase y anotala en un lugar seguro. Si la olvidás no hay forma de recuperar lo que está en la nube (lo de este dispositivo no se pierde). Se va a subir todo cifrado y borrar lo anterior de Drive.",
+  "@cryptoPassIntro": {
+    "description": "Passphrase dialog: explanation when enabling encryption"
+  },
+  "cryptoPassLabel": "Frase",
+  "@cryptoPassLabel": {
+    "description": "Label of the passphrase field"
+  },
+  "cryptoPassRepeat": "Repetí la frase",
+  "@cryptoPassRepeat": {
+    "description": "Label of the repeat passphrase field"
+  },
+  "cryptoPassMismatch": "Las dos frases no coinciden.",
+  "@cryptoPassMismatch": {
+    "description": "Passphrase dialog error: the two passphrases differ"
+  },
+  "cryptoActivate": "Activar",
+  "@cryptoActivate": {
+    "description": "Passphrase dialog confirm button when enabling"
+  },
+  "cryptoUnlock": "Desbloquear",
+  "@cryptoUnlock": {
+    "description": "Passphrase dialog confirm button when unlocking"
+  },
+  "cryptoPassShort": "La frase tiene que tener al menos {min} caracteres.",
+  "@cryptoPassShort": {
+    "description": "Passphrase dialog error: passphrase too short",
+    "placeholders": {
+      "min": {
+        "type": "int"
+      }
+    }
+  },
+  "cryptoStepDeriving": "Derivando la clave (puede tardar unos segundos)…",
+  "@cryptoStepDeriving": {
+    "description": "Encryption progress: deriving the key"
+  },
+  "cryptoStepSyncBeforeEncrypt": "Sincronizando antes de cifrar…",
+  "@cryptoStepSyncBeforeEncrypt": {
+    "description": "Encryption progress: syncing before encrypting"
+  },
+  "cryptoStepSyncBeforeDecrypt": "Sincronizando antes de descifrar…",
+  "@cryptoStepSyncBeforeDecrypt": {
+    "description": "Encryption progress: syncing before decrypting"
+  },
+  "cryptoStepEncrypting": "Cifrando {done}/{total}…",
+  "@cryptoStepEncrypting": {
+    "description": "Encryption progress: encrypting file n of total",
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "cryptoStepDecrypting": "Descifrando {done}/{total}…",
+  "@cryptoStepDecrypting": {
+    "description": "Encryption progress: decrypting file n of total",
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "commonRename": "Renombrar",
+  "@commonRename": {
+    "description": "Generic \"Rename\" menu item or button"
+  },
+  "commonExport": "Exportar",
+  "@commonExport": {
+    "description": "Generic \"Export\" menu item, button or title"
+  },
+  "commonSave": "Guardar",
+  "@commonSave": {
+    "description": "Generic \"Save\" button"
+  },
+  "commonUpdate": "Actualizar",
+  "@commonUpdate": {
+    "description": "Generic \"Update\"/\"Refresh\" button"
+  },
+  "commonSearch": "Buscar",
+  "@commonSearch": {
+    "description": "Generic \"Search\" menu item or tooltip"
+  },
+  "sheetLabel": "Hoja {n}",
+  "@sheetLabel": {
+    "description": "Label of a sheet by its number",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "sheetLabelTitled": "Hoja {n} · {title}",
+  "@sheetLabelTitled": {
+    "description": "Label of a sheet with its number and title",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      },
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "sheetCountPlural": "{count, plural, =1{{count} hoja} other{{count} hojas}}",
+  "@sheetCountPlural": {
+    "description": "Number of sheets (sections and export dialogs)",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "menuInsertPdf": "PDF",
+  "@menuInsertPdf": {
+    "description": "Insert menu: import a PDF"
+  },
+  "menuInsertVoice": "Grabación de voz",
+  "@menuInsertVoice": {
+    "description": "Insert menu: record voice"
+  },
+  "menuInsertImage": "Imagen",
+  "@menuInsertImage": {
+    "description": "Insert menu: image from the gallery"
+  },
+  "menuInsertCamera": "Cámara",
+  "@menuInsertCamera": {
+    "description": "Insert menu: take a photo"
+  },
+  "menuInsertAudio": "Archivo de audio",
+  "@menuInsertAudio": {
+    "description": "Insert menu: audio file"
+  },
+  "menuInsertSticky": "Nota adhesiva",
+  "@menuInsertSticky": {
+    "description": "Insert menu: sticky note"
+  },
+  "menuInsertSheet": "Hoja nueva",
+  "@menuInsertSheet": {
+    "description": "Insert menu: new sheet"
+  },
+  "menuMoreReadingExit": "Salir del modo lectura",
+  "@menuMoreReadingExit": {
+    "description": "More menu: leave reading mode"
+  },
+  "menuMoreReading": "Modo lectura",
+  "@menuMoreReading": {
+    "description": "More menu: enter reading mode"
+  },
+  "menuMoreBookmarkRemove": "Quitar marcador",
+  "@menuMoreBookmarkRemove": {
+    "description": "More menu and tooltip: remove the bookmark of the sheet"
+  },
+  "menuMoreBookmarkAdd": "Marcar esta hoja",
+  "@menuMoreBookmarkAdd": {
+    "description": "More menu and tooltip: bookmark the current sheet"
+  },
+  "menuMoreFullscreen": "Pantalla completa",
+  "@menuMoreFullscreen": {
+    "description": "More menu and toolbar: full screen"
+  },
+  "menuMoreStyle": "Estilo de hoja",
+  "@menuMoreStyle": {
+    "description": "More menu: sheet style"
+  },
+  "menuMorePaperColor": "Color del papel",
+  "@menuMorePaperColor": {
+    "description": "More menu: paper color of an infinite canvas, and dialog title"
+  },
+  "menuMoreShortcuts": "Atajos de teclado",
+  "@menuMoreShortcuts": {
+    "description": "More menu: keyboard shortcuts"
+  },
+  "menuMoreFavoriteRemove": "Quitar de favoritos",
+  "@menuMoreFavoriteRemove": {
+    "description": "Tooltip: remove the notebook from favorites"
+  },
+  "menuMoreFavoriteAdd": "Favorito",
+  "@menuMoreFavoriteAdd": {
+    "description": "Tooltip: mark the notebook as favorite"
+  },
+  "menuMoreLockRemove": "Quitar bloqueo",
+  "@menuMoreLockRemove": {
+    "description": "Tooltip: remove the PIN lock"
+  },
+  "menuMoreLockAdd": "Bloquear con PIN",
+  "@menuMoreLockAdd": {
+    "description": "Tooltip: lock the notebook with a PIN"
+  },
+  "menuMoreShare": "Compartir",
+  "@menuMoreShare": {
+    "description": "Tooltip: share the notebook as PDF"
+  },
+  "menuMorePrint": "Imprimir",
+  "@menuMorePrint": {
+    "description": "Tooltip: print the notebook"
+  },
+  "menuMoreDeleteNotebook": "Borrar cuaderno",
+  "@menuMoreDeleteNotebook": {
+    "description": "Tooltip: delete the notebook"
+  },
+  "menuExportFolderTitle": "Exportar carpeta",
+  "@menuExportFolderTitle": {
+    "description": "Title of the folder export sheet"
+  },
+  "menuExportFolderPdf": "Un PDF por cuaderno",
+  "@menuExportFolderPdf": {
+    "description": "Folder export: PDF option description"
+  },
+  "menuExportFolderPng": "Una carpeta por cuaderno con una imagen por hoja",
+  "@menuExportFolderPng": {
+    "description": "Folder export: PNG option description"
+  },
+  "menuExportFolderVynote": "Un .vynote por cuaderno, para pasarlo a otro dispositivo",
+  "@menuExportFolderVynote": {
+    "description": "Folder export: .vynote option description"
+  },
+  "menuExportFormatPdf": "PDF",
+  "@menuExportFormatPdf": {
+    "description": "Export format name: PDF"
+  },
+  "menuExportFormatPng": "Imágenes (PNG)",
+  "@menuExportFormatPng": {
+    "description": "Export format name: PNG images"
+  },
+  "menuExportFormatVynote": "Vynote",
+  "@menuExportFormatVynote": {
+    "description": "Export format name: Vynote"
+  },
+  "menuExportBackground": "Incluir el fondo de la hoja",
+  "@menuExportBackground": {
+    "description": "Export sheet switch: include the paper background"
+  },
+  "menuExportBackgroundOff": "Apagado: solo lo escrito, sobre blanco",
+  "@menuExportBackgroundOff": {
+    "description": "Export sheet switch subtitle when off"
+  },
+  "menuExportAllPdf": "Todo el cuaderno",
+  "@menuExportAllPdf": {
+    "description": "Export option description: whole notebook as PDF"
+  },
+  "menuExportAllPng": "Todas las hojas, en un .zip",
+  "@menuExportAllPng": {
+    "description": "Export option description: all sheets as PNGs in a zip"
+  },
+  "menuExportVynoteTitle": "Cuaderno de Vynote (.vynote)",
+  "@menuExportVynoteTitle": {
+    "description": "Export option: notebook as a .vynote file"
+  },
+  "menuExportVynoteHint": "Para pasarlo a otro dispositivo o hacer copia",
+  "@menuExportVynoteHint": {
+    "description": "Export option description: .vynote file"
+  },
+  "menuExportSheetPdf": "PDF de esta hoja",
+  "@menuExportSheetPdf": {
+    "description": "Export option: PDF of the current sheet"
+  },
+  "menuExportSheetPng": "Imagen de esta hoja (PNG)",
+  "@menuExportSheetPng": {
+    "description": "Export option: image of the current sheet"
+  },
+  "sectionNew": "Nueva sección",
+  "@sectionNew": {
+    "description": "Sections menu: create a section, and dialog title"
+  },
+  "sectionOptions": "Opciones de la sección",
+  "@sectionOptions": {
+    "description": "Tooltip of the section options button"
+  },
+  "sectionUp": "Subir",
+  "@sectionUp": {
+    "description": "Section menu: move the section up"
+  },
+  "sectionDown": "Bajar",
+  "@sectionDown": {
+    "description": "Section menu: move the section down"
+  },
+  "sectionExportTitle": "¿Qué secciones exportar?",
+  "@sectionExportTitle": {
+    "description": "Title of the dialog that asks which sections to export"
+  },
+  "sectionAll": "Todas",
+  "@sectionAll": {
+    "description": "Checkbox that selects all sections"
+  },
+  "indexTitle": "Índice",
+  "@indexTitle": {
+    "description": "Title of the index (table of contents) panel"
+  },
+  "indexEmpty": "Todavía no hay títulos.\nUsá la herramienta Título de la barra para marcar lo que escribiste.",
+  "@indexEmpty": {
+    "description": "Index panel empty state"
+  },
+  "indexLevelUp": "Pasar a Título {level}",
+  "@indexLevelUp": {
+    "description": "Index entry menu: promote the heading to the given level",
+    "placeholders": {
+      "level": {
+        "type": "int"
+      }
+    }
+  },
+  "indexLevelDown": "Pasar a Título {level}",
+  "@indexLevelDown": {
+    "description": "Index entry menu: demote the heading to the given level",
+    "placeholders": {
+      "level": {
+        "type": "int"
+      }
+    }
+  },
+  "indexRemove": "Quitar del índice",
+  "@indexRemove": {
+    "description": "Index entry menu: remove the heading from the index"
+  },
+  "indexRenameTitle": "Renombrar título",
+  "@indexRenameTitle": {
+    "description": "Dialog title to rename a heading"
+  },
+  "searchHint": "Buscá en los textos, notas adhesivas y títulos de hojas",
+  "@searchHint": {
+    "description": "Search results hint when the query is empty"
+  },
+  "searchNone": "Sin resultados para \"{query}\"",
+  "@searchNone": {
+    "description": "Search results message when nothing matches",
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
+  "searchTitleSnippet": "Título: {title}",
+  "@searchTitleSnippet": {
+    "description": "Search result snippet for a sheet title match",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "paperColorIvory": "Marfil",
+  "@paperColorIvory": {
+    "description": "Ivory paper color name (also the tooltip of its swatch)"
+  },
+  "paperColorWhite": "Blanco",
+  "@paperColorWhite": {
+    "description": "White paper color name (also the tooltip of its swatch)"
+  },
+  "paperColorCream": "Crema",
+  "@paperColorCream": {
+    "description": "Cream paper color name (also the tooltip of its swatch)"
+  },
+  "paperColorGray": "Gris",
+  "@paperColorGray": {
+    "description": "Gray paper color name (also the tooltip of its swatch)"
+  },
+  "paperColorLightBlue": "Celeste",
+  "@paperColorLightBlue": {
+    "description": "Light blue paper color name (also the tooltip of its swatch)"
+  },
+  "paperColorGreen": "Verde",
+  "@paperColorGreen": {
+    "description": "Green paper color name (also the tooltip of its swatch)"
+  },
+  "styleDeleteTemplate": "¿Borrar la plantilla «{name}»?",
+  "@styleDeleteTemplate": {
+    "description": "Title of the confirmation to delete a user template",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "styleSize": "Tamaño",
+  "@styleSize": {
+    "description": "Style dialog section: paper size"
+  },
+  "styleBackground": "Fondo",
+  "@styleBackground": {
+    "description": "Style dialog section: paper background"
+  },
+  "styleTemplates": "Plantillas",
+  "@styleTemplates": {
+    "description": "Style dialog section: built-in templates"
+  },
+  "styleMyTemplates": "Mis plantillas",
+  "@styleMyTemplates": {
+    "description": "Style dialog section: user templates"
+  },
+  "styleFromImage": "Desde una imagen…",
+  "@styleFromImage": {
+    "description": "Style dialog button: create a template from an image"
+  },
+  "styleSpacingLined": "Interlineado",
+  "@styleSpacingLined": {
+    "description": "Style dialog section: line spacing for lined paper"
+  },
+  "styleSpacingGrid": "Cuadrícula",
+  "@styleSpacingGrid": {
+    "description": "Style dialog section: grid spacing"
+  },
+  "styleApplyTo": "Aplicar a",
+  "@styleApplyTo": {
+    "description": "Style dialog section: where to apply the style"
+  },
+  "styleThisSheet": "Esta hoja",
+  "@styleThisSheet": {
+    "description": "Style dialog option: apply to this sheet only"
+  },
+  "styleWholeNotebook": "Todo el cuaderno",
+  "@styleWholeNotebook": {
+    "description": "Style dialog option: apply to the whole notebook"
+  },
+  "styleTitleNew": "Hoja nueva",
+  "@styleTitleNew": {
+    "description": "Style dialog title when creating a new sheet"
+  },
+  "styleTitle": "Estilo de hoja",
+  "@styleTitle": {
+    "description": "Style dialog title"
+  },
+  "styleApply": "Aplicar",
+  "@styleApply": {
+    "description": "Style dialog confirm button"
+  },
+  "pagesAll": "Ver todas",
+  "@pagesAll": {
+    "description": "Tooltip of the pages panel button when the bookmark filter is on"
+  },
+  "pagesOnlyBookmarked": "Solo marcadas",
+  "@pagesOnlyBookmarked": {
+    "description": "Tooltip of the pages panel button that filters bookmarked sheets"
+  },
+  "pagesNewAfter": "Hoja nueva después de la actual",
+  "@pagesNewAfter": {
+    "description": "Tooltip of the button that adds a sheet after the current one"
+  },
+  "pagesNoBookmarks": "No hay hojas marcadas",
+  "@pagesNoBookmarks": {
+    "description": "Pages panel empty state with the bookmark filter on"
+  },
+  "pagesNoBookmarksHint": "No hay hojas marcadas. Usá el marcador de arriba para marcar la hoja que estás viendo.",
+  "@pagesNoBookmarksHint": {
+    "description": "Pages panel hint when there are no bookmarked sheets"
+  },
+  "pagesBookmark": "Marcar",
+  "@pagesBookmark": {
+    "description": "Tooltip of the thumbnail bookmark button"
+  },
+  "pagesDragToMove": "Arrastrar para mover",
+  "@pagesDragToMove": {
+    "description": "Tooltip of the thumbnail drag handle"
+  },
+  "pagesNewAfterMenu": "Hoja nueva después",
+  "@pagesNewAfterMenu": {
+    "description": "Sheet menu: add a sheet after this one"
+  },
+  "pagesNewWithTemplate": "Hoja nueva con plantilla…",
+  "@pagesNewWithTemplate": {
+    "description": "Sheet menu: add a sheet using a template"
+  },
+  "pagesDuplicate": "Duplicar",
+  "@pagesDuplicate": {
+    "description": "Sheet menu: duplicate the sheet"
+  },
+  "pagesSaveTemplate": "Guardar como plantilla",
+  "@pagesSaveTemplate": {
+    "description": "Sheet menu and dialog title: save the sheet as a template"
+  },
+  "pagesMoveBefore": "Mover antes",
+  "@pagesMoveBefore": {
+    "description": "Sheet menu: move the sheet earlier"
+  },
+  "pagesMoveAfter": "Mover después",
+  "@pagesMoveAfter": {
+    "description": "Sheet menu: move the sheet later"
+  },
+  "notebookTemplateDefault": "Plantilla {n}",
+  "@notebookTemplateDefault": {
+    "description": "Default name suggested when saving a sheet as a template",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "notebookTemplateFailed": "No se pudo guardar la plantilla: {error}",
+  "@notebookTemplateFailed": {
+    "description": "Snackbar when the template could not be saved",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "notebookTemplateSaved": "Plantilla guardada",
+  "@notebookTemplateSaved": {
+    "description": "Snackbar after saving a template"
+  },
+  "notebookTemplateName": "Nombre",
+  "@notebookTemplateName": {
+    "description": "Label of the template name field"
+  },
+  "notebookSheetNameTitle": "Nombre de la hoja {n}",
+  "@notebookSheetNameTitle": {
+    "description": "Dialog title to rename a sheet",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "notebookOptional": "Opcional",
+  "@notebookOptional": {
+    "description": "Hint of the optional sheet title field"
+  },
+  "notebookLastSheet": "No se puede borrar la única hoja del cuaderno",
+  "@notebookLastSheet": {
+    "description": "Snackbar when deleting the only sheet"
+  },
+  "notebookDeleteSheetTitle": "Borrar la hoja {n}",
+  "@notebookDeleteSheetTitle": {
+    "description": "Title of the confirmation to delete a sheet",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "notebookDeleteSheetBody": "Se borra la hoja con todo lo que tiene (se puede deshacer).",
+  "@notebookDeleteSheetBody": {
+    "description": "Body of the confirmation to delete a sheet"
+  },
+  "notebookSheetReadFailed": "No se pudo leer la hoja: {error}",
+  "@notebookSheetReadFailed": {
+    "description": "Snackbar when a sheet cannot be read from disk",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "notebookBookmarkTitle": "Marcador",
+  "@notebookBookmarkTitle": {
+    "description": "Title of the bookmark dialog"
+  },
+  "notebookBookmarkHint": "Nombre (opcional)",
+  "@notebookBookmarkHint": {
+    "description": "Hint of the bookmark name field"
+  },
+  "notebookBookmarkNoName": "Sin nombre",
+  "@notebookBookmarkNoName": {
+    "description": "Bookmark dialog button: bookmark without a name"
+  },
+  "notebookSectionOpenFailed": "No se pudo abrir la sección: {error}",
+  "@notebookSectionOpenFailed": {
+    "description": "Snackbar when a section cannot be opened",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "notebookSectionDefault": "Sección {n}",
+  "@notebookSectionDefault": {
+    "description": "Default name of a new section",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "notebookSectionHint": "Ej: Práctica",
+  "@notebookSectionHint": {
+    "description": "Hint of the new section name field"
+  },
+  "notebookSectionRename": "Renombrar sección",
+  "@notebookSectionRename": {
+    "description": "Title of the rename section dialog"
+  },
+  "notebookLastSection": "No se puede borrar la única sección del cuaderno",
+  "@notebookLastSection": {
+    "description": "Snackbar when deleting the only section"
+  },
+  "notebookDeleteSectionTitle": "Borrar la sección \"{name}\"",
+  "@notebookDeleteSectionTitle": {
+    "description": "Title of the confirmation to delete a section",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "notebookDeleteSectionBody": "Se {count, plural, =1{borra 1 hoja con todo lo que tiene} other{borran {count} hojas con todo lo que tienen}}. No se puede deshacer.",
+  "@notebookDeleteSectionBody": {
+    "description": "Body of the confirmation to delete a section",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "notebookInsertFailed": "No se pudo insertar: {error}",
+  "@notebookInsertFailed": {
+    "description": "Snackbar when inserting something failed",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "notebookRecordingBusy": "Ya hay una grabación en curso",
+  "@notebookRecordingBusy": {
+    "description": "Snackbar when a recording is already running"
+  },
+  "notebookImportingPdf": "Importando PDF",
+  "@notebookImportingPdf": {
+    "description": "Title of the PDF import progress dialog"
+  },
+  "notebookPickFile": "Elegí el archivo…",
+  "@notebookPickFile": {
+    "description": "PDF import dialog: shown while the user picks the file"
+  },
+  "notebookSheetsImported": "{count, plural, =1{{count} hoja importada} other{{count} hojas importadas}}",
+  "@notebookSheetsImported": {
+    "description": "Snackbar after importing a PDF",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "notebookFavoriteAdded": "Agregado a favoritos",
+  "@notebookFavoriteAdded": {
+    "description": "Snackbar after marking the notebook as favorite"
+  },
+  "notebookFavoriteRemoved": "Quitado de favoritos",
+  "@notebookFavoriteRemoved": {
+    "description": "Snackbar after removing the notebook from favorites"
+  },
+  "notebookUnlockTitle": "Quitar bloqueo",
+  "@notebookUnlockTitle": {
+    "description": "Title of the PIN dialog to remove the lock"
+  },
+  "notebookUnlockHint": "Ingresá el PIN actual",
+  "@notebookUnlockHint": {
+    "description": "Subtitle of the PIN dialog to remove the lock"
+  },
+  "notebookUnlocked": "Cuaderno desbloqueado",
+  "@notebookUnlocked": {
+    "description": "Snackbar after removing the lock"
+  },
+  "notebookLockTitle": "Bloquear cuaderno",
+  "@notebookLockTitle": {
+    "description": "Title of the PIN dialog to lock the notebook"
+  },
+  "notebookLockHint": "Elegí un PIN de 4 o más números",
+  "@notebookLockHint": {
+    "description": "Subtitle of the PIN dialog to lock the notebook"
+  },
+  "notebookPinShort": "El PIN tiene que tener al menos 4 números",
+  "@notebookPinShort": {
+    "description": "Snackbar when the PIN is too short"
+  },
+  "notebookPinRepeat": "Repetí el PIN",
+  "@notebookPinRepeat": {
+    "description": "Title of the dialog that asks the PIN again"
+  },
+  "notebookPinMismatch": "Los PIN no coinciden",
+  "@notebookPinMismatch": {
+    "description": "Snackbar when the two PINs differ"
+  },
+  "notebookLocked": "Cuaderno bloqueado: se pide el PIN al abrirlo",
+  "@notebookLocked": {
+    "description": "Snackbar after locking the notebook"
+  },
+  "notebookSaved": "Cuaderno guardado",
+  "@notebookSaved": {
+    "description": "Snackbar after exporting the notebook"
+  },
+  "notebookExportFailed": "No se pudo exportar: {error}",
+  "@notebookExportFailed": {
+    "description": "Snackbar when the export failed",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "notebookSheetFileName": "{name} - hoja {n}",
+  "@notebookSheetFileName": {
+    "description": "Name used for the exported file of a single sheet",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "notebookImageSaved": "Imagen guardada",
+  "@notebookImageSaved": {
+    "description": "Snackbar after saving the image of a sheet"
+  },
+  "notebookFullscreenExit": "Salir de pantalla completa",
+  "@notebookFullscreenExit": {
+    "description": "Tooltip of the button that leaves full screen"
+  },
+  "notebookRecording": "Grabando",
+  "@notebookRecording": {
+    "description": "Recording indicator text"
+  },
+  "notebookRecordingNamed": "Grabando · {name}",
+  "@notebookRecordingNamed": {
+    "description": "Recording indicator text with the name of the audio",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "notebookRecordingStop": "Parar y guardar",
+  "@notebookRecordingStop": {
+    "description": "Tooltip of the button that stops and saves the recording"
+  },
+  "notebookRecordingCancel": "Cancelar y descartar",
+  "@notebookRecordingCancel": {
+    "description": "Tooltip of the button that cancels the recording"
+  },
+  "notebookLinkFailed": "No se pudo abrir el link",
+  "@notebookLinkFailed": {
+    "description": "Snackbar when a web link cannot be opened"
+  },
+  "notebookSheetGone": "La hoja ya no existe",
+  "@notebookSheetGone": {
+    "description": "Snackbar when a link points to a sheet that does not exist anymore"
+  },
+  "notebookBack": "Volver a los cuadernos",
+  "@notebookBack": {
+    "description": "Tooltip of the back arrow in the notebook"
+  },
+  "notebookSearchClose": "Cerrar búsqueda",
+  "@notebookSearchClose": {
+    "description": "Tooltip of the button that closes the search"
+  },
+  "notebookInsert": "Insertar",
+  "@notebookInsert": {
+    "description": "Tooltip of the insert (+) button"
+  },
+  "notebookIndexTooltip": "Índice",
+  "@notebookIndexTooltip": {
+    "description": "Tooltip of the index button"
+  },
+  "notebookSections": "Secciones",
+  "@notebookSections": {
+    "description": "Tooltip of the sections button"
+  },
+  "notebookPages": "Hojas",
+  "@notebookPages": {
+    "description": "Tooltip of the pages panel button"
+  },
+  "notebookMore": "Más opciones",
+  "@notebookMore": {
+    "description": "Tooltip of the notebook overflow button"
+  },
+  "notebookRemoteChanges": "Hay cambios de otro dispositivo",
+  "@notebookRemoteChanges": {
+    "description": "Banner shown when another device changed the open notebook"
+  },
+  "notebookSearchIn": "Buscar en \"{name}\"",
+  "@notebookSearchIn": {
+    "description": "Hint of the notebook search field",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "notebookSheetCounter": "{title}{n} / {total}",
+  "@notebookSheetCounter": {
+    "description": "Counter under the notebook title: optional sheet title prefix, current sheet and total",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      },
+      "n": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "audioPrefix": "Audio",
+  "@audioPrefix": {
+    "description": "Prefix of the default name of audio recordings (followed by a number), and hint of the audio rename field"
+  },
+  "errVoiceBusy": "Ya hay una grabación en curso",
+  "@errVoiceBusy": {
+    "description": "Error: a recording is already running"
+  },
+  "errVoiceNoPermission": "Sin permiso para usar el micrófono",
+  "@errVoiceNoPermission": {
+    "description": "Error: the microphone permission is missing"
+  },
+  "errVoiceFailed": "No se pudo grabar: {detail}",
+  "@errVoiceFailed": {
+    "description": "Error: the recording could not start",
+    "placeholders": {
+      "detail": {
+        "type": "String"
+      }
+    }
+  },
+  "headingTitle": "Agregar al índice",
+  "@headingTitle": {
+    "description": "Title of the dialog that adds a heading to the index"
+  },
+  "headingFailed": "No se pudo leer: escribí el nombre",
+  "@headingFailed": {
+    "description": "Hint of the heading name field when handwriting recognition failed"
+  },
+  "headingHint": "Nombre",
+  "@headingHint": {
+    "description": "Hint of the heading name field"
+  },
+  "headingDownloading": "Bajando el reconocimiento de letra, solo la primera vez (podés escribir el nombre mientras tanto)…",
+  "@headingDownloading": {
+    "description": "Heading dialog: the handwriting model is being downloaded"
+  },
+  "headingReading": "Leyendo la letra… (podés escribir el nombre mientras tanto)",
+  "@headingReading": {
+    "description": "Heading dialog: the handwriting is being recognized"
+  },
+  "headingMoreImportant": "Más importante",
+  "@headingMoreImportant": {
+    "description": "Tooltip of the button that lowers the heading level number"
+  },
+  "headingLessImportant": "Menos importante",
+  "@headingLessImportant": {
+    "description": "Tooltip of the button that raises the heading level number"
+  },
+  "headingLevel": "Título {level}",
+  "@headingLevel": {
+    "description": "Heading level label",
+    "placeholders": {
+      "level": {
+        "type": "int"
+      }
+    }
+  },
+  "headingAdd": "Agregar",
+  "@headingAdd": {
+    "description": "Heading dialog confirm button"
+  },
+  "formatBold": "Negrita (Ctrl+B)",
+  "@formatBold": {
+    "description": "Text formatting bar: tooltip or label (with its keyboard shortcut when it has one)"
+  },
+  "formatItalic": "Cursiva (Ctrl+I)",
+  "@formatItalic": {
+    "description": "Text formatting bar: tooltip or label (with its keyboard shortcut when it has one)"
+  },
+  "formatUnderline": "Subrayado (Ctrl+U)",
+  "@formatUnderline": {
+    "description": "Text formatting bar: tooltip or label (with its keyboard shortcut when it has one)"
+  },
+  "formatStrike": "Tachado (Alt+Shift+5)",
+  "@formatStrike": {
+    "description": "Text formatting bar: tooltip or label (with its keyboard shortcut when it has one)"
+  },
+  "formatColor": "Color del texto",
+  "@formatColor": {
+    "description": "Text formatting bar: tooltip or label (with its keyboard shortcut when it has one)"
+  },
+  "formatHighlight": "Resaltado (Ctrl+Shift+H)",
+  "@formatHighlight": {
+    "description": "Text formatting bar: tooltip or label (with its keyboard shortcut when it has one)"
+  },
+  "formatNormal": "Normal",
+  "@formatNormal": {
+    "description": "Text formatting bar: tooltip or label (with its keyboard shortcut when it has one)"
+  },
+  "formatTitle": "Título",
+  "@formatTitle": {
+    "description": "Text formatting bar: tooltip or label (with its keyboard shortcut when it has one)"
+  },
+  "formatSubtitle": "Subtítulo",
+  "@formatSubtitle": {
+    "description": "Text formatting bar: tooltip or label (with its keyboard shortcut when it has one)"
+  },
+  "formatBullets": "Viñetas (Ctrl+Shift+8)",
+  "@formatBullets": {
+    "description": "Text formatting bar: tooltip or label (with its keyboard shortcut when it has one)"
+  },
+  "formatNumbered": "Numerada (Ctrl+Shift+7)",
+  "@formatNumbered": {
+    "description": "Text formatting bar: tooltip or label (with its keyboard shortcut when it has one)"
+  },
+  "formatTodo": "Lista de tareas (Ctrl+Shift+9)",
+  "@formatTodo": {
+    "description": "Text formatting bar: tooltip or label (with its keyboard shortcut when it has one)"
+  },
+  "formatOutdent": "Menos sangría (Shift+Tab)",
+  "@formatOutdent": {
+    "description": "Text formatting bar: tooltip or label (with its keyboard shortcut when it has one)"
+  },
+  "formatIndent": "Más sangría (Tab)",
+  "@formatIndent": {
+    "description": "Text formatting bar: tooltip or label (with its keyboard shortcut when it has one)"
+  },
+  "formatAlignLeft": "Alinear a la izquierda (Ctrl+L)",
+  "@formatAlignLeft": {
+    "description": "Text formatting bar: tooltip or label (with its keyboard shortcut when it has one)"
+  },
+  "formatCenter": "Centrar (Ctrl+E)",
+  "@formatCenter": {
+    "description": "Text formatting bar: tooltip or label (with its keyboard shortcut when it has one)"
+  },
+  "formatAlignRight": "Alinear a la derecha (Ctrl+R)",
+  "@formatAlignRight": {
+    "description": "Text formatting bar: tooltip or label (with its keyboard shortcut when it has one)"
+  },
+  "formatJustify": "Justificar (Ctrl+J)",
+  "@formatJustify": {
+    "description": "Text formatting bar: tooltip or label (with its keyboard shortcut when it has one)"
+  },
+  "formatSizeDown": "Achicar letra (Ctrl+[)",
+  "@formatSizeDown": {
+    "description": "Text formatting bar: tooltip or label (with its keyboard shortcut when it has one)"
+  },
+  "formatSizeUp": "Agrandar letra (Ctrl+])",
+  "@formatSizeUp": {
+    "description": "Text formatting bar: tooltip or label (with its keyboard shortcut when it has one)"
+  },
+  "formatSizeAuto": "Automático",
+  "@formatSizeAuto": {
+    "description": "Text formatting bar: tooltip or label (with its keyboard shortcut when it has one)"
+  },
+  "formatCopy": "Copiar",
+  "@formatCopy": {
+    "description": "Bar over a selection that crosses paragraphs: copy"
+  },
+  "formatCut": "Cortar",
+  "@formatCut": {
+    "description": "Bar over a selection that crosses paragraphs: cut"
+  },
+  "pullDone": "Hoja agregada",
+  "@pullDone": {
+    "description": "Pull-to-add indicator: the sheet was added"
+  },
+  "pullHold": "Mantené para agregar una hoja",
+  "@pullHold": {
+    "description": "Pull-to-add indicator: hold to add a sheet"
+  },
+  "toolPen": "Lápiz · tocá de nuevo para opciones",
+  "@toolPen": {
+    "description": "Tooltip of a tool in the toolbar"
+  },
+  "toolHighlighter": "Resaltador · tocá de nuevo para opciones",
+  "@toolHighlighter": {
+    "description": "Tooltip of a tool in the toolbar"
+  },
+  "toolPaint": "Decorador · tocá de nuevo para opciones",
+  "@toolPaint": {
+    "description": "Tooltip of a tool in the toolbar"
+  },
+  "toolShapes": "Formas · tocá de nuevo para opciones",
+  "@toolShapes": {
+    "description": "Tooltip of a tool in the toolbar"
+  },
+  "toolText": "Texto con teclado",
+  "@toolText": {
+    "description": "Tooltip of a tool in the toolbar"
+  },
+  "toolSelect": "Seleccionar",
+  "@toolSelect": {
+    "description": "Tooltip of a tool in the toolbar"
+  },
+  "toolTitle": "Título para el índice",
+  "@toolTitle": {
+    "description": "Tooltip of a tool in the toolbar"
+  },
+  "toolUndo": "Deshacer",
+  "@toolUndo": {
+    "description": "Toolbar tooltip: undo"
+  },
+  "toolRedo": "Rehacer",
+  "@toolRedo": {
+    "description": "Toolbar tooltip: redo"
+  },
+  "toolZoomLocked": "Zoom fijo ({percent}%) · tocá para soltarlo",
+  "@toolZoomLocked": {
+    "description": "Toolbar tooltip when the zoom is locked",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "toolZoomLock": "Fijar el zoom",
+  "@toolZoomLock": {
+    "description": "Toolbar tooltip: lock the zoom"
+  },
+  "toolMoreColors": "Más colores",
+  "@toolMoreColors": {
+    "description": "Toolbar tooltip: open the color panel"
+  },
+  "toolPenOptions": "Punta, grosor y opacidad",
+  "@toolPenOptions": {
+    "description": "Toolbar tooltip: open the pen options"
+  },
+  "toolDragBar": "Arrastrá para mover la barra",
+  "@toolDragBar": {
+    "description": "Tooltip of the toolbar drag handle"
+  },
+  "zoomIndicator": "{percent}%",
+  "@zoomIndicator": {
+    "description": "Zoom indicator: percentage",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "zoomIndicatorLocked": "{percent}% · fijo",
+  "@zoomIndicatorLocked": {
+    "description": "Zoom indicator: percentage when the zoom is locked",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "selOrder": "Orden",
+  "@selOrder": {
+    "description": "Selection toolbar: button or menu item"
+  },
+  "selFront": "Traer al frente",
+  "@selFront": {
+    "description": "Selection toolbar: button or menu item"
+  },
+  "selUp": "Subir uno",
+  "@selUp": {
+    "description": "Selection toolbar: button or menu item"
+  },
+  "selDown": "Bajar uno",
+  "@selDown": {
+    "description": "Selection toolbar: button or menu item"
+  },
+  "selBack": "Enviar al fondo",
+  "@selBack": {
+    "description": "Selection toolbar: button or menu item"
+  },
+  "selDuplicate": "Duplicar",
+  "@selDuplicate": {
+    "description": "Selection toolbar: button or menu item"
+  },
+  "selLink": "Link",
+  "@selLink": {
+    "description": "Selection toolbar: button or menu item"
+  },
+  "selEditLink": "Editar link",
+  "@selEditLink": {
+    "description": "Selection toolbar: button or menu item"
+  },
+  "selRemoveLink": "Quitar link",
+  "@selRemoveLink": {
+    "description": "Selection toolbar: button or menu item"
+  },
+  "selStraighten": "Enderezar",
+  "@selStraighten": {
+    "description": "Selection toolbar: button or menu item"
+  },
+  "selDelete": "Eliminar",
+  "@selDelete": {
+    "description": "Selection toolbar: button or menu item"
+  },
+  "selDeselect": "Deseleccionar",
+  "@selDeselect": {
+    "description": "Selection toolbar: button or menu item"
+  },
+  "sheetMenuPaste": "Pegar acá",
+  "@sheetMenuPaste": {
+    "description": "Menu shown when long pressing the sheet: paste here"
+  },
+  "linkTitle": "Link",
+  "@linkTitle": {
+    "description": "Title of the dialog that creates a link"
+  },
+  "linkTitleEdit": "Editar link",
+  "@linkTitleEdit": {
+    "description": "Title of the dialog that edits a link"
+  },
+  "linkKindWeb": "Página web",
+  "@linkKindWeb": {
+    "description": "Link dialog: web page option"
+  },
+  "linkKindSheet": "Hoja",
+  "@linkKindSheet": {
+    "description": "Link dialog: sheet option"
+  },
+  "linkKindNotebook": "Cuaderno",
+  "@linkKindNotebook": {
+    "description": "Link dialog: notebook option"
+  },
+  "linkUrlHint": "dirección, ej. es.wikipedia.org",
+  "@linkUrlHint": {
+    "description": "Hint of the web address field of the link dialog"
+  },
+  "linkNoSheets": "No hay hojas.",
+  "@linkNoSheets": {
+    "description": "Link dialog: there are no sheets to link"
+  },
+  "linkNoNotebooks": "No hay otros cuadernos.",
+  "@linkNoNotebooks": {
+    "description": "Link dialog: there are no other notebooks to link"
+  },
+  "stickyHint": "Nota…",
+  "@stickyHint": {
+    "description": "Hint of an empty sticky note"
+  },
+  "editorLinkMissingPage": "Esa página no está en el cuaderno",
+  "@editorLinkMissingPage": {
+    "description": "Snackbar when a PDF link points to a page that is not in the notebook"
+  },
+  "editorRenameAudio": "Renombrar audio",
+  "@editorRenameAudio": {
+    "description": "Title of the dialog that renames an audio"
+  },
+  "editorPullHint": "Al final, deslizá hacia arriba y mantené para agregar una hoja",
+  "@editorPullHint": {
+    "description": "Hint shown under the last sheet"
+  },
+  "editorScrollerLabel": "Hoja {n} de {total}",
+  "@editorScrollerLabel": {
+    "description": "Label of the fast scroller thumb: current sheet out of total",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "editorCopied": "Copiado",
+  "@editorCopied": {
+    "description": "Snackbar after copying the selection"
+  },
+  "editorLoadingSheet": "Cargando la hoja {n}…",
+  "@editorLoadingSheet": {
+    "description": "Placeholder text while a sheet is loading",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "tipPen": "Bolígrafo",
+  "@tipPen": {
+    "description": "Name of the pen tip \"pen\" in the pen panel"
+  },
+  "tipFountain": "Pluma",
+  "@tipFountain": {
+    "description": "Name of the pen tip \"fountain\" in the pen panel"
+  },
+  "tipPencil": "Lápiz",
+  "@tipPencil": {
+    "description": "Name of the pen tip \"pencil\" in the pen panel"
+  },
+  "tipFine": "Fibra",
+  "@tipFine": {
+    "description": "Name of the pen tip \"fine\" in the pen panel"
+  },
+  "tipCalligraphy": "Caligrafía",
+  "@tipCalligraphy": {
+    "description": "Name of the pen tip \"calli\" in the pen panel"
+  },
+  "paintStyleBrush": "Pincel",
+  "@paintStyleBrush": {
+    "description": "Name of the decorator stroke style \"brush\""
+  },
+  "paintStyleHighlighter": "Resaltador",
+  "@paintStyleHighlighter": {
+    "description": "Name of the decorator stroke style \"hl\""
+  },
+  "paintStyleMarker": "Fibra",
+  "@paintStyleMarker": {
+    "description": "Name of the decorator stroke style \"marker\""
+  },
+  "paintShapeStars": "Estrellas",
+  "@paintShapeStars": {
+    "description": "Name of the decorator shape \"stars\""
+  },
+  "paintShapeHearts": "Corazones",
+  "@paintShapeHearts": {
+    "description": "Name of the decorator shape \"hearts\""
+  },
+  "paintShapeSparkles": "Destellos",
+  "@paintShapeSparkles": {
+    "description": "Name of the decorator shape \"sparkles\""
+  },
+  "paintShapeMoons": "Lunas",
+  "@paintShapeMoons": {
+    "description": "Name of the decorator shape \"moons\""
+  },
+  "paintShapeDots": "Puntos",
+  "@paintShapeDots": {
+    "description": "Name of the decorator shape \"dots\""
+  },
+  "paintShapeCircles": "Círculos",
+  "@paintShapeCircles": {
+    "description": "Name of the decorator shape \"circles\""
+  },
+  "paintShapeExclamations": "Exclamaciones",
+  "@paintShapeExclamations": {
+    "description": "Name of the decorator shape \"bangs\""
+  },
+  "paintShapeBolts": "Rayos",
+  "@paintShapeBolts": {
+    "description": "Name of the decorator shape \"bolts\""
+  },
+  "paintShapeTicks": "Ticks",
+  "@paintShapeTicks": {
+    "description": "Name of the decorator shape \"ticks\""
+  },
+  "paintShapeCrosses": "Cruces",
+  "@paintShapeCrosses": {
+    "description": "Name of the decorator shape \"crosses\""
+  },
+  "paintShapeClouds": "Nubes",
+  "@paintShapeClouds": {
+    "description": "Name of the decorator shape \"clouds\""
+  },
+  "paintShapeBubbles": "Globos",
+  "@paintShapeBubbles": {
+    "description": "Name of the decorator shape \"bubbles\""
+  },
+  "paintShapeLeaves": "Hojas",
+  "@paintShapeLeaves": {
+    "description": "Name of the decorator shape \"leaves\""
+  },
+  "paintShapePaws": "Huellas",
+  "@paintShapePaws": {
+    "description": "Name of the decorator shape \"paws\""
+  },
+  "paintShapeTriangles": "Triángulos",
+  "@paintShapeTriangles": {
+    "description": "Name of the decorator shape \"triangles\""
+  },
+  "paintShapeSquares": "Cuadrados",
+  "@paintShapeSquares": {
+    "description": "Name of the decorator shape \"squares\""
+  },
+  "paintShapeDiamonds": "Rombos",
+  "@paintShapeDiamonds": {
+    "description": "Name of the decorator shape \"diamonds\""
+  },
+  "paintShapeFlowers": "Flores",
+  "@paintShapeFlowers": {
+    "description": "Name of the decorator shape \"flowers\""
+  },
+  "paintShapeNotes": "Notas",
+  "@paintShapeNotes": {
+    "description": "Name of the decorator shape \"notes\""
+  },
+  "shapeKindLine": "Recta",
+  "@shapeKindLine": {
+    "description": "Name of the exact shape \"line\" in the shapes panel"
+  },
+  "shapeKindArrow": "Flecha",
+  "@shapeKindArrow": {
+    "description": "Name of the exact shape \"arrow\" in the shapes panel"
+  },
+  "shapeKindRectangle": "Rectángulo",
+  "@shapeKindRectangle": {
+    "description": "Name of the exact shape \"rect\" in the shapes panel"
+  },
+  "shapeKindCircle": "Círculo",
+  "@shapeKindCircle": {
+    "description": "Name of the exact shape \"circle\" in the shapes panel"
+  },
+  "shapeKindEllipse": "Elipse",
+  "@shapeKindEllipse": {
+    "description": "Name of the exact shape \"ellipse\" in the shapes panel"
+  },
+  "shapeKindTriangle": "Triángulo",
+  "@shapeKindTriangle": {
+    "description": "Name of the exact shape \"triangle\" in the shapes panel"
+  },
+  "penFavorites": "Favoritos",
+  "@penFavorites": {
+    "description": "Pen panel: section title of the favorite colors"
+  },
+  "penFavEdit": "Cambiar",
+  "@penFavEdit": {
+    "description": "Pen panel: button that starts editing the favorite colors"
+  },
+  "penFavHelpEditing": "Elegí un color de la paleta o del selector: se guarda en el favorito marcado.",
+  "@penFavHelpEditing": {
+    "description": "Pen panel: help while editing the favorite colors"
+  },
+  "penFavHelp": "Tocá «Cambiar» o mantené apretado un favorito para elegir su color.",
+  "@penFavHelp": {
+    "description": "Pen panel: help for the favorite colors"
+  },
+  "penPanelHighlighter": "Resaltador",
+  "@penPanelHighlighter": {
+    "description": "Pen panel title for the highlighter"
+  },
+  "penPanelPencil": "Lápiz",
+  "@penPanelPencil": {
+    "description": "Pen panel title for the pen"
+  },
+  "penTip": "Punta",
+  "@penTip": {
+    "description": "Pen panel: section title of the pen tips"
+  },
+  "penWidth": "Grosor",
+  "@penWidth": {
+    "description": "Pen panel: stroke width slider"
+  },
+  "penOpacity": "Opacidad",
+  "@penOpacity": {
+    "description": "Pen panel: opacity slider"
+  },
+  "penSmartShapes": "Figuras inteligentes",
+  "@penSmartShapes": {
+    "description": "Pen panel: switch that straightens shapes"
+  },
+  "penSmartShapesHint": "Mantené el lápiz quieto al terminar una forma",
+  "@penSmartShapesHint": {
+    "description": "Pen panel: how the smart shapes work"
+  },
+  "penColor": "Color",
+  "@penColor": {
+    "description": "Pen panel: section title of the colors"
+  },
+  "penCustomColor": "Color personalizado",
+  "@penCustomColor": {
+    "description": "Pen panel: button that opens the custom color picker"
+  },
+  "penEraser": "Goma (apretá el botón del lápiz)",
+  "@penEraser": {
+    "description": "Pen panel: section title of the eraser size"
+  },
+  "penEraserSmall": "Chica",
+  "@penEraserSmall": {
+    "description": "Eraser size: small"
+  },
+  "penEraserMedium": "Mediana",
+  "@penEraserMedium": {
+    "description": "Eraser size: medium"
+  },
+  "penEraserLarge": "Grande",
+  "@penEraserLarge": {
+    "description": "Eraser size: large"
+  },
+  "shapesTitle": "Formas",
+  "@shapesTitle": {
+    "description": "Shapes panel title, and decorator switch for shapes"
+  },
+  "shapesBorder": "Borde",
+  "@shapesBorder": {
+    "description": "Shapes panel: border section"
+  },
+  "shapesBorderHint": "El borde usa el color y el grosor del lápiz.",
+  "@shapesBorderHint": {
+    "description": "Shapes panel: how the border is drawn"
+  },
+  "shapesFill": "Relleno",
+  "@shapesFill": {
+    "description": "Shapes panel: fill switch"
+  },
+  "shapesNoFill": "La recta y la flecha no se rellenan.",
+  "@shapesNoFill": {
+    "description": "Shapes panel: line and arrow cannot be filled"
+  },
+  "shapesSnapGrid": "Pegar a la cuadrícula",
+  "@shapesSnapGrid": {
+    "description": "Shapes panel: snap to the grid switch"
+  },
+  "shapesSnapGridHint": "En hojas cuadriculadas, milimetradas, de puntos o con ejes",
+  "@shapesSnapGridHint": {
+    "description": "Shapes panel: where snapping applies"
+  },
+  "paintPanelTitle": "Decorador",
+  "@paintPanelTitle": {
+    "description": "Decorator panel title"
+  },
+  "paintStroke": "Trazo",
+  "@paintStroke": {
+    "description": "Decorator panel: stroke style section"
+  },
+  "paintWidth": "Ancho",
+  "@paintWidth": {
+    "description": "Decorator panel: width slider"
+  },
+  "paintBackground": "Fondo",
+  "@paintBackground": {
+    "description": "Decorator panel: background switch"
+  },
+  "paintGlitter": "Brillo",
+  "@paintGlitter": {
+    "description": "Decorator panel: glitter switch"
+  },
+  "paintAmount": "Cantidad",
+  "@paintAmount": {
+    "description": "Decorator panel: amount slider"
+  },
+  "paintAuto": "Auto",
+  "@paintAuto": {
+    "description": "Decorator panel: automatic shape color"
+  },
+  "paintSize": "Tamaño",
+  "@paintSize": {
+    "description": "Decorator panel: size slider"
+  }
+}

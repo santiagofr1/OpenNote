@@ -3,6 +3,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import '../../data/storage.dart';
 import '../../domain/domain.dart';
+import '../../l10n/l10n.dart';
 
 /// Un resultado: texto o nota adhesiva ([id]) o el título de la hoja ([id] null).
 class SearchHit {
@@ -99,9 +100,9 @@ class SearchResults extends StatelessWidget {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxHeight: 420),
         child: q.isEmpty
-            ? note('Buscá en los textos, notas adhesivas y títulos de hojas')
+            ? note(context.l10n.searchHint)
             : hits.isEmpty
-                ? note('Sin resultados para "$q"')
+                ? note(context.l10n.searchNone(q))
                 : ListView(
                     shrinkWrap: true,
                     padding: const EdgeInsets.all(6),
@@ -111,9 +112,9 @@ class SearchResults extends StatelessWidget {
                           key: Key('hit-${h.id ?? h.meta.id}'),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           leading: Icon(Symbols.description, weight: 300, color: cs.onSurfaceVariant),
-                          title: Text('Hoja ${h.sheet + 1}${h.meta.title.isEmpty ? '' : ' · ${h.meta.title}'}',
+                          title: Text(h.meta.title.isEmpty ? context.l10n.sheetLabel(h.sheet + 1) : context.l10n.sheetLabelTitled(h.sheet + 1, h.meta.title),
               style: const TextStyle(fontWeight: FontWeight.w500)),
-                          subtitle: Text(h.snippet, maxLines: 2, overflow: TextOverflow.ellipsis),
+                          subtitle: Text(h.id == null ? context.l10n.searchTitleSnippet(h.meta.title) : h.snippet, maxLines: 2, overflow: TextOverflow.ellipsis),
                           onTap: () => onTap(h),
                         ),
                     ],

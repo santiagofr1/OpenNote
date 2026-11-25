@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../domain/domain.dart';
+import '../l10n/l10n.dart';
 
 enum _Kind { web, sheet, nb }
 
@@ -86,14 +87,14 @@ class _LinkDialogState extends State<_LinkDialog> {
         ChoiceChip(key: key, label: Text(label), selected: kind == k, onSelected: (_) => setState(() => kind = k));
     return AlertDialog(
       scrollable: true,
-      title: Text(widget.initial.isEmpty ? 'Link' : 'Editar link'),
+      title: Text(widget.initial.isEmpty ? context.l10n.linkTitle : context.l10n.linkTitleEdit),
       content: SizedBox(
         width: 360,
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Wrap(spacing: 8, children: [
-            chip(_Kind.web, 'Página web', const Key('linkKindWeb')),
-            chip(_Kind.sheet, 'Hoja', const Key('linkKindSheet')),
-            chip(_Kind.nb, 'Cuaderno', const Key('linkKindNb')),
+            chip(_Kind.web, context.l10n.linkKindWeb, const Key('linkKindWeb')),
+            chip(_Kind.sheet, context.l10n.linkKindSheet, const Key('linkKindSheet')),
+            chip(_Kind.nb, context.l10n.linkKindNotebook, const Key('linkKindNb')),
           ]),
           const SizedBox(height: 12),
           switch (kind) {
@@ -103,21 +104,21 @@ class _LinkDialogState extends State<_LinkDialog> {
                 autofocus: true,
                 keyboardType: TextInputType.url,
                 autocorrect: false,
-                decoration: const InputDecoration(hintText: 'dirección, ej. es.wikipedia.org'),
+                decoration: InputDecoration(hintText: context.l10n.linkUrlHint),
                 onChanged: (_) => setState(() {}),
                 onSubmitted: (_) => result.isEmpty ? null : Navigator.pop(context, result),
               ),
-            _Kind.sheet => _list(widget.sheets, sheetId, 'linkSheet', (id) => sheetId = id, 'No hay hojas.'),
-            _Kind.nb => _list(widget.notebooks, nbId, 'linkNb', (id) => nbId = id, 'No hay otros cuadernos.'),
+            _Kind.sheet => _list(widget.sheets, sheetId, 'linkSheet', (id) => sheetId = id, context.l10n.linkNoSheets),
+            _Kind.nb => _list(widget.notebooks, nbId, 'linkNb', (id) => nbId = id, context.l10n.linkNoNotebooks),
           },
         ]),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(context.l10n.commonCancel)),
         FilledButton(
           key: const Key('linkOk'),
           onPressed: result.isEmpty ? null : () => Navigator.pop(context, result),
-          child: const Text('Crear'),
+          child: Text(context.l10n.commonCreate),
         ),
       ],
     );

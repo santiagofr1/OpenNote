@@ -3,6 +3,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import '../../sync/sync_controller.dart';
 import '../../sync/sync_crypto.dart';
+import '../../l10n/l10n.dart';
 
 /// Frase mínima (el cifrado vale lo que vale la frase).
 const kMinPassphrase = 8;
@@ -15,8 +16,11 @@ class CryptoSection extends StatelessWidget {
 
   Future<void> _run(BuildContext context, Future<String?> Function() op) async {
     final messenger = ScaffoldMessenger.maybeOf(context);
+    final l = context.l10n;
     final problem = await op();
-    if (problem != null) messenger?.showSnackBar(SnackBar(content: Text(problem)));
+    if (problem != null) {
+      messenger?.showSnackBar(SnackBar(content: Text(syncErrorText(l, sync.problemKind, sync.problemArg, problem))));
+    }
   }
 
   @override
@@ -29,10 +33,10 @@ class CryptoSection extends StatelessWidget {
       builder: (ctx, _) {
         final busy = sync.syncing || sync.phase == SyncPhase.connecting;
         final (String status, IconData icon) = switch (crypto.state) {
-          CryptoState.unknown => ('Todavía no se sabe: se ve en la próxima sincronización.', Symbols.lock_open),
-          CryptoState.off => ('Desactivado: Google puede leer lo que se sube a tu Drive.', Symbols.lock_open),
-          CryptoState.on => ('Activado: en Drive solo hay archivos cifrados con tu frase.', Symbols.lock),
-          CryptoState.locked => ('La nube está cifrada. Ingresá la frase para poder sincronizar.', Symbols.lock),
+          CryptoState.unknown => (ctx.l10n.cryptoStatusUnknown, Symbols.lock_open),
+          CryptoState.off => (ctx.l10n.cryptoStatusOff, Symbols.lock_open),
+          CryptoState.on => (ctx.l10n.cryptoStatusOn, Symbols.lock),
+          CryptoState.locked => (ctx.l10n.cryptoStatusLocked, Symbols.lock),
         };
         return Padding(
           padding: const EdgeInsets.only(top: 18),
@@ -42,18 +46,17 @@ class CryptoSection extends StatelessWidget {
             Row(children: [
               Icon(icon, weight: 300, color: crypto.state == CryptoState.on ? cs.primary : cs.onSurfaceVariant),
               const SizedBox(width: 10),
-              Text('Cifrado', style: Theme.of(ctx).textTheme.titleMedium),
+              Text(ctx.l10n.cryptoTitle, style: Theme.of(ctx).textTheme.titleMedium),
             ]),
             const SizedBox(height: 8),
             Text(status, key: const Key('cryptoStatus'), style: TextStyle(color: cs.onSurfaceVariant)),
             if (crypto.progress != null) ...[
               const SizedBox(height: 6),
-              Text(crypto.progress!, key: const Key('cryptoProgress'), style: TextStyle(color: cs.primary)),
+              Text(cryptoStepText(ctx.l10n, crypto), key: const Key('cryptoProgress'), style: TextStyle(color: cs.primary)),
             ],
             const SizedBox(height: 6),
             Text(
-              'Si olvidás la frase no hay forma de recuperar lo que está en la nube (lo de este dispositivo no se pierde). '
-              'Los nombres de archivo en Drive son códigos al azar y siguen a la vista.',
+              ctx.l10n.cryptoWarning,
               style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
             ),
             const SizedBox(height: 10),
@@ -68,7 +71,7 @@ class CryptoSection extends StatelessWidget {
                           if (pass != null && context.mounted) await _run(context, () => sync.enableEncryption(pass));
                         },
                   icon: const Icon(Symbols.lock, weight: 400),
-                  label: const Text('Activar cifrado'),
+                  label: Text(ctx.l10n.cryptoEnable),
                 ),
               if (crypto.state == CryptoState.locked)
                 FilledButton.icon(
@@ -80,7 +83,7 @@ class CryptoSection extends StatelessWidget {
                           if (pass != null && context.mounted) await _run(context, () => sync.unlockEncryption(pass));
                         },
                   icon: const Icon(Symbols.key, weight: 400),
-                  label: const Text('Ingresar frase'),
+                  label: Text(ctx.l10n.cryptoEnterPass),
                 ),
               if (crypto.state == CryptoState.on)
                 OutlinedButton(
@@ -91,21 +94,20 @@ class CryptoSection extends StatelessWidget {
                           final ok = await showDialog<bool>(
                             context: context,
                             builder: (dctx) => AlertDialog(
-                              title: const Text('¿Desactivar el cifrado?'),
-                              content: const Text('Se vuelve a subir todo sin cifrar y se borra lo cifrado de Drive. '
-                                  'Puede tardar si hay muchos archivos.'),
+                              title: Text(dctx.l10n.cryptoDisableTitle),
+                              content: Text(dctx.l10n.cryptoDisableBody),
                               actions: [
-                                TextButton(onPressed: () => Navigator.pop(dctx, false), child: const Text('Cancelar')),
+                                TextButton(onPressed: () => Navigator.pop(dctx, false), child: Text(dctx.l10n.commonCancel)),
                                 FilledButton(
                                     key: const Key('cryptoDisableOk'),
                                     onPressed: () => Navigator.pop(dctx, true),
-                                    child: const Text('Desactivar')),
+                                    child: Text(dctx.l10n.cryptoDisableConfirm)),
                               ],
                             ),
                           );
                           if (ok == true && context.mounted) await _run(context, sync.disableEncryption);
                         },
-                  child: const Text('Desactivar cifrado'),
+                  child: Text(ctx.l10n.cryptoDisable),
                 ),
             ]),
           ]),
@@ -126,9 +128,9 @@ Future<String?> askPassphrase(BuildContext context, {required bool confirm}) {
       builder: (ctx, setState) {
         void submit() {
           if (c1.text.length < kMinPassphrase) {
-            setState(() => error = 'La frase tiene que tener al menos $kMinPassphrase caracteres.');
+            setState(() => error = ctx.l10n.cryptoPassShort(kMinPassphrase));
           } else if (confirm && c1.text != c2.text) {
-            setState(() => error = 'Las dos frases no coinciden.');
+            setState(() => error = ctx.l10n.cryptoPassMismatch);
           } else {
             Navigator.pop(ctx, c1.text);
           }
@@ -136,20 +138,19 @@ Future<String?> askPassphrase(BuildContext context, {required bool confirm}) {
 
         return AlertDialog(
           scrollable: true,
-          title: Text(confirm ? 'Activar cifrado' : 'Frase de cifrado'),
+          title: Text(confirm ? ctx.l10n.cryptoEnable : ctx.l10n.cryptoPassTitle),
           content: SizedBox(
             width: 360,
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
               if (confirm)
-                const Text('Elegí una frase y anotala en un lugar seguro. Si la olvidás no hay forma de recuperar lo que '
-                    'está en la nube (lo de este dispositivo no se pierde). Se va a subir todo cifrado y borrar lo anterior de Drive.'),
+                Text(ctx.l10n.cryptoPassIntro),
               if (confirm) const SizedBox(height: 12),
               TextField(
                 key: const Key('cryptoPass1'),
                 controller: c1,
                 autofocus: true,
                 obscureText: true,
-                decoration: const InputDecoration(labelText: 'Frase'),
+                decoration: InputDecoration(labelText: ctx.l10n.cryptoPassLabel),
                 onSubmitted: (_) => confirm ? null : submit(),
               ),
               if (confirm)
@@ -157,7 +158,7 @@ Future<String?> askPassphrase(BuildContext context, {required bool confirm}) {
                   key: const Key('cryptoPass2'),
                   controller: c2,
                   obscureText: true,
-                  decoration: const InputDecoration(labelText: 'Repetí la frase'),
+                  decoration: InputDecoration(labelText: ctx.l10n.cryptoPassRepeat),
                   onSubmitted: (_) => submit(),
                 ),
               if (error != null) ...[
@@ -167,8 +168,8 @@ Future<String?> askPassphrase(BuildContext context, {required bool confirm}) {
             ]),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-            FilledButton(key: const Key('cryptoDialogOk'), onPressed: submit, child: Text(confirm ? 'Activar' : 'Desbloquear')),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(ctx.l10n.commonCancel)),
+            FilledButton(key: const Key('cryptoDialogOk'), onPressed: submit, child: Text(confirm ? ctx.l10n.cryptoActivate : ctx.l10n.cryptoUnlock)),
           ],
         );
       },

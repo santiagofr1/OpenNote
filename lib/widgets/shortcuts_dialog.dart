@@ -1,33 +1,35 @@
 import 'package:flutter/material.dart';
 
-const _typing = <(String, String)>[
-  ('Negrita', 'Ctrl+B'),
-  ('Cursiva', 'Ctrl+I'),
-  ('Subrayado', 'Ctrl+U'),
-  ('Tachado', 'Alt+Shift+5'),
-  ('Resaltado (poner / sacar)', 'Ctrl+Shift+H'),
-  ('Agrandar letra', 'Ctrl+]'),
-  ('Achicar letra', 'Ctrl+['),
-  ('Viñetas', 'Ctrl+Shift+8'),
-  ('Lista numerada', 'Ctrl+Shift+7'),
-  ('Lista de tareas', 'Ctrl+Shift+9'),
-  ('Alinear a la izquierda', 'Ctrl+L'),
-  ('Centrar', 'Ctrl+E'),
-  ('Alinear a la derecha', 'Ctrl+R'),
-  ('Justificar', 'Ctrl+J'),
-  ('Más sangría', 'Tab'),
-  ('Menos sangría', 'Shift+Tab'),
+import '../l10n/l10n.dart';
+
+List<(String, String)> _typing(L l) => [
+  (l.shortcutBold, 'Ctrl+B'),
+  (l.shortcutItalic, 'Ctrl+I'),
+  (l.shortcutUnderline, 'Ctrl+U'),
+  (l.shortcutStrike, 'Alt+Shift+5'),
+  (l.shortcutHighlight, 'Ctrl+Shift+H'),
+  (l.shortcutFontUp, 'Ctrl+]'),
+  (l.shortcutFontDown, 'Ctrl+['),
+  (l.shortcutBullets, 'Ctrl+Shift+8'),
+  (l.shortcutNumbered, 'Ctrl+Shift+7'),
+  (l.shortcutTodo, 'Ctrl+Shift+9'),
+  (l.shortcutAlignLeft, 'Ctrl+L'),
+  (l.shortcutCenter, 'Ctrl+E'),
+  (l.shortcutAlignRight, 'Ctrl+R'),
+  (l.shortcutJustify, 'Ctrl+J'),
+  (l.shortcutIndent, 'Tab'),
+  (l.shortcutOutdent, 'Shift+Tab'),
 ];
 
-const _sheet = <(String, String)>[
-  ('Deshacer', 'Ctrl+Z'),
-  ('Rehacer', 'Ctrl+Y / Ctrl+Shift+Z'),
-  ('Lápiz', 'P'),
-  ('Resaltador', 'H'),
-  ('Texto (abre un bloque)', 'T'),
-  ('Seleccionar', 'S'),
-  ('Zoom', 'Ctrl + rueda del mouse'),
-  ('Ver estos atajos', 'Ctrl+/'),
+List<(String, String)> _sheet(L l) => [
+  (l.shortcutUndo, 'Ctrl+Z'),
+  (l.shortcutRedo, 'Ctrl+Y / Ctrl+Shift+Z'),
+  (l.shortcutPencil, 'P'),
+  (l.shortcutHighlighter, 'H'),
+  (l.shortcutText, 'T'),
+  (l.shortcutSelect, 'S'),
+  (l.shortcutZoom, l.shortcutZoomKeys),
+  (l.shortcutHelp, 'Ctrl+/'),
 ];
 
 /// Lista de atajos de teclado: los que valen escribiendo en un texto y los que valen sobre la hoja.
@@ -57,19 +59,19 @@ Future<void> showShortcutsDialog(BuildContext context) => showDialog<void>(
             );
         return AlertDialog(
           key: const Key('shortcutsDialog'),
-          title: const Text('Atajos de teclado'),
+          title: Text(ctx.l10n.shortcutsTitle),
           content: SizedBox(
             width: 420,
             child: SingleChildScrollView(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                title('Escribiendo'),
-                for (final r in _typing) row(r),
-                title('En la hoja'),
-                for (final r in _sheet) row(r),
+                title(ctx.l10n.shortcutsTyping),
+                for (final r in _typing(ctx.l10n)) row(r),
+                title(ctx.l10n.shortcutsSheet),
+                for (final r in _sheet(ctx.l10n)) row(r),
               ]),
             ),
           ),
-          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cerrar'))],
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(ctx.l10n.commonClose))],
         );
       },
     );

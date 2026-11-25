@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../domain/domain.dart';
+import '../l10n/l10n.dart';
 import 'rich_editing.dart';
 import 'text_blocks.dart';
 
@@ -62,30 +63,30 @@ class _FormatBarState extends State<FormatBar> {
     Widget st(String k, String label, ParaStyle s) => _chip(cs, k, label, p.style == s, () => ed.setParaStyle(s));
     final c = ed.currentColor, h = ed.currentHighlight;
     return [
-      fmt('fmt-bold', Symbols.format_bold, 'Negrita (Ctrl+B)', Fmt.bold),
-      fmt('fmt-italic', Symbols.format_italic, 'Cursiva (Ctrl+I)', Fmt.italic),
-      fmt('fmt-underline', Symbols.format_underlined, 'Subrayado (Ctrl+U)', Fmt.underline),
-      fmt('fmt-strike', Symbols.format_strikethrough, 'Tachado (Alt+Shift+5)', Fmt.strike),
-      _btn(cs, 'fmt-color', Symbols.format_color_text, 'Color del texto', _open == 'color', () => _toggle('color'),
+      fmt('fmt-bold', Symbols.format_bold, context.l10n.formatBold, Fmt.bold),
+      fmt('fmt-italic', Symbols.format_italic, context.l10n.formatItalic, Fmt.italic),
+      fmt('fmt-underline', Symbols.format_underlined, context.l10n.formatUnderline, Fmt.underline),
+      fmt('fmt-strike', Symbols.format_strikethrough, context.l10n.formatStrike, Fmt.strike),
+      _btn(cs, 'fmt-color', Symbols.format_color_text, context.l10n.formatColor, _open == 'color', () => _toggle('color'),
           dot: c == null ? null : Color(c)),
-      _btn(cs, 'fmt-hl', Symbols.format_ink_highlighter, 'Resaltado (Ctrl+Shift+H)', _open == 'hl', () => _toggle('hl'),
+      _btn(cs, 'fmt-hl', Symbols.format_ink_highlighter, context.l10n.formatHighlight, _open == 'hl', () => _toggle('hl'),
           dot: h == null ? null : Color(h)),
       _sizeControl(ed, cs),
       _sep(cs),
-      st('fmt-normal', 'Normal', ParaStyle.normal),
-      st('fmt-title', 'Título', ParaStyle.title),
-      st('fmt-subtitle', 'Subtítulo', ParaStyle.subtitle),
+      st('fmt-normal', context.l10n.formatNormal, ParaStyle.normal),
+      st('fmt-title', context.l10n.formatTitle, ParaStyle.title),
+      st('fmt-subtitle', context.l10n.formatSubtitle, ParaStyle.subtitle),
       _sep(cs),
-      list('fmt-bullet', Symbols.format_list_bulleted, 'Viñetas (Ctrl+Shift+8)', ListKind.bullet),
-      list('fmt-numbered', Symbols.format_list_numbered, 'Numerada (Ctrl+Shift+7)', ListKind.numbered),
-      list('fmt-check', Symbols.checklist, 'Lista de tareas (Ctrl+Shift+9)', ListKind.checklist),
-      _btn(cs, 'fmt-outdent', Symbols.format_indent_decrease, 'Menos sangría (Shift+Tab)', false, () => ed.indentBy(-1)),
-      _btn(cs, 'fmt-indent', Symbols.format_indent_increase, 'Más sangría (Tab)', false, () => ed.indentBy(1)),
+      list('fmt-bullet', Symbols.format_list_bulleted, context.l10n.formatBullets, ListKind.bullet),
+      list('fmt-numbered', Symbols.format_list_numbered, context.l10n.formatNumbered, ListKind.numbered),
+      list('fmt-check', Symbols.checklist, context.l10n.formatTodo, ListKind.checklist),
+      _btn(cs, 'fmt-outdent', Symbols.format_indent_decrease, context.l10n.formatOutdent, false, () => ed.indentBy(-1)),
+      _btn(cs, 'fmt-indent', Symbols.format_indent_increase, context.l10n.formatIndent, false, () => ed.indentBy(1)),
       _sep(cs),
-      al('fmt-left', Symbols.format_align_left, 'Alinear a la izquierda (Ctrl+L)', ParaAlign.left),
-      al('fmt-center', Symbols.format_align_center, 'Centrar (Ctrl+E)', ParaAlign.center),
-      al('fmt-right', Symbols.format_align_right, 'Alinear a la derecha (Ctrl+R)', ParaAlign.right),
-      al('fmt-justify', Symbols.format_align_justify, 'Justificar (Ctrl+J)', ParaAlign.justify),
+      al('fmt-left', Symbols.format_align_left, context.l10n.formatAlignLeft, ParaAlign.left),
+      al('fmt-center', Symbols.format_align_center, context.l10n.formatCenter, ParaAlign.center),
+      al('fmt-right', Symbols.format_align_right, context.l10n.formatAlignRight, ParaAlign.right),
+      al('fmt-justify', Symbols.format_align_justify, context.l10n.formatJustify, ParaAlign.justify),
     ];
   }
 
@@ -97,17 +98,17 @@ class _FormatBarState extends State<FormatBar> {
               key: const Key('across-copy'),
               onPressed: ed.copyAcross,
               icon: const Icon(Symbols.content_copy, size: 18),
-              label: const Text('Copiar')),
+              label: Text(context.l10n.commonCopy)),
           TextButton.icon(
               key: const Key('across-cut'),
               onPressed: ed.cutAcross,
               icon: const Icon(Symbols.content_cut, size: 18),
-              label: const Text('Cortar')),
+              label: Text(context.l10n.formatCut)),
           TextButton.icon(
               key: const Key('across-delete'),
               onPressed: ed.deleteAcross,
               icon: const Icon(Symbols.delete, size: 18),
-              label: const Text('Borrar')),
+              label: Text(context.l10n.commonDelete)),
         ]),
       );
 
@@ -150,7 +151,7 @@ class _FormatBarState extends State<FormatBar> {
     final auto = autoPt(ed.line), cur = ed.currentSize;
     final label = cur != null ? _ptText(cur) : (ed.mixedSize ? '' : _ptText(auto));
     return Row(mainAxisSize: MainAxisSize.min, children: [
-      _btn(cs, 'fmt-size-down', Symbols.text_decrease, 'Achicar letra (Ctrl+[)', false, () => ed.stepSize(-1, auto)),
+      _btn(cs, 'fmt-size-down', Symbols.text_decrease, context.l10n.formatSizeDown, false, () => ed.stepSize(-1, auto)),
       InkWell(
         key: const Key('fmt-size'),
         canRequestFocus: false,
@@ -171,7 +172,7 @@ class _FormatBarState extends State<FormatBar> {
                   color: _open == 'size' ? cs.onSecondaryContainer : cs.onSurfaceVariant)),
         ),
       ),
-      _btn(cs, 'fmt-size-up', Symbols.text_increase, 'Agrandar letra (Ctrl+])', false, () => ed.stepSize(1, auto)),
+      _btn(cs, 'fmt-size-up', Symbols.text_increase, context.l10n.formatSizeUp, false, () => ed.stepSize(1, auto)),
     ]);
   }
 
@@ -200,7 +201,7 @@ class _FormatBarState extends State<FormatBar> {
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(children: [
-        item(const Key('fmt-size-auto'), 'Automático', cur == null, null),
+        item(const Key('fmt-size-auto'), context.l10n.formatSizeAuto, cur == null, null),
         for (final n in kSizes) item(Key('fmt-size-${_ptText(n)}'), _ptText(n), cur == n, n),
       ]),
     );
