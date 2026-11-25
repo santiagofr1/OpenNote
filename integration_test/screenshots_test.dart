@@ -73,16 +73,16 @@ void main() {
         await saveShot(t, '$outDir/$name.png');
       }
 
-      await shot('03_biblioteca');
+      await shot('03_library');
 
       await t.tap(find.byKey(Key('nb-$nbPhysics')));
       await settle(t, 3500);
-      await shot('01_cuaderno');
+      await shot('01_notebook');
 
       await t.tap(find.byKey(const Key('pagesBtn')));
       await settle(t, 1500);
       expect(find.byKey(const Key('pagesPanel')), findsOneWidget);
-      await shot('02_panel_hojas');
+      await shot('02_page_panel');
 
       await t.tap(find.byKey(const Key('back')));
       await settle(t, 1200);
@@ -120,7 +120,7 @@ void main() {
       await open(nbAnalysis);
       await t.tap(find.byKey(const Key('indexBtn')));
       await settle(t, 1500);
-      await shot('04_indice');
+      await shot('04_index');
       await t.tap(find.byKey(const Key('indexBtn')));
       await settle(t, 400);
       await back();
@@ -133,7 +133,7 @@ void main() {
       await g.up();
       await settle(t, 800);
       expect(editor().sel.strokes.length, 1);
-      await shot('05_figuras');
+      await shot('05_shapes');
       await back();
 
       // 06: PDF importado por el flujo real, con anotaciones a mano encima
