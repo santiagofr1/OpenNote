@@ -27,6 +27,27 @@ jobs:
   # archivos juntos: ninguna app ve una versión a medias. Si fallan los tests, el APK o el .deb, no se publica nada;
   # si falla solo Windows, sale sin el .exe.
 
+  # La versión se calcula una sola vez (tool/version.sh: MAYOR.MENOR de pubspec.yaml y el PARCHE siguiente a la última
+  # tag de esa serie) y la usan todos los jobs. El versionCode de Android sigue subiendo con cada corrida.
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      name: ${{ steps.v.outputs.name }}
+      code: ${{ steps.v.outputs.code }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute version
+        id: v
+        run: |
+          NAME=$(tool/version.sh)
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "code=$(( ${{ github.run_number }} + 200 ))" >> "$GITHUB_OUTPUT"
+          echo "Versión: $NAME (versionCode $(( ${{ github.run_number }} + 200 )))"
+
   test:
     runs-on: ubuntu-latest
     steps:
@@ -49,6 +70,7 @@ jobs:
         run: flutter test
 
   android:
+    needs: version
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -73,8 +95,8 @@ jobs:
 
       - name: Set version
         run: |
-          echo "VERSION_NAME=1.0.${{ github.run_number }}" >> "$GITHUB_ENV"
-          echo "VERSION_CODE=$(( ${{ github.run_number }} + 200 ))" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=${{ needs.version.outputs.name }}" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=${{ needs.version.outputs.code }}" >> "$GITHUB_ENV"
 
       - name: Decode signing keystore
         env:
@@ -134,6 +156,7 @@ jobs:
           if-no-files-found: error
 
   linux:
+    needs: version
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -156,8 +179,8 @@ jobs:
 
       - name: Set version
         run: |
-          echo "VERSION_NAME=1.0.${{ github.run_number }}" >> "$GITHUB_ENV"
-          echo "VERSION_CODE=$(( ${{ github.run_number }} + 200 ))" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=${{ needs.version.outputs.name }}" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=${{ needs.version.outputs.code }}" >> "$GITHUB_ENV"
 
       - name: Datos de Google (opcional)
         env:
@@ -187,6 +210,7 @@ jobs:
           if-no-files-found: error
 
   windows:
+    needs: version
     runs-on: windows-latest
     defaults:
       run:
@@ -206,8 +230,8 @@ jobs:
 
       - name: Set version
         run: |
-          echo "VERSION_NAME=1.0.${{ github.run_number }}" >> "$GITHUB_ENV"
-          echo "VERSION_CODE=$(( ${{ github.run_number }} + 200 ))" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=${{ needs.version.outputs.name }}" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=${{ needs.version.outputs.code }}" >> "$GITHUB_ENV"
 
       - name: Datos de Google (opcional)
         env:
@@ -251,7 +275,7 @@ jobs:
   # Publica solo si pasaron los tests y salieron el APK y el .deb; el .exe va si salió. Lanzado a mano, solo si se
   # marca "publicar" (si no, sirve para probar que todo compila sin sacar una release).
   publish:
-    needs: [test, android, linux, windows]
+    needs: [version, test, android, linux, windows]
     if: >-
       always() && needs.test.result == 'success' && needs.android.result == 'success' &&
       needs.linux.result == 'success' &&
@@ -265,8 +289,8 @@ jobs:
 
       - name: Set version
         run: |
-          echo "VERSION_NAME=1.0.${{ github.run_number }}" >> "$GITHUB_ENV"
-          echo "VERSION_CODE=$(( ${{ github.run_number }} + 200 ))" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=${{ needs.version.outputs.name }}" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=${{ needs.version.outputs.code }}" >> "$GITHUB_ENV"
 
       - name: Bajar los archivos
         uses: actions/download-artifact@v4
