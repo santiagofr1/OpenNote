@@ -4,7 +4,7 @@
 
 [![Release](https://img.shields.io/github/v/release/santiagofr1/OpenNote?color=brightgreen)](https://github.com/santiagofr1/OpenNote/releases/latest)
 [![Workflow de release](https://github.com/santiagofr1/OpenNote/actions/workflows/release.yml/badge.svg)](https://github.com/santiagofr1/OpenNote/actions/workflows/release.yml)
-[![Licencia: MIT](https://img.shields.io/badge/licencia-MIT-blue.svg)](LICENSE)
+[![Licencia: GPL v3](https://img.shields.io/badge/licencia-GPLv3-blue.svg)](LICENSE)
 [![PRs bienvenidos](https://img.shields.io/badge/PRs-bienvenidos-brightgreen.svg)](CONTRIBUTING.md)
 [![Plataforma: Android](https://img.shields.io/badge/plataforma-Android-3DDC84.svg?logo=android&logoColor=white)](https://github.com/santiagofr1/OpenNote/releases/latest)
 [![Hecho con Flutter](https://img.shields.io/badge/hecho%20con-Flutter-02569B.svg?logo=flutter&logoColor=white)](https://flutter.dev)
@@ -161,7 +161,7 @@ Cada capa usa solo las de arriba: `domain` no sabe nada de Flutter, y el resto s
 
 ## Contribuir
 
-OpenNote es **software libre** bajo licencia MIT. Lo podés usar, copiar, modificar y redistribuir como quieras.
+OpenNote es **software libre** bajo licencia GPL v3. Lo podés usar, copiar, modificar y redistribuir, siempre que lo que distribuyas siga siendo libre.
 
 El software libre funciona porque la gente se anima a meter mano. No hace falta ser experto en Flutter ni pedir permiso:
 
@@ -186,4 +186,5 @@ La guía para arrancar está en [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Licencia
 
-[MIT](LICENSE). Hacé lo que quieras con el código, solo mantené el aviso de copyright.
+[GPL v3](LICENSE) © 2026 Santiago Frances. Podés usar, estudiar, modificar y redistribuir el código. Si distribuís una versión
+modificada, tiene que ser bajo la misma licencia y con su código fuente disponible.

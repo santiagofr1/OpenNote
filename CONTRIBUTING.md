@@ -100,4 +100,4 @@ Usá la [plantilla de reporte de error](https://github.com/santiagofr1/OpenNote/
 
 ## Licencia
 
-Al contribuir aceptás que tu aporte se publique bajo la licencia [MIT](LICENSE) del proyecto.
+Al contribuir aceptás que tu aporte se publique bajo la licencia [GPL v3](LICENSE) del proyecto.
