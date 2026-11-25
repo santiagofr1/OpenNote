@@ -23,6 +23,22 @@ void main() {
       await root.delete(recursive: true);
     }
   });
+
+  test('dos guardados de preferencias seguidos no se pisan, y loadPrefsSettled lee lo último', () async {
+    final root = await Directory.systemTemp.createTemp('apuntes_prefs');
+    try {
+      final store = Storage(root: root);
+      await store.init();
+      unawaited(store.savePrefs({'a': 1}));
+      unawaited(store.savePrefs({'b': 2}));
+      unawaited(store.savePrefs({'exportBg': false}));
+      final p = await store.loadPrefsSettled(); // sin esperar los guardados: tiene que ver los tres
+      expect(p?['a'], 1);
+      expect(p?['b'], 2);
+      expect(p?['exportBg'], false);
+    } finally {
+      await Storage.settleWrites();
+      await root.delete(recursive: true);
+    }
+  });
 }
-
-

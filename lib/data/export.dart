@@ -83,7 +83,8 @@ Future<List<_PdfLink>> _sheetLinks(Storage store, NotebookDoc doc, int sheet) as
 /// Lo que se sabe de una hoja ya dibujada, para armar su página del PDF.
 typedef _PagePlan = ({String id, SheetMeta meta, Uint8List png, List<_PdfLink> links, List<String> pdfKeys});
 /// La preferencia recordada de exportar con el fondo de la hoja (prefs.json, 'exportBg'); por defecto sí.
-Future<bool> exportBackgroundPref(Storage store) async => (await store.loadPrefs())?['exportBg'] != false;
+// espera los guardados en curso: si se acaba de cambiar el interruptor y se exporta enseguida, vale lo nuevo
+Future<bool> exportBackgroundPref(Storage store) async => (await store.loadPrefsSettled())?['exportBg'] != false;
 
 /// Arma el PDF del cuaderno: una página del tamaño de cada hoja, cada una con su fondo y su papel. Las secciones elegidas
 /// ([sections], todas si es null) van una atrás de la otra, en su orden. Los links (de Vynote y de los PDF importados)
