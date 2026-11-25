@@ -104,6 +104,11 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     HardwareKeyboard.instance.removeHandler(_shortcut);
     searchCtrl.dispose();
     _searchTimer?.cancel();
+    // un cambio de herramientas todavía sin guardar no se pierde al cerrar: se guarda ya
+    if (_prefsTimer?.isActive == true) {
+      _prefsTimer!.cancel();
+      unawaited(store.savePrefs(widget.tools.toJson()));
+    }
     if (fullscreen) SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     if (recorder.recording) {
       unawaited(_closeVoice()); // el cuaderno se cierra grabando: se para y se guarda lo grabado hasta ahí
