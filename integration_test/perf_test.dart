@@ -1,6 +1,6 @@
 // Benchmark de cuadernos grandes en la tablet (NO es parte de app_test.dart). Mide cuánto cuesta abrir, guardar,
 // scrollear y tener en memoria cuadernos de 50, 100, 200 y 400 hojas, para decidir si hace falta la carga perezosa
-// de hojas lejanas (PENDIENTES.md, punto 1). Todo en una carpeta temporal propia: nunca toca tus cuadernos.
+// de hojas lejanas. Todo en una carpeta temporal propia: nunca toca tus cuadernos.
 //
 // Se corre con tool/perf.sh (build profile + `flutter drive`; deja build/perf/perf.json y build/perf/perf.log).
 // Los tamaños se eligen al compilar: --dart-define=PERF_SIZES=50,100 (por defecto 50,100,200,400).
@@ -47,11 +47,6 @@ import 'hershey_script.dart';
 const _sizesEnv = String.fromEnvironment('PERF_SIZES', defaultValue: '50,100,200,400');
 const _pdfSheets = 100; // tamaño con el que se prueba la exportación
 const _fullLoadMax = 100; // por encima de esto no se decodifica el cuaderno entero (la app ya no abre así; en la tablet muere)
-
-// Modo comparación con Samsung Notes (tool/comparar.sh): --dart-define=PERF_COMPARE=34 corre SOLO ese caso (en horizontal,
-// sin scrollear solo: mide FrameTiming mientras un script externo hace swipes con adb) y no los tamaños.
-const _compareEnv = String.fromEnvironment('PERF_COMPARE', defaultValue: '');
-const _compareWindowSeconds = 40;
 
 // Modo traza (tool/traza.sh): --dart-define=PERF_TRACE=50 corre SOLO ese caso: genera N hojas, abre por la UI y hace
 // el scroll "medio" (6 flings) dentro de binding.traceAction, que deja la línea de tiempo en reportData['timeline'].
@@ -310,11 +305,9 @@ String modo() => kReleaseMode ? 'release' : (kProfileMode ? 'profile' : 'debug')
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-  final compare = _compareEnv.isEmpty ? null : int.parse(_compareEnv.trim());
   final trace = _traceEnv.isEmpty ? null : int.parse(_traceEnv.trim());
-  final sizes = compare != null || trace != null ? <int>[] : [for (final s in _sizesEnv.split(',')) int.parse(s.trim())];
+  final sizes = trace != null ? <int>[] : [for (final s in _sizesEnv.split(',')) int.parse(s.trim())];
   final results = <String, Object>{'modo': modo(), 'tamanios': sizes};
-  if (compare != null) results['comparar_hojas'] = compare;
   if (trace != null) results['traza_hojas'] = trace;
   final frames = FrameRecorder();
   final lines = <String>[];
@@ -353,23 +346,21 @@ void main() {
   setUpAll(frames.attach);
   tearDownAll(() {
     frames.detach();
-    if (compare == null) {
-      // tabla resumen entre tamaños
-      say('');
-      say('===== RESUMEN (modo ${modo()}) =====');
-      say('hojas | puntos | disco MB | leer+decod ms | abrir perezoso ms | abrir UI ms | guardar 1 trazo ms | scroll build p90 | '
-          'scroll raster p90 | >16ms % | RSS abierto MB | maxRSS MB');
-      for (final n in sizes) {
-        final m = results['$n'];
-        if (m is! Map) continue;
-        final sc = [for (final z in ['inicio', 'medio', 'final']) m['scroll_$z']].whereType<Map>().toList();
-        double worst(String k) => sc.isEmpty ? 0 : sc.map((e) => (e[k] as num).toDouble()).reduce(max);
-        final fr = sc.fold<int>(0, (a, e) => a + (e['frames'] as int));
-        final slow = sc.fold<int>(0, (a, e) => a + (e['frames_mas_16ms'] as int));
-        say('$n | ${m['puntos']} | ${m['disco_mb']} | ${m['leer_decodificar_ms'] ?? '-'} | ${m['abrir_perezoso_ms']} | '
-            '${m['abrir_ui_ms']} | ${m['guardar_1_trazo_ms']} | ${worst('build_p90_ms')} | ${worst('raster_p90_ms')} | '
-            '${fr == 0 ? '-' : r1(100 * slow / fr)} | ${m['rss_abierto_mb']} | ${m['rss_max_mb']}');
-      }
+    // tabla resumen entre tamaños
+    say('');
+    say('===== RESUMEN (modo ${modo()}) =====');
+    say('hojas | puntos | disco MB | leer+decod ms | abrir perezoso ms | abrir UI ms | guardar 1 trazo ms | scroll build p90 | '
+        'scroll raster p90 | >16ms % | RSS abierto MB | maxRSS MB');
+    for (final n in sizes) {
+      final m = results['$n'];
+      if (m is! Map) continue;
+      final sc = [for (final z in ['inicio', 'medio', 'final']) m['scroll_$z']].whereType<Map>().toList();
+      double worst(String k) => sc.isEmpty ? 0 : sc.map((e) => (e[k] as num).toDouble()).reduce(max);
+      final fr = sc.fold<int>(0, (a, e) => a + (e['frames'] as int));
+      final slow = sc.fold<int>(0, (a, e) => a + (e['frames_mas_16ms'] as int));
+      say('$n | ${m['puntos']} | ${m['disco_mb']} | ${m['leer_decodificar_ms'] ?? '-'} | ${m['abrir_perezoso_ms']} | '
+          '${m['abrir_ui_ms']} | ${m['guardar_1_trazo_ms']} | ${worst('build_p90_ms')} | ${worst('raster_p90_ms')} | '
+          '${fr == 0 ? '-' : r1(100 * slow / fr)} | ${m['rss_abierto_mb']} | ${m['rss_max_mb']}');
     }
     publish();
   });
@@ -662,70 +653,6 @@ void main() {
         say('ERROR en traza: $e');
         rethrow;
       } finally {
-        publish();
-        await t.pumpWidget(const SizedBox());
-        if (await root.exists()) await root.delete(recursive: true);
-      }
-    });
-  }
-
-  // ---------- caso aparte: comparación con Samsung Notes (tool/comparar.sh) ----------
-  if (compare != null) {
-    testWidgets('perf: comparación con Samsung Notes ($compare hojas, horizontal)',
-        timeout: const Timeout(Duration(minutes: 20)), (t) async {
-      final out = <String, Object?>{};
-      results['comparar'] = out;
-      final root = await Directory.systemTemp.createTemp('apuntes_perf_cmp');
-      try {
-        await generate(compare, root, out);
-        await SystemChrome.setPreferredOrientations(
-            [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
-        await Future<void>.delayed(const Duration(seconds: 2)); // que el sistema termine de girar
-        await openByUi(t, compare, root, out);
-
-        // ventana de medición: el test NO scrollea; solo mira los frames mientras tool/comparar.sh hace swipes con adb
-        final ed = t.state<PageEditorState>(find.byType(PageEditor));
-        final p0 = ed.scroll.offset;
-        await frames.mark();
-        final sw = Stopwatch()..start();
-        // el binding de test descarta los toques reales y no dibuja frames por su cuenta: durante la ventana
-        // se dejan pasar los toques de adb y los frames los pide la app como en uso normal
-        final lb = t.binding as LiveTestWidgetsFlutterBinding;
-        final policy = lb.framePolicy;
-        lb.shouldPropagateDevicePointerEvents = true;
-        lb.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
-        say('LISTO_PARA_SWIPES');
-        try {
-          while (sw.elapsed < const Duration(seconds: _compareWindowSeconds)) {
-            await Future<void>.delayed(const Duration(milliseconds: 250));
-          }
-        } finally {
-          lb.shouldPropagateDevicePointerEvents = false;
-          lb.framePolicy = policy;
-        }
-        // solo los cuadros mientras el scroll se movía (ver FrameRecorder.take); los de afuera de esa ventana no cuentan
-        final f = await frames.take(onlyMoving: true);
-        f['recorrido_px'] = r1((ed.scroll.offset - p0).abs()); // neto
-        f['ventana_s'] = _compareWindowSeconds;
-        out['swipes'] = f;
-        out['rss_tras_swipes_mb'] = mb(ProcessInfo.currentRss);
-        out['rss_max_mb'] = mb(ProcessInfo.maxRss);
-        say('swipes ($compare hojas, horizontal, ventana de $_compareWindowSeconds s, activa ${f['ventana_activa_ms']} ms): '
-            '${f['frames']} frames en movimiento, ${f['recorrido_total_px']} px recorridos (neto ${f['recorrido_px']}) | '
-            'build prom/p50/p90/p99 ${f['build_prom_ms']}/${f['build_p50_ms']}/${f['build_p90_ms']}/${f['build_p99_ms']} ms | '
-            'raster prom/p50/p90/p99 ${f['raster_prom_ms']}/${f['raster_p50_ms']}/${f['raster_p90_ms']}/${f['raster_p99_ms']} ms | '
-            '>16 ms: ${f['frames_mas_16ms']} (${f['frames_mas_16ms_pct']} %), peor ${f['total_peor_ms']} ms');
-        say('swipes, por grupo: ${groups(f)}');
-        say('RSS tras swipes ${out['rss_tras_swipes_mb']} MB, maxRSS ${out['rss_max_mb']} MB');
-
-        await t.tap(find.byKey(const Key('back')));
-        await settle(t, 1500);
-      } catch (e) {
-        out['error'] = '$e';
-        say('ERROR en comparación: $e');
-        rethrow;
-      } finally {
-        await SystemChrome.setPreferredOrientations([]);
         publish();
         await t.pumpWidget(const SizedBox());
         if (await root.exists()) await root.delete(recursive: true);

@@ -18,7 +18,7 @@ instalada() { adb -s "$DEV" shell pm list packages "$PKG" | tr -d '\r' | grep -q
 
 instalada || { echo "ERROR: la app real ($PKG) no está instalada; no corro nada."; exit 1; }
 
-# 1) Solo si la tablet está en el inicio o en OpenNote (nunca encima de otra app, p. ej. Samsung Notes).
+# 1) Solo si la tablet está en el inicio o en OpenNote (nunca encima de otra app).
 FOCO=$(adb -s "$DEV" shell dumpsys window | grep mCurrentFocus | tr -d '\r')
 echo "$FOCO" | grep -qE 'launcher|com\.apuntes\.apuntes' || { echo "ERROR: la tablet está en otra app; no corro nada."; echo "$FOCO"; exit 1; }
 

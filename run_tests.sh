@@ -7,12 +7,17 @@
 #   NOMBRE='texto' ./run_tests.sh   -> solo los casos cuyo nombre contiene ese texto
 #   FILTRO='regex' ./run_tests.sh   -> solo los casos cuyo nombre encaja con la expresión regular
 #   NUEVOS=1 ./run_tests.sh   -> solo los casos de las funciones de esta tanda (ver NUEVOS_RE más abajo)
+# Muestra los pasos y una barra de avance; el log entero queda en test_tablet.log y al terminar avisa con una
+# notificación en la PC (si hay notify-send).
 set -e
 # Casos de la tanda actual (fondos #31, plantillas #33, pegar imagen #32, selector de color) y los viejos que tocan lo mismo.
-NUEVOS_RE='issue #3[1-9]\)|issue #23\)|favoritos: Cambiar|estilo de hoja|issue #41\)|issue #42\)'
+NUEVOS_RE='issue #3[1-9]\)|issue #23\)|favoritos: Cambiar|estilo de hoja|issue #41\)|issue #42\)|scroll rápido|resaltador sobre un PDF|índice: al cerrarlo'
 [ "${NUEVOS:-0}" = 1 ] && FILTRO=${FILTRO:-$NUEVOS_RE}
 export PATH=~/flutter/bin:$PATH JAVA_HOME=~/Android/jdk21 ANDROID_HOME=~/Android/Sdk
 cd "$(dirname "$0")"
+LOG=test_tablet.log
+paso() { echo "[$1/4] $2"; }
+avisar() { command -v notify-send >/dev/null && notify-send -a OpenNote "Tests en la tablet" "$1" 2>/dev/null || true; }
 DEV=${DEV:-$(adb devices | awk 'NR==2{print $1}')}
 PKG=com.apuntes.apuntes
 DATA=/sdcard/Android/data/$PKG/files/apuntes
@@ -26,12 +31,13 @@ instalada() { adb -s "$DEV" shell pm list packages "$PKG" | tr -d '\r' | grep -q
 
 instalada || { echo "ERROR: la app real ($PKG) no está instalada; no corro nada."; exit 1; }
 
-# 1) Solo si la tablet está en el inicio o en OpenNote (nunca encima de otra app, p. ej. Samsung Notes).
+# 1) Solo si la tablet está en el inicio o en OpenNote (nunca encima de otra app).
 FOCO=$(adb -s "$DEV" shell dumpsys window | grep mCurrentFocus | tr -d '\r')
 echo "$FOCO" | grep -qE 'launcher|com\.apuntes\.apuntes' || { echo "ERROR: la tablet está en otra app; no corro nada."; echo "$FOCO"; exit 1; }
 
 # 2) Compilar antes: flutter decide qué app desinstalar ANTES de compilar, leyendo el APK que haya.
 #    Sin APK previo usa el id del código (com.apuntes.apuntes) y desinstalaría la app real.
+paso 1 "Compilando la app de prueba (tarda unos minutos)…"
 flutter build apk --debug >/dev/null
 AAPT=$(ls -d "$ANDROID_HOME"/build-tools/*/ | tail -1)aapt2
 ID=$("$AAPT" dump badging build/app/outputs/flutter-apk/app-debug.apk | sed -n "s/^package: name='\([^']*\)'.*/\1/p")
@@ -63,10 +69,23 @@ if [ "${BACKUP:-0}" = 1 ]; then
   echo "Backup: $B ($(find "$B" -type f | wc -l) archivos)"
 fi
 
+# cuántos casos van a correr (para la barra): los nombres de app_test.dart que entran en el filtro
+TOTAL=$(python3 -I - "$NOMBRE" "$FILTRO" <<'EOF'
+import re, sys
+nombre, filtro = sys.argv[1], sys.argv[2]
+src = open('integration_test/app_test.dart', encoding='utf-8').read()
+casos = re.findall(r"testWidgets\(\s*'((?:[^'\\]|\\.)*)'", src)
+casos = [c for c in casos if (not nombre or nombre in c) and (not filtro or re.search(filtro, c))]
+print(len(casos))
+EOF
+)
+paso 2 "Instalando y corriendo $TOTAL caso(s) en la tablet (el log entero va a $LOG)…"
 set +e
-flutter test integration_test/app_test.dart -d "$DEV" -r expanded --no-uninstall ${NOMBRE:+--plain-name "$NOMBRE"} ${FILTRO:+--name "$FILTRO"}
-R=$?
+flutter test integration_test/app_test.dart -d "$DEV" -r expanded --no-uninstall ${NOMBRE:+--plain-name "$NOMBRE"} ${FILTRO:+--name "$FILTRO"} 2>&1 \
+  | python3 -I tool/progreso_tests.py "$LOG" "$TOTAL"
+R=${PIPESTATUS[1]}
 set -e
+paso 3 "Verificando que la app real y tus cuadernos sigan intactos…"
 
 FALLO=0
 if ! instalada; then
@@ -81,5 +100,15 @@ if [ "$ANTES" != "$DESPUES" ]; then
   FALLO=1
 fi
 [ $FALLO = 0 ] && echo "OK: la app real y sus datos siguen intactos."
-[ $FALLO = 0 ] || exit 2
+if [ $FALLO != 0 ]; then
+  avisar "OJO: la app real o sus datos cambiaron"
+  exit 2
+fi
+if [ "$R" = 0 ]; then
+  paso 4 "Listo: todo verde"
+  avisar "Todo verde ($TOTAL casos)"
+else
+  paso 4 "Listo: hay casos que fallaron (detalle arriba y en $LOG)"
+  avisar "Fallaron casos: mirá la terminal o $LOG"
+fi
 exit $R

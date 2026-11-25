@@ -94,7 +94,7 @@ class SheetImageCache {
   Map<String, (double, double)> viewFractions = const {};
 
   /// Tandas con menos puntos que esto son baratas de rasterizar: no valen una imagen. Con trazos como mallas (una
-  /// `drawVertices` por lote, ver docs/TECNICO.md, etapa 5) una hoja de 12k puntos se pinta en ~1 ms de UI.
+  /// `drawVertices` por lote) una hoja de 12k puntos se pinta en ~1 ms de UI.
   int minPoints;
   Duration quiet;
 

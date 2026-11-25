@@ -64,7 +64,6 @@ Si tu cambio puede afectar la velocidad o la memoria (dibujo, carga, guardado, s
 
 - `tool/perf.sh`: mide cuadernos de 50, 100, 200 y 400 hojas en la tablet (tarda unos 15-25 minutos).
   `SIZES=100,200 tool/perf.sh` corre solo esos tamaños.
-- `tool/comparar.sh`: compara la app con Samsung Notes en la tablet, con un cuaderno de 34 hojas.
 
 Pegá los números antes y después en el PR.
 
@@ -82,8 +81,7 @@ lib/theme/       tema y colores
 ```
 
 Cada capa usa solo las de arriba. Si una lógica puede ir en `lib/domain/` sin depender de Flutter, ponela ahí y
-cubrila con tests. El formato de archivos, la carga perezosa y el guardado están explicados en
-[docs/TECNICO.md](docs/TECNICO.md).
+cubrila con tests.
 
 ## Estilo
 

@@ -92,7 +92,7 @@ class Selection {
   /// Ids de todo lo seleccionado (trazos, textos y elementos).
   Set<String> get allIds => {...strokes, ...texts, ...items};
 
-  /// "Seleccionar todo": todo lo de la hoja [sheet] (índice; como Samsung Notes, que selecciona por página). Cada
+  /// "Seleccionar todo": todo lo de la hoja [sheet] (índice; se selecciona por página). Cada
   /// elemento es de la hoja de su borde de arriba ([NotebookDoc.sheetOfElement]). Una hoja sin cargar no tiene elementos.
   /// Sin [sheet]: todo lo que haya cargado (lo usa "Seleccionar todo el cuaderno" después de cargar las hojas que faltan).
   void selectAll(NotebookDoc p, {int? sheet}) {

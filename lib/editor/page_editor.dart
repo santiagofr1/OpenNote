@@ -25,6 +25,7 @@ import '../widgets/auto_scroller.dart';
 import '../widgets/dialogs.dart';
 import 'context_menu.dart';
 import 'dock_layout.dart';
+import 'fast_scroller.dart';
 import 'format_bar.dart';
 import 'handwriting.dart';
 import 'heading_dialog.dart';
@@ -1963,6 +1964,16 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   // ---------------- dedos: zoom y menú de la hoja ----------------
   Offset get _scrollOffset => Offset(hscroll.hasClients ? hscroll.offset : 0, scroll.hasClients ? scroll.offset : 0);
 
+  // Al abrir o cerrar un panel lateral el ancho del visor cambia y con él la escala: el scroll en píxeles pasaría a ser
+  // otra posición del cuaderno. Se guarda la escala del último layout para reubicar la vista (ver [_keepPlaceOnResize]).
+  double? _lastLayoutScale;
+  SheetLayout? _lastLayout;
+  bool _zoomApplied = false; // el layout de este cuadro ya acomodó el scroll por un zoom
+  // destino de un scroll animado en curso, en unidades del documento: pos = docY * escala + kTopPad + px
+  ({double docY, double px})? _scrollTarget;
+  int _scrollTargetTurn = 0; // sube con cada animación: la que fue reemplazada no borra el destino de la nueva
+  bool _retargetQueued = false;
+
   Offset? _zoomScrollTo; // scroll que deja el foco del pellizco en su lugar, se aplica en el próximo layout
 
   void _flashZoom() {
@@ -1994,9 +2005,14 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final to = _zoomScrollTo;
     if (to == null) return;
     _zoomScrollTo = null;
+    _zoomApplied = true;
     if (hscroll.hasClients && hscroll.position.hasPixels) hscroll.position.correctPixels(max(0.0, to.dx));
     if (scroll.hasClients && scroll.position.hasPixels) scroll.position.correctPixels(max(0.0, to.dy));
-    // el máximo real recién se conoce después del layout: si quedó afuera, se recorta
+    _clampScrollSoon();
+  }
+
+  /// El máximo real recién se conoce después del layout: si el scroll quedó afuera, se recorta.
+  void _clampScrollSoon() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (hscroll.hasClients && hscroll.offset > hscroll.position.maxScrollExtent) {
@@ -2008,8 +2024,57 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     });
   }
 
+  /// Si cambió la escala por el ancho del visor (se abrió o cerró un panel, giró la pantalla), deja la vista en el mismo
+  /// lugar del cuaderno; con un scroll animado en curso, le recalcula el destino con la escala nueva.
+  void _keepPlaceOnResize() {
+    final oldScale = _lastLayoutScale, oldLayout = _lastLayout;
+    _lastLayoutScale = layout.scale;
+    _lastLayout = layout;
+    final byZoom = _zoomApplied;
+    _zoomApplied = false;
+    if (oldScale == null || oldLayout == null || byZoom || (layout.scale - oldScale).abs() < 1e-6) return;
+    final newScale = layout.scale;
+    final target = _scrollTarget;
+    if (scroll.hasClients && scroll.position.hasPixels) {
+      if (target == null) {
+        final docTop = (scroll.offset - kTopPad) / oldScale;
+        scroll.position.correctPixels(max(0.0, docTop * newScale + kTopPad));
+      } else if (!_retargetQueued) {
+        _retargetQueued = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _retargetQueued = false;
+          final t = _scrollTarget;
+          if (!mounted || t == null || !scroll.hasClients) return;
+          _animateToTarget(t, const Duration(milliseconds: 200));
+        });
+      }
+    }
+    if (hscroll.hasClients && hscroll.position.hasPixels) {
+      final docLeft = (hscroll.offset - oldLayout.sheetLeft) / oldScale;
+      hscroll.position.correctPixels(max(0.0, docLeft * newScale + layout.sheetLeft));
+    }
+    _clampScrollSoon();
+    // correctPixels no avisa: lo que depende del scroll (hoja visible, rango armado) se pone al día después
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _onScroll();
+    });
+  }
+
+  /// Anima el scroll vertical a [t] (docY * escala + kTopPad + px) y lo recuerda hasta que termine, para poder
+  /// recalcularlo si cambia la escala mientras tanto.
+  Future<void> _animateToTarget(({double docY, double px}) t, Duration d) {
+    _scrollTarget = t;
+    final turn = ++_scrollTargetTurn;
+    final pos = (t.docY * scale + kTopPad + t.px).clamp(0.0, scroll.position.maxScrollExtent);
+    // al relanzar con el mismo destino, la animación vieja termina igual (cortada): solo la última lo borra
+    return scroll.animateTo(pos, duration: d, curve: Curves.easeOutQuart).whenComplete(() {
+      if (turn == _scrollTargetTurn) _scrollTarget = null;
+    });
+  }
+
   void _touchDown(PointerDownEvent e) {
     if (e.kind != PointerDeviceKind.touch) return;
+    _scrollTarget = null; // el dedo toma el control: ya no hay destino que sostener
     touch.down(e.pointer, e.position);
     if (touch.length == 2) _cancelTouchShape();
     final onSelUi = _selUiPointers.remove(e.pointer);
@@ -2298,7 +2363,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     }
     final y = (k.clamp(0, doc.sheetCount - 1) * kSheetStep * scale).clamp(0.0, scroll.position.maxScrollExtent);
     if (animate) {
-      scroll.animateTo(y, duration: const Duration(milliseconds: 380), curve: Curves.easeOutQuart);
+      _animateToTarget((docY: k.clamp(0, doc.sheetCount - 1) * kSheetStep, px: -kTopPad), const Duration(milliseconds: 380));
     } else {
       scroll.jumpTo(y);
     }
@@ -2418,8 +2483,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   void scrollToItem(String id) {
     final it = doc.items[id];
     if (it == null || !scroll.hasClients) return;
-    scroll.animateTo((it.y * scale + kTopPad - 120).clamp(0.0, scroll.position.maxScrollExtent),
-        duration: const Duration(milliseconds: 380), curve: Curves.easeOutQuart);
+    _animateToTarget((docY: it.y, px: -120), const Duration(milliseconds: 380));
   }
 
   /// Lleva la vista a la altura [yLocal] (local a la hoja) de la hoja [k], dejándola a ~120 px de arriba (el índice).
@@ -2431,8 +2495,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     }
     k = k.clamp(0, doc.sheetCount - 1);
     widget.sheetNotifier?.value = k;
-    scroll.animateTo(((k * kSheetStep + yLocal) * scale + kTopPad - 120).clamp(0.0, scroll.position.maxScrollExtent),
-        duration: const Duration(milliseconds: 380), curve: Curves.easeOutQuart);
+    _animateToTarget((docY: k * kSheetStep + yLocal, px: -120), const Duration(milliseconds: 380));
   }
 
   // ---------------- índice ----------------
@@ -2522,8 +2585,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     setState(() => sel.replace(texts: [if (t != null) id], items: [if (it != null) id]));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (scroll.hasClients) {
-        scroll.animateTo((y * scale + kTopPad - 120).clamp(0.0, scroll.position.maxScrollExtent),
-            duration: const Duration(milliseconds: 380), curve: Curves.easeOutQuart);
+        _animateToTarget((docY: y, px: -120), const Duration(milliseconds: 380));
       }
     });
     liveTick.value++;
@@ -2575,6 +2637,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         _viewH = box.maxHeight;
         _viewW = box.maxWidth;
         _applyZoomScroll();
+        _keepPlaceOnResize();
         _dpr = View.of(context).devicePixelRatio;
         _syncMeshFeather();
         developer.Timeline.timeSync('ON canvas range+sync', () {
@@ -2597,15 +2660,21 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
                 // el lápiz NO scrollea: solo dedo y touchpad
                 // con el zoom fijado el dedo solo NO mueve la hoja (así la palma no la corre al escribir): se mueve con
                 // dos dedos; la rueda del mouse y el trackpad siguen andando
+                // (la barra vertical la reemplaza el scroll rápido; la horizontal tiene la suya más abajo)
                 behavior: ScrollConfiguration.of(context).copyWith(
                   dragDevices: {if (!ts.zoomLocked) PointerDeviceKind.touch, PointerDeviceKind.trackpad},
-                  scrollbars: true,
+                  scrollbars: false,
                 ),
                 child: SingleChildScrollView(
                   controller: scroll,
                   physics: physics,
                   keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
-                  child: SingleChildScrollView(
+                  child: ScrollConfiguration(
+                    behavior: ScrollConfiguration.of(context).copyWith(
+                      dragDevices: {if (!ts.zoomLocked) PointerDeviceKind.touch, PointerDeviceKind.trackpad},
+                      scrollbars: true,
+                    ),
+                    child: SingleChildScrollView(
                     controller: hscroll,
                     scrollDirection: Axis.horizontal,
                     physics: physics,
@@ -2633,9 +2702,21 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
                           ),
                       ]),
                     ),
+                    ),
                   ),
                 ),
               ),
+            ),
+          ),
+          // hermano del visor: el dedo sobre el pulgar no llega a los manejadores de toque del visor
+          Positioned(
+            top: 0,
+            bottom: 0,
+            right: 0,
+            width: 200,
+            child: FastScroller(
+              controller: scroll,
+              label: doc.nb.canvas ? null : () => 'Hoja ${visibleSheet + 1} de ${doc.sheetCount}',
             ),
           ),
           Positioned(left: 0, right: 0, bottom: 28, child: Center(child: PullIndicator(pull))),
@@ -2847,7 +2928,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             if (!doc.isLoadedAt(k)) _loadingMark(k),
             for (final (i, run) in _sheetRuns[doc.sheets[k].id]!.indexed) _run(run, i, textMode, k),
           ],
-          for (final (i, run) in zRuns(sortByZ(extras)).indexed) _run(run, i, textMode, -1),
+          for (final (i, run) in splitHighlighters(zRuns(sortByZ(extras))).indexed) _run(run, i, textMode, -1),
           Positioned.fill(
             child: IgnorePointer(
               child: RepaintBoundary(
@@ -2887,7 +2968,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     for (final t in doc.texts.values) {
       buckets[doc.sheetOfY(t.y)]?.add(t);
     }
-    buckets.forEach((k, els) => _sheetRuns[doc.sheets[k].id] = zRuns(sortByZ(els)));
+    buckets.forEach((k, els) => _sheetRuns[doc.sheets[k].id] = splitHighlighters(zRuns(sortByZ(els))));
   }
 
   /// Aviso (sin animación) en una hoja visible que todavía no se leyó de disco: se ve el papel y nada más.
@@ -2931,8 +3012,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
           child: RepaintBoundary(
             child: CustomPaint(
                 painter: InkPainter(doc, strokes, r, scale, _verOf(id), () => sel.moving ? sel.strokes : (_shapeEdit != null ? {_shapeEdit!.id} : const {}),
-                    cache: _imgs, cacheKey: 'ink-$id-$i', sheetId: id, dpr: _dpr, maxPx: 2 * _viewW * _dpr),
-                isComplex: true),
+                    cache: _imgs, cacheKey: 'ink-$id-$i', sheetId: id, dpr: _dpr, maxPx: 2 * _viewW * _dpr, multiply: run.multiply),
+                // la tanda multiplicada no se rasteriza aparte: perdería la mezcla con el PDF de abajo
+                isComplex: !run.multiply,
+                willChange: run.multiply),
           ),
         ),
       );
