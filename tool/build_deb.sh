@@ -37,9 +37,9 @@ Categories=Office;
 StartupWMClass=$APP_ID
 EOF
 
-# Íconos: el más grande de los mipmap de Android, reescalado.
-src=android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
-for s in 48 64 128 192; do
+# Íconos: el de 512 px que genera tool/icon_from_png.py, reescalado.
+src=docs/img/icon.png
+for s in 48 64 128 256 512; do
   d="$pkg/usr/share/icons/hicolor/${s}x${s}/apps"
   install -d "$d"
   python3 - "$src" "$s" "$d/$APP_ID.png" <<'PY'

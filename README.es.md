@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/img/icon.png" width="128" alt="Vynote"></p>
+
 # Vynote
 
 [English](README.md) · **Español**
