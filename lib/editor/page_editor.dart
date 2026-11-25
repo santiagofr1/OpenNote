@@ -1971,6 +1971,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   bool _zoomApplied = false; // el layout de este cuadro ya acomodó el scroll por un zoom
   // destino de un scroll animado en curso, en unidades del documento: pos = docY * escala + kTopPad + px
   ({double docY, double px})? _scrollTarget;
+  int _scrollTargetTurn = 0; // sube con cada animación: la que fue reemplazada no borra el destino de la nueva
   bool _retargetQueued = false;
 
   Offset? _zoomScrollTo; // scroll que deja el foco del pellizco en su lugar, se aplica en el próximo layout
@@ -2063,9 +2064,11 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   /// recalcularlo si cambia la escala mientras tanto.
   Future<void> _animateToTarget(({double docY, double px}) t, Duration d) {
     _scrollTarget = t;
+    final turn = ++_scrollTargetTurn;
     final pos = (t.docY * scale + kTopPad + t.px).clamp(0.0, scroll.position.maxScrollExtent);
+    // al relanzar con el mismo destino, la animación vieja termina igual (cortada): solo la última lo borra
     return scroll.animateTo(pos, duration: d, curve: Curves.easeOutQuart).whenComplete(() {
-      if (identical(_scrollTarget, t)) _scrollTarget = null;
+      if (turn == _scrollTargetTurn) _scrollTarget = null;
     });
   }
 

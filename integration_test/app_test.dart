@@ -2318,6 +2318,10 @@ void main() {
   });
 
   testWidgets('menú de la hoja: solo "Pegar acá", y solo si hay algo copiado (issue #25)', (t) async {
+    // el portapapeles del sistema de la tablet puede tener una imagen copiada: acá se lo da por vacío
+    final hasImg = SystemClipboard.hasImage;
+    SystemClipboard.hasImage = () async => false;
+    addTearDown(() => SystemClipboard.hasImage = hasImg);
     await start(t);
     await createNotebook(t, 'Todo');
     final ed = editor(t);
