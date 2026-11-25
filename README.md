@@ -17,6 +17,21 @@ Vynote is a handwriting note-taking app with the S Pen (and with the keyboard to
 It's free, it's open source, it works offline, and your notes are yours: they're stored on your device,
 with no accounts and no servers of our own. If you want, you can sync them between your tablet and your PC with your own Google Drive.
 
+## What it solves
+
+- **Your notes are on the tablet, but you study or work on the PC.** The same notebooks open in the Linux and Windows
+  app, and they sync on their own through your own Google Drive.
+- **You don't want to hand your notes to someone else's server.** There are no accounts or servers of ours: everything
+  stays on your devices and in your Drive, and with end-to-end encryption not even Google can read it.
+- **You can't find that topic in a 60-page notebook.** Mark your handwritten titles and the index numbers them and takes
+  you straight to each one.
+- **You have to study from a PDF or a worksheet.** Import it and write, highlight and answer right on top, on the
+  tablet or on the PC.
+- **Your sketches and diagrams come out messy.** Draw a shape, hold the pen still, and it turns into a neat line,
+  circle, rectangle or polygon.
+- **You need to move or back up a notebook.** Export it as PDF, PNG or a `.vynote` file and take it to another
+  device.
+
 ## Features
 
 - **Pressure-sensitive writing**: the stroke gets thicker or thinner depending on how hard you press the pen.

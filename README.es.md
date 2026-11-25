@@ -17,6 +17,21 @@ Vynote es una app de apuntes a mano con S Pen (y también con teclado) para tabl
 Es gratis, es de código abierto, funciona sin conexión y tus apuntes son tuyos: se guardan en tu dispositivo,
 sin cuentas ni servidores propios. Si querés, los sincronizás entre la tablet y la PC con tu propio Google Drive.
 
+## Qué resuelve
+
+- **Tus apuntes están en la tablet, pero estudiás o trabajás en la PC.** Los mismos cuadernos se abren en la app de
+  Linux y de Windows, y se sincronizan solos por tu propio Google Drive.
+- **No querés dejar tus apuntes en el servidor de otro.** No hay cuentas ni servidores nuestros: todo queda en tus
+  dispositivos y en tu Drive, y con el cifrado de extremo a extremo ni Google puede leerlo.
+- **No encontrás ese tema en un cuaderno de 60 hojas.** Marcás tus títulos escritos a mano y el índice los numera y te
+  lleva directo a cada uno.
+- **Tenés que estudiar de un PDF o de una guía.** Lo importás y escribís, resaltás y respondés encima, en la tablet o en
+  la PC.
+- **Tus esquemas y gráficos quedan desprolijos.** Dibujás una figura, dejás el lápiz quieto y se convierte en una línea,
+  círculo, rectángulo o polígono prolijo.
+- **Necesitás pasar o respaldar un cuaderno.** Lo exportás como PDF, PNG o archivo `.vynote` y lo llevás a otro
+  dispositivo.
+
 ## Qué tiene
 
 - **Escritura con presión**: el trazo engrosa o se afina según cuánto apretás el lápiz.
