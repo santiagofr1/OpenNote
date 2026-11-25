@@ -64,7 +64,6 @@ Si tu cambio puede afectar la velocidad o la memoria (dibujo, carga, guardado, s
 
 - `tool/perf.sh`: mide cuadernos de 50, 100, 200 y 400 hojas en la tablet (tarda unos 15-25 minutos).
   `SIZES=100,200 tool/perf.sh` corre solo esos tamaños.
-- `tool/comparar.sh`: compara la app con Samsung Notes en la tablet, con un cuaderno de 34 hojas.
 
 Pegá los números antes y después en el PR.
 
