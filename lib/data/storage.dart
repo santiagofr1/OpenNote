@@ -629,24 +629,21 @@ class Storage {
 
   /// Mezcla [p] con lo que ya hay: así las herramientas y las opciones de actualización
   /// (que se guardan por separado) no se pisan entre sí.
-  /// Los guardados van en fila: cada uno lee lo que dejó el anterior (dos seguidos sin esperar no se pisan).
+  /// Lo que se guardó en esta sesión (lo último gana). Cada guardado escribe todo esto encima de lo que hay en disco:
+  /// dos guardados seguidos sin esperar no se pisan aunque se crucen.
+  final Map<String, dynamic> _prefsSet = {};
+
   Future<void> savePrefs(Map<String, dynamic> p) {
-    final run = _prefsQueue.catchError((_) {}).then((_) => _savePrefs(p));
-    _prefsQueue = run;
-    return _track(run);
+    _prefsSet.addAll(p);
+    return _track(_savePrefs(p));
   }
 
-  Future<void> _prefsQueue = Future.value();
-
-  /// Las preferencias después de que terminen los guardados en curso (para leer lo que se acaba de elegir).
-  Future<Map?> loadPrefsSettled() async {
-    await _prefsQueue.catchError((_) {});
-    return loadPrefs();
-  }
+  /// Las preferencias con lo último que se eligió, aunque todavía no haya terminado de escribirse.
+  Future<Map?> loadPrefsSettled() async => {...?(await loadPrefs()), ..._prefsSet};
 
   Future<void> _savePrefs(Map<String, dynamic> p) async {
     final prev = await loadPrefs();
-    await _writeJson(_prefs, {...?prev?.cast<String, dynamic>(), ...p});
+    await _writeJson(_prefs, {...?prev?.cast<String, dynamic>(), ..._prefsSet});
   }
 }
 

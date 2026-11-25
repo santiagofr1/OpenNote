@@ -6,7 +6,7 @@ Uso (lo llama run_tests.sh):
 
 Todo lo que llega se guarda tal cual en LOG. En la terminal se ve una barra con cuántos casos van (de TOTAL), cuántos
 pasaron y fallaron, y el caso que está corriendo. Al final imprime el resumen y el error de cada caso que falló.
-Sale con 0 si no falló ninguno y 1 si falló alguno (o si no llegó a correr ningún caso).
+Sale con 0 si no falló ninguno y 1 si falló alguno, si quedaron casos sin terminar o si corrieron menos de TOTAL.
 """
 import re
 import shutil
@@ -75,6 +75,8 @@ def main():
     if tty:
         sys.stdout.write('\n')
 
+    # "did not complete" (se cortó la conexión con la app) marca [E] pero no suma al contador de fallas
+    mal = max(mal, len(fallados))
     print(f'TESTS: {ok} pasaron, {mal} fallaron, {salteados} salteados (de {total} esperados)')
     for n in fallados:
         print(f'\nFALLÓ: {n}')
@@ -82,6 +84,9 @@ def main():
             print('    ' + l)
     if ok + mal == 0:
         print('No llegó a correr ningún caso: mirá el log.')
+        return 1
+    if ok + mal + salteados < total:
+        print(f'\nOJO: corrieron {ok + mal + salteados} de {total} casos (¿se cortó la conexión con la tablet?).')
         return 1
     return 1 if mal else 0
 
