@@ -1,5 +1,5 @@
 /// Qué rutas (relativas a la carpeta de datos) se sincronizan, y cómo se reconocen. Son las mismas en el disco local y
-/// en el remoto (`OpenNote/` en Drive). Todo lo que viene del remoto se valida con esto antes de escribir: una ruta que
+/// en el remoto (`Vynote/` en Drive). Todo lo que viene del remoto se valida con esto antes de escribir: una ruta que
 /// no encaja (con `..`, otra carpeta, nombres raros) se ignora.
 library;
 

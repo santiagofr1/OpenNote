@@ -11,7 +11,7 @@ Vynote es una app de apuntes a mano, libre y de código abierto
 
 - **Tus cuadernos** (trazos, textos, imágenes, audios y su organización) se guardan en tu dispositivo.
 - **Si activás la sincronización con Google Drive**, Vynote usa el permiso `drive.file` de Google: solo puede
-  ver y modificar los archivos que **crea ella misma** en tu Drive (la carpeta `OpenNote`). No puede leer ni tocar
+  ver y modificar los archivos que **crea ella misma** en tu Drive (la carpeta `Vynote`). No puede leer ni tocar
   el resto de tus archivos. De tu cuenta de Google solo usa tu dirección de correo para mostrarte con qué cuenta
   estás conectado.
 
@@ -29,7 +29,7 @@ Vynote es una app de apuntes a mano, libre y de código abierto
 ## Cómo borrar tus datos
 
 - Desde la app: "Sincronización con Google Drive" → "Desconectar" revoca el acceso.
-- En tu Drive podés borrar la carpeta `OpenNote` cuando quieras.
+- En tu Drive podés borrar la carpeta `Vynote` cuando quieras.
 - También podés quitar el acceso desde https://myaccount.google.com/permissions.
 - Desinstalar la app borra los datos guardados en el dispositivo.
 

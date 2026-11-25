@@ -54,9 +54,8 @@ class _Node {
 class DriveRemoteStore implements RemoteStore, PurgingRemoteStore {
   DriveRemoteStore(http.Client client, {this.rootName = kDefaultRoot}) : _api = drive.DriveApi(client);
 
-  /// La carpeta de Drive. Los builds de desarrollo (debug, como "OpenNote Test") usan otra para no tocar los cuadernos reales.
-  // La carpeta conserva el nombre viejo a propósito: así las nubes que ya existen siguen sincronizando.
-  static const kDefaultRoot = bool.fromEnvironment('dart.vm.product') ? 'OpenNote' : 'OpenNote Test';
+  /// La carpeta de Drive. Los builds de desarrollo (debug, como "Vynote Test") usan otra para no tocar los cuadernos reales.
+  static const kDefaultRoot = bool.fromEnvironment('dart.vm.product') ? 'Vynote' : 'Vynote Test';
   final drive.DriveApi _api;
   final String rootName;
 
@@ -123,7 +122,7 @@ class DriveRemoteStore implements RemoteStore, PurgingRemoteStore {
     _pickRoot();
   }
 
-  /// La carpeta raíz: la `OpenNote` más vieja cuyo padre no es nada de lo que la app creó (o sea, está en Mi unidad).
+  /// La carpeta raíz: la `Vynote` más vieja cuyo padre no es nada de lo que la app creó (o sea, está en Mi unidad).
   void _pickRoot() {
     final c = [
       for (final n in _nodes.values)
@@ -217,7 +216,7 @@ class DriveRemoteStore implements RemoteStore, PurgingRemoteStore {
         final hadRoot = _rootId != null;
         _pickRoot();
         if (hadRoot && _rootId == null) {
-          // borraron la carpeta OpenNote entera: se avisa como listado completo (y vacío), no como cientos de borrados
+          // borraron la carpeta Vynote entera: se avisa como listado completo (y vacío), no como cientos de borrados
           return RemoteChanges(files: const [], nextToken: next ?? token, full: true);
         }
         final after = _snapshot();

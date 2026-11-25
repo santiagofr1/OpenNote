@@ -11,7 +11,7 @@ This page explains what data it uses and where that data goes.
 
 - **Your notebooks** (strokes, text, images, audio and how they're organized) are stored on your device.
 - **If you turn on Google Drive sync**, Vynote uses Google's `drive.file` permission: it can only view and modify the
-  files **it creates itself** in your Drive (the `OpenNote` folder). It can't read or touch the rest of your files.
+  files **it creates itself** in your Drive (the `Vynote` folder). It can't read or touch the rest of your files.
   From your Google account it only uses your email address, to show you which account you're connected with.
 
 ## Where it goes
@@ -27,7 +27,7 @@ This page explains what data it uses and where that data goes.
 ## How to delete your data
 
 - From the app: "Sincronización con Google Drive" (Google Drive sync) → "Desconectar" (Disconnect) revokes access.
-- In your Drive, you can delete the `OpenNote` folder whenever you want.
+- In your Drive, you can delete the `Vynote` folder whenever you want.
 - You can also remove access at https://myaccount.google.com/permissions.
 - Uninstalling the app deletes the data saved on the device.
 

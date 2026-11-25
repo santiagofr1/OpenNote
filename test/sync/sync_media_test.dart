@@ -173,7 +173,7 @@ void main() {
 
     test('un archivo de más de 5 MB (audio importado, foto grande) se sube con subida reanudable', () async {
       final (c, uploads) = drive();
-      final store = DriveRemoteStore(c, rootName: 'OpenNote');
+      final store = DriveRemoteStore(c, rootName: 'Vynote');
       final big = Uint8List(6 * 1024 * 1024)..fillRange(0, 6 * 1024 * 1024, 9);
       await store.upload('media/mbig.mp3', big);
       expect(uploads, hasLength(1));
@@ -183,7 +183,7 @@ void main() {
 
     test('uno chico sigue yendo en un solo pedido (multipart)', () async {
       final (c, uploads) = drive();
-      final store = DriveRemoteStore(c, rootName: 'OpenNote');
+      final store = DriveRemoteStore(c, rootName: 'Vynote');
       await store.upload('media/mchico.jpg', Uint8List(100 * 1024));
       expect(uploads.single.type, 'multipart');
     });

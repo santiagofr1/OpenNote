@@ -421,7 +421,7 @@ and whether losing the passphrase is acceptable for the user.
 
 **Decided by the user (2026-11-21):** sync goes through **Google Drive**. The tablet (Android) and the Linux app connect
 once with Google and from then on sync on their own. Scope `drive.file` (the app only sees what it creates), folder
-`OpenNote` in "Mi unidad" (My Drive). The Google Cloud project is created once by the owner; the client IDs go inside the
+`Vynote` in "Mi unidad" (My Drive). The Google Cloud project is created once by the owner; the client IDs go inside the
 published app. Users only tap "Conectar con Google" (Connect with Google).
 
 Code: `lib/sync/`. The engine (`sync_engine.dart`, `sync_merge.dart`, `sync_state.dart`) knows nothing about Google: it
@@ -431,10 +431,10 @@ talks to the `RemoteStore` interface (`remote_store.dart`), which has an in-memo
 
 ### Remote structure
 
-It is the same structure as on disk, under `OpenNote/` in "Mi unidad" (My Drive). The folder keeps the name `OpenNote` from before the app was renamed to Vynote, so existing clouds keep syncing:
+It is the same structure as on disk, under `Vynote/` in "Mi unidad" (My Drive):
 
 ```
-OpenNote/
+Vynote/
   index.json                         notebooks and folders
   notebooks/<id>/notebook.json       order and sheet data of the notebook
   notebooks/<id>/sheets/<hoja>.sheet one sheet (binary)
@@ -485,7 +485,7 @@ overwritten between devices.
   are never deleted.
 - On Drive, deleting sends the file to the **trash** (it can be recovered from Drive; the 30-day window is
   **(unconfirmed)**).
-- If the `OpenNote` folder appears empty (it was deleted by mistake), nothing is deleted here: everything is uploaded again.
+- If the `Vynote` folder appears empty (it was deleted by mistake), nothing is deleted here: everything is uploaded again.
 - **New notebooks and folders:** they appear in `index.json` and in `notebooks/<id>/`; the other side creates them.
   **Renaming or moving** changes only `index.json` (the `id` does not change), so the notebook is not uploaded again.
 - Switching Google account starts from scratch (without deleting anything locally).
@@ -648,7 +648,7 @@ and when they are touched.
   `ONCR` (4 magic bytes) + version (1 byte, currently 1) + nonce (24) + ciphertext + tag (16). Associated data (AAD):
   version + **file path**, so an encrypted file cannot be moved to another path without failing. Measured: 5 MiB encrypt in
   ~170 ms and decrypt in ~140 ms (PC).
-- **`OpenNote/crypto.json`** (in clear, no secrets): `version`, `cipher`, KDF parameters, `salt`, `verifier` (a known text
+- **`Vynote/crypto.json`** (in clear, no secrets): `version`, `cipher`, KDF parameters, `salt`, `verifier` (a known text
   encrypted with the key: decrypting it correctly proves the passphrase is right) and `migrating` (null, or
   `encrypting` / `decrypting` while the encryption is being changed). If it exists, the cloud is encrypted.
 - **The derived key (not the passphrase) is stored in the secure storage** (`TokenStore` / `flutter_secure_storage`:
@@ -770,7 +770,7 @@ missing.
 - Drive has no conditional write: two devices uploading the same sheet at the very same moment can overwrite each other.
   It is mitigated by comparing the hash right before uploading; the remaining case is very narrow.
 - With `drive.file` only the files created by this app are visible; if the user uploads or moves files by hand inside
-  `OpenNote`, the app does not see them.
+  `Vynote`, the app does not see them.
 - Two folders with the same name (if two devices create `notebooks/` at once) are treated as the same by path.
 
 ---

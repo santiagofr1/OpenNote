@@ -49,7 +49,7 @@ with no accounts and no servers of our own. If you want, you can sync them betwe
   `.vynote` file to back them up or move them to another tablet. You can import `.vynote`, PDF, images and audio (old `.opennote` files from before the rename still import).
   An imported PDF goes into the page you're looking at, and its pages open instantly, ready to write on top of.
 - **Google Drive sync (optional)**: connect once with your Google account, and the tablet and the PC apps (Linux and
-  Windows) stay in sync on their own. The app only sees its own "OpenNote" folder in your Drive (it keeps that name for compatibility), changes made on two
+  Windows) stay in sync on their own. The app only sees its own "Vynote" folder in your Drive, changes made on two
   devices are merged page by page, and you can turn on end-to-end encryption with a passphrase so nobody else can read
   your notes, not even Google.
 - **PC app**: the same app for Linux and Windows, with your synced notebooks. Install it from the apt repo or the
