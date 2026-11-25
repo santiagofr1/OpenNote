@@ -1459,9 +1459,6 @@ class LEs extends L {
   String get formatSizeAuto => 'Automático';
 
   @override
-  String get formatCopy => 'Copiar';
-
-  @override
   String get formatCut => 'Cortar';
 
   @override

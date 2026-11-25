@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/editor/page_editor.dart';
+import 'package:apuntes/l10n/l10n.dart';
 import 'package:apuntes/rendering/ink_layers.dart';
 import 'package:apuntes/rendering/sheet_image_cache.dart';
 import 'package:flutter/gestures.dart';
@@ -46,6 +47,10 @@ void main() {
     addTearDown(t.view.reset);
     tools.zoom = 1;
     Widget app() => MaterialApp(
+      localizationsDelegates: L.localizationsDelegates,
+      supportedLocales: L.supportedLocales,
+      locale: const Locale('es'),
+      
           home: Scaffold(
             body: PageEditor(doc: doc, tools: tools, store: Storage(root: root), onChanged: () {}, onPrefsChanged: () {}),
           ),
@@ -106,6 +111,10 @@ void main() {
 
     tools.zoom = 1.3;
     await t.pumpWidget(MaterialApp(
+      localizationsDelegates: L.localizationsDelegates,
+      supportedLocales: L.supportedLocales,
+      locale: const Locale('es'),
+      
       home: Scaffold(
         body: PageEditor(doc: doc, tools: tools, store: Storage(root: root), onChanged: () {}, onPrefsChanged: () {}),
       ),
@@ -125,6 +134,10 @@ void main() {
     await settle(t);
     tools.zoom = 4;
     await t.pumpWidget(MaterialApp(
+      localizationsDelegates: L.localizationsDelegates,
+      supportedLocales: L.supportedLocales,
+      locale: const Locale('es'),
+      
       home: Scaffold(
         body: PageEditor(doc: doc, tools: tools, store: Storage(root: root), onChanged: () {}, onPrefsChanged: () {}),
       ),

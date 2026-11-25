@@ -1,4 +1,5 @@
 import 'package:apuntes/editor/link_dialog.dart';
+import 'package:apuntes/l10n/l10n.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -8,7 +9,11 @@ void main() {
 
   Future<Future<String?>> open(WidgetTester t, {String initial = ''}) async {
     late BuildContext ctx;
-    await t.pumpWidget(MaterialApp(home: Builder(builder: (c) {
+    await t.pumpWidget(MaterialApp(
+      localizationsDelegates: L.localizationsDelegates,
+      supportedLocales: L.supportedLocales,
+      locale: const Locale('es'),
+      home: Builder(builder: (c) {
       ctx = c;
       return const SizedBox();
     })));

@@ -17,6 +17,7 @@ import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/data/templates.dart';
 import 'package:apuntes/data/system_clipboard.dart';
 import 'package:apuntes/domain/domain.dart';
+import 'package:apuntes/l10n/l10n.dart';
 import 'package:apuntes/editor/fake_audio_source.dart';
 import 'package:apuntes/editor/handwriting.dart';
 import 'package:apuntes/editor/link_open.dart';
@@ -95,8 +96,10 @@ void main() {
   }
 
   /// En la PC, la pantalla de la tablet como se usa: horizontal y con la letra del sistema al 110 % (en Android, nada).
-  /// Un test que fije su propio tamaño lo hace DESPUÉS.
+  /// Un test que fije su propio tamaño lo hace DESPUÉS. El idioma del sistema siempre es español (en todas las
+  /// plataformas): los tests buscan textos en español.
   void sim(WidgetTester t) {
+    forceSpanish(t);
     if (!Platform.isAndroid) simulateTablet(t, physical: kTabletLandscape, textScale: kTabletTextScale);
   }
 
@@ -1674,6 +1677,10 @@ void main() {
   testWidgets('ajustes: buscar actualizaciones a mano y el interruptor automático', (t) async {
     await start(t);
     await t.tap(find.byKey(const Key('libraryMenu')));
+    await settle(t, 600);
+    // las actualizaciones viven en Ajustes, no en el menú de la biblioteca
+    expect(find.byKey(const Key('checkUpdates')), findsNothing);
+    await t.tap(find.byKey(const Key('settingsMenu')));
     await settle(t, 600);
     expect(find.byKey(const Key('checkUpdates')), findsOneWidget);
     expect(t.widget<SwitchListTile>(find.byKey(const Key('autoUpdates'))).value, isTrue);
@@ -3817,12 +3824,98 @@ void main() {
     await t.tap(find.byKey(const Key('back')));
     await settle(t, 1200);
   });
+
+  // ---------------- ajustes: idiomas ----------------
+  /// Abre Ajustes desde la biblioteca.
+  Future<void> openSettings(WidgetTester t) async {
+    await t.tap(find.byKey(const Key('libraryMenu')));
+    await settle(t, 600);
+    await t.tap(find.byKey(const Key('settingsMenu')));
+    await settle(t, 600);
+  }
+
+  /// Elige [value] en el diálogo de idiomas que abre [entry] (`settingsAppLanguage` / `settingsInkLanguage`).
+  Future<void> pickLanguage(WidgetTester t, String entry, String prefix, String value) async {
+    await t.tap(find.byKey(Key(entry)));
+    await settle(t, 400);
+    await t.tap(find.byKey(Key('$prefix-$value')));
+    await settle(t, 800);
+  }
+
+  Map prefsOf() => jsonDecode(File('${root.path}/prefs.json').readAsStringSync()) as Map;
+
+  testWidgets('ajustes: cambiar el idioma de la app a inglés y volver, y la versión se ve', (t) async {
+    await start(t);
+    await openSettings(t);
+    Locale appLocale() => Localizations.localeOf(t.element(find.byKey(const Key('settingsTitle'))));
+    // arranca en el idioma del sistema (forzado a es_AR) y la versión se ve
+    expect(appLocale().languageCode, 'es');
+    expect(find.text('Ajustes'), findsWidgets);
+    final version = t.widget<Text>(find.byKey(const Key('settingsVersion'))).data;
+    expect(version, isNotNull);
+    expect(version!.trim(), isNotEmpty);
+    // a inglés: la app se redibuja sin reiniciar, y queda guardado
+    await pickLanguage(t, 'settingsAppLanguage', 'appLang', 'en');
+    expect(appLocale(), const Locale('en'));
+    final en = lookupL(const Locale('en'));
+    expect(t.widget<Text>(find.byKey(const Key('settingsTitle'))).data, en.settingsTitle);
+    await Storage.settleWrites();
+    expect(prefsOf()['appLanguage'], 'en');
+    // y de vuelta a español
+    await pickLanguage(t, 'settingsAppLanguage', 'appLang', 'es');
+    expect(appLocale(), const Locale('es'));
+    expect(t.widget<Text>(find.byKey(const Key('settingsTitle'))).data, 'Ajustes');
+    await Storage.settleWrites();
+    expect(prefsOf()['appLanguage'], 'es');
+    // "como el sistema": vuelve al idioma del dispositivo
+    await pickLanguage(t, 'settingsAppLanguage', 'appLang', 'system');
+    expect(appLocale().languageCode, 'es');
+    await Storage.settleWrites();
+    expect(prefsOf()['appLanguage'], 'system');
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('ajustes: idioma de la escritura sigue al de la app y se puede elegir aparte', (t) async {
+    final saved = handwriting;
+    final fake = _FakeHandwriting('Introducción');
+    handwriting = fake;
+    addTearDown(() => handwriting = saved);
+    await start(t); // el sistema está en es_AR
+    expect(fake.tag, 'es-AR', reason: 'sigue a la app (español) y la región del dispositivo tiene modelo propio');
+    await openSettings(t);
+    // la app en inglés: la escritura la sigue (el dispositivo no está en inglés: modelo genérico) y se cambia de modelo
+    await pickLanguage(t, 'settingsAppLanguage', 'appLang', 'en');
+    expect(fake.tag, 'en');
+    expect(fake.deleted, contains('en'), reason: 'al cambiar de modelo se borran los otros');
+    // la escritura aparte: portugués (el dispositivo no está en portugués: genérico)
+    await pickLanguage(t, 'settingsInkLanguage', 'inkLang', 'pt');
+    expect(fake.tag, 'pt');
+    // español con la app en inglés: el dispositivo sí está en es_AR
+    await pickLanguage(t, 'settingsInkLanguage', 'inkLang', 'es');
+    expect(fake.tag, 'es-AR');
+    await Storage.settleWrites();
+    expect(prefsOf()['inkLanguage'], 'es');
+    // "igual que la app" otra vez: la app está en inglés
+    await pickLanguage(t, 'settingsInkLanguage', 'inkLang', 'app');
+    expect(fake.tag, 'en');
+    // la app vuelve al idioma del sistema (es_AR)
+    await pickLanguage(t, 'settingsAppLanguage', 'appLang', 'system');
+    expect(fake.tag, 'es-AR');
+    await Storage.settleWrites();
+    expect(prefsOf(), containsPair('inkLanguage', 'app'));
+    expect(t.takeException(), isNull);
+  });
 }
 
 /// Reconocimiento de letra de mentira: siempre lee [text].
 class _FakeHandwriting implements HandwritingRecognizer {
   final String text;
   _FakeHandwriting(this.text);
+  @override
+  String tag = 'es';
+  final deleted = <String>[];
+  @override
+  Future<void> deleteUnusedModels(String keepTag) async => deleted.add(keepTag);
   @override
   Future<bool> isModelReady() async => true;
   @override

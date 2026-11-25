@@ -37,6 +37,18 @@ Future<void> loadRoboto() async {
   if (n > 0) await loader.load();
 }
 
+/// Fija el idioma del sistema en [locale] (para la app y para el dispositivo). Se deshace solo al terminar el test.
+void forceLocale(WidgetTester t, ui.Locale locale) {
+  t.platformDispatcher.localesTestValue = [locale];
+  addTearDown(t.platformDispatcher.clearLocalesTestValue);
+  t.platformDispatcher.localeTestValue = locale;
+  addTearDown(t.platformDispatcher.clearLocaleTestValue);
+}
+
+/// Los tests buscan textos en español: el sistema (el de la tablet o el de la PC) se fuerza a español de Argentina, en
+/// todas las plataformas.
+void forceSpanish(WidgetTester t) => forceLocale(t, const ui.Locale('es', 'AR'));
+
 /// Fija la pantalla, la barra de estado, el tema oscuro y los colores de la app (sin el acento del escritorio GTK,
 /// que en la tablet no existe). Todo se deshace solo al terminar el test.
 void simulateTablet(WidgetTester t,

@@ -13,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'screenshots_data.dart';
+import 'tablet_sim.dart' show forceLocale;
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -25,6 +26,8 @@ void main() {
   }
 
   testWidgets('captura de PC del README', (t) async {
+    // la interfaz sale en el idioma del contenido de ejemplo
+    forceLocale(t, shotLang == 'en' ? const Locale('en', 'US') : const Locale('es', 'AR'));
     await t.binding.setSurfaceSize(const Size(1280, 800));
     addTearDown(() => t.binding.setSurfaceSize(null));
     final root = await Directory.systemTemp.createTemp('apuntes_capturas_pc');

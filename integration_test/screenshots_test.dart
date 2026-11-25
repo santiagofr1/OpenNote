@@ -36,6 +36,8 @@ void main() {
   const outDir = String.fromEnvironment('SHOT_OUT', defaultValue: 'docs/img');
 
   testWidgets('capturas del README', (t) async {
+    // la interfaz sale en el idioma del contenido de ejemplo (en todas las plataformas)
+    forceLocale(t, shotLang == 'en' ? const Locale('en', 'US') : const Locale('es', 'AR'));
     final android = Platform.isAndroid;
     if (!android) {
       // PC: se simula la pantalla de la tablet (1200 x 1928 px a 1,5x = 800 x 1285,3 lógicos) y su barra de estado

@@ -2025,10 +2025,6 @@
   "@formatSizeAuto": {
     "description": "Text formatting bar: tooltip or label (with its keyboard shortcut when it has one)"
   },
-  "formatCopy": "Copiar",
-  "@formatCopy": {
-    "description": "Bar over a selection that crosses paragraphs: copy"
-  },
   "formatCut": "Cortar",
   "@formatCut": {
     "description": "Bar over a selection that crosses paragraphs: cut"

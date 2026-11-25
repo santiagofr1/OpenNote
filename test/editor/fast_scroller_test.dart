@@ -1,4 +1,5 @@
 import 'package:apuntes/editor/fast_scroller.dart';
+import 'package:apuntes/l10n/l10n.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -12,6 +13,10 @@ void main() {
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.reset);
     await t.pumpWidget(MaterialApp(
+      localizationsDelegates: L.localizationsDelegates,
+      supportedLocales: L.supportedLocales,
+      locale: const Locale('es'),
+      
       home: Scaffold(
         body: Stack(children: [
           ListView.builder(controller: c, itemExtent: 100, itemCount: items, itemBuilder: (_, i) => Text('$i')),

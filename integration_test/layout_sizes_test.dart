@@ -58,6 +58,7 @@ void main() {
 
   for (final (slug, name, physical, dpr, top) in _sizes) {
     testWidgets('pantalla $name: biblioteca, cuaderno, paneles, diálogos y sincronización sin desbordes', (t) async {
+      forceSpanish(t);
       simulateTablet(t, physical: physical, dpr: dpr, top: top);
       final screen = Offset.zero & (physical / dpr);
       final root = await Directory.systemTemp.createTemp('apuntes_layout');
@@ -174,6 +175,7 @@ void main() {
   // teléfono vertical (411 dp): el panel de hojas va encima de la hoja (no le come el ancho) y se cierra tocando el fondo
   testWidgets('pantalla teléfono vertical: con el panel de hojas abierto la barra de herramientas entra en la pantalla',
       (t) async {
+    forceSpanish(t);
     simulateTablet(t, physical: const Size(1080, 2340), dpr: 2.625, top: 24 * 2.625);
     final root = await Directory.systemTemp.createTemp('apuntes_layout');
     addTearDown(() async {

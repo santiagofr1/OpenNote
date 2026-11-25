@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:apuntes/data/updates.dart';
 import 'package:apuntes/domain/version.dart';
+import 'package:apuntes/l10n/l10n.dart';
 import 'package:apuntes/widgets/update_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -56,6 +57,10 @@ void main() {
     addTearDown(t.view.reset);
     await t.pumpWidget(
       MaterialApp(
+      localizationsDelegates: L.localizationsDelegates,
+      supportedLocales: L.supportedLocales,
+      locale: const Locale('es'),
+      
         theme: ThemeData(snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating)),
         home: Builder(
           builder: (ctx) => Scaffold(

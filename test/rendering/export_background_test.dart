@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/domain/domain.dart';
+import 'package:apuntes/l10n/l10n.dart';
 import 'package:apuntes/rendering/sheet_render.dart';
 import 'package:apuntes/screens/notebook/menus.dart';
 import 'package:flutter/material.dart';
@@ -83,7 +84,11 @@ void main() {
     await t.runAsync(store.init);
     final ts = ToolState();
     late BuildContext ctx;
-    await t.pumpWidget(MaterialApp(home: Builder(builder: (c) {
+    await t.pumpWidget(MaterialApp(
+      localizationsDelegates: L.localizationsDelegates,
+      supportedLocales: L.supportedLocales,
+      locale: const Locale('es'),
+      home: Builder(builder: (c) {
       ctx = c;
       return const SizedBox();
     })));

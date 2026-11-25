@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/editor/page_editor.dart';
+import 'package:apuntes/l10n/l10n.dart';
 import 'package:apuntes/rendering/pdf_cover.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -39,6 +40,10 @@ void main() {
     final store = Storage(root: root);
     await t.runAsync(store.init);
     await t.pumpWidget(MaterialApp(
+      localizationsDelegates: L.localizationsDelegates,
+      supportedLocales: L.supportedLocales,
+      locale: const Locale('es'),
+      
       home: Scaffold(
         body: PageEditor(doc: doc, tools: ToolState(), store: store, onChanged: () {}, onPrefsChanged: () {}),
       ),

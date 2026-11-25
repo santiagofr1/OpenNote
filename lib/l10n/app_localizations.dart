@@ -2541,12 +2541,6 @@ abstract class L {
   /// **'Automático'**
   String get formatSizeAuto;
 
-  /// Bar over a selection that crosses paragraphs: copy
-  ///
-  /// In es, this message translates to:
-  /// **'Copiar'**
-  String get formatCopy;
-
   /// Bar over a selection that crosses paragraphs: cut
   ///
   /// In es, this message translates to:

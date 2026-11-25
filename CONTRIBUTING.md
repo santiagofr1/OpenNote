@@ -84,14 +84,23 @@ lib/editor/      page-strip editor, pen input, selection, undo, zoom, toolbar
 lib/screens/     library and open notebook
 lib/widgets/     shared dialogs
 lib/theme/       theme and colors
+lib/l10n/        translations (.arb files) and the generated `L` class
 ```
 
 Each layer only uses the ones above it. If a piece of logic can go in `lib/domain/` without depending on Flutter,
 put it there and cover it with tests.
 
+## Translations
+
+The app is translated with Flutter's `gen-l10n`: Spanish (`app_es.arb`, the base), English (`app_en.arb`) and Brazilian
+Portuguese (`app_pt.arb`). A key missing from a language falls back to Spanish. To add or change a text, edit the
+`.arb` files and run `flutter gen-l10n`; the generated code lives in `lib/l10n/` and is committed. Names of languages
+are always written in their own language and are not translated. The tests run in Spanish.
+
 ## Style
 
-- Comments and interface texts are written in **Spanish**.
+- Comments are written in **Spanish**. Interface texts are never written in the code: they go in `lib/l10n/app_es.arb`
+  (the template, with a `@key` description for each one) and are read with `context.l10n.key`.
 - Follow the rules in `analysis_options.yaml`.
 - Small, focused changes: one PR, one topic.
 
