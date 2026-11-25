@@ -3542,8 +3542,9 @@ void main() {
 
 
   testWidgets('índice: al cerrarlo la vista se queda en el título elegido', (t) async {
-    // visor ancho: la escala depende del ancho y el panel del índice se lo come
-    t.view.physicalSize = const Size(2560, 1600);
+    // 1200 x 800 lógicos, sea cual sea la densidad: la escala depende del ancho (hasta 1100 de hoja) y el panel del
+    // índice se come parte; más ancho que esto, con el panel abierto la hoja seguiría en su tope y no cambiaría nada
+    t.view.physicalSize = const Size(1200, 800) * t.view.devicePixelRatio;
     addTearDown(t.view.resetPhysicalSize);
     await start(t);
     await createNotebook(t, 'IndiceSalto');
