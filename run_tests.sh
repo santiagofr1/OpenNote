@@ -33,7 +33,7 @@ instalada || { echo "ERROR: la app real ($PKG) no está instalada; no corro nada
 
 # 1) Solo si la tablet está en el inicio o en Vynote (nunca encima de otra app).
 FOCO=$(adb -s "$DEV" shell dumpsys window | grep mCurrentFocus | tr -d '\r')
-echo "$FOCO" | grep -qE 'launcher|com\.apuntes\.apuntes' || { echo "ERROR: la tablet está en otra app; no corro nada."; echo "$FOCO"; exit 1; }
+echo "$FOCO" | grep -qE 'launcher|io\.github\.santiagofr1\.vynote' || { echo "ERROR: la tablet está en otra app; no corro nada."; echo "$FOCO"; exit 1; }
 
 # 2) Compilar antes: flutter decide qué app desinstalar ANTES de compilar, leyendo el APK que haya.
 #    Sin APK previo usa el id del código (io.github.santiagofr1.vynote) y desinstalaría la app real.
