@@ -43,6 +43,10 @@ BACKUP=1 ./run_tests.sh    # same, but also downloads a copy of your real notebo
 `./run_tests.sh` installs a separate app, **"Vynote Test"** (`io.github.santiagofr1.vynote.test`), with its own data.
 It never touches the real app or your notebooks: at the end, it checks that the real app and its files are still the same.
 
+`INTEGRACION=1 ./test_pc.sh` (on top of the usual unit tests) runs the full integration suite (`app_test.dart` and
+`layout_sizes_test.dart`) in the Linux app, simulating the tablet screen; whatever needs the real pen, ML Kit or the
+background sync still needs a device. The app runs on a virtual display (Xvfb) so no window pops up; use `VER=1` to see it.
+
 Rule for new features: **every new feature adds a case to `integration_test/app_test.dart`.** If needed, also add a
 pure-logic test in `test/`.
 

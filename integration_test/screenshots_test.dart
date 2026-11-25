@@ -5,7 +5,6 @@
 
 import 'dart:io';
 import 'dart:math';
-import 'dart:ui' as ui;
 
 import 'package:apuntes/app.dart';
 import 'package:apuntes/data/media_import.dart';
@@ -18,12 +17,11 @@ import 'package:apuntes/sync/fake_remote_store.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart' hide testWidgets;
 import 'package:integration_test/integration_test.dart';
 
 import 'screenshots_data.dart';
+import 'tablet_sim.dart';
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -37,35 +35,11 @@ void main() {
 
   const outDir = String.fromEnvironment('SHOT_OUT', defaultValue: 'docs/img');
 
-  /// Registra Roboto desde las fuentes del sistema (el motor de Linux no la encuentra solo por nombre).
-  Future<void> loadRoboto() async {
-    const dir = '/usr/share/fonts/truetype/roboto/unhinted/RobotoTTF';
-    final loader = FontLoader('Roboto');
-    var n = 0;
-    for (final f in ['Light', 'Regular', 'Medium', 'Bold', 'Italic', 'BoldItalic']) {
-      final file = File('$dir/Roboto-$f.ttf');
-      if (file.existsSync()) {
-        loader.addFont(Future.value(ByteData.sublistView(file.readAsBytesSync())));
-        n++;
-      }
-    }
-    if (n > 0) await loader.load();
-  }
-
   testWidgets('capturas del README', (t) async {
     final android = Platform.isAndroid;
     if (!android) {
       // PC: se simula la pantalla de la tablet (1200 x 1928 px a 1,5x = 800 x 1285,3 lógicos) y su barra de estado
-      t.view.physicalSize = const Size(1200, 1928);
-      t.view.devicePixelRatio = 1.5;
-      t.view.padding = const FakeViewPadding(top: 45);
-      t.view.viewPadding = const FakeViewPadding(top: 45);
-      addTearDown(t.view.reset);
-      // tema oscuro y colores de la app (sin el acento del escritorio GTK, que en la tablet no existe)
-      t.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
-      addTearDown(t.platformDispatcher.clearPlatformBrightnessTestValue);
-      t.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-          const MethodChannel('io.material.plugins/dynamic_color'), (_) async => null);
+      simulateTablet(t);
       // Roboto (la fuente de Android) desde el sistema; si no está, queda la fuente por defecto de Linux
       await loadRoboto();
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
@@ -94,12 +68,7 @@ void main() {
           return;
         }
         // PC: se dibuja la capa raíz entera a PNG
-        final rv = t.binding.renderViews.first;
-        final layer = rv.debugLayer! as OffsetLayer;
-        // el layer raíz ya trae la escala del devicePixelRatio: se pide en píxeles físicos (pixelRatio 1)
-        final img = await t.runAsync(() => layer.toImage(Offset.zero & t.view.physicalSize));
-        final data = await t.runAsync(() => img!.toByteData(format: ui.ImageByteFormat.png));
-        await File('$outDir/$name.png').writeAsBytes(data!.buffer.asUint8List());
+        await saveShot(t, '$outDir/$name.png');
       }
 
       await shot('03_biblioteca');

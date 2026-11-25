@@ -3,6 +3,7 @@
 # (biblioteca de ejemplo en una carpeta temporal, sincronización de mentira), espera `PCSHOT READY` y guarda la
 # ventana X11 en el PNG que se le pase (por defecto docs/img/07b_sync_pc.png). Hace falta xwininfo y python3-gi.
 #   tool/screenshot_pc.sh [salida.png] [es|en]   -> el segundo argumento es el idioma del contenido de ejemplo (es por defecto)
+source "$(dirname "$0")/sin_ventana.sh"  # la app corre en una pantalla virtual (VER=1 para verla)
 set -e
 export PATH=~/flutter/bin:$PATH
 cd "$(dirname "$0")/.."

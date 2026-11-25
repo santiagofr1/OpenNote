@@ -38,19 +38,26 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart' hide testWidgets;
 import 'package:image/image.dart' as pimg;
 import 'package:integration_test/integration_test.dart';
 import 'package:pdf/pdf.dart' show PdfColor;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import 'tablet_sim.dart';
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   late Directory root;
 
+  // en la PC (Linux) se simula la pantalla de la tablet; en la tablet no hace falta
+  setUpAll(() async {
+    if (!Platform.isAndroid) await loadRoboto();
+  });
   setUp(() async => root = await Directory.systemTemp.createTemp('apuntes_test'));
   tearDown(() async {
+    await Storage.settleWrites(); // que no llegue una escritura tardía a una carpeta ya borrada
     if (await root.exists()) await root.delete(recursive: true);
   });
 
@@ -87,7 +94,14 @@ void main() {
     }
   }
 
+  /// En la PC, la pantalla de la tablet como se usa: horizontal y con la letra del sistema al 110 % (en Android, nada).
+  /// Un test que fije su propio tamaño lo hace DESPUÉS.
+  void sim(WidgetTester t) {
+    if (!Platform.isAndroid) simulateTablet(t, physical: kTabletLandscape, textScale: kTabletTextScale);
+  }
+
   Future<void> start(WidgetTester t) async {
+    sim(t);
     await t.pumpWidget(ApuntesApp(root: root));
     await settle(t, 1500);
   }
@@ -1438,7 +1452,10 @@ void main() {
     final entries = ZipDecoder().decodeBytes(zipBytes!).where((f) => f.isFile).toList();
     expect(entries.map((f) => f.name), ['Facultad/Apuntes/Apuntes - hoja 01.png']);
     expect(entries.single.content.take(4).toList(), [0x89, 0x50, 0x4E, 0x47]);
-    await settle(t, 600);
+    // el aviso sale cuando saveFolderZip devuelve y se borra el temporal (E/S real): se espera a que aparezca
+    for (var i = 0; i < 40 && find.text('Carpeta exportada').evaluate().isEmpty; i++) {
+      await settle(t, 100);
+    }
     expect(find.text('Carpeta exportada'), findsOneWidget);
     expect(t.takeException(), isNull);
   });
@@ -2480,6 +2497,7 @@ void main() {
 
   testWidgets('sincronización: "Sincronizar ahora" sube un cuaderno y otro dispositivo lo baja (remoto falso)', (t) async {
     final remote = FakeRemoteStore();
+    sim(t);
     await t.pumpWidget(ApuntesApp(root: root, backend: FakeBackend(remote)));
     await settle(t, 1500);
     await createNotebook(t, 'Para nube');
@@ -2515,6 +2533,7 @@ void main() {
 
   testWidgets('sincronización: borrar un cuaderno sincronizado lo borra de la nube (remoto falso)', (t) async {
     final remote = FakeRemoteStore();
+    sim(t);
     await t.pumpWidget(ApuntesApp(root: root, backend: FakeBackend(remote)));
     await settle(t, 1500);
     await createNotebook(t, 'Para borrar');
@@ -2557,6 +2576,7 @@ void main() {
   });
 
   testWidgets('sincronización en segundo plano: el interruptor aparece (solo en Android), viene encendido y se guarda', (t) async {
+    sim(t);
     await t.pumpWidget(ApuntesApp(root: root, backend: FakeBackend(FakeRemoteStore())));
     await settle(t, 1500);
     await t.tap(find.byKey(const Key('libraryMenu')));
@@ -2581,6 +2601,7 @@ void main() {
     final remote = FakeRemoteStore();
     final backend = FakeBackend(remote);
     await backend.signIn(); // ya conectado: la app retoma la sesión al abrir
+    sim(t);
     await t.pumpWidget(ApuntesApp(
         root: root, backend: backend, syncPoll: const Duration(seconds: 4), syncDebounce: const Duration(seconds: 2)));
     await settle(t, 1500);
@@ -2646,6 +2667,7 @@ void main() {
 
   testWidgets('sincronización: sección Cifrado y el diálogo de frase valida que coincidan', (t) async {
     final remote = FakeRemoteStore();
+    sim(t);
     await t.pumpWidget(ApuntesApp(root: root, backend: FakeBackend(remote)));
     await settle(t, 1500);
     await t.tap(find.byKey(const Key('libraryMenu')));
@@ -2661,7 +2683,7 @@ void main() {
     expect(find.byKey(const Key('cryptoStatus')), findsOneWidget);
     expect(find.textContaining('Si olvidás la frase'), findsOneWidget);
 
-    await t.tap(find.byKey(const Key('cryptoEnable')));
+    await tapV(t, find.byKey(const Key('cryptoEnable'))); // en horizontal queda abajo en la hoja: hay que llevarlo a la vista
     await settle(t, 600);
     await t.enterText(find.byKey(const Key('cryptoPass1')), 'una frase larga');
     await t.enterText(find.byKey(const Key('cryptoPass2')), 'otra frase larga');
@@ -3610,9 +3632,11 @@ void main() {
   testWidgets('índice: al cerrarlo la vista se queda en el título elegido', (t) async {
     // 1200 x 800 lógicos, sea cual sea la densidad: la escala depende del ancho (hasta 1100 de hoja) y el panel del
     // índice se come parte; más ancho que esto, con el panel abierto la hoja seguiría en su tope y no cambiaría nada
+    sim(t); // en la PC: densidad y barra de la tablet; el tamaño es el de acá abajo
     t.view.physicalSize = const Size(1200, 800) * t.view.devicePixelRatio;
     addTearDown(t.view.resetPhysicalSize);
-    await start(t);
+    await t.pumpWidget(ApuntesApp(root: root));
+    await settle(t, 1500);
     await createNotebook(t, 'IndiceSalto');
     var ed = editor(t);
     while (ed.doc.sheetCount < 8) {

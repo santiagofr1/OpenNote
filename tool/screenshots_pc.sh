@@ -6,6 +6,7 @@
 # La captura 07_sync.png es una composición: la hoja de sincronización de la "tablet" (07a, del mismo test) a la izquierda
 # y la ventana de la app de PC (07b, tool/screenshot_pc.sh, ventana X11 real) a la derecha, armada con tool/compose_sync.py.
 # Los intermedios 07a/07b no quedan en el repo: se arman en un directorio temporal que se borra al terminar.
+source "$(dirname "$0")/sin_ventana.sh"  # la app corre en una pantalla virtual (VER=1 para verla)
 set -e
 export PATH=~/flutter/bin:$PATH
 cd "$(dirname "$0")/.."
