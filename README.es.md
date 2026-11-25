@@ -10,7 +10,7 @@
 [![Workflow de release](https://github.com/santiagofr1/Vynote/actions/workflows/release.yml/badge.svg)](https://github.com/santiagofr1/Vynote/actions/workflows/release.yml)
 [![Licencia: GPL v3](https://img.shields.io/badge/licencia-GPLv3-blue.svg)](LICENSE)
 [![PRs bienvenidos](https://img.shields.io/badge/PRs-bienvenidos-brightgreen.svg)](CONTRIBUTING.md)
-[![Plataforma: Android](https://img.shields.io/badge/plataforma-Android-3DDC84.svg?logo=android&logoColor=white)](https://github.com/santiagofr1/Vynote/releases/latest)
+[![Plataforma: Android | Linux | Windows](https://img.shields.io/badge/plataforma-Android%20%7C%20Linux%20%7C%20Windows-3DDC84.svg)](https://github.com/santiagofr1/Vynote/releases/latest)
 [![Hecho con Flutter](https://img.shields.io/badge/hecho%20con-Flutter-02569B.svg?logo=flutter&logoColor=white)](https://flutter.dev)
 
 Vynote es una app de apuntes a mano con S Pen (y también con teclado) para tablets Android.
