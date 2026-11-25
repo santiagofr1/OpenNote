@@ -831,6 +831,34 @@ void main() {
     }
   });
 
+  testWidgets('estilo de hoja: en horizontal entra sin scroll, en dos columnas', (t) async {
+    await start(t);
+    // tablet en horizontal (1333 x 752 lógicos) con la letra del sistema al 110 %
+    t.view.physicalSize = const Size(1333.4, 752) * t.view.devicePixelRatio;
+    t.platformDispatcher.textScaleFactorTestValue = 1.1;
+    addTearDown(t.view.resetPhysicalSize);
+    addTearDown(t.platformDispatcher.clearTextScaleFactorTestValue);
+    await settle(t);
+    await createNotebook(t, 'Horizontal');
+    await openMore(t, 'Estilo de hoja');
+
+    final dialog = find.byType(AlertDialog);
+    final scroll = find.descendant(of: dialog, matching: find.byType(Scrollable));
+    final pos = t.state<ScrollableState>(scroll.first).position;
+    expect(pos.maxScrollExtent, 0, reason: 'el diálogo entra entero, sin scroll');
+    final screen = Offset.zero & (t.view.physicalSize / t.view.devicePixelRatio);
+    for (final k in ['applyAll', 'styleOk']) {
+      final r = t.getRect(find.byKey(Key(k)));
+      expect(screen.contains(r.topLeft) && screen.contains(r.bottomRight), isTrue, reason: '$k dentro de la pantalla: $r');
+    }
+    final dx = (t.getCenter(find.byKey(const Key('size-a4'))).dx - t.getCenter(find.byKey(const Key('applyAll'))).dx).abs();
+    expect(dx, greaterThan(200), reason: 'tamaño y "Aplicar a" van en columnas distintas');
+
+    await t.tap(find.text('Cancelar'));
+    await settle(t, 600);
+    expect(t.takeException(), isNull);
+  });
+
   testWidgets('favorito y bloqueo con PIN', (t) async {
     await start(t);
     await createNotebook(t, 'Secreto');

@@ -1,3 +1,5 @@
+import 'dart:math' show min;
+
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
@@ -102,7 +104,10 @@ Future<StyleChoice?> showStyleDialog(BuildContext context, NotebookDoc doc,
       }
       final title = TextStyle(fontWeight: FontWeight.w500, color: cs.onSurface);
       final options = spacingsFor(bg);
-      final sheetControls = Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+      final mq = MediaQuery.sizeOf(ctx);
+      // tablet en horizontal: dos columnas y la vista previa abajo de la segunda, para que entre sin scroll
+      final wide = !doc.nb.canvas && mq.width >= 1000 && mq.width > mq.height;
+      final colA = Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('Tamaño', style: title),
         const SizedBox(height: 8),
         Wrap(spacing: 8, children: [
@@ -137,7 +142,8 @@ Future<StyleChoice?> showStyleDialog(BuildContext context, NotebookDoc doc,
             },
           ),
         ]),
-        const SizedBox(height: 18),
+      ]);
+      final colB = Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('Color del papel', style: title),
         const SizedBox(height: 8),
         Wrap(spacing: 10, children: [for (final (c, label) in papers) paperOpt(c, label)]),
@@ -173,6 +179,11 @@ Future<StyleChoice?> showStyleDialog(BuildContext context, NotebookDoc doc,
           ]),
         ],
       ]);
+      final sheetControls = Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        colA,
+        const SizedBox(height: 18),
+        colB,
+      ]);
       // lienzo infinito: solo el color del papel, que vale para todo
       final controls = !doc.nb.canvas
           ? sheetControls
@@ -181,24 +192,45 @@ Future<StyleChoice?> showStyleDialog(BuildContext context, NotebookDoc doc,
               const SizedBox(height: 8),
               Wrap(spacing: 10, runSpacing: 10, children: [for (final (c, label) in papers) paperOpt(c, label)]),
             ]);
+      final preview = PaperPreview(
+          bg: bg,
+          paper: paper,
+          spacing: spacing,
+          size: size,
+          width: 130,
+          image: bg == 'image' && image != null ? store.media(image!) : null);
       return AlertDialog(
+        insetPadding: wide
+            ? const EdgeInsets.symmetric(horizontal: 32, vertical: 16)
+            : const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
         title: Text(doc.nb.canvas ? 'Color del papel' : (forNew ? 'Hoja nueva' : 'Estilo de hoja')),
-        content: SizedBox(
-          width: 560,
-          child: SingleChildScrollView(
-            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Expanded(child: controls),
-              const SizedBox(width: 20),
-              PaperPreview(
-                  bg: bg,
-                  paper: paper,
-                  spacing: spacing,
-                  size: size,
-                  width: 130,
-                  image: bg == 'image' && image != null ? store.media(image!) : null),
-            ]),
-          ),
-        ),
+        content: wide
+            ? SizedBox(
+                width: min(mq.width - 96, 940),
+                child: SingleChildScrollView(
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(child: colA),
+                    const SizedBox(width: 24),
+                    Expanded(
+                      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        colB,
+                        const SizedBox(height: 18),
+                        preview,
+                      ]),
+                    ),
+                  ]),
+                ),
+              )
+            : SizedBox(
+                width: 560,
+                child: SingleChildScrollView(
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(child: controls),
+                    const SizedBox(width: 20),
+                    preview,
+                  ]),
+                ),
+              ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
           FilledButton(key: const Key('styleOk'), onPressed: () => Navigator.pop(ctx, true), child: Text(forNew ? 'Crear' : 'Aplicar')),
