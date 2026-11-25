@@ -7,7 +7,7 @@ set -e
 export PATH=~/flutter/bin:$PATH
 cd "$(dirname "$0")/.."
 OUT=${1:-docs/img/07b_sync_pc.png}
-L=${2:-es}
+L=${2:-en}
 LOG=$(mktemp)
 GDK_BACKEND=x11 flutter test integration_test/screenshots_pc_test.dart -d linux --dart-define=SHOT_LANG="$L" >"$LOG" 2>&1 &
 PID=$!

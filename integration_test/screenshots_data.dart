@@ -14,10 +14,10 @@ import 'package:pdf/widgets.dart' as pw;
 
 import 'hershey_script.dart';
 
-const shotLang = String.fromEnvironment('SHOT_LANG', defaultValue: 'es');
+const shotLang = String.fromEnvironment('SHOT_LANG', defaultValue: 'en');
 bool get _en => shotLang == 'en';
 
-/// Elige el texto de ejemplo según el idioma de las capturas (`--dart-define=SHOT_LANG=es|en`; por defecto es).
+/// Elige el texto de ejemplo según el idioma de las capturas (`--dart-define=SHOT_LANG=es|en`; por defecto en, el del README).
 String tr(String es, String en) => _en ? en : es;
 
 // Nombres de los cuadernos (el test los abre por su key `nb-<nombre>`).
