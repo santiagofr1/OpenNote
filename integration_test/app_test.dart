@@ -1539,12 +1539,12 @@ void main() {
     expect(find.byKey(const Key('folder-Facultad (2)')), findsOneWidget);
     await t.tap(find.byKey(const Key('folder-Facultad (2)')));
     await settle(t, 800);
-    // el nombre ya existe en el índice: el cuaderno importado lleva "(importado)"
-    expect(find.byKey(const Key('nb-Apuntes (importado)')), findsOneWidget);
+    // la carpeta es nueva: los cuadernos conservan su nombre (los repetidos solo cuentan dentro de la misma carpeta)
+    expect(find.byKey(const Key('nb-Apuntes')), findsOneWidget);
     expect(find.byKey(const Key('folder-Sub')), findsOneWidget);
     await t.tap(find.byKey(const Key('folder-Sub')));
     await settle(t, 800);
-    expect(find.byKey(const Key('nb-Parcial (importado)')), findsOneWidget);
+    expect(find.byKey(const Key('nb-Parcial')), findsOneWidget);
     expect(t.takeException(), isNull);
   });
 

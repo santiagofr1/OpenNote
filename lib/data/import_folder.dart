@@ -42,7 +42,6 @@ Future<FolderImportResult> importFolderZip(Storage store, NotesIndex idx, Uint8L
   final newNotebooks = <Notebook>[];
   final topLevel = <Folder>{};
   var looseNotebooks = false;
-  final taken = {for (final n in idx.notebooks) n.name};
   final failed = <String>[];
 
   Folder folderFor(List<String> segs) {
@@ -89,8 +88,10 @@ Future<FolderImportResult> importFolderZip(Storage store, NotesIndex idx, Uint8L
       final bytes = f.readBytes();
       if (bytes == null) throw VynoteException('vacío');
       final folder = segs.isEmpty ? null : folderFor(segs);
-      final nb = await importNotebookBytes(store, Uint8List.fromList(bytes), taken: taken, folder: folder?.id ?? parent);
-      taken.add(nb.name);
+      final dest = folder?.id ?? parent;
+      // los nombres solo chocan dentro de la carpeta de destino (en una carpeta recién creada no hay con qué chocar)
+      final taken = {for (final n in idx.notebooksIn(dest)) n.name};
+      final nb = await importNotebookBytes(store, Uint8List.fromList(bytes), taken: taken, folder: dest);
       idx.notebooks.add(nb);
       newNotebooks.add(nb);
       if (folder == null) looseNotebooks = true;
