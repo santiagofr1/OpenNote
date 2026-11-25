@@ -3485,15 +3485,26 @@ void main() {
     }
 
     void amarilloSobreBlanco(List<int> p, String cuando) {
-      expect(p.sublist(0, 3), everyElement(lessThan(60)), reason: 'en pantalla $cuando: el negro del PDF queda por encima');
-      expect(p[3], greaterThan(170), reason: 'en pantalla $cuando: sobre el blanco se ve amarillo');
-      expect(p[4], greaterThan(170));
-      expect(p[5], lessThan(p[3] - 40));
+      expect(p.sublist(0, 3), everyElement(lessThan(60)), reason: 'en pantalla $cuando: el negro del PDF queda por encima ($p)');
+      expect(p[3], greaterThan(170), reason: 'en pantalla $cuando: sobre el blanco se ve amarillo ($p)');
+      expect(p[4], greaterThan(170), reason: '$p');
+      expect(p[5], lessThan(p[3] - 40), reason: '$p');
     }
 
     // el trazo mide 22: cubre 11 hacia cada lado del borde; se mira en el medio del tramo
     final mid = Offset.lerp(a, b, .5)!;
     final up = Offset(0, 5 * ed.scale);
+    // antes de trazar, la página tiene que verse ya en esos dos puntos (negro arriba del borde, blanco abajo); con la
+    // tablet cargada después de muchos casos, la imagen de la página puede tardar más
+    var base = await pantalla(mid - up, mid + up);
+    bool listo(List<int> p) => p.sublist(0, 3).every((v) => v < 60) && p.sublist(3).every((v) => v > 230);
+    final sw1 = Stopwatch()..start();
+    while (!listo(base) && sw1.elapsedMilliseconds < 8000) {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await t.pump();
+      base = await pantalla(mid - up, mid + up);
+    }
+    expect(listo(base), isTrue, reason: 'antes de resaltar se ve el PDF: negro y blanco en esos puntos ($base)');
     final g = await t.startGesture(a, kind: PointerDeviceKind.stylus);
     for (var i = 1; i <= 12; i++) {
       await g.moveTo(Offset.lerp(a, b, i / 12)!);
