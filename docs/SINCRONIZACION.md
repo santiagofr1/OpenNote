@@ -1,6 +1,6 @@
 # App de PC y sincronización
 
-Investigación para el punto 17 de [PENDIENTES.md](../PENDIENTES.md). La decisión tomada (Google Drive) y su diseño están en
+Investigación sobre la app de PC y la sincronización. La decisión tomada (Google Drive) y su diseño están en
 "Decisión: Google Drive", antes de las fuentes; lo demás es la investigación previa.
 Fecha de la investigación: 2026-11-20.
 
@@ -62,7 +62,7 @@ El punto crítico para OpenNote es que el lápiz de una tableta Wacom/Huion en P
 muestras históricas del trazo y la curva se ve recta. El PR de arreglo seguía abierto en la fecha del issue [7].
 Es un tema de la tablet que conviene seguir porque afecta la calidad del trazo.
 
-**Mouse.** El botón derecho ya borra (`TECNICO.md`, "Tablets y lápices"). Con mouse la presión vale 1
+**Mouse.** El botón derecho ya borra. Con mouse la presión vale 1
 **(sin confirmar)**.
 
 **Recomendación de entrada:** Linux primero. Para Windows y macOS, probar con un lápiz real y decidir después
@@ -70,7 +70,7 @@ entre un plugin (Stylet es nuevo: publicado hace 43 días, 0 likes [6]) o códig
 
 ### 1.2 Atajos de teclado
 
-- Ya existen Ctrl+B/I/U y Tab/Shift+Tab en el texto (`TECNICO.md`).
+- Ya existen Ctrl+B/I/U y Tab/Shift+Tab en el texto.
 - Falta relevar cuáles existen para deshacer/rehacer, guardar, borrar la selección, copiar y pegar. No lo hice.
 - Flutter resuelve atajos con `Shortcuts` y `Actions` **(sin confirmar: no leí la doc)**.
 
@@ -397,7 +397,7 @@ y el manejo de los `*.sync-conflict-*` de Syncthing **(sin confirmar)**.
 | **LAN propia** (QR + TLS mutuo + mDNS) | Alta si se hace bien. El punto débil es el primer emparejamiento (CVE-2020-26164 [8]). | Alta: QR una vez, sin cuentas. Solo en la misma red y con la app abierta. | Grande. | `bonsoir`, `basic_utils`, `crypto` o `cryptography`, `dart:io`, `mobile_scanner` (no escanea en PC), `qr_flutter`. |
 | **Google Drive + E2E** | Google no lee el contenido; sí ve metadatos. | Alta: sin servidor, login con Google. | Grande. | `googleapis`; login propio en PC; `cryptography`. |
 | **WebDAV (Nextcloud) + E2E** | Igual que Drive, pero el servidor es propio. | Media: hay que tener un servidor. | Grande. | `webdav_client` (poco mantenido) o HTTP directo. |
-| **Exportar/importar `.opennote`** (ya en PENDIENTES) | Alta: archivo local, sin red. | Baja: manual. | Medio. | ZIP. Complementa a las demás, no las reemplaza. |
+| **Exportar/importar `.opennote`** | Alta: archivo local, sin red. | Baja: manual. | Medio. | ZIP. Complementa a las demás, no las reemplaza. |
 
 ---
 
@@ -443,7 +443,7 @@ con la interfaz `RemoteStore` (`remote_store.dart`), que tiene una versión en m
 
 ### Estructura remota
 
-Es la misma estructura que en el disco (ver `TECNICO.md`), bajo `OpenNote/` en "Mi unidad":
+Es la misma estructura que en el disco, bajo `OpenNote/` en "Mi unidad":
 
 ```
 OpenNote/

@@ -82,8 +82,7 @@ lib/theme/       tema y colores
 ```
 
 Cada capa usa solo las de arriba. Si una lógica puede ir en `lib/domain/` sin depender de Flutter, ponela ahí y
-cubrila con tests. El formato de archivos, la carga perezosa y el guardado están explicados en
-[docs/TECNICO.md](docs/TECNICO.md).
+cubrila con tests.
 
 ## Estilo
 

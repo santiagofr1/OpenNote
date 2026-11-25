@@ -154,11 +154,10 @@ lib/
 └── theme/       # tema y colores
 integration_test/  # suite completa en tablet (app_test.dart)
 tool/              # scripts: capturas, ícono, trazas
-docs/              # documentación técnica (TECNICO.md), releases, capturas e ícono
+docs/              # releases, capturas e ícono
 ```
 
-Cada capa usa solo las de arriba: `domain` no sabe nada de Flutter, y el resto se apoya en él. El detalle del
-formato de archivos, la carga perezosa y el guardado está en [docs/TECNICO.md](docs/TECNICO.md).
+Cada capa usa solo las de arriba: `domain` no sabe nada de Flutter, y el resto se apoya en él.
 
 ## Contribuir
 
@@ -176,12 +175,11 @@ El software libre funciona porque la gente se anima a meter mano. No hace falta 
 Algunas buenas primeras contribuciones:
 
 - [ ] Probar OpenNote en otra tablet o con otro lápiz (USI, Galaxy Tab S más nueva) y reportar qué anda
-      (ver "Tablets y lápices" en [docs/TECNICO.md](docs/TECNICO.md))
 - [ ] Traducción al inglés de los textos de la interfaz (hoy está todo en español)
 - [ ] Nuevos fondos o plantillas de hoja (`lib/domain/paper_layout.dart`, `lib/widgets/backgrounds.dart`)
 - [ ] Nuevas puntas para el lápiz (`lib/domain/tools.dart`, dibujo en `lib/domain/stroke_mesh.dart`)
 - [ ] Empaquetado para F-Droid
-- [ ] App de PC: ya hay Linux (.deb) y Windows (.exe); falta macOS, y resolver entrada con mouse y tableta, atajos y empaquetado (ver PENDIENTES.md)
+- [ ] App de PC: ya hay Linux (.deb) y Windows (.exe); falta macOS, y resolver entrada con mouse y tableta, atajos y empaquetado
 - [ ] Más tests de lógica pura en `test/`
 
 La guía para arrancar está en [CONTRIBUTING.md](CONTRIBUTING.md).

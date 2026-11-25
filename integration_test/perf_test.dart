@@ -1,6 +1,6 @@
 // Benchmark de cuadernos grandes en la tablet (NO es parte de app_test.dart). Mide cuánto cuesta abrir, guardar,
 // scrollear y tener en memoria cuadernos de 50, 100, 200 y 400 hojas, para decidir si hace falta la carga perezosa
-// de hojas lejanas (PENDIENTES.md, punto 1). Todo en una carpeta temporal propia: nunca toca tus cuadernos.
+// de hojas lejanas. Todo en una carpeta temporal propia: nunca toca tus cuadernos.
 //
 // Se corre con tool/perf.sh (build profile + `flutter drive`; deja build/perf/perf.json y build/perf/perf.log).
 // Los tamaños se eligen al compilar: --dart-define=PERF_SIZES=50,100 (por defecto 50,100,200,400).
