@@ -61,7 +61,7 @@ workflow passes them in from secrets. If you fork it and want to test the sync (
 **your own Google Cloud project**: the steps are in [docs/SYNC.md](docs/SYNC.md), "Set up Google Cloud". Copy
 `google_config.example.json` to `google_config.json` (it's in `.gitignore`) and run with
 `--dart-define-from-file=google_config.json`. Without that data, the app still builds and works the same, except that
-**"Conectar con Google"** (Connect with Google) warns that it needs to be configured. The sync tests (`test/sync/`) use
+**Connect with Google** warns that it needs to be configured. The sync tests (`test/sync/`) use
 an in-memory fake remote and don't need anything from Google.
 
 ## Performance

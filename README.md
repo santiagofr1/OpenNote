@@ -11,9 +11,11 @@
 [![Platform: Android | Linux | Windows](https://img.shields.io/badge/platform-Android%20%7C%20Linux%20%7C%20Windows-3DDC84.svg)](https://github.com/santiagofr1/Vynote/releases/latest)
 [![Made with Flutter](https://img.shields.io/badge/made%20with-Flutter-02569B.svg?logo=flutter&logoColor=white)](https://flutter.dev)
 
-Vynote is a handwriting note-taking app with the S Pen (and with the keyboard too) for Android tablets.
-It's free, it's open source, it works offline, and your notes are yours: they're stored on your device,
-with no accounts and no servers of our own. If you want, you can sync them between your tablet and your PC with your own Google Drive.
+Vynote is a note-taking app for writing by hand on Android tablets, with a pen like the S Pen, and with the keyboard
+when you need it. It's free and open source, it works offline, and your notes stay yours: they live on your device, with
+no accounts and no servers of ours. If you want, your own Google Drive keeps the tablet and your PC in sync.
+
+It's available in English, Spanish and Brazilian Portuguese.
 
 ## What it solves
 
@@ -32,43 +34,42 @@ with no accounts and no servers of our own. If you want, you can sync them betwe
 
 ## Features
 
-- **Pressure-sensitive writing**: the stroke gets thicker or thinner depending on how hard you press the pen.
-- **Tips and colors**: ballpoint, fountain pen, pencil, felt-tip and calligraphy, plus a highlighter, with its own palette and adjustable widths.
-- **Smart shapes**: draw a line, circle, ellipse, rectangle/square, triangle or polygon, keep the pen still for a moment,
-  and it turns into a neat shape. Without lifting the pen, you can stretch or shrink it. You can turn this on or off in the pen panel.
-- **Eraser on the button**: press the S Pen button to erase. There are three eraser sizes.
-- **Formatted text**: tap the keyboard icon and a new line opens with bold, italic, underline, colors,
-  headings, lists, indentation and alignment.
-- **Notebook index**: with the **"Título"** (Title) tool, you enclose what you wrote (by hand or with the keyboard) and mark it as
-  Title 1, 2, 3… Handwriting is read on the spot, no internet needed. The **"Índice"** (Index) panel shows everything
-  numbered (1, 1.1, 1.2…) with the page number and takes you to each title. Marked titles appear on the page with
-  their number and travel with sync.
-- **AutoCAD-style selection**: dragging to the right selects what's fully inside the box; dragging to the left selects
-  everything the box touches. A tap selects a single item, and tapping again cycles to the one underneath (for example,
-  only the highlighter on one word). Tapping outside deselects. Pressing and holding on the page, **"Seleccionar todo"**
-  (Select all) takes everything on that page, and **"Seleccionar todo el cuaderno"** (Select entire notebook) loads and
-  takes all of them. Then you can move, copy, duplicate or delete. Corner handles scale while keeping proportions, the
-  handles in the middle of each side stretch only width or only height, and you can rotate.
-- **Layer order**: bring to front, bring forward, send backward or send to back the selection. Can be undone.
-- **Images, sticky notes and audio**: insert them on the page, alongside the ink.
-- **Notebooks as a strip of pages**: swipe from page to page and the title shows which one you're on (for example,
-  "2 / 5"). Add, duplicate, delete, mark or rename pages from the thumbnail panel, and reorder them by dragging the
-  handle. All of that can be undone.
-- **Backgrounds at real A4 size**: ruled at 7, 8 or 10 mm, grid or dots. If you print at 100 %, it comes out at actual size.
-- **Style per page or per notebook**: choose the background, paper color and line spacing.
-- **Organized library**: nested folders, favorites, name search that ignores case and accents, and notebooks protected with a PIN.
-- **Reading mode**: read without touching anything by mistake.
-- **Export and import**: with a single **"Exportar"** (Export) option, you can take notebooks out as PDF or PNG, or whole as an
-  `.vynote` file to back them up or move them to another tablet. You can import `.vynote`, PDF, images and audio (old `.opennote` files from before the rename still import).
-  A folder exported as a Vynote `.zip` imports back with its subfolders and notebooks in place.
-  An imported PDF goes into the page you're looking at, and its pages open instantly, ready to write on top of.
-- **Google Drive sync (optional)**: connect once with your Google account, and the tablet and the PC apps (Linux and
-  Windows) stay in sync on their own. The app only sees its own "Vynote" folder in your Drive, changes made on two
-  devices are merged page by page, and you can turn on end-to-end encryption with a passphrase so nobody else can read
-  your notes, not even Google.
-- **PC app**: the same app for Linux and Windows, with your synced notebooks. Install it from the apt repo or the
-  installer (see Installation).
-- **Material You look**: follows your tablet's theme.
+**Writing and drawing**
+- Ink that responds to pen pressure, with several pen tips, a highlighter and your own colors.
+- Neat shapes: draw roughly, hold the pen still, and it snaps into a clean shape you can still resize.
+- The pen button erases, so you never have to switch tools.
+- Typed text with the usual formatting (headings, lists, bold, colors) next to your handwriting.
+- Images, sticky notes and voice recordings on the page.
+
+**Editing**
+- Select anything with a box or a tap, then move, resize, rotate, copy or reorder it.
+- Every change can be undone, including adding, moving or deleting pages.
+
+**Finding your way**
+- An index built from your handwritten titles, numbered by level, that takes you to each one.
+- A page panel with thumbnails to jump around, bookmark and reorder pages.
+- Search across typed text, sticky notes and page titles.
+- A library with nested folders, favorites and PIN-locked notebooks.
+
+**Paper**
+- Ruled, grid, dotted and plain backgrounds, plus templates (Cornell, to-do list, music staff, planners), all at real
+  paper size, so they print to scale.
+- Your own templates from any image, and a style per page or for the whole notebook.
+- An infinite canvas when a page isn't enough.
+
+**PDFs**
+- Import a PDF and write, highlight and answer right on top of it.
+- Export notebooks as PDF or PNG, or as a `.vynote` file to back them up or move them; whole folders export and import
+  as a `.zip`.
+
+**Sync and PC**
+- Optional Google Drive sync between the tablet and the Linux and Windows apps, merged page by page.
+- End-to-end encryption with a passphrase, so only your devices can read your notes.
+- On the PC: zoom with Ctrl + mouse wheel and keyboard shortcuts (Ctrl+/ lists them).
+
+**Made to read and present**
+- Reading mode to go through your notes without touching anything by mistake, and full screen.
+- A Material You look that follows your tablet's theme, and works on phones too.
 
 ## Screenshots
 
@@ -91,7 +92,7 @@ with no accounts and no servers of our own. If you want, you can sync them betwe
 ### From the APK (easiest)
 
 1. Download the `.apk` file from the [latest release](https://github.com/santiagofr1/Vynote/releases/latest).
-2. Open it on your tablet. If Android asks, enable **"Instalar apps desconocidas"** (Install unknown apps) for the browser
+2. Open it on your tablet. If Android asks, enable **Install unknown apps** for the browser
    or file manager you use.
 3. Follow the installer's steps.
 
@@ -126,9 +127,9 @@ Then open it from the applications menu or with `vynote`. To build the `.deb` yo
 
 Download `Vynote-v<version>-windows-setup.exe` from the [latest release](https://github.com/santiagofr1/Vynote/releases/latest)
 and run it (Windows 10 or 11, 64-bit). It installs to `Program Files\Vynote`, creates a Start menu shortcut (and a
-desktop one if you choose), and uninstalls from **"Aplicaciones instaladas"** (Installed apps). The installer comes out
-a few minutes after the APK and is not signed: Windows SmartScreen may warn you, so pick **"Más información"** (More info)
-and then **"Ejecutar de todas formas"** (Run anyway). No background sync (same as Linux); Google login opens your browser.
+desktop one if you choose), and uninstalls from **Installed apps**. The installer comes out
+a few minutes after the APK and is not signed: Windows SmartScreen may warn you, so pick **More info**
+and then **Run anyway**. No background sync (same as Linux); Google login opens your browser.
 
 ### From the source
 
@@ -147,15 +148,14 @@ To build for the tablet you also need the Android SDK and JDK 21. The full steps
 
 ## Usage
 
-- **Writing**: use the S Pen to write. With your finger you scroll across the page, and pinch to zoom.
-- **Zoom on the PC**: hold Ctrl and turn the mouse wheel; the wheel alone scrolls the page.
-  You can lock the zoom if it bothers you.
-- **Erasing**: press the S Pen button while moving the tip over the ink.
-- **Text**: tap the keyboard icon in the toolbar to open a new line and type with the keyboard.
-- **Pages**: swipe between pages. At the end of the last page, drag up and hold until the circle fills to add a new
-  page. The page panel shows all of them as thumbnails.
-- **Notebooks**: from the library, the "+" creates a new notebook (in the folder you're in) or a new folder. Press and
-  hold a notebook or folder to choose **"Mover a…"** (Move to…).
+- **Write** with the pen. Your finger scrolls the page and pinches to zoom; lock the zoom if it gets in the way.
+- **Erase** by holding the pen button while you go over the ink.
+- **Type** with the keyboard icon in the toolbar.
+- **Add a page** by dragging up past the end of the last one and holding until the circle fills.
+- **On the PC**, hold Ctrl and turn the mouse wheel to zoom; the wheel alone scrolls.
+- **Organize** from the library: **+** creates a notebook or a folder, and pressing and holding one gives you
+  **Move to…**, **Export** and more.
+- **Settings** (in the library's ⋮ menu) has the app language, the handwriting language and the version.
 
 ## Compatibility
 
@@ -200,7 +200,7 @@ Free software works because people dive in. You don't need to be a Flutter exper
 Some good first contributions:
 
 - [ ] Try Vynote on another tablet or with another pen (USI, newer Galaxy Tab S) and report what works
-- [ ] Translate the interface text into English (right now everything is in Spanish)
+- [ ] Translate Vynote into your language (one `.arb` file in `lib/l10n/`; see [CONTRIBUTING.md](CONTRIBUTING.md))
 - [ ] New page backgrounds or templates (`lib/domain/paper_layout.dart`, `lib/widgets/backgrounds.dart`)
 - [ ] New pen tips (`lib/domain/tools.dart`, drawing in `lib/domain/stroke_mesh.dart`)
 - [ ] F-Droid packaging
