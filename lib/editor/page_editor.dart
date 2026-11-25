@@ -23,6 +23,7 @@ import '../rendering/text_layout.dart';
 import '../theme/colors.dart';
 import '../widgets/auto_scroller.dart';
 import '../widgets/dialogs.dart';
+import '../l10n/l10n.dart';
 import 'context_menu.dart';
 import 'dock_layout.dart';
 import 'fast_scroller.dart';
@@ -45,6 +46,7 @@ import 'toolbar.dart';
 import 'voice_recorder.dart';
 import 'touch_gestures.dart';
 import 'viewport.dart';
+import 'wheel_zoom.dart';
 import 'zoom_indicator.dart';
 
 /// Hojas que se cargan de disco más allá del rango armado (de cada lado).
@@ -271,6 +273,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       v.dispose();
     }
     _stillTimer?.cancel();
+    _wheelSave?.cancel();
     _shapeHold?.cancel();
     _imgs.dispose();
     liveTick.dispose();
@@ -1012,7 +1015,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             }
             final k = doc.sheetOfY(a.dy), top = k * kSheetStep * scale, width = kW * scale;
             final box = shapeBox(kind, a, b);
-            final text = shapeMeasure(kind, a, b, unitsPerMm(doc.sizeAt(a.dy)));
+            final text = shapeMeasure(kind, a, b, unitsPerMm(doc.sizeAt(a.dy)), l: context.l10n);
             const bw = 300.0, bh = 28.0;
             final left = (box.center.dx * scale - bw / 2).clamp(0.0, max(0.0, width - bw)).toDouble();
             final above = box.top * scale - 8 - bh >= top;
@@ -1474,7 +1477,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   List<({String id, String label})> get _sheetChoices => [
         for (var k = 0; k < doc.sheetCount; k++)
-          (id: doc.sheets[k].id, label: 'Hoja ${k + 1}${doc.sheets[k].title.isEmpty ? '' : ' · ${doc.sheets[k].title}'}')
+          (id: doc.sheets[k].id, label: doc.sheets[k].title.isEmpty ? context.l10n.sheetLabel(k + 1) : context.l10n.sheetLabelTitled(k + 1, doc.sheets[k].title))
       ];
 
   Future<String?> _askLink([String initial = '']) => showLinkDialog(context,
@@ -1589,7 +1592,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     if (target != null) {
       widget.onOpenLink?.call(target);
     } else if (missing) {
-      snack(context, 'Esa página no está en el cuaderno');
+      snack(context, context.l10n.editorLinkMissingPage);
     } else {
       fallback?.call();
     }
@@ -1998,6 +2001,38 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     // el scroll se corrige en el layout de este mismo cuadro (ver _applyZoomScroll); si no, se pinta un cuadro con el
     // zoom nuevo y el scroll viejo y la hoja tiembla
     _zoomScrollTo = SheetLayout(_viewW, z, units: doc.width).scrollFor(anchor, f);
+  }
+
+  Timer? _wheelSave;
+
+  /// Ctrl + ruedita del mouse = zoom (la ruedita sola scrollea; ver [NoCtrlWheelPhysics]).
+  void _wheelSignal(PointerSignalEvent e) {
+    if (e is PointerScrollEvent && ctrlHeld()) {
+      GestureBinding.instance.pointerSignalResolver
+          .register(e, (ev) => _wheelZoom((ev as PointerScrollEvent).scrollDelta.dy, ev.position));
+    } else if (e is PointerScaleEvent) {
+      // algunas plataformas mandan Ctrl+rueda / pellizco del touchpad como escala
+      GestureBinding.instance.pointerSignalResolver
+          .register(e, (ev) => _wheelZoomBy((ev as PointerScaleEvent).scale, ev.position));
+    }
+  }
+
+  void _wheelZoom(double dy, Offset global) {
+    if (dy == 0) return; // rueda horizontal
+    _wheelZoomBy(wheelZoomFactor(dy), global);
+  }
+
+  void _wheelZoomBy(double factor, Offset global) {
+    if (ts.zoomLocked) {
+      _flashZoom(); // la píldora muestra el candado
+      return;
+    }
+    final box = _viewportKey.currentContext!.findRenderObject() as RenderBox;
+    _setZoom(ts.zoom * factor, box.globalToLocal(global));
+    _wheelSave?.cancel();
+    _wheelSave = Timer(const Duration(milliseconds: 500), () {
+      if (mounted) widget.onPrefsChanged();
+    });
   }
 
   /// Aplica el scroll pendiente del zoom antes de que el visor arme su layout (mismo cuadro, sin notificar).
@@ -2474,7 +2509,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final it = sel.itemsOf(doc).singleOrNull;
     if (it == null || it.type != 'audio') return;
     // askText: el diálogo de siempre (no libera el controlador mientras se anima al cerrarse)
-    final name = await askText(context, 'Renombrar audio', initial: it.text, hint: 'Audio', ok: 'Guardar');
+    final name = await askText(context, context.l10n.editorRenameAudio, initial: it.text, hint: context.l10n.audioPrefix, ok: context.l10n.commonSave);
     if (!mounted) return;
     if (name != null) renameItem(it.id, name);
   }
@@ -2646,7 +2681,9 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         });
         final sheetSize = Size(layout.sheetWidth, doc.h * scale);
         // durante el pellizco no scrollea: si no, el zoom tironea
-        final physics = touch.pinching ? const NeverScrollableScrollPhysics() : const ClampingScrollPhysics();
+        final physics = touch.pinching
+            ? const NeverScrollableScrollPhysics()
+            : const NoCtrlWheelPhysics(parent: ClampingScrollPhysics());
         return Stack(children: [
           Listener(
             key: _viewportKey,
@@ -2654,6 +2691,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             onPointerMove: _touchMove,
             onPointerUp: _touchUp,
             onPointerCancel: _touchUp,
+            onPointerSignal: _wheelSignal,
             child: NotificationListener<ScrollNotification>(
               onNotification: (n) => doc.nb.canvas ? false : pull.onScroll(n, touching: touch.count > 0),
               child: ScrollConfiguration(
@@ -2694,7 +2732,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
                             child: Padding(
                               padding: const EdgeInsets.fromLTRB(16, 22, 16, 70),
                               child: Text(
-                                'Al final, deslizá hacia arriba y mantené para agregar una hoja',
+                                context.l10n.editorPullHint,
                                 textAlign: TextAlign.center,
                                 style: TextStyle(color: cs.onSurfaceVariant.withValues(alpha: .7), fontSize: 13),
                               ),
@@ -2716,7 +2754,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             width: 200,
             child: FastScroller(
               controller: scroll,
-              label: doc.nb.canvas ? null : () => 'Hoja ${visibleSheet + 1} de ${doc.sheetCount}',
+              label: doc.nb.canvas ? null : () => context.l10n.editorScrollerLabel(visibleSheet + 1, doc.sheetCount),
             ),
           ),
           Positioned(left: 0, right: 0, bottom: 28, child: Center(child: PullIndicator(pull))),
@@ -2791,7 +2829,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             child: FittedBox(fit: BoxFit.scaleDown, child: SelectionMenu(
             onCopy: () {
               _copySel();
-              snack(context, 'Copiado', duration: const Duration(milliseconds: 1200), width: 260);
+              snack(context, context.l10n.editorCopied, duration: const Duration(milliseconds: 1200), width: 260);
             },
             onCut: () {
               _copySel();
@@ -2980,7 +3018,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         height: 120 * scale,
         child: IgnorePointer(
           child: Center(
-            child: Text('Cargando la hoja ${k + 1}…',
+            child: Text(context.l10n.editorLoadingSheet(k + 1),
                 style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: .55), fontSize: 14)),
           ),
         ),

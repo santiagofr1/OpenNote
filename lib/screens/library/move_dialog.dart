@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../domain/domain.dart';
+import '../../l10n/l10n.dart';
 
 /// Elegir adónde mover algo: árbol de carpetas con "Inicio" arriba.
 /// Devuelve el id de la carpeta elegida dentro de un registro (`(id: null)` = Inicio),
@@ -15,12 +16,12 @@ Future<({String? id})?> askMoveTarget(BuildContext context, NotesIndex idx,
     final disabled = id != null && exclude.contains(id);
     final here = id == current;
     rows.add(ListTile(
-      key: Key('moveTarget-$name'),
+      key: Key('moveTarget-${id == null ? 'Inicio' : name}'),
       enabled: !disabled,
       contentPadding: EdgeInsets.only(left: 12.0 + depth * 22, right: 12),
       leading: Icon(id == null ? Symbols.home : Symbols.folder, weight: 300, fill: id == null ? 0 : 1, color: disabled ? null : cs.primary),
       title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
-      trailing: here ? Text('acá', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12.5)) : null,
+      trailing: here ? Text(context.l10n.moveHere, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12.5)) : null,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       onTap: () => Navigator.pop(context, (id: id)),
     ));
@@ -30,7 +31,7 @@ Future<({String? id})?> askMoveTarget(BuildContext context, NotesIndex idx,
     }
   }
 
-  row(null, 'Inicio', 0);
+  row(null, context.l10n.libraryHome, 0);
   return showDialog<({String? id})>(
     context: context,
     builder: (ctx) => AlertDialog(
@@ -38,7 +39,7 @@ Future<({String? id})?> askMoveTarget(BuildContext context, NotesIndex idx,
       title: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
       contentPadding: const EdgeInsets.fromLTRB(8, 12, 8, 0),
       content: SizedBox(width: 360, child: Column(mainAxisSize: MainAxisSize.min, children: rows)),
-      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar'))],
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(ctx.l10n.commonCancel))],
     ),
   );
 }

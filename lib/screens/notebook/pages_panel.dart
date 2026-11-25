@@ -7,6 +7,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import '../../domain/domain.dart';
 import '../../widgets/sheet_thumb.dart';
+import '../../l10n/l10n.dart';
 import 'thumb_cache.dart';
 
 enum SheetAction { rename, addAfter, addWithTemplate, duplicate, saveTemplate, moveUp, moveDown, delete }
@@ -127,20 +128,20 @@ class _PagesPanelState extends State<PagesPanel> {
                 ),
                 const Spacer(),
                 IconButton(
-                  tooltip: onlyBookmarks ? 'Ver todas' : 'Solo marcadas',
+                  tooltip: onlyBookmarks ? context.l10n.pagesAll : context.l10n.pagesOnlyBookmarked,
                   isSelected: onlyBookmarks,
                   onPressed: onToggleBookmarksFilter,
                   icon: Icon(Symbols.bookmark,
                       weight: 300, fill: onlyBookmarks ? 1 : 0, color: onlyBookmarks ? cs.primary : cs.onSurfaceVariant),
                 ),
                 IconButton(
-                  tooltip: 'Buscar',
+                  tooltip: context.l10n.commonSearch,
                   onPressed: onSearch,
                   icon: Icon(Symbols.search, weight: 300, color: cs.onSurfaceVariant),
                 ),
                 IconButton(
                   key: const Key('addPage'),
-                  tooltip: 'Hoja nueva después de la actual',
+                  tooltip: context.l10n.pagesNewAfter,
                   onPressed: onAdd,
                   icon: Icon(Symbols.note_add, weight: 300, color: cs.onSurfaceVariant),
                 ),
@@ -151,7 +152,7 @@ class _PagesPanelState extends State<PagesPanel> {
               child: list.isEmpty
                   ? (onlyBookmarks
                       ? const SizedBox.shrink()
-                      : Center(child: Text('No hay hojas marcadas', style: TextStyle(color: cs.onSurfaceVariant))))
+                      : Center(child: Text(context.l10n.pagesNoBookmarks, style: TextStyle(color: cs.onSurfaceVariant))))
                   : GridView.builder(
                       key: _gridKey,
                       controller: _scroll,
@@ -177,7 +178,7 @@ class _PagesPanelState extends State<PagesPanel> {
     if (list.isEmpty) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-        child: Text('No hay hojas marcadas. Usá el marcador de arriba para marcar la hoja que estás viendo.',
+        child: Text(context.l10n.pagesNoBookmarksHint,
             key: const Key('noBookmarks'), style: TextStyle(color: cs.onSurfaceVariant)),
       );
     }
@@ -196,9 +197,9 @@ class _PagesPanelState extends State<PagesPanel> {
               visualDensity: VisualDensity.compact,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               leading: Icon(Symbols.bookmark, size: 20, fill: 1, weight: 400, color: cs.primary),
-              title: Text(doc.sheets[k].title.isEmpty ? 'Hoja ${k + 1}' : doc.sheets[k].title,
+              title: Text(doc.sheets[k].title.isEmpty ? context.l10n.sheetLabel(k + 1) : doc.sheets[k].title,
                   maxLines: 1, overflow: TextOverflow.ellipsis),
-              trailing: Text('Hoja ${k + 1}', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+              trailing: Text(context.l10n.sheetLabel(k + 1), style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
               onTap: () => widget.onOpen(k),
             ),
           const Divider(height: 8),
@@ -283,7 +284,7 @@ class _PagesPanelState extends State<PagesPanel> {
         ),
       ),
       child: Tooltip(
-        message: 'Arrastrar para mover',
+        message: context.l10n.pagesDragToMove,
         child: Container(
           width: 34,
           height: 34,
@@ -345,7 +346,7 @@ class _PagesPanelState extends State<PagesPanel> {
                   right: 12,
                   child: IconButton(
                     visualDensity: VisualDensity.compact,
-                    tooltip: meta.bookmark ? 'Quitar marcador' : 'Marcar',
+                    tooltip: meta.bookmark ? context.l10n.menuMoreBookmarkRemove : context.l10n.pagesBookmark,
                     onPressed: () => onToggleBookmark(k),
                     icon: Icon(Symbols.bookmark,
                         size: 20,
@@ -390,16 +391,19 @@ class _PagesPanelState extends State<PagesPanel> {
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                child: Text('Hoja ${k + 1}${doc.sheets[k].title.isEmpty ? '' : ' · ${doc.sheets[k].title}'}',
+                child: Text(
+                    doc.sheets[k].title.isEmpty
+                        ? ctx.l10n.sheetLabel(k + 1)
+                        : ctx.l10n.sheetLabelTitled(k + 1, doc.sheets[k].title),
                     style: Theme.of(ctx).textTheme.titleMedium)),
-            tile(SheetAction.rename, Symbols.edit, 'Renombrar'),
-            tile(SheetAction.addAfter, Symbols.note_add, 'Hoja nueva después'),
-            tile(SheetAction.addWithTemplate, Symbols.note_stack_add, 'Hoja nueva con plantilla…'),
-            tile(SheetAction.duplicate, Symbols.content_copy, 'Duplicar'),
-            tile(SheetAction.saveTemplate, Symbols.bookmark_add, 'Guardar como plantilla'),
-            if (k > 0) tile(SheetAction.moveUp, Symbols.arrow_upward, 'Mover antes'),
-            if (k < doc.sheetCount - 1) tile(SheetAction.moveDown, Symbols.arrow_downward, 'Mover después'),
-            if (doc.sheetCount > 1) tile(SheetAction.delete, Symbols.delete, 'Borrar', danger: true),
+            tile(SheetAction.rename, Symbols.edit, ctx.l10n.commonRename),
+            tile(SheetAction.addAfter, Symbols.note_add, ctx.l10n.pagesNewAfterMenu),
+            tile(SheetAction.addWithTemplate, Symbols.note_stack_add, ctx.l10n.pagesNewWithTemplate),
+            tile(SheetAction.duplicate, Symbols.content_copy, ctx.l10n.pagesDuplicate),
+            tile(SheetAction.saveTemplate, Symbols.bookmark_add, ctx.l10n.pagesSaveTemplate),
+            if (k > 0) tile(SheetAction.moveUp, Symbols.arrow_upward, ctx.l10n.pagesMoveBefore),
+            if (k < doc.sheetCount - 1) tile(SheetAction.moveDown, Symbols.arrow_downward, ctx.l10n.pagesMoveAfter),
+            if (doc.sheetCount > 1) tile(SheetAction.delete, Symbols.delete, ctx.l10n.commonDelete, danger: true),
           ]),
         ),
       ),

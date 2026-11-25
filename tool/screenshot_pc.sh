@@ -2,12 +2,15 @@
 # Captura la ventana de la app de PC (Linux) para el README: corre integration_test/screenshots_pc_test.dart
 # (biblioteca de ejemplo en una carpeta temporal, sincronización de mentira), espera `PCSHOT READY` y guarda la
 # ventana X11 en el PNG que se le pase (por defecto docs/img/07b_sync_pc.png). Hace falta xwininfo y python3-gi.
+#   tool/screenshot_pc.sh [salida.png] [es|en]   -> el segundo argumento es el idioma del contenido de ejemplo (es por defecto)
+source "$(dirname "$0")/sin_ventana.sh"  # la app corre en una pantalla virtual (VER=1 para verla)
 set -e
 export PATH=~/flutter/bin:$PATH
 cd "$(dirname "$0")/.."
 OUT=${1:-docs/img/07b_sync_pc.png}
+L=${2:-en}
 LOG=$(mktemp)
-GDK_BACKEND=x11 flutter test integration_test/screenshots_pc_test.dart -d linux >"$LOG" 2>&1 &
+GDK_BACKEND=x11 flutter test integration_test/screenshots_pc_test.dart -d linux --dart-define=SHOT_LANG="$L" >"$LOG" 2>&1 &
 PID=$!
 trap 'kill $PID 2>/dev/null || true; rm -f "$LOG"' EXIT
 for _ in $(seq 1 600); do

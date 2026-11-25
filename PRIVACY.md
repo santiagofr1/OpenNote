@@ -1,7 +1,5 @@
 # Vynote Privacy Policy
 
-**English** · [Español](PRIVACIDAD.md)
-
 Last updated: November 21, 2026.
 
 Vynote is a free, open-source handwriting note-taking app (https://github.com/santiagofr1/Vynote).
@@ -26,7 +24,7 @@ This page explains what data it uses and where that data goes.
 
 ## How to delete your data
 
-- From the app: "Sincronización con Google Drive" (Google Drive sync) → "Desconectar" (Disconnect) revokes access.
+- From the app: "Google Drive sync" → "Disconnect" revokes access.
 - In your Drive, you can delete the `Vynote` folder whenever you want.
 - You can also remove access at https://myaccount.google.com/permissions.
 - Uninstalling the app deletes the data saved on the device.

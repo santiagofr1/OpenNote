@@ -1,51 +1,56 @@
+import '../l10n/app_localizations.dart';
 import 'elements.dart';
 import 'stroke.dart';
 
 enum Tool { pen, hl, paint, shape, text, select, title }
 
 /// Puntas del lápiz (id guardado en el trazo, nombre en pantalla).
-const tips = [
-  ('pen', 'Bolígrafo'),
-  ('fountain', 'Pluma'),
-  ('pencil', 'Lápiz'),
-  ('fine', 'Fibra'),
-  ('calli', 'Caligrafía'),
+final tips = <(String, String Function(L))>[
+  ('pen', (l) => l.tipPen),
+  ('fountain', (l) => l.tipFountain),
+  ('pencil', (l) => l.tipPencil),
+  ('fine', (l) => l.tipFine),
+  ('calli', (l) => l.tipCalligraphy),
 ];
 
 /// Tipos de trazo de la pintura (id guardado en `pp.st`, nombre en pantalla).
-const paintStyles = [('brush', 'Pincel'), ('hl', 'Resaltador'), ('marker', 'Fibra')];
+final paintStyles = <(String, String Function(L))>[
+  ('brush', (l) => l.paintStyleBrush),
+  ('hl', (l) => l.paintStyleHighlighter),
+  ('marker', (l) => l.paintStyleMarker),
+];
 
 /// Formas de la pintura decorativa (id guardado en el trazo, nombre en pantalla).
-const paintShapes = [
-  ('paint-stars', 'Estrellas'),
-  ('paint-hearts', 'Corazones'),
-  ('paint-sparkles', 'Destellos'),
-  ('paint-moons', 'Lunas'),
-  ('paint-dots', 'Puntos'),
-  ('paint-circles', 'Círculos'),
-  ('paint-bangs', 'Exclamaciones'),
-  ('paint-bolts', 'Rayos'),
-  ('paint-ticks', 'Ticks'),
-  ('paint-crosses', 'Cruces'),
-  ('paint-clouds', 'Nubes'),
-  ('paint-bubbles', 'Globos'),
-  ('paint-leaves', 'Hojas'),
-  ('paint-paws', 'Huellas'),
-  ('paint-triangles', 'Triángulos'),
-  ('paint-squares', 'Cuadrados'),
-  ('paint-diamonds', 'Rombos'),
-  ('paint-flowers', 'Flores'),
-  ('paint-notes', 'Notas'),
+final paintShapes = <(String, String Function(L))>[
+  ('paint-stars', (l) => l.paintShapeStars),
+  ('paint-hearts', (l) => l.paintShapeHearts),
+  ('paint-sparkles', (l) => l.paintShapeSparkles),
+  ('paint-moons', (l) => l.paintShapeMoons),
+  ('paint-dots', (l) => l.paintShapeDots),
+  ('paint-circles', (l) => l.paintShapeCircles),
+  ('paint-bangs', (l) => l.paintShapeExclamations),
+  ('paint-bolts', (l) => l.paintShapeBolts),
+  ('paint-ticks', (l) => l.paintShapeTicks),
+  ('paint-crosses', (l) => l.paintShapeCrosses),
+  ('paint-clouds', (l) => l.paintShapeClouds),
+  ('paint-bubbles', (l) => l.paintShapeBubbles),
+  ('paint-leaves', (l) => l.paintShapeLeaves),
+  ('paint-paws', (l) => l.paintShapePaws),
+  ('paint-triangles', (l) => l.paintShapeTriangles),
+  ('paint-squares', (l) => l.paintShapeSquares),
+  ('paint-diamonds', (l) => l.paintShapeDiamonds),
+  ('paint-flowers', (l) => l.paintShapeFlowers),
+  ('paint-notes', (l) => l.paintShapeNotes),
 ];
 
 /// Formas exactas (id guardado en prefs, nombre en pantalla).
-const shapeKinds = [
-  ('line', 'Recta'),
-  ('arrow', 'Flecha'),
-  ('rect', 'Rectángulo'),
-  ('circle', 'Círculo'),
-  ('ellipse', 'Elipse'),
-  ('triangle', 'Triángulo'),
+final shapeKinds = <(String, String Function(L))>[
+  ('line', (l) => l.shapeKindLine),
+  ('arrow', (l) => l.shapeKindArrow),
+  ('rect', (l) => l.shapeKindRectangle),
+  ('circle', (l) => l.shapeKindCircle),
+  ('ellipse', (l) => l.shapeKindEllipse),
+  ('triangle', (l) => l.shapeKindTriangle),
 ];
 
 /// Colores claros de relleno de las formas (se suman a los favoritos del lápiz).

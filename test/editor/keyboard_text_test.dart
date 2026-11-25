@@ -4,6 +4,7 @@ import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/editor/page_editor.dart';
 import 'package:apuntes/editor/rich_editing.dart';
+import 'package:apuntes/l10n/l10n.dart';
 import 'package:apuntes/rendering/text_layout.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -20,6 +21,10 @@ void main() {
     addTearDown(t.view.reset);
     final d = doc ?? NotebookDoc(Notebook.create('T'));
     await t.pumpWidget(MaterialApp(
+      localizationsDelegates: L.localizationsDelegates,
+      supportedLocales: L.supportedLocales,
+      locale: const Locale('es'),
+      
       home: Scaffold(
         body: PageEditor(
             doc: d,

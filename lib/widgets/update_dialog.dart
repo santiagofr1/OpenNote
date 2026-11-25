@@ -6,6 +6,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import '../data/updates.dart';
 import '../domain/version.dart';
+import '../l10n/l10n.dart';
 import 'dialogs.dart';
 
 enum UpdateChoice { later, skip, update }
@@ -20,7 +21,7 @@ Future<UpdateChoice?> showUpdateDialog(BuildContext context, UpdateInfo info, {A
     builder: (ctx) => AlertDialog(
       scrollable: true,
       icon: const Icon(Symbols.new_releases, weight: 300),
-      title: const Text('Hay una versión nueva de Vynote', textAlign: TextAlign.center),
+      title: Text(ctx.l10n.updateAvailableTitle, textAlign: TextAlign.center),
       content: SizedBox(
         width: 420,
         child: Column(
@@ -28,12 +29,14 @@ Future<UpdateChoice?> showUpdateDialog(BuildContext context, UpdateInfo info, {A
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              installed == null ? 'Versión nueva: ${info.version}' : 'Tenés la $installed  →  nueva ${info.version}',
+              installed == null
+                  ? ctx.l10n.updateNewVersion('${info.version}')
+                  : ctx.l10n.updateVersions('$installed', '${info.version}'),
               key: const Key('updateVersions'),
               style: theme.textTheme.titleMedium,
             ),
             const SizedBox(height: 16),
-            Text('Novedades', style: theme.textTheme.labelLarge),
+            Text(ctx.l10n.updateNotesTitle, style: theme.textTheme.labelLarge),
             const SizedBox(height: 6),
             ConstrainedBox(
               constraints: BoxConstraints(maxHeight: (MediaQuery.sizeOf(ctx).height * 0.25).clamp(80.0, 240.0)),
@@ -43,7 +46,7 @@ Future<UpdateChoice?> showUpdateDialog(BuildContext context, UpdateInfo info, {A
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      for (final n in notes.isEmpty ? const ['Mejoras y arreglos varios.'] : notes)
+                      for (final n in notes.isEmpty ? [ctx.l10n.updateNotesDefault] : notes)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 4),
                           child: Row(
@@ -61,7 +64,7 @@ Future<UpdateChoice?> showUpdateDialog(BuildContext context, UpdateInfo info, {A
             ),
             const SizedBox(height: 12),
             Text(
-              'Se baja de la página oficial del proyecto en GitHub. Tus cuadernos no se tocan: solo se actualiza la app.',
+              ctx.l10n.updateSourceInfo,
               style: small,
             ),
           ],
@@ -73,17 +76,17 @@ Future<UpdateChoice?> showUpdateDialog(BuildContext context, UpdateInfo info, {A
         TextButton(
           key: const Key('updateLater'),
           onPressed: () => Navigator.pop(ctx, UpdateChoice.later),
-          child: const Text('Ahora no'),
+          child: Text(ctx.l10n.commonNotNow),
         ),
         TextButton(
           key: const Key('updateSkip'),
           onPressed: () => Navigator.pop(ctx, UpdateChoice.skip),
-          child: const Text('Omitir esta versión'),
+          child: Text(ctx.l10n.updateSkip),
         ),
         FilledButton(
           key: const Key('updateNow'),
           onPressed: () => Navigator.pop(ctx, UpdateChoice.update),
-          child: const Text('Actualizar'),
+          child: Text(ctx.l10n.updateInstall),
         ),
       ],
     ),
@@ -117,7 +120,7 @@ Future<void> _downloadAndInstall(BuildContext context, UpdateInfo info) async {
     context: context,
     barrierDismissible: false,
     builder: (ctx) => AlertDialog(
-      title: const Text('Bajando la versión nueva'),
+      title: Text(ctx.l10n.updateDownloading),
       content: SizedBox(
         width: 360,
         child: ValueListenableBuilder<double?>(
@@ -128,12 +131,12 @@ Future<void> _downloadAndInstall(BuildContext context, UpdateInfo info) async {
             children: [
               LinearProgressIndicator(key: const Key('updateProgress'), value: v),
               const SizedBox(height: 8),
-              Text(v == null ? 'Conectando…' : '${(v * 100).round()} %'),
+              Text(v == null ? ctx.l10n.updateConnecting : '${(v * 100).round()} %'),
             ],
           ),
         ),
       ),
-      actions: [TextButton(key: const Key('updateCancel'), onPressed: cancel.cancel, child: const Text('Cancelar'))],
+      actions: [TextButton(key: const Key('updateCancel'), onPressed: cancel.cancel, child: Text(ctx.l10n.commonCancel))],
     ),
   );
   final nav = Navigator.of(context, rootNavigator: true);
@@ -146,7 +149,7 @@ Future<void> _downloadAndInstall(BuildContext context, UpdateInfo info) async {
   }
   if (!context.mounted || cancel.cancelled) return;
   if (file == null) {
-    snack(context, 'No pudimos bajar la actualización. Probá de nuevo en un rato.');
+    snack(context, context.l10n.updateDownloadFailed);
     return;
   }
   final r = await Updates.install(file);
@@ -158,17 +161,14 @@ Future<void> _downloadAndInstall(BuildContext context, UpdateInfo info) async {
       final go = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Un paso más'),
-          content: const Text(
-            'Android pide que le des permiso a Vynote para instalar su propia actualización. '
-            'Es una sola vez. Te llevamos a los ajustes: activá "Permitir de esta fuente", volvé y tocá Actualizar de nuevo.',
-          ),
+          title: Text(ctx.l10n.updateStepTitle),
+          content: Text(ctx.l10n.updatePermissionBody),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Ahora no')),
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.l10n.commonNotNow)),
             FilledButton(
               key: const Key('updateOpenSettings'),
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Ir a ajustes'),
+              child: Text(ctx.l10n.updateGoToSettings),
             ),
           ],
         ),
@@ -178,32 +178,32 @@ Future<void> _downloadAndInstall(BuildContext context, UpdateInfo info) async {
       final restart = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Vynote se actualizó'),
-          content: Text('Ya quedó instalada la ${info.version}. Reiniciá la app para usarla.'),
+          title: Text(ctx.l10n.updateDoneTitle),
+          content: Text(ctx.l10n.updateDoneBody('${info.version}')),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Después')),
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.l10n.commonLater)),
             FilledButton(
               key: const Key('updateRestart'),
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Reiniciar ahora'),
+              child: Text(ctx.l10n.updateRestartNow),
             ),
           ],
         ),
       );
       if (restart == true) await Updates.restart();
     case InstallResult.cancelled:
-      snack(context, 'Actualización cancelada.');
+      snack(context, context.l10n.updateCancelled);
     case InstallResult.manual:
       final cmd = 'sudo apt install ${file.path}';
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Instalala a mano'),
+          title: Text(ctx.l10n.updateManualTitle),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('No encontramos cómo pedir permisos de administrador. Abrí una terminal y corré:'),
+              Text(ctx.l10n.updateManualBody),
               const SizedBox(height: 12),
               SelectableText(cmd, key: const Key('updateManualCmd'), style: const TextStyle(fontFamily: 'monospace')),
             ],
@@ -212,11 +212,11 @@ Future<void> _downloadAndInstall(BuildContext context, UpdateInfo info) async {
             TextButton(
               onPressed: () async {
                 await Clipboard.setData(ClipboardData(text: cmd));
-                if (ctx.mounted) snack(ctx, 'Comando copiado');
+                if (ctx.mounted) snack(ctx, ctx.l10n.updateCommandCopied);
               },
-              child: const Text('Copiar'),
+              child: Text(ctx.l10n.commonCopy),
             ),
-            FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('Listo')),
+            FilledButton(onPressed: () => Navigator.pop(ctx), child: Text(ctx.l10n.commonDone)),
           ],
         ),
       );
@@ -224,8 +224,8 @@ Future<void> _downloadAndInstall(BuildContext context, UpdateInfo info) async {
       snack(
         context,
         Updates.platform() == UpdatePlatform.android
-            ? 'No pudimos abrir el instalador. Probá de nuevo en un rato.'
-            : 'No se pudo instalar la actualización. Probá de nuevo en un rato.',
+            ? context.l10n.updateInstallerFailed
+            : context.l10n.updateInstallFailed,
       );
   }
 }

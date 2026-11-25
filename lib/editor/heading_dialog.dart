@@ -1,6 +1,7 @@
 // ignore_for_file: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import '../l10n/l10n.dart';
 
 const _kMaxTitle = 120, _kMaxLevel = 9;
 
@@ -75,7 +76,7 @@ class _HeadingDialogState extends State<_HeadingDialog> {
     final help = TextStyle(fontSize: 13, color: cs.onSurfaceVariant);
     return AlertDialog(
       scrollable: true,
-      title: const Text('Agregar al índice'),
+      title: Text(context.l10n.headingTitle),
       content: SizedBox(
         width: 360,
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -87,7 +88,7 @@ class _HeadingDialogState extends State<_HeadingDialog> {
               focusNode: _focus,
               autofocus: widget.recognizing == null,
               textCapitalization: TextCapitalization.sentences,
-              decoration: InputDecoration(hintText: _failed ? 'No se pudo leer: escribí el nombre' : 'Nombre'),
+              decoration: InputDecoration(hintText: _failed ? context.l10n.headingFailed : context.l10n.headingHint),
               onSubmitted: (_) => _ok(),
             ),
           ),
@@ -100,8 +101,8 @@ class _HeadingDialogState extends State<_HeadingDialog> {
                 Expanded(
                   child: Text(
                       widget.downloading
-                          ? 'Bajando el reconocimiento de letra, solo la primera vez (podés escribir el nombre mientras tanto)…'
-                          : 'Leyendo la letra… (podés escribir el nombre mientras tanto)',
+                          ? context.l10n.headingDownloading
+                          : context.l10n.headingReading,
                       style: help),
                 ),
               ]),
@@ -110,28 +111,28 @@ class _HeadingDialogState extends State<_HeadingDialog> {
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             IconButton(
                 key: const Key('headingLevelDown'),
-                tooltip: 'Más importante',
+                tooltip: context.l10n.headingMoreImportant,
                 onPressed: _level > 1 ? () => setState(() => _level--) : null,
                 icon: const Icon(Symbols.remove, weight: 300)),
             SizedBox(
               width: 84,
-              child: Text('Título $_level',
+              child: Text(context.l10n.headingLevel(_level),
                   key: const Key('headingLevel'), textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
             ),
             IconButton(
                 key: const Key('headingLevelUp'),
-                tooltip: 'Menos importante',
+                tooltip: context.l10n.headingLessImportant,
                 onPressed: _level < _kMaxLevel ? () => setState(() => _level++) : null,
                 icon: const Icon(Symbols.add, weight: 300)),
           ]),
         ]),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(context.l10n.commonCancel)),
         ListenableBuilder(
           listenable: _ctrl,
           builder: (_, _) => FilledButton(
-              key: const Key('headingOk'), onPressed: _ctrl.text.trim().isEmpty ? null : _ok, child: const Text('Agregar')),
+              key: const Key('headingOk'), onPressed: _ctrl.text.trim().isEmpty ? null : _ok, child: Text(context.l10n.headingAdd)),
         ),
       ],
     );

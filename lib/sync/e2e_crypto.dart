@@ -25,7 +25,8 @@ const _macLen = 16;
 
 /// La frase no sirve para abrir la nube (o el archivo no se pudo descifrar con esta clave).
 class WrongPassphraseException extends RemoteException {
-  const WrongPassphraseException([super.message = 'La frase de cifrado es incorrecta']);
+  const WrongPassphraseException([String? message])
+      : super(message ?? 'La frase de cifrado es incorrecta', kind: message == null ? SyncError.wrongPassphrase : SyncError.other);
 }
 
 /// Un archivo de la nube no está cifrado como se esperaba o está dañado.

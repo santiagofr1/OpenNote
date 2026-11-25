@@ -9,16 +9,17 @@ trigger a release. It can also be started by hand from **Actions → Release →
 The `.github/workflows/release.yml` workflow:
 
 1. Runs `flutter pub get`, `flutter analyze --no-fatal-infos` and `flutter test`.
-2. Computes the version from the GitHub Actions run number:
-   - `versionName`: `1.0.<run_number>` (for example, `1.0.42`).
-   - `versionCode`: `<run_number> + 100` (for example, `142`), always greater than the local `1`.
+2. Computes the version once, in the `version` job, with `tool/version.sh` (see "Version numbers" below):
+   - `versionName`: `MAJOR.MINOR` from `version:` in `pubspec.yaml`, plus the next PATCH after the highest existing
+     `vMAJOR.MINOR.*` tag (for example, `1.1.3`; `1.1.0` for the first release of a series).
+   - `versionCode`: `<run_number> + 200`, so it keeps growing with every run and Android updates never break.
 3. Signs the APK with the release key stored in the repository secrets.
-4. Publishes the APK as `Vynote-v1.0.<run_number>.apk` in a GitHub Release tagged
-   `v1.0.<run_number>`, using the commit subjects since the previous `v*` tag as the release notes.
+4. Publishes the APK as `Vynote-v<versionName>.apk` in a GitHub Release tagged `v<versionName>`, using the commit
+   subjects since the previous `v*` tag as the release notes.
 5. Marks that release as the latest (`make_latest`).
 
 Then the `linux` job runs (Ubuntu 24.04, `needs: release`): it runs `flutter build linux --release`, builds
-`vynote_<version>_amd64.deb` with `tool/build_deb.sh` (same version `1.0.<run_number>`, with the Google IDs
+`vynote_<version>_amd64.deb` with `tool/build_deb.sh` (same version, with the Google IDs
 from the same secrets) and uploads it to the same release with `gh release upload`. If that job fails, the APK
 and the Android update notice keep working (the app only picks the `.apk` asset). The release notes include
 the installation instructions for Linux. At the end it notifies the apt repo (`santiagofr1/apt`) with a
@@ -28,7 +29,7 @@ index. The `APT_DISPATCH_TOKEN` secret is optional (a fine-grained token with *C
 anyway. For apt to pick it up, `santiagofr1/Vynote` must be listed in that repo's `apps.txt`.
 
 The `windows` job (`windows-latest`, `needs: release`) follows the same pattern: it runs
-`flutter build windows --release` (`--build-name=1.0.<run_number>`, `--build-number=<run_number> + 100`, with the
+`flutter build windows --release` (`--build-name=<versionName>`, `--build-number=<versionCode>`, with the
 Google IDs from the same secrets), builds the installer with Inno Setup (`windows/installer/vynote.iss`, version
 passed via `/DAppVersion=`; it uses `iscc` and, if that is missing, runs `choco install innosetup`) and uploads
 `Vynote-v<version>-windows-setup.exe` to the same release with `softprops/action-gh-release@v2`. The installer's
@@ -141,3 +142,17 @@ keyPassword=...
 
 If the file does not exist, `android/app/build.gradle.kts` uses the debug signing so that
 `./build_install.sh` and `flutter run --release` keep working in development.
+
+## Version numbers
+
+Versions follow `MAJOR.MINOR.PATCH`:
+
+- **PATCH** (`1.1.3`): only fixes, performance or wording. Nothing new for the user. It is computed automatically.
+- **MINOR** (`1.2.0`): the release brings at least one new feature or a visible change in how something is used.
+  Bump it by hand in `pubspec.yaml` (`version: 1.2.0+1`) in the same merge to `main` that brings the feature; the next
+  release starts at `1.2.0`.
+- **MAJOR** (`2.0.0`): compatibility breaks (an older version can no longer open the notebooks or the sync of the new
+  one) or there is a big redesign.
+
+Only the `MAJOR.MINOR` part of `pubspec.yaml` matters; the patch and the build number there are ignored by the
+workflow. `tool/version.sh` prints the version the next release will get.

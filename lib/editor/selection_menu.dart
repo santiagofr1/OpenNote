@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../domain/domain.dart';
+import '../l10n/l10n.dart';
 
 /// Barrita oscura sobre la selección: copiar, cortar, duplicar, orden (capas), eliminar, deseleccionar.
 class SelectionMenu extends StatelessWidget {
@@ -53,14 +54,14 @@ class SelectionMenu extends StatelessWidget {
     );
     Widget order() => PopupMenuButton<ZMove>(
       key: const Key('selOrder'),
-      tooltip: 'Orden',
+      tooltip: context.l10n.selOrder,
       onSelected: onOrder,
       position: PopupMenuPosition.under,
-      itemBuilder: (_) => const [
-        PopupMenuItem(value: ZMove.front, child: Text('Traer al frente')),
-        PopupMenuItem(value: ZMove.up, child: Text('Subir uno')),
-        PopupMenuItem(value: ZMove.down, child: Text('Bajar uno')),
-        PopupMenuItem(value: ZMove.back, child: Text('Enviar al fondo')),
+      itemBuilder: (_) => [
+        PopupMenuItem(value: ZMove.front, child: Text(context.l10n.selFront)),
+        PopupMenuItem(value: ZMove.up, child: Text(context.l10n.selUp)),
+        PopupMenuItem(value: ZMove.down, child: Text(context.l10n.selDown)),
+        PopupMenuItem(value: ZMove.back, child: Text(context.l10n.selBack)),
       ],
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
@@ -69,7 +70,7 @@ class SelectionMenu extends StatelessWidget {
           children: [
             Icon(Symbols.layers, size: 19, weight: 300, color: fg),
             const SizedBox(width: 6),
-            Text('Orden', style: TextStyle(color: fg, fontSize: 14)),
+            Text(context.l10n.selOrder, style: TextStyle(color: fg, fontSize: 14)),
           ],
         ),
       ),
@@ -83,20 +84,20 @@ class SelectionMenu extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            b(Symbols.content_copy, 'Copiar', onCopy),
-            b(Symbols.content_cut, 'Cortar', onCut),
-            b(Symbols.control_point_duplicate, 'Duplicar', onDuplicate),
+            b(Symbols.content_copy, context.l10n.commonCopy, onCopy),
+            b(Symbols.content_cut, context.l10n.formatCut, onCut),
+            b(Symbols.control_point_duplicate, context.l10n.selDuplicate, onDuplicate),
             order(),
-            if (onRename != null) b(Symbols.edit, 'Renombrar', onRename!),
-            if (onLink != null) b(Symbols.link, 'Link', onLink!),
-            if (onEditLink != null) b(Symbols.edit, 'Editar link', onEditLink!),
-            if (onRemoveLink != null) b(Symbols.link_off, 'Quitar link', onRemoveLink!),
-            if (onStraighten != null) b(Symbols.format_align_left, 'Enderezar', onStraighten!),
-            b(Symbols.delete, 'Eliminar', onDelete),
+            if (onRename != null) b(Symbols.edit, context.l10n.commonRename, onRename!),
+            if (onLink != null) b(Symbols.link, context.l10n.selLink, onLink!),
+            if (onEditLink != null) b(Symbols.edit, context.l10n.selEditLink, onEditLink!),
+            if (onRemoveLink != null) b(Symbols.link_off, context.l10n.selRemoveLink, onRemoveLink!),
+            if (onStraighten != null) b(Symbols.format_align_left, context.l10n.selStraighten, onStraighten!),
+            b(Symbols.delete, context.l10n.selDelete, onDelete),
             IconButton(
               onPressed: onClose,
               icon: Icon(Symbols.close, size: 19, weight: 300, color: fg.withValues(alpha: .75)),
-              tooltip: 'Deseleccionar',
+              tooltip: context.l10n.selDeselect,
             ),
           ],
         ),

@@ -7,6 +7,7 @@ import 'dart:math' show max, min;
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path_provider/path_provider.dart';
 
 import '../domain/domain.dart';
@@ -94,7 +95,28 @@ class Storage {
 
   /// Escribe a un temporal y renombra: si se corta a la mitad, el archivo viejo queda entero.
   /// Las escrituras al mismo archivo se hacen una después de la otra.
-  Future<void> _writeBytes(File f, List<int> data) {
+  Future<void> _writeBytes(File f, List<int> data) => _track(_writeBytesRaw(f, data));
+
+  // escrituras en curso de todas las instancias: los tests esperan a que terminen antes de borrar su carpeta
+  static final _inflight = <Future<void>>{};
+
+  static Future<T> _track<T>(Future<T> f) {
+    final v = f.then<void>((_) {}, onError: (_) {});
+    _inflight.add(v);
+    v.whenComplete(() => _inflight.remove(v));
+    return f;
+  }
+
+  /// Espera (hasta ~5 s) a que terminen todas las escrituras en curso. Solo para tests.
+  @visibleForTesting
+  static Future<void> settleWrites() async {
+    final end = DateTime.now().add(const Duration(seconds: 5));
+    while (_inflight.isNotEmpty && DateTime.now().isBefore(end)) {
+      await Future.wait(_inflight.toList());
+    }
+  }
+
+  Future<void> _writeBytesRaw(File f, List<int> data) {
     final prev = _writing[f.path] ?? Future.value();
     final run = prev.catchError((_) {}).then((_) async {
       await f.parent.create(recursive: true);
@@ -112,7 +134,7 @@ class Storage {
 
   // ================= índice =================
   /// Lee el índice. Si está en el formato viejo (páginas), lo convierte antes (ver [migrateLegacy]).
-  Future<NotesIndex> loadIndex() async {
+  Future<NotesIndex> loadIndex({String sampleName = 'Mi cuaderno'}) async {
     Map? j;
     try {
       final text = await indexFile.readAsString();
@@ -126,7 +148,7 @@ class Storage {
     }
     if (j == null) {
       // primera vez: cuaderno de ejemplo
-      final nb = Notebook.create('Mi cuaderno');
+      final nb = Notebook.create(sampleName);
       final idx = NotesIndex(last: nb.id, notebooks: [nb]);
       await saveNotebook(NotebookDoc(nb));
       await saveIndex(idx);
@@ -607,9 +629,21 @@ class Storage {
 
   /// Mezcla [p] con lo que ya hay: así las herramientas y las opciones de actualización
   /// (que se guardan por separado) no se pisan entre sí.
-  Future<void> savePrefs(Map<String, dynamic> p) async {
+  /// Lo que se guardó en esta sesión (lo último gana). Cada guardado escribe todo esto encima de lo que hay en disco:
+  /// dos guardados seguidos sin esperar no se pisan aunque se crucen.
+  final Map<String, dynamic> _prefsSet = {};
+
+  Future<void> savePrefs(Map<String, dynamic> p) {
+    _prefsSet.addAll(p);
+    return _track(_savePrefs(p));
+  }
+
+  /// Las preferencias con lo último que se eligió, aunque todavía no haya terminado de escribirse.
+  Future<Map?> loadPrefsSettled() async => {...?(await loadPrefs()), ..._prefsSet};
+
+  Future<void> _savePrefs(Map<String, dynamic> p) async {
     final prev = await loadPrefs();
-    await _writeJson(_prefs, {...?prev?.cast<String, dynamic>(), ...p});
+    await _writeJson(_prefs, {...?prev?.cast<String, dynamic>(), ..._prefsSet});
   }
 }
 

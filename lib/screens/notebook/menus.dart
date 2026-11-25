@@ -4,6 +4,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../../data/export_folder.dart';
 import '../../data/storage.dart';
 import '../../domain/domain.dart';
+import '../../l10n/l10n.dart';
 import '../../widgets/menu_row.dart';
 
 // Menús de la barra del cuaderno. Devuelven el valor elegido (los mismos que reciben
@@ -14,35 +15,55 @@ Future<String?> showInsertMenu(BuildContext context, Offset at, {bool canvas = f
       context: context,
       position: RelativeRect.fromLTRB(at.dx - 200, at.dy, at.dx, at.dy),
       items: [
-        const PopupMenuItem(value: 'pdf', child: MenuRow(Symbols.picture_as_pdf, 'PDF')),
-        const PopupMenuItem(value: 'voice', child: MenuRow(Symbols.mic, 'Grabación de voz')),
+        PopupMenuItem(value: 'pdf', child: MenuRow(Symbols.picture_as_pdf, context.l10n.menuInsertPdf)),
+        PopupMenuItem(value: 'voice', child: MenuRow(Symbols.mic, context.l10n.menuInsertVoice)),
         const PopupMenuDivider(),
-        const PopupMenuItem(value: 'image', child: MenuRow(Symbols.image, 'Imagen')),
-        const PopupMenuItem(value: 'camera', child: MenuRow(Symbols.photo_camera, 'Cámara')),
-        const PopupMenuItem(value: 'audio', child: MenuRow(Symbols.music_note, 'Archivo de audio')),
-        const PopupMenuItem(value: 'sticky', child: MenuRow(Symbols.sticky_note_2, 'Nota adhesiva')),
-        if (!canvas) const PopupMenuItem(value: 'sheet', child: MenuRow(Symbols.note_add, 'Hoja nueva')),
+        PopupMenuItem(value: 'image', child: MenuRow(Symbols.image, context.l10n.menuInsertImage)),
+        PopupMenuItem(value: 'camera', child: MenuRow(Symbols.photo_camera, context.l10n.menuInsertCamera)),
+        PopupMenuItem(value: 'audio', child: MenuRow(Symbols.music_note, context.l10n.menuInsertAudio)),
+        PopupMenuItem(value: 'sticky', child: MenuRow(Symbols.sticky_note_2, context.l10n.menuInsertSticky)),
+        if (!canvas) PopupMenuItem(value: 'sheet', child: MenuRow(Symbols.note_add, context.l10n.menuInsertSheet)),
       ],
     );
 
 /// Menú ⋮ anclado en [at]. Abajo, una fila de íconos con keys `more-<valor>`.
-Future<String?> showMoreMenu(BuildContext context, Offset at, Notebook nb) => showMenu<String>(
+/// Con [compact] (teléfono vertical) arriba van lectura, marcador y pantalla completa, que no entran en la barra.
+Future<String?> showMoreMenu(BuildContext context, Offset at, Notebook nb, {({bool reading, bool bookmark})? compact}) =>
+    showMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(at.dx - 260, at.dy, at.dx, at.dy),
       items: [
-        const PopupMenuItem(value: 'search', child: MenuRow(Symbols.search, 'Buscar')),
-        PopupMenuItem(value: 'style', child: MenuRow(Symbols.palette, nb.canvas ? 'Color del papel' : 'Estilo de hoja')),
-        const PopupMenuItem(value: 'shortcuts', child: MenuRow(Symbols.keyboard, 'Atajos de teclado')),
+        if (compact != null) ...[
+          PopupMenuItem(
+              value: 'reading',
+              key: const Key('more-reading'),
+              child: MenuRow(Symbols.menu_book, compact.reading ? context.l10n.menuMoreReadingExit : context.l10n.menuMoreReading)),
+          PopupMenuItem(
+              value: 'bookmark',
+              key: const Key('more-bookmark'),
+              child: MenuRow(Symbols.bookmark, compact.bookmark ? context.l10n.menuMoreBookmarkRemove : context.l10n.menuMoreBookmarkAdd)),
+          PopupMenuItem(
+              value: 'fullscreen',
+              key: const Key('more-fullscreen'),
+              child: MenuRow(Symbols.open_in_full, context.l10n.menuMoreFullscreen)),
+          const PopupMenuDivider(),
+        ],
+        PopupMenuItem(value: 'search', child: MenuRow(Symbols.search, context.l10n.commonSearch)),
+        PopupMenuItem(
+            value: 'style',
+            child: MenuRow(Symbols.palette, nb.canvas ? context.l10n.menuMorePaperColor : context.l10n.menuMoreStyle)),
+        PopupMenuItem(value: 'shortcuts', child: MenuRow(Symbols.keyboard, context.l10n.menuMoreShortcuts)),
         const PopupMenuDivider(),
-        const PopupMenuItem(value: 'export', child: MenuRow(Symbols.ios_share, 'Exportar')),
+        PopupMenuItem(value: 'export', child: MenuRow(Symbols.ios_share, context.l10n.commonExport)),
         const PopupMenuDivider(),
         _IconRow([
-          (Symbols.star, nb.favorite ? 'Quitar de favoritos' : 'Favorito', 'fav', nb.favorite),
-          (nb.pin != null ? Symbols.lock : Symbols.lock_open, nb.pin != null ? 'Quitar bloqueo' : 'Bloquear con PIN', 'lock',
-              nb.pin != null),
-          (Symbols.share, 'Compartir', 'share', false),
-          (Symbols.print, 'Imprimir', 'print', false),
-          (Symbols.delete, 'Borrar cuaderno', 'delete', false),
+          (Symbols.star, nb.favorite ? context.l10n.menuMoreFavoriteRemove : context.l10n.menuMoreFavoriteAdd, 'fav',
+              nb.favorite),
+          (nb.pin != null ? Symbols.lock : Symbols.lock_open,
+              nb.pin != null ? context.l10n.menuMoreLockRemove : context.l10n.menuMoreLockAdd, 'lock', nb.pin != null),
+          (Symbols.share, context.l10n.menuMoreShare, 'share', false),
+          (Symbols.print, context.l10n.menuMorePrint, 'print', false),
+          (Symbols.delete, context.l10n.menuMoreDeleteNotebook, 'delete', false),
         ]),
       ],
     );
@@ -101,11 +122,11 @@ Future<FolderExportFormat?> showFolderExportSheet(BuildContext context) {
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-              child: Text('Exportar carpeta', style: Theme.of(ctx).textTheme.titleLarge)),
-          tile(Symbols.picture_as_pdf, 'PDF', 'Un PDF por cuaderno', FolderExportFormat.pdf),
-          tile(Symbols.photo_library, 'Imágenes (PNG)', 'Una carpeta por cuaderno con una imagen por hoja',
+              child: Text(ctx.l10n.menuExportFolderTitle, style: Theme.of(ctx).textTheme.titleLarge)),
+          tile(Symbols.picture_as_pdf, ctx.l10n.menuExportFormatPdf, ctx.l10n.menuExportFolderPdf, FolderExportFormat.pdf),
+          tile(Symbols.photo_library, ctx.l10n.menuExportFormatPng, ctx.l10n.menuExportFolderPng,
               FolderExportFormat.png),
-          tile(Symbols.archive, 'Vynote', 'Un .vynote por cuaderno, para pasarlo a otro dispositivo',
+          tile(Symbols.archive, ctx.l10n.menuExportFormatVynote, ctx.l10n.menuExportFolderVynote,
               FolderExportFormat.vynote),
         ]),
       ),
@@ -138,12 +159,12 @@ Future<String?> showExportSheet(BuildContext context, Storage store, ToolState t
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-              child: Text('Exportar', style: Theme.of(ctx).textTheme.titleLarge)),
+              child: Text(ctx.l10n.commonExport, style: Theme.of(ctx).textTheme.titleLarge)),
           StatefulBuilder(
             builder: (ctx, setS) => SwitchListTile(
               key: const Key('exportBg'),
-              title: const Text('Incluir el fondo de la hoja'),
-              subtitle: const Text('Apagado: solo lo escrito, sobre blanco'),
+              title: Text(ctx.l10n.menuExportBackground),
+              subtitle: Text(ctx.l10n.menuExportBackgroundOff),
               value: tools.exportBackground,
               onChanged: (v) {
                 setS(() => tools.exportBackground = v);
@@ -151,14 +172,13 @@ Future<String?> showExportSheet(BuildContext context, Storage store, ToolState t
               },
             ),
           ),
-          tile(Symbols.picture_as_pdf, 'PDF', 'Todo el cuaderno', 'pdf'),
-          tile(Symbols.photo_library, 'Imágenes (PNG)', 'Todas las hojas, en un .zip', 'png'),
-          tile(Symbols.archive, 'Cuaderno de Vynote (.vynote)', 'Para pasarlo a otro dispositivo o hacer copia',
-              'vynote'),
+          tile(Symbols.picture_as_pdf, ctx.l10n.menuExportFormatPdf, ctx.l10n.menuExportAllPdf, 'pdf'),
+          tile(Symbols.photo_library, ctx.l10n.menuExportFormatPng, ctx.l10n.menuExportAllPng, 'png'),
+          tile(Symbols.archive, ctx.l10n.menuExportVynoteTitle, ctx.l10n.menuExportVynoteHint, 'vynote'),
           if (sheetName != null) ...[
             const Divider(indent: 16, endIndent: 16),
-            tile(Symbols.description, 'PDF de esta hoja', sheetName, 'sheet'),
-            tile(Symbols.image, 'Imagen de esta hoja (PNG)', sheetName, 'sheetpng'),
+            tile(Symbols.description, ctx.l10n.menuExportSheetPdf, sheetName, 'sheet'),
+            tile(Symbols.image, ctx.l10n.menuExportSheetPng, sheetName, 'sheetpng'),
           ],
         ]),
       ),

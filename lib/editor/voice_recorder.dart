@@ -39,10 +39,16 @@ class RecordAudioSource implements AudioSource {
   Future<void> dispose() => _rec.dispose();
 }
 
+enum VoiceError { busy, noPermission, failed }
+
 /// No se pudo empezar a grabar; [message] se le puede mostrar al usuario.
 class VoiceException implements Exception {
   final String message;
-  const VoiceException(this.message);
+
+  /// Qué pasó (para mostrarlo en el idioma de la app) y el detalle técnico, si hay.
+  final VoiceError kind;
+  final String? detail;
+  const VoiceException(this.message, {this.kind = VoiceError.failed, this.detail});
   @override
   String toString() => message;
 }
@@ -88,11 +94,11 @@ class VoiceRecorder extends ChangeNotifier {
   /// Empieza a grabar el audio de [itemId] en `media/[file]` (con `.tmp` hasta parar). [VoiceException] si ya hay una grabación
   /// o no se puede (sin permiso del micrófono, etc.): en ese caso no queda nada en disco.
   Future<void> start(String itemId, String file) async {
-    if (busy) throw const VoiceException('Ya hay una grabación en curso');
+    if (busy) throw const VoiceException('Ya hay una grabación en curso', kind: VoiceError.busy);
     _starting = true;
     final src = sourceFactory();
     try {
-      if (!await src.hasPermission()) throw const VoiceException('Sin permiso para usar el micrófono');
+      if (!await src.hasPermission()) throw const VoiceException('Sin permiso para usar el micrófono', kind: VoiceError.noPermission);
       await store.media('$file.tmp').parent.create(recursive: true);
       await src.start(store.media('$file.tmp').path);
     } on VoiceException {
@@ -100,7 +106,7 @@ class VoiceRecorder extends ChangeNotifier {
       rethrow;
     } catch (e) {
       await _quiet(src.dispose);
-      throw VoiceException('No se pudo grabar: $e');
+      throw VoiceException('No se pudo grabar: $e', kind: VoiceError.failed, detail: '$e');
     } finally {
       _starting = false;
     }

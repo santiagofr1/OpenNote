@@ -106,7 +106,7 @@ extension FolderOps on NotesIndex {
   }
 
   /// "Inicio" o "Inicio / Facultad / Análisis".
-  String pathLabel(String? id) => ['Inicio', ...pathOf(id).map((f) => f.name)].join(' / ');
+  String pathLabel(String? id, {String home = 'Inicio'}) => [home, ...pathOf(id).map((f) => f.name)].join(' / ');
 
   /// Mueve un cuaderno a [folder] (null = inicio).
   void moveNotebook(Notebook nb, String? folder) => nb.folder = folder;

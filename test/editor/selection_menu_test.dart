@@ -1,5 +1,6 @@
 import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/editor/selection_menu.dart';
+import 'package:apuntes/l10n/l10n.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -7,6 +8,10 @@ void main() {
   testWidgets('el menú Orden ofrece las cuatro acciones y avisa cuál se eligió', (t) async {
     final got = <ZMove>[];
     await t.pumpWidget(MaterialApp(
+      localizationsDelegates: L.localizationsDelegates,
+      supportedLocales: L.supportedLocales,
+      locale: const Locale('es'),
+      
       home: Scaffold(
         body: Center(
           child: SelectionMenu(

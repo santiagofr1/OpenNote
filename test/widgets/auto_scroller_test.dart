@@ -1,3 +1,4 @@
+import 'package:apuntes/l10n/l10n.dart';
 import 'package:apuntes/widgets/auto_scroller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +15,10 @@ void main() {
   Future<(ScrollController, GlobalKey)> build(WidgetTester t, Axis axis) async {
     final c = ScrollController(), key = GlobalKey();
     await t.pumpWidget(MaterialApp(
+      localizationsDelegates: L.localizationsDelegates,
+      supportedLocales: L.supportedLocales,
+      locale: const Locale('es'),
+      
       home: Align(
         alignment: Alignment.topLeft,
         child: SizedBox(

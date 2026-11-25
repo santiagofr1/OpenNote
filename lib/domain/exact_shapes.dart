@@ -4,6 +4,9 @@ library;
 import 'dart:math';
 import 'dart:ui' show Offset, Rect;
 
+import 'package:intl/intl.dart';
+
+import '../l10n/app_localizations.dart';
 import 'shape_recognizer.dart';
 
 const _lineKinds = {'line', 'arrow'};
@@ -58,22 +61,24 @@ List<double> exactShapePoints(String kind, Offset a, Offset b) {
   return exactShapeFit(kind, a, b).toPoints(.5);
 }
 
-String _n1(double v) => v.toStringAsFixed(1).replaceAll('.', ',');
+String _n1(double v, [String? locale]) =>
+    locale == null ? v.toStringAsFixed(1).replaceAll('.', ',') : NumberFormat('0.0', locale).format(v);
 
 /// Texto con las medidas de la forma en mm reales ([unitsPerMm] de la hoja).
-String shapeMeasure(String kind, Offset a, Offset b, double unitsPerMm) {
+String shapeMeasure(String kind, Offset a, Offset b, double unitsPerMm, {L? l}) {
+  final loc = l?.localeName;
   final d = b - a, w = d.dx.abs() / unitsPerMm, h = d.dy.abs() / unitsPerMm;
   switch (kind) {
     case 'line' || 'arrow':
       var deg = (atan2(-d.dy, d.dx) * 180 / pi).round() % 360;
       if (deg < 0) deg += 360;
-      return '${_n1(d.distance / unitsPerMm)} mm · $deg°';
+      return '${_n1(d.distance / unitsPerMm, loc)} mm · $deg°';
     case 'circle':
-      return 'r ${_n1(d.distance / unitsPerMm)} mm';
+      return 'r ${_n1(d.distance / unitsPerMm, loc)} mm';
     case 'triangle':
-      return 'base ${_n1(w)} · alto ${_n1(h)} mm';
+      return l == null ? 'base ${_n1(w)} · alto ${_n1(h)} mm' : l.shapeMeasureTriangle(_n1(w, loc), _n1(h, loc));
     default:
-      return '${_n1(w)} × ${_n1(h)} mm';
+      return '${_n1(w, loc)} × ${_n1(h, loc)} mm';
   }
 }
 

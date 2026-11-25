@@ -6,12 +6,15 @@ import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../data/export.dart';
+import '../../data/import_folder.dart';
 import '../../data/media_import.dart';
 import '../../data/vynote_file.dart';
 import '../../data/storage.dart';
 import '../../data/updates.dart';
 import '../../domain/domain.dart';
 import '../../domain/version.dart';
+import '../../l10n/l10n.dart';
+import '../../l10n/language_settings.dart';
 import '../../sync/background_sync.dart';
 import '../../sync/google_auth.dart';
 import '../../sync/google_config.dart';
@@ -24,6 +27,7 @@ import '../../widgets/dialogs.dart';
 import '../../widgets/pdf_progress.dart';
 import '../../widgets/update_dialog.dart';
 import '../notebook/menus.dart';
+import '../settings/settings_screen.dart';
 import '../notebook/notebook_screen.dart';
 import '../notebook/sections_menu.dart';
 import 'folder_card.dart';
@@ -119,10 +123,11 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     await store.init();
     store.onSaved = (_) => sync.notifySaved();
     final prefs = await store.loadPrefs();
+    if (mounted) LanguageScope.maybeOf(context)?.load(prefs);
     _setupBackgroundSync(prefs);
     tools.load(prefs);
     updPrefs = UpdatePrefs.from(prefs);
-    final idx = await store.loadIndex();
+    final idx = await store.loadIndex(sampleName: mounted ? context.l10n.librarySampleNotebook : 'Mi cuaderno');
     setState(() => index = idx);
     unawaited(sync.init());
     WidgetsBinding.instance.addPostFrameCallback((_) => _autoUpdateCheck());
@@ -158,19 +163,19 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
   }
 
   /// "Buscar actualizaciones" a mano: ignora el plazo de 24 h y la versión omitida.
-  Future<void> _manualUpdateCheck() async {
-    snack(context, 'Buscando actualizaciones…', duration: const Duration(seconds: 2));
+  Future<void> manualUpdateCheck() async {
+    snack(context, context.l10n.updateChecking, duration: const Duration(seconds: 2));
     final r = await Updates.check();
     if (!mounted) return;
     if (r.failed) {
-      snack(context, 'No se pudo buscar actualizaciones ahora');
+      snack(context, context.l10n.updateCheckFailed);
       return;
     }
     updPrefs.lastCheck = DateTime.now().millisecondsSinceEpoch;
     await store.savePrefs(updPrefs.toJson());
     if (!mounted) return;
     if (r.update == null) {
-      snack(context, 'Ya tenés la última versión');
+      snack(context, context.l10n.updateUpToDate);
     } else {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       await _offer(r.update!);
@@ -198,45 +203,34 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     }
   }
 
+  /// Menú ⋮: sincronización con Google Drive y Ajustes.
   Future<void> _settings() async {
-    final check = await showSafeSheet<String>(
+    final pick = await showSafeSheet<String>(
       context,
-      (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => Padding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            ListTile(
-              key: const Key('checkUpdates'),
-              leading: const Icon(Symbols.system_update, weight: 300),
-              title: const Text('Buscar actualizaciones'),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              onTap: () => Navigator.pop(ctx, 'check'),
-            ),
-            ListTile(
-              key: const Key('syncMenu'),
-              leading: const Icon(Symbols.cloud_sync, weight: 300),
-              title: const Text('Sincronización con Google Drive'),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              onTap: () => Navigator.pop(ctx, 'sync'),
-            ),
-            SwitchListTile(
-              key: const Key('autoUpdates'),
-              secondary: const Icon(Symbols.update, weight: 300),
-              title: const Text('Buscar actualizaciones automáticamente'),
-              value: updPrefs.auto,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              onChanged: (v) {
-                setS(() => updPrefs.auto = v);
-                store.savePrefs(updPrefs.toJson());
-              },
-            ),
-          ]),
-        ),
+      (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            key: const Key('syncMenu'),
+            leading: const Icon(Symbols.cloud_sync, weight: 300),
+            title: Text(ctx.l10n.syncTitle),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            onTap: () => Navigator.pop(ctx, 'sync'),
+          ),
+          ListTile(
+            key: const Key('settingsMenu'),
+            leading: const Icon(Symbols.settings, weight: 300),
+            title: Text(ctx.l10n.settingsTitle),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            onTap: () => Navigator.pop(ctx, 'settings'),
+          ),
+        ]),
       ),
     );
-    if (check == 'check' && mounted) await _manualUpdateCheck();
-    if (check == 'sync' && mounted) {
-      await _openSyncSheet();
+    if (pick == 'sync' && mounted) await _openSyncSheet();
+    if (pick == 'settings' && mounted) {
+      await Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => SettingsScreen(store: store, updates: updPrefs, onCheckUpdates: manualUpdateCheck)));
     }
   }
 
@@ -249,10 +243,10 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
 
   Future<void> _open(Notebook nb, {bool askedPin = false}) async {
     if (nb.pin != null && !askedPin) {
-      final p = await askPin(context, nb.name, subtitle: 'Este cuaderno está bloqueado');
+      final p = await askPin(context, nb.name, subtitle: context.l10n.libraryLockedNotebook);
       if (p == null || !mounted) return;
       if (hashPin(p) != nb.pin) {
-        snack(context, 'PIN incorrecto');
+        snack(context, context.l10n.libraryWrongPin);
         return;
       }
     }
@@ -286,7 +280,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     if (_staleAfterSync) unawaited(_reloadAfterSync());
     if (!index!.notebooks.contains(nb)) {
       setState(() => thumbs.remove(nb.id)); // lo borraron desde adentro
-      snack(context, 'Cuaderno borrado');
+      snack(context, context.l10n.libraryNotebookDeleted);
       return;
     }
     setState(() {});
@@ -297,7 +291,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
       final id = result.substring(5);
       final target = index!.notebooks.where((n) => n.id == id).firstOrNull;
       if (target == null) {
-        snack(context, 'El cuaderno ya no existe');
+        snack(context, context.l10n.libraryNotebookGone);
       } else {
         return _open(target);
       }
@@ -313,9 +307,10 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             for (final (key, icon, label) in [
-              ('newNotebook', Symbols.note_add, 'Cuaderno nuevo'),
-              ('newFolder', Symbols.create_new_folder, 'Carpeta nueva'),
-              ('importNotebook', Symbols.upload_file, 'Importar cuaderno .vynote'),
+              ('newNotebook', Symbols.note_add, ctx.l10n.libraryNewNotebook),
+              ('newFolder', Symbols.create_new_folder, ctx.l10n.libraryNewFolder),
+              ('importNotebook', Symbols.upload_file, ctx.l10n.libraryImportNotebook),
+              ('importFolder', Symbols.folder_zip, ctx.l10n.libraryImportFolder),
             ])
               ListTile(
                 key: Key(key),
@@ -332,6 +327,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     if (v == 'newNotebook') await _createNotebook();
     if (v == 'newFolder') await _createFolder();
     if (v == 'importNotebook') await importVynote();
+    if (v == 'importFolder') await importFolder();
   }
 
   /// Elige un `.vynote` y lo agrega como cuaderno nuevo (en la carpeta actual). También lo usan los tests.
@@ -347,11 +343,68 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
       setState(() {
         if (t != null) thumbs[nb.id] = t;
       });
-      snack(context, 'Importado como "${nb.name}"');
-    } on VynoteException catch (e) {
-      if (mounted) snack(context, 'No se pudo importar: ${e.message}');
+      snack(context, context.l10n.libraryImportedAs(nb.name));
     } catch (e) {
-      if (mounted) snack(context, 'No se pudo importar: $e');
+      if (mounted) snack(context, context.l10n.libraryImportFailed(errText(context.l10n, e)));
+    }
+  }
+
+  /// Elige el `.zip` de una carpeta exportada como Vynote y la recrea (con sus subcarpetas) en la carpeta actual,
+  /// con progreso cancelable. También lo usan los tests.
+  Future<void> importFolder() async {
+    final bytes = await Pickers.folderZip();
+    if (bytes == null || !mounted) return;
+    final progress = ValueNotifier<(int, int, String)>((0, 1, ''));
+    final nav = Navigator.of(context);
+    var cancel = false;
+    unawaited(showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Text(ctx.l10n.libraryImportingFolder),
+        content: ValueListenableBuilder(
+          valueListenable: progress,
+          builder: (ctx, v, _) {
+            final style = TextStyle(color: Theme.of(ctx).colorScheme.onSurfaceVariant);
+            return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              LinearProgressIndicator(value: v.$2 == 0 ? null : v.$1 / v.$2, borderRadius: BorderRadius.circular(4)),
+              const SizedBox(height: 12),
+              Text(ctx.l10n.exportFolderProgress(v.$1 < v.$2 ? v.$1 + 1 : v.$2, v.$2), style: style),
+              if (v.$3.isNotEmpty) Text(v.$3, style: style.copyWith(fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+            ]);
+          },
+        ),
+        actions: [TextButton(key: const Key('cancelFolderImport'), onPressed: () => cancel = true, child: Text(ctx.l10n.commonCancel))],
+      ),
+    ));
+    try {
+      final before = {for (final n in index!.notebooks) n.id};
+      final r = await importFolderZip(store, index!, bytes,
+          parent: current, onProgress: (a, b, n) => progress.value = (a, b, n), cancelled: () => cancel);
+      if (nav.canPop()) nav.pop();
+      if (!mounted) return;
+      if (cancel) {
+        snack(context, context.l10n.libraryImportCancelled);
+        return;
+      }
+      await store.saveIndex(index!);
+      final loaded = <String, NotebookDoc>{};
+      for (final nb in index!.notebooks.where((n) => !before.contains(n.id))) {
+        final t = await store.loadSheetDoc(nb, 0);
+        if (t != null) loaded[nb.id] = t;
+      }
+      if (!mounted) return;
+      setState(() => thumbs.addAll(loaded));
+      final l = context.l10n;
+      final fail = r.failed.isEmpty ? '' : l.libraryImportUnreadable(r.failed.length);
+      snack(
+          context,
+          r.folder == null
+              ? l.libraryImportedMany(r.imported, fail)
+              : l.libraryImportedFolder(r.folder!.name, r.imported, fail));
+    } catch (e) {
+      if (nav.canPop()) nav.pop();
+      if (mounted) snack(context, context.l10n.libraryImportFailed(errText(context.l10n, e)));
     }
   }
 
@@ -360,14 +413,14 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     try {
       final bytes = await exportNotebookBytes(store, nb);
       final ok = await saveVynote(bytes, nb.name);
-      if (ok && mounted) snack(context, 'Cuaderno "${nb.name}" guardado');
+      if (ok && mounted) snack(context, context.l10n.libraryExportDone(nb.name));
     } catch (e) {
-      if (mounted) snack(context, 'No se pudo exportar: $e');
+      if (mounted) snack(context, context.l10n.libraryExportFailed(errText(context.l10n, e)));
     }
   }
 
   Future<void> _createFolder() async {
-    final name = (await askText(context, 'Carpeta nueva', hint: 'Ej: Facultad', ok: 'Crear'))?.trim();
+    final name = (await askText(context, context.l10n.libraryNewFolder, hint: context.l10n.libraryFolderHint, ok: context.l10n.commonCreate))?.trim();
     if (name == null || name.isEmpty) return;
     setState(() => index!.folders.add(Folder.create(name, parent: current)));
     await store.saveIndex(index!);
@@ -389,7 +442,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
   }
 
   Future<void> _rename(Notebook nb) async {
-    final n = (await askText(context, 'Renombrar cuaderno', initial: nb.name))?.trim();
+    final n = (await askText(context, context.l10n.libraryRenameNotebook, initial: nb.name))?.trim();
     if (n == null || n.isEmpty) return;
     setState(() => nb.name = n);
     await store.saveIndex(index!);
@@ -397,7 +450,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
 
   Future<void> _duplicate(Notebook nb) async {
     // se copian los archivos de las hojas: no se carga ni se decodifica nada del cuaderno
-    final copy = Notebook(newId('n'), '${nb.name} (copia)', bg: nb.bg, image: nb.image, paper: nb.paper, spacing: nb.spacing, size: nb.size, folder: nb.folder, canvas: nb.canvas, canvasW: nb.canvasW)
+    final copy = Notebook(newId('n'), context.l10n.libraryCopySuffix(nb.name), bg: nb.bg, image: nb.image, paper: nb.paper, spacing: nb.spacing, size: nb.size, folder: nb.folder, canvas: nb.canvas, canvasW: nb.canvasW)
       ..copySectionsFrom(nb) // las secciones y las hojas de TODAS (los archivos se copian todos)
       ..touch();
     await store.copyNotebookFiles(nb, copy);
@@ -406,7 +459,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     index!.notebooks.add(copy);
     await store.saveIndex(index!);
     setState(() {});
-    if (mounted) snack(context, 'Cuaderno duplicado');
+    if (mounted) snack(context, context.l10n.libraryDuplicated);
   }
 
   /// "Exportar" de la biblioteca: la misma hoja que el cuaderno, sin "PDF de esta hoja".
@@ -439,7 +492,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
   Future<void> _exportFolder(Folder f) async {
     final idx = index!;
     if (idx.notebookCount(f.id) == 0) {
-      snack(context, 'La carpeta está vacía');
+      snack(context, context.l10n.libraryFolderEmptyExport);
       return;
     }
     final fmt = await showFolderExportSheet(context);
@@ -460,11 +513,11 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
       });
 
   Future<void> _moveNotebook(Notebook nb) async {
-    final r = await askMoveTarget(context, index!, title: 'Mover "${nb.name}" a…', current: nb.folder);
+    final r = await askMoveTarget(context, index!, title: context.l10n.libraryMoveTitle(nb.name), current: nb.folder);
     if (r == null || !mounted) return;
     setState(() => index!.moveNotebook(nb, r.id));
     await store.saveIndex(index!);
-    if (mounted) snack(context, 'Movido a ${index!.pathLabel(r.id)}');
+    if (mounted) snack(context, context.l10n.libraryMovedTo(index!.pathLabel(r.id, home: context.l10n.libraryHome)));
   }
 
   /// Soltó un cuaderno o carpeta sobre una carpeta o miga de pan ([target]; null = Inicio).
@@ -482,9 +535,9 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     setState(() {});
     await store.saveIndex(idx);
     if (!mounted) return;
-    snack(context, '${nb != null ? 'Movido' : 'Movida'} a ${idx.pathLabel(target)}',
+    snack(context, nb != null ? context.l10n.libraryMovedTo(idx.pathLabel(target, home: context.l10n.libraryHome)) : context.l10n.libraryMovedFolderTo(idx.pathLabel(target, home: context.l10n.libraryHome)),
         action: SnackBarAction(
-          label: 'Deshacer',
+          label: context.l10n.libraryUndo,
           onPressed: () async {
             if (nb != null && idx.notebooks.contains(nb)) {
               idx.moveNotebook(nb, before);
@@ -502,7 +555,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
   }
 
   Future<void> _renameFolder(Folder f) async {
-    final n = (await askText(context, 'Renombrar carpeta', initial: f.name))?.trim();
+    final n = (await askText(context, context.l10n.libraryRenameFolder, initial: f.name))?.trim();
     if (n == null || n.isEmpty) return;
     setState(() => f
       ..name = n
@@ -512,12 +565,12 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
 
   Future<void> _moveFolder(Folder f) async {
     final r = await askMoveTarget(context, index!,
-        title: 'Mover "${f.name}" a…', current: f.parent, exclude: {f.id, ...index!.descendantIds(f.id)});
+        title: context.l10n.libraryMoveTitle(f.name), current: f.parent, exclude: {f.id, ...index!.descendantIds(f.id)});
     if (r == null || !mounted) return;
     if (!index!.moveFolder(f, r.id)) return;
     setState(() {});
     await store.saveIndex(index!);
-    if (mounted) snack(context, 'Movida a ${index!.pathLabel(r.id)}');
+    if (mounted) snack(context, context.l10n.libraryMovedFolderTo(index!.pathLabel(r.id, home: context.l10n.libraryHome)));
   }
 
   Future<void> _deleteFolder(Folder f) async {
@@ -525,15 +578,14 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     final empty = idx.notebooksIn(f.id).isEmpty && idx.childrenOf(f.id).isEmpty;
     FolderDelete? mode;
     if (empty) {
-      if (!await confirmDelete(context, 'Borrar "${f.name}"', 'La carpeta está vacía.')) return;
+      if (!await confirmDelete(context, context.l10n.deleteNotebookTitle(f.name), context.l10n.libraryFolderEmptyBody)) return;
       mode = FolderDelete.deleteContents;
     } else {
       mode = await _askFolderDelete(f);
       if (mode == null || !mounted) return;
       if (mode == FolderDelete.deleteContents) {
         final n = idx.notebookCount(f.id);
-        final ok = await confirmDelete(context, 'Borrar todo',
-            'Se borran la carpeta "${f.name}", sus subcarpetas y $n ${n == 1 ? 'cuaderno' : 'cuadernos'} con todas sus hojas. No se puede deshacer.');
+        final ok = await confirmDelete(context, context.l10n.libraryDeleteAllTitle, context.l10n.libraryDeleteAllBody(f.name, n));
         if (!ok || !mounted) return;
       }
     }
@@ -552,7 +604,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
   }
 
   Future<FolderDelete?> _askFolderDelete(Folder f) {
-    final parent = index!.pathOf(f.parent).isEmpty ? 'Inicio' : index!.folderById(f.parent)!.name;
+    final parent = index!.pathOf(f.parent).isEmpty ? context.l10n.libraryHome : index!.folderById(f.parent)!.name;
     return showDialog<FolderDelete>(
       context: context,
       builder: (ctx) {
@@ -560,21 +612,21 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
         return AlertDialog(
           scrollable: true,
           icon: Icon(Symbols.folder_delete, color: cs.error, weight: 300),
-          title: Text('Borrar "${f.name}"'),
-          content: Text('¿Qué hacemos con lo que tiene adentro?', style: TextStyle(color: cs.onSurfaceVariant)),
+          title: Text(ctx.l10n.deleteNotebookTitle(f.name)),
+          content: Text(ctx.l10n.libraryFolderWhatToDo, style: TextStyle(color: cs.onSurfaceVariant)),
           actionsOverflowDirection: VerticalDirection.down,
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(ctx.l10n.commonCancel)),
             FilledButton.tonal(
               key: const Key('folderKeep'),
               onPressed: () => Navigator.pop(ctx, FolderDelete.moveContentsToParent),
-              child: Text('Sacar los cuadernos a $parent'),
+              child: Text(ctx.l10n.libraryFolderKeep(parent)),
             ),
             FilledButton(
               key: const Key('folderDeleteAll'),
               style: FilledButton.styleFrom(backgroundColor: cs.error, foregroundColor: cs.onError),
               onPressed: () => Navigator.pop(ctx, FolderDelete.deleteContents),
-              child: const Text('Borrar todo'),
+              child: Text(ctx.l10n.libraryDeleteAllTitle),
             ),
           ],
         );
@@ -587,10 +639,10 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     HapticFeedback.mediumImpact();
     setState(() => pressed = f.id);
     final v = await _optionsMenu(card, f.name, [
-      (Symbols.edit, 'Renombrar', 'rename', null),
-      (Symbols.drive_file_move, 'Mover a…', 'move', 'moveTo'),
-      (Symbols.ios_share, 'Exportar', 'export', 'exportFolder'),
-      (Symbols.delete, 'Borrar', 'delete', null),
+      (Symbols.edit, context.l10n.libraryOptRename, 'rename', null),
+      (Symbols.drive_file_move, context.l10n.libraryOptMove, 'move', 'moveTo'),
+      (Symbols.ios_share, context.l10n.libraryOptExport, 'export', 'exportFolder'),
+      (Symbols.delete, context.l10n.libraryOptDelete, 'delete', null),
     ]);
     if (!mounted) return;
     setState(() => pressed = null);
@@ -621,12 +673,12 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     HapticFeedback.mediumImpact();
     setState(() => pressed = nb.id);
     final v = await _optionsMenu(card, nb.name, [
-      (Symbols.open_in_new, 'Abrir', 'open', null),
-      (Symbols.edit, 'Renombrar', 'rename', null),
-      (Symbols.drive_file_move, 'Mover a…', 'move', 'moveTo'),
-      (Symbols.content_copy, 'Duplicar', 'dup', null),
-      (Symbols.ios_share, 'Exportar', 'export', 'exportNotebook'),
-      (Symbols.delete, 'Borrar', 'delete', null),
+      (Symbols.open_in_new, context.l10n.libraryOptOpen, 'open', null),
+      (Symbols.edit, context.l10n.libraryOptRename, 'rename', null),
+      (Symbols.drive_file_move, context.l10n.libraryOptMove, 'move', 'moveTo'),
+      (Symbols.content_copy, context.l10n.libraryOptDuplicate, 'dup', null),
+      (Symbols.ios_share, context.l10n.libraryOptExport, 'export', 'exportNotebook'),
+      (Symbols.delete, context.l10n.libraryOptDelete, 'delete', null),
     ]);
     if (!mounted) return;
     setState(() => pressed = null);
@@ -677,7 +729,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
                 key: const Key('new'),
                 onPressed: _new,
                 icon: const Icon(Symbols.add, weight: 400),
-                label: const Text('Nuevo'),
+                label: Text(context.l10n.libraryNew),
               ),
         body: idx == null
             ? const Center(child: CircularProgressIndicator())
@@ -697,7 +749,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
                         Icon(searching ? Symbols.search_off : Symbols.menu_book,
                             size: 56, weight: 200, color: cs.onSurfaceVariant.withValues(alpha: .6)),
                         const SizedBox(height: 12),
-                        Text(searching ? 'Sin resultados' : current == null ? 'Todavía no hay cuadernos' : 'Esta carpeta está vacía',
+                        Text(searching ? context.l10n.libraryEmptyNoResults : current == null ? context.l10n.libraryEmptyNone : context.l10n.libraryEmptyFolder,
                             style: TextStyle(color: cs.onSurfaceVariant, fontSize: 16)),
                       ]),
                     ),
@@ -775,26 +827,27 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
   }
 
   Widget _header(NotesIndex idx, ColorScheme cs) {
+    final l = context.l10n;
     final folder = idx.folderById(current);
     final n = idx.notebooksIn(current).length, nf = idx.childrenOf(current).length;
     final parts = [
-      if (n > 0 || nf == 0) '$n ${n == 1 ? 'cuaderno' : 'cuadernos'}',
-      if (nf > 0) '$nf ${nf == 1 ? 'carpeta' : 'carpetas'}',
+      if (n > 0 || nf == 0) l.libraryNotebookCount(n),
+      if (nf > 0) l.libraryFolderCount(nf),
     ];
     final sub = idx.notebooks.isEmpty && idx.folders.isEmpty
-        ? 'Creá el primero para empezar'
-        : '${parts.join(' · ')} · mantené uno apretado para opciones o arrastralo a una carpeta';
+        ? l.libraryHeaderFirst
+        : l.libraryHeaderHint(parts.join(' · '));
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
         if (folder != null)
           IconButton(
             key: const Key('up'),
-            tooltip: 'Subir una carpeta',
+            tooltip: l.libraryUpTooltip,
             icon: const Icon(Symbols.arrow_back, weight: 400),
             onPressed: () => _goTo(folder.parent),
           ),
         Expanded(
-          child: Text(folder?.name ?? 'Cuadernos',
+          child: Text(folder?.name ?? l.libraryTitle,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w500, color: cs.onSurface)),
@@ -802,14 +855,14 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
         SyncIndicator(sync: sync, onTap: _openSyncSheet),
         IconButton(
           key: const Key('libraryMenu'),
-          tooltip: 'Más opciones',
+          tooltip: l.libraryMenuTooltip,
           icon: const Icon(Symbols.more_vert, weight: 400),
           onPressed: _settings,
         ),
       ]),
       if (folder != null) _breadcrumb(idx, cs),
       const SizedBox(height: 4),
-      Text(searching ? 'Resultados en todas las carpetas' : sub, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 14)),
+      Text(searching ? l.libraryResultsEverywhere : sub, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 14)),
       const SizedBox(height: 14),
       TextField(
         key: const Key('librarySearch'),
@@ -817,13 +870,13 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
         onChanged: (v) => setState(() => query = v),
         textInputAction: TextInputAction.search,
         decoration: InputDecoration(
-          hintText: 'Buscar cuadernos y carpetas',
+          hintText: l.librarySearchHint,
           prefixIcon: const Icon(Symbols.search, weight: 300),
           suffixIcon: query.isEmpty
               ? null
               : IconButton(
                   key: const Key('librarySearchClear'),
-                  tooltip: 'Borrar búsqueda',
+                  tooltip: l.librarySearchClear,
                   icon: const Icon(Symbols.close, weight: 300),
                   onPressed: () => setState(() {
                     searchCtl.clear();
@@ -870,7 +923,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     return Padding(
       padding: const EdgeInsets.only(top: 2),
       child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
-        crumb('crumb-inicio', 'Inicio', null),
+        crumb('crumb-inicio', context.l10n.libraryHome, null),
         for (final f in path) ...[
           Icon(Symbols.chevron_right, size: 16, color: cs.onSurfaceVariant),
           crumb('crumb-${f.name}', f.name, f.id, last: f == path.last),

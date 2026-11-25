@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/editor/page_editor.dart';
+import 'package:apuntes/l10n/l10n.dart';
 import 'package:apuntes/rendering/ink_layers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -36,6 +37,10 @@ void main() {
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.reset);
     await t.pumpWidget(MaterialApp(
+      localizationsDelegates: L.localizationsDelegates,
+      supportedLocales: L.supportedLocales,
+      locale: const Locale('es'),
+      
       home: Scaffold(
         body: PageEditor(
             doc: doc, tools: ToolState()..tool = tool, store: Storage(root: root), onChanged: () {}, onPrefsChanged: () {}),

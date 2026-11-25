@@ -1,20 +1,23 @@
+import 'dart:math' show min;
+
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../data/storage.dart';
 import '../../data/templates.dart';
 import '../../domain/domain.dart';
+import '../../l10n/l10n.dart';
 import '../../widgets/backgrounds.dart';
 import '../../widgets/paper_preview.dart';
 
 /// Colores de papel: valor guardado y nombre (el nombre lo usan los tests como tooltip).
-const papers = [
-  ('#fffefb', 'Marfil'),
-  ('#ffffff', 'Blanco'),
-  ('#fbf3e0', 'Crema'),
-  ('#f0efeb', 'Gris'),
-  ('#eaf3fb', 'Celeste'),
-  ('#eef6ec', 'Verde'),
+final papers = <(String, String Function(L))>[
+  ('#fffefb', (l) => l.paperColorIvory),
+  ('#ffffff', (l) => l.paperColorWhite),
+  ('#fbf3e0', (l) => l.paperColorCream),
+  ('#f0efeb', (l) => l.paperColorGray),
+  ('#eaf3fb', (l) => l.paperColorLightBlue),
+  ('#eef6ec', (l) => l.paperColorGreen),
 ];
 
 /// Lo elegido en el diálogo: [all] aplica a todas las hojas (y a las nuevas); si no, solo a la hoja visible.
@@ -34,8 +37,8 @@ Future<StyleChoice?> showStyleDialog(BuildContext context, NotebookDoc doc,
     context: context,
     builder: (ctx) => StatefulBuilder(builder: (ctx, set) {
       final cs = Theme.of(ctx).colorScheme;
-      Widget paperOpt(String c, String label) => Tooltip(
-            message: label,
+      Widget paperOpt(String c, String Function(L) label) => Tooltip(
+            message: label(ctx.l10n),
             child: InkWell(
               customBorder: const CircleBorder(),
               onTap: () => set(() => paper = c),
@@ -50,10 +53,10 @@ Future<StyleChoice?> showStyleDialog(BuildContext context, NotebookDoc doc,
               ),
             ),
           );
-      Widget bgChip(String v, IconData i, String label) => ChoiceChip(
+      Widget bgChip(String v, IconData i, String Function(L) label) => ChoiceChip(
             key: Key('bg-$v'),
             avatar: Icon(i, size: 18, weight: 300),
-            label: Text(label),
+            label: Text(label(ctx.l10n)),
             selected: bg == v,
             onSelected: (_) => set(() {
               bg = v;
@@ -65,10 +68,10 @@ Future<StyleChoice?> showStyleDialog(BuildContext context, NotebookDoc doc,
         final del = await showDialog<bool>(
           context: ctx,
           builder: (c) => AlertDialog(
-            title: Text('¿Borrar la plantilla «${t.name}»?'),
+            title: Text(ctx.l10n.styleDeleteTemplate(t.name)),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancelar')),
-              FilledButton(key: const Key('tplDelete'), onPressed: () => Navigator.pop(c, true), child: const Text('Borrar')),
+              TextButton(onPressed: () => Navigator.pop(c, false), child: Text(c.l10n.commonCancel)),
+              FilledButton(key: const Key('tplDelete'), onPressed: () => Navigator.pop(c, true), child: Text(c.l10n.commonDelete)),
             ],
           ),
         );
@@ -102,30 +105,33 @@ Future<StyleChoice?> showStyleDialog(BuildContext context, NotebookDoc doc,
       }
       final title = TextStyle(fontWeight: FontWeight.w500, color: cs.onSurface);
       final options = spacingsFor(bg);
-      final sheetControls = Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Tamaño', style: title),
+      final mq = MediaQuery.sizeOf(ctx);
+      // tablet en horizontal: dos columnas y la vista previa abajo de la segunda, para que entre sin scroll
+      final wide = !doc.nb.canvas && mq.width >= 1000 && mq.width > mq.height;
+      final colA = Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(ctx.l10n.styleSize, style: title),
         const SizedBox(height: 8),
         Wrap(spacing: 8, children: [
           for (final (v, label) in kPaperSizes)
             ChoiceChip(key: Key('size-$v'), label: Text(label), selected: size == v, onSelected: (_) => set(() => size = v)),
         ]),
         const SizedBox(height: 18),
-        Text('Fondo', style: title),
+        Text(ctx.l10n.styleBackground, style: title),
         const SizedBox(height: 8),
         Wrap(spacing: 8, runSpacing: 8, children: [for (final (v, i, label) in backgrounds) bgChip(v, i, label)]),
         const SizedBox(height: 18),
-        Text('Plantillas', style: title),
+        Text(ctx.l10n.styleTemplates, style: title),
         const SizedBox(height: 8),
         Wrap(spacing: 8, runSpacing: 8, children: [for (final (v, i, label) in templates) bgChip(v, i, label)]),
         const SizedBox(height: 18),
-        Text('Mis plantillas', style: title),
+        Text(ctx.l10n.styleMyTemplates, style: title),
         const SizedBox(height: 8),
         Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
           for (final t in mine) tplTile(t),
           OutlinedButton.icon(
             key: const Key('tplFromImage'),
             icon: const Icon(Symbols.image, size: 18, weight: 300),
-            label: const Text('Desde una imagen…'),
+            label: Text(ctx.l10n.styleFromImage),
             onPressed: () async {
               final t = await templateFromImage(store);
               if (t == null) return;
@@ -137,13 +143,14 @@ Future<StyleChoice?> showStyleDialog(BuildContext context, NotebookDoc doc,
             },
           ),
         ]),
-        const SizedBox(height: 18),
-        Text('Color del papel', style: title),
+      ]);
+      final colB = Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(ctx.l10n.menuMorePaperColor, style: title),
         const SizedBox(height: 8),
         Wrap(spacing: 10, children: [for (final (c, label) in papers) paperOpt(c, label)]),
         if (options.isNotEmpty) ...[
           const SizedBox(height: 18),
-          Text(bg == 'lined' ? 'Interlineado' : 'Cuadrícula', style: title),
+          Text(bg == 'lined' ? ctx.l10n.styleSpacingLined : ctx.l10n.styleSpacingGrid, style: title),
           const SizedBox(height: 8),
           Wrap(spacing: 8, children: [
             for (final o in options)
@@ -157,51 +164,80 @@ Future<StyleChoice?> showStyleDialog(BuildContext context, NotebookDoc doc,
         ],
         if (!forNew) ...[
           const SizedBox(height: 18),
-          Text('Aplicar a', style: title),
+          Text(ctx.l10n.styleApplyTo, style: title),
           const SizedBox(height: 8),
           Wrap(spacing: 8, children: [
             ChoiceChip(
                 key: const Key('applySheet'),
-                label: const Text('Esta hoja'),
+                label: Text(ctx.l10n.styleThisSheet),
                 selected: !all,
                 onSelected: (_) => set(() => all = false)),
             ChoiceChip(
                 key: const Key('applyAll'),
-                label: const Text('Todo el cuaderno'),
+                label: Text(ctx.l10n.styleWholeNotebook),
                 selected: all,
                 onSelected: (_) => set(() => all = true)),
           ]),
         ],
       ]);
+      final sheetControls = Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        colA,
+        const SizedBox(height: 18),
+        colB,
+      ]);
       // lienzo infinito: solo el color del papel, que vale para todo
       final controls = !doc.nb.canvas
           ? sheetControls
           : Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Color del papel', style: title),
+              Text(ctx.l10n.menuMorePaperColor, style: title),
               const SizedBox(height: 8),
               Wrap(spacing: 10, runSpacing: 10, children: [for (final (c, label) in papers) paperOpt(c, label)]),
             ]);
+      final preview = PaperPreview(
+          bg: bg,
+          paper: paper,
+          spacing: spacing,
+          size: size,
+          width: 130,
+          image: bg == 'image' && image != null ? store.media(image!) : null);
       return AlertDialog(
-        title: Text(doc.nb.canvas ? 'Color del papel' : (forNew ? 'Hoja nueva' : 'Estilo de hoja')),
-        content: SizedBox(
-          width: 560,
-          child: SingleChildScrollView(
-            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Expanded(child: controls),
-              const SizedBox(width: 20),
-              PaperPreview(
-                  bg: bg,
-                  paper: paper,
-                  spacing: spacing,
-                  size: size,
-                  width: 130,
-                  image: bg == 'image' && image != null ? store.media(image!) : null),
-            ]),
-          ),
-        ),
+        insetPadding: wide
+            ? const EdgeInsets.symmetric(horizontal: 32, vertical: 16)
+            : const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+        title: Text(doc.nb.canvas ? ctx.l10n.menuMorePaperColor : (forNew ? ctx.l10n.styleTitleNew : ctx.l10n.styleTitle)),
+        content: wide
+            ? SizedBox(
+                width: min(mq.width - 96, 940),
+                child: SingleChildScrollView(
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(child: colA),
+                    const SizedBox(width: 24),
+                    Expanded(
+                      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        colB,
+                        const SizedBox(height: 18),
+                        preview,
+                      ]),
+                    ),
+                  ]),
+                ),
+              )
+            : SizedBox(
+                width: 560,
+                child: SingleChildScrollView(
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(child: controls),
+                    const SizedBox(width: 20),
+                    preview,
+                  ]),
+                ),
+              ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          FilledButton(key: const Key('styleOk'), onPressed: () => Navigator.pop(ctx, true), child: Text(forNew ? 'Crear' : 'Aplicar')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.l10n.commonCancel)),
+          FilledButton(
+              key: const Key('styleOk'),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(forNew ? ctx.l10n.commonCreate : ctx.l10n.styleApply)),
         ],
       );
     }),

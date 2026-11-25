@@ -9,6 +9,7 @@ import 'package:apuntes/editor/history.dart';
 import 'package:apuntes/editor/items_layer.dart';
 import 'package:apuntes/editor/page_editor.dart';
 import 'package:apuntes/editor/text_blocks.dart';
+import 'package:apuntes/l10n/l10n.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -341,6 +342,10 @@ void main() {
       addTearDown(t.view.reset);
       final tools = ToolState()..tool = Tool.pen;
       await t.pumpWidget(MaterialApp(
+      localizationsDelegates: L.localizationsDelegates,
+      supportedLocales: L.supportedLocales,
+      locale: const Locale('es'),
+      
         home: Scaffold(
           body: PageEditor(doc: doc, tools: tools, store: store, onChanged: () {}, onPrefsChanged: () {}),
         ),

@@ -9,12 +9,16 @@ import 'sync_paths.dart';
 
 /// `crypto.json` de la nube cambió (otro dispositivo activó, desactivó o rehízo el cifrado): hay que volver a leerlo.
 class VaultChangedException extends RemoteException {
-  const VaultChangedException([super.message = 'Cambió la configuración de cifrado de la nube']);
+  const VaultChangedException([String? message])
+      : super(message ?? 'Cambió la configuración de cifrado de la nube',
+            kind: message == null ? SyncError.vaultChanged : SyncError.other);
 }
 
 /// La nube está cifrada y acá no hay una clave que sirva: falta la frase.
 class CryptoLockedException extends RemoteException {
-  const CryptoLockedException([super.message = 'La nube está cifrada: ingresá la frase en Sincronización > Cifrado']);
+  const CryptoLockedException([String? message])
+      : super(message ?? 'La nube está cifrada: ingresá la frase en Sincronización > Cifrado',
+            kind: message == null ? SyncError.cryptoLocked : SyncError.other);
 }
 
 /// ruta → (hash del archivo CIFRADO que hay en la nube, hash del CLARO que contiene). Es lo que permite que el motor

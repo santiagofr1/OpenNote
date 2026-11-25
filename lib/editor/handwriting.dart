@@ -5,9 +5,18 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:google_mlkit_digital_ink_recognition/google_mlkit_digital_ink_recognition.dart' as ml;
 
 import '../domain/domain.dart';
+import 'ink_model_tag.dart';
 
 /// Lee a mano alzada (trazos -> texto). Solo hay en Android; en el resto, quien llama pide escribir el nombre.
 abstract class HandwritingRecognizer {
+  /// La etiqueta del modelo que se usa (por ejemplo `es-AR`; ver [inkModelTag]). Al cambiarla, lo que se lea desde
+  /// entonces usa el modelo nuevo (se baja la próxima vez que haga falta).
+  String get tag;
+  set tag(String value);
+
+  /// Borra los modelos de es / en / pt bajados que no sean [keepTag].
+  Future<void> deleteUnusedModels(String keepTag);
+
   /// Si el modelo del idioma ya está bajado (la primera vez hay que bajarlo).
   Future<bool> isModelReady();
 
@@ -39,17 +48,33 @@ class SingleFlight<T> {
   }
 }
 
-/// Reconocimiento de letra de ML Kit (en el dispositivo, español).
+/// Reconocimiento de letra de ML Kit (en el dispositivo). El idioma se elige con [tag] (ver los modelos en
+/// developers.google.com/ml-kit/vision/digital-ink-recognition/base-models).
 class MlKitHandwriting implements HandwritingRecognizer {
-  static const _lang = 'es-AR'; // ver los modelos en developers.google.com/ml-kit/vision/digital-ink-recognition/base-models
+  @override
+  String tag = 'es';
   static const _timeout = Duration(seconds: 25);
   final _models = ml.DigitalInkRecognizerModelManager();
   final _download = SingleFlight<bool>();
 
   @override
+  Future<void> deleteUnusedModels(String keepTag) async {
+    for (final e in kInkRegions.entries) {
+      for (final t in [e.key, for (final r in e.value) '${e.key}-$r']) {
+        if (t == keepTag) continue;
+        try {
+          if (await _models.isModelDownloaded(t)) await _models.deleteModel(t);
+        } catch (e) {
+          debugPrint('Vynote letra: no se pudo borrar el modelo $t: $e');
+        }
+      }
+    }
+  }
+
+  @override
   Future<bool> isModelReady() async {
     try {
-      return await _models.isModelDownloaded(_lang);
+      return await _models.isModelDownloaded(tag);
     } catch (_) {
       return false;
     }
@@ -58,9 +83,9 @@ class MlKitHandwriting implements HandwritingRecognizer {
   @override
   Future<bool> ensureModel() => _download.run(() async {
         try {
-          if (await _models.isModelDownloaded(_lang)) return true;
-          final ok = await _models.downloadModel(_lang, isWifiRequired: false);
-          if (!ok) debugPrint('Vynote letra: no se pudo bajar el modelo $_lang');
+          if (await _models.isModelDownloaded(tag)) return true;
+          final ok = await _models.downloadModel(tag, isWifiRequired: false);
+          if (!ok) debugPrint('Vynote letra: no se pudo bajar el modelo $tag');
           return ok;
         } catch (e) {
           debugPrint('Vynote letra: error al bajar el modelo $e');
@@ -92,7 +117,7 @@ class MlKitHandwriting implements HandwritingRecognizer {
         t += 300;
         ink.strokes.add(st);
       }
-      rec = ml.DigitalInkRecognizer(languageCode: _lang);
+      rec = ml.DigitalInkRecognizer(languageCode: tag);
       final out = await rec.recognize(ink);
       final text = out.isEmpty ? '' : out.first.text.trim();
       if (text.isEmpty) debugPrint('Vynote letra: sin candidatos (${ink.strokes.length} trazos)');

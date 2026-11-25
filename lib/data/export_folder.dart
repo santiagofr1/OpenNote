@@ -33,14 +33,14 @@ List<({Notebook nb, String path})> folderExportEntries(NotesIndex idx, Folder ro
   void walk(Folder f, String path) {
     final used = <String>{};
     for (final nb in idx.notebooksIn(f.id)) {
-      out.add((nb: nb, path: '$path/${unique(used, clean(nb.name, 'Cuaderno'))}'));
+      out.add((nb: nb, path: '$path/${unique(used, clean(nb.name, exportTexts.notebook))}'));
     }
     for (final c in idx.childrenOf(f.id)) {
-      walk(c, '$path/${unique(used, clean(c.name, 'Carpeta'))}');
+      walk(c, '$path/${unique(used, clean(c.name, exportTexts.folder))}');
     }
   }
 
-  walk(root, clean(root.name, 'Carpeta'));
+  walk(root, clean(root.name, exportTexts.folder));
   return out;
 }
 
@@ -105,8 +105,8 @@ Future<File?> buildFolderZip(Storage store, NotesIndex idx, Folder root, FolderE
 Future<bool> Function(File zip, String name) saveFolderZip = (zip, name) async {
   final safe = safeFileName(name).trim();
   final uri = await FilePicker.saveFile(
-    dialogTitle: 'Guardar carpeta',
-    fileName: '${safe.isEmpty ? 'Carpeta' : safe}.zip',
+    dialogTitle: exportTexts.saveFolder,
+    fileName: '${safe.isEmpty ? exportTexts.folder : safe}.zip',
     bytes: await zip.readAsBytes(),
     mimeType: 'application/zip',
   );

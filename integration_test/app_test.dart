@@ -17,6 +17,7 @@ import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/data/templates.dart';
 import 'package:apuntes/data/system_clipboard.dart';
 import 'package:apuntes/domain/domain.dart';
+import 'package:apuntes/l10n/l10n.dart';
 import 'package:apuntes/editor/fake_audio_source.dart';
 import 'package:apuntes/editor/handwriting.dart';
 import 'package:apuntes/editor/link_open.dart';
@@ -38,19 +39,26 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart' hide testWidgets;
 import 'package:image/image.dart' as pimg;
 import 'package:integration_test/integration_test.dart';
 import 'package:pdf/pdf.dart' show PdfColor;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import 'tablet_sim.dart';
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   late Directory root;
 
+  // en la PC (Linux) se simula la pantalla de la tablet; en la tablet no hace falta
+  setUpAll(() async {
+    if (!Platform.isAndroid) await loadRoboto();
+  });
   setUp(() async => root = await Directory.systemTemp.createTemp('apuntes_test'));
   tearDown(() async {
+    await Storage.settleWrites(); // que no llegue una escritura tardía a una carpeta ya borrada
     if (await root.exists()) await root.delete(recursive: true);
   });
 
@@ -87,7 +95,16 @@ void main() {
     }
   }
 
+  /// En la PC, la pantalla de la tablet como se usa: horizontal y con la letra del sistema al 110 % (en Android, nada).
+  /// Un test que fije su propio tamaño lo hace DESPUÉS. El idioma del sistema siempre es español (en todas las
+  /// plataformas): los tests buscan textos en español.
+  void sim(WidgetTester t) {
+    forceSpanish(t);
+    if (!Platform.isAndroid) simulateTablet(t, physical: kTabletLandscape, textScale: kTabletTextScale);
+  }
+
   Future<void> start(WidgetTester t) async {
+    sim(t);
     await t.pumpWidget(ApuntesApp(root: root));
     await settle(t, 1500);
   }
@@ -817,6 +834,34 @@ void main() {
     }
   });
 
+  testWidgets('estilo de hoja: en horizontal entra sin scroll, en dos columnas', (t) async {
+    await start(t);
+    // tablet en horizontal (1333 x 752 lógicos) con la letra del sistema al 110 %
+    t.view.physicalSize = const Size(1333.4, 752) * t.view.devicePixelRatio;
+    t.platformDispatcher.textScaleFactorTestValue = 1.1;
+    addTearDown(t.view.resetPhysicalSize);
+    addTearDown(t.platformDispatcher.clearTextScaleFactorTestValue);
+    await settle(t);
+    await createNotebook(t, 'Horizontal');
+    await openMore(t, 'Estilo de hoja');
+
+    final dialog = find.byType(AlertDialog);
+    final scroll = find.descendant(of: dialog, matching: find.byType(Scrollable));
+    final pos = t.state<ScrollableState>(scroll.first).position;
+    expect(pos.maxScrollExtent, 0, reason: 'el diálogo entra entero, sin scroll');
+    final screen = Offset.zero & (t.view.physicalSize / t.view.devicePixelRatio);
+    for (final k in ['applyAll', 'styleOk']) {
+      final r = t.getRect(find.byKey(Key(k)));
+      expect(screen.contains(r.topLeft) && screen.contains(r.bottomRight), isTrue, reason: '$k dentro de la pantalla: $r');
+    }
+    final dx = (t.getCenter(find.byKey(const Key('size-a4'))).dx - t.getCenter(find.byKey(const Key('applyAll'))).dx).abs();
+    expect(dx, greaterThan(200), reason: 'tamaño y "Aplicar a" van en columnas distintas');
+
+    await t.tap(find.text('Cancelar'));
+    await settle(t, 600);
+    expect(t.takeException(), isNull);
+  });
+
   testWidgets('favorito y bloqueo con PIN', (t) async {
     await start(t);
     await createNotebook(t, 'Secreto');
@@ -976,6 +1021,57 @@ void main() {
     await t.tap(find.byWidgetPredicate((w) => w is Tooltip && (w.message ?? '').startsWith('Zoom fijo')));
     await settle(t);
     expect(ed.widget.tools.zoomLocked, isFalse);
+  });
+
+  testWidgets('zoom en la PC: Ctrl + rueda agranda alrededor del cursor y la rueda sola scrollea', (t) async {
+    await start(t);
+    await createNotebook(t, 'Rueda');
+    final ed = editor(t);
+    ed.widget.tools.zoom = 1;
+    ed.widget.tools.zoomLocked = false;
+    final c = sheetCenter(t);
+    final vp = find
+        .descendant(of: find.byType(PageEditor), matching: find.byType(Listener))
+        .evaluate()
+        .map((e) => e.renderObject as RenderBox)
+        .firstWhere((b) => b.hasSize && (b.size.height - ed.scroll.position.viewportDimension).abs() < .5);
+    Offset off() => Offset(ed.hscroll.hasClients ? ed.hscroll.offset : 0, ed.scroll.offset);
+
+    Future<void> wheel(double dy, Offset at) async {
+      await t.sendEventToBinding(PointerScrollEvent(kind: PointerDeviceKind.mouse, position: at, scrollDelta: Offset(0, dy)));
+      await settle(t, 300);
+    }
+
+    // rueda sola: scrollea y no cambia el zoom
+    final z0 = ed.ts.zoom, y0 = ed.scroll.offset;
+    await wheel(120, c);
+    expect(ed.ts.zoom, z0, reason: 'la rueda sola no cambia el zoom');
+    expect(ed.scroll.offset, greaterThan(y0 + 20), reason: 'la rueda sola scrollea');
+
+    // Ctrl + rueda hacia arriba: agranda y deja quieto el punto bajo el cursor
+    final p = c + const Offset(40, 60);
+    final f = p - vp.localToGlobal(Offset.zero);
+    final y1 = ed.scroll.offset, z1 = ed.ts.zoom;
+    final before = ed.layout.toPage(f, off());
+    await simulateKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await wheel(-120, p);
+    expect(ed.ts.zoom, closeTo(z1 * exp(.24), .01), reason: 'Ctrl + rueda hacia arriba agranda');
+    final after = ed.layout.toPage(f, off());
+    expect((after - before).distance * ed.ts.zoom, lessThan(2), reason: 'el punto bajo el cursor no se mueve');
+    expect(ed.scroll.offset, isNot(y1), reason: 'el scroll solo cambió para sostener el punto');
+
+    // con el candado puesto, Ctrl + rueda no cambia el zoom
+    await simulateKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await t.tap(find.byTooltip('Fijar el zoom'));
+    await settle(t);
+    expect(ed.ts.zoomLocked, isTrue);
+    final fixed = ed.ts.zoom, yFixed = ed.scroll.offset;
+    await simulateKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await wheel(-120, p);
+    await simulateKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    expect(ed.ts.zoom, fixed, reason: 'con el candado no hay zoom');
+    expect(ed.scroll.offset, yFixed, reason: 'ni scroll con Ctrl');
+    expect(t.takeException(), isNull);
   });
 
   testWidgets('pellizco después de poner y sacar el candado: el zoom crece parejo y la hoja no tiembla (#27)', (t) async {
@@ -1387,8 +1483,71 @@ void main() {
     final entries = ZipDecoder().decodeBytes(zipBytes!).where((f) => f.isFile).toList();
     expect(entries.map((f) => f.name), ['Facultad/Apuntes/Apuntes - hoja 01.png']);
     expect(entries.single.content.take(4).toList(), [0x89, 0x50, 0x4E, 0x47]);
-    await settle(t, 600);
+    // el aviso sale cuando saveFolderZip devuelve y se borra el temporal (E/S real): se espera a que aparezca
+    for (var i = 0; i < 40 && find.text('Carpeta exportada').evaluate().isEmpty; i++) {
+      await settle(t, 100);
+    }
     expect(find.text('Carpeta exportada'), findsOneWidget);
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('importar carpeta: el .zip exportado vuelve con sus subcarpetas y cuadernos', (t) async {
+    await start(t);
+    await createFolder(t, 'Facultad');
+    await t.tap(find.byKey(const Key('folder-Facultad')));
+    await settle(t, 800);
+    await createNotebook(t, 'Apuntes');
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+    await createFolder(t, 'Sub');
+    await t.tap(find.byKey(const Key('folder-Sub')));
+    await settle(t, 800);
+    await createNotebook(t, 'Parcial');
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+    await t.tap(find.byKey(const Key('up')));
+    await settle(t, 800);
+    await t.tap(find.byKey(const Key('up')));
+    await settle(t, 800);
+
+    Uint8List? zipBytes;
+    final savedZip = saveFolderZip, savedPick = Pickers.folderZip;
+    saveFolderZip = (zip, name) async {
+      zipBytes = await zip.readAsBytes();
+      return true;
+    };
+    addTearDown(() {
+      saveFolderZip = savedZip;
+      Pickers.folderZip = savedPick;
+    });
+    await holdOn(t, find.byKey(const Key('folder-Facultad')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('exportFolder')));
+    await settle(t, 600);
+    await t.tap(find.byKey(const Key('folderExport-vynote')));
+    for (var i = 0; i < 200 && zipBytes == null; i++) {
+      await settle(t, 100);
+    }
+    expect(zipBytes, isNotNull);
+    await settle(t, 600);
+
+    Pickers.folderZip = () async => zipBytes;
+    await t.tap(find.byKey(const Key('new')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('importFolder')));
+    for (var i = 0; i < 100 && find.textContaining('importada').evaluate().isEmpty; i++) {
+      await settle(t, 100);
+    }
+    expect(find.textContaining('importada'), findsOneWidget);
+    expect(find.byKey(const Key('folder-Facultad (2)')), findsOneWidget);
+    await t.tap(find.byKey(const Key('folder-Facultad (2)')));
+    await settle(t, 800);
+    // la carpeta es nueva: los cuadernos conservan su nombre (los repetidos solo cuentan dentro de la misma carpeta)
+    expect(find.byKey(const Key('nb-Apuntes')), findsOneWidget);
+    expect(find.byKey(const Key('folder-Sub')), findsOneWidget);
+    await t.tap(find.byKey(const Key('folder-Sub')));
+    await settle(t, 800);
+    expect(find.byKey(const Key('nb-Parcial')), findsOneWidget);
     expect(t.takeException(), isNull);
   });
 
@@ -1518,6 +1677,10 @@ void main() {
   testWidgets('ajustes: buscar actualizaciones a mano y el interruptor automático', (t) async {
     await start(t);
     await t.tap(find.byKey(const Key('libraryMenu')));
+    await settle(t, 600);
+    // las actualizaciones viven en Ajustes, no en el menú de la biblioteca
+    expect(find.byKey(const Key('checkUpdates')), findsNothing);
+    await t.tap(find.byKey(const Key('settingsMenu')));
     await settle(t, 600);
     expect(find.byKey(const Key('checkUpdates')), findsOneWidget);
     expect(t.widget<SwitchListTile>(find.byKey(const Key('autoUpdates'))).value, isTrue);
@@ -2429,6 +2592,7 @@ void main() {
 
   testWidgets('sincronización: "Sincronizar ahora" sube un cuaderno y otro dispositivo lo baja (remoto falso)', (t) async {
     final remote = FakeRemoteStore();
+    sim(t);
     await t.pumpWidget(ApuntesApp(root: root, backend: FakeBackend(remote)));
     await settle(t, 1500);
     await createNotebook(t, 'Para nube');
@@ -2464,6 +2628,7 @@ void main() {
 
   testWidgets('sincronización: borrar un cuaderno sincronizado lo borra de la nube (remoto falso)', (t) async {
     final remote = FakeRemoteStore();
+    sim(t);
     await t.pumpWidget(ApuntesApp(root: root, backend: FakeBackend(remote)));
     await settle(t, 1500);
     await createNotebook(t, 'Para borrar');
@@ -2506,6 +2671,7 @@ void main() {
   });
 
   testWidgets('sincronización en segundo plano: el interruptor aparece (solo en Android), viene encendido y se guarda', (t) async {
+    sim(t);
     await t.pumpWidget(ApuntesApp(root: root, backend: FakeBackend(FakeRemoteStore())));
     await settle(t, 1500);
     await t.tap(find.byKey(const Key('libraryMenu')));
@@ -2530,6 +2696,7 @@ void main() {
     final remote = FakeRemoteStore();
     final backend = FakeBackend(remote);
     await backend.signIn(); // ya conectado: la app retoma la sesión al abrir
+    sim(t);
     await t.pumpWidget(ApuntesApp(
         root: root, backend: backend, syncPoll: const Duration(seconds: 4), syncDebounce: const Duration(seconds: 2)));
     await settle(t, 1500);
@@ -2595,6 +2762,7 @@ void main() {
 
   testWidgets('sincronización: sección Cifrado y el diálogo de frase valida que coincidan', (t) async {
     final remote = FakeRemoteStore();
+    sim(t);
     await t.pumpWidget(ApuntesApp(root: root, backend: FakeBackend(remote)));
     await settle(t, 1500);
     await t.tap(find.byKey(const Key('libraryMenu')));
@@ -2610,7 +2778,7 @@ void main() {
     expect(find.byKey(const Key('cryptoStatus')), findsOneWidget);
     expect(find.textContaining('Si olvidás la frase'), findsOneWidget);
 
-    await t.tap(find.byKey(const Key('cryptoEnable')));
+    await tapV(t, find.byKey(const Key('cryptoEnable'))); // en horizontal queda abajo en la hoja: hay que llevarlo a la vista
     await settle(t, 600);
     await t.enterText(find.byKey(const Key('cryptoPass1')), 'una frase larga');
     await t.enterText(find.byKey(const Key('cryptoPass2')), 'otra frase larga');
@@ -3559,9 +3727,11 @@ void main() {
   testWidgets('índice: al cerrarlo la vista se queda en el título elegido', (t) async {
     // 1200 x 800 lógicos, sea cual sea la densidad: la escala depende del ancho (hasta 1100 de hoja) y el panel del
     // índice se come parte; más ancho que esto, con el panel abierto la hoja seguiría en su tope y no cambiaría nada
+    sim(t); // en la PC: densidad y barra de la tablet; el tamaño es el de acá abajo
     t.view.physicalSize = const Size(1200, 800) * t.view.devicePixelRatio;
     addTearDown(t.view.resetPhysicalSize);
-    await start(t);
+    await t.pumpWidget(ApuntesApp(root: root));
+    await settle(t, 1500);
     await createNotebook(t, 'IndiceSalto');
     var ed = editor(t);
     while (ed.doc.sheetCount < 8) {
@@ -3609,12 +3779,143 @@ void main() {
     expect(ed.visibleSheet, 5);
   });
 
+
+  testWidgets('teléfono vertical: lectura, pantalla completa y marcador pasan al menú ⋮ y los paneles se abren encima', (t) async {
+    await start(t);
+    t.view.physicalSize = const Size(411, 890) * t.view.devicePixelRatio;
+    addTearDown(t.view.resetPhysicalSize);
+    await settle(t);
+    await createNotebook(t, 'Telefono');
+    final screen = Offset.zero & (t.view.physicalSize / t.view.devicePixelRatio);
+    expect(find.byKey(const Key('reading')), findsNothing);
+    expect(find.byKey(const Key('bookmarkSheet')), findsNothing);
+    final title = t.getRect(find.byKey(const Key('nbTitle')));
+    expect(screen.contains(title.topLeft) && screen.contains(title.bottomRight), isTrue, reason: 'el título se ve ($title)');
+
+    bool readOnly() => t.widget<PageEditor>(find.byType(PageEditor)).readOnly;
+    await t.tap(find.byKey(const Key('more')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('more-reading')));
+    await settle(t);
+    expect(readOnly(), isTrue);
+    await t.tap(find.byKey(const Key('more')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('more-reading')));
+    await settle(t);
+    expect(readOnly(), isFalse);
+
+    await t.tap(find.byKey(const Key('more')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('more-bookmark')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('bookmarkSave')));
+    await settle(t, 800);
+    expect(editor(t).doc.sheets[0].bookmark, isTrue);
+
+    await t.tap(find.byKey(const Key('pagesBtn')));
+    await settle(t, 800);
+    expect(find.byKey(const Key('panelScrim')), findsOneWidget);
+    expect((t.getRect(find.byType(PageEditor)).width - screen.width).abs(), lessThanOrEqualTo(1));
+    // el panel tapa el centro del fondo: se toca el tramo que sobra a la derecha
+    await t.tapAt(Offset(screen.width - 20, screen.height / 2));
+    await settle(t, 800);
+    expect(find.byKey(const Key('panelScrim')), findsNothing);
+    expect(t.takeException(), isNull);
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+  });
+
+  // ---------------- ajustes: idiomas ----------------
+  /// Abre Ajustes desde la biblioteca.
+  Future<void> openSettings(WidgetTester t) async {
+    await t.tap(find.byKey(const Key('libraryMenu')));
+    await settle(t, 600);
+    await t.tap(find.byKey(const Key('settingsMenu')));
+    await settle(t, 600);
+  }
+
+  /// Elige [value] en el diálogo de idiomas que abre [entry] (`settingsAppLanguage` / `settingsInkLanguage`).
+  Future<void> pickLanguage(WidgetTester t, String entry, String prefix, String value) async {
+    await t.tap(find.byKey(Key(entry)));
+    await settle(t, 400);
+    await t.tap(find.byKey(Key('$prefix-$value')));
+    await settle(t, 800);
+  }
+
+  Map prefsOf() => jsonDecode(File('${root.path}/prefs.json').readAsStringSync()) as Map;
+
+  testWidgets('ajustes: cambiar el idioma de la app a inglés y volver, y la versión se ve', (t) async {
+    await start(t);
+    await openSettings(t);
+    Locale appLocale() => Localizations.localeOf(t.element(find.byKey(const Key('settingsTitle'))));
+    // arranca en el idioma del sistema (forzado a es_AR) y la versión se ve
+    expect(appLocale().languageCode, 'es');
+    expect(find.text('Ajustes'), findsWidgets);
+    final version = t.widget<Text>(find.byKey(const Key('settingsVersion'))).data;
+    expect(version, isNotNull);
+    expect(version!.trim(), isNotEmpty);
+    // a inglés: la app se redibuja sin reiniciar, y queda guardado
+    await pickLanguage(t, 'settingsAppLanguage', 'appLang', 'en');
+    expect(appLocale(), const Locale('en'));
+    final en = lookupL(const Locale('en'));
+    expect(t.widget<Text>(find.byKey(const Key('settingsTitle'))).data, en.settingsTitle);
+    await Storage.settleWrites();
+    expect(prefsOf()['appLanguage'], 'en');
+    // y de vuelta a español
+    await pickLanguage(t, 'settingsAppLanguage', 'appLang', 'es');
+    expect(appLocale(), const Locale('es'));
+    expect(t.widget<Text>(find.byKey(const Key('settingsTitle'))).data, 'Ajustes');
+    await Storage.settleWrites();
+    expect(prefsOf()['appLanguage'], 'es');
+    // "como el sistema": vuelve al idioma del dispositivo
+    await pickLanguage(t, 'settingsAppLanguage', 'appLang', 'system');
+    expect(appLocale().languageCode, 'es');
+    await Storage.settleWrites();
+    expect(prefsOf()['appLanguage'], 'system');
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('ajustes: idioma de la escritura sigue al de la app y se puede elegir aparte', (t) async {
+    final saved = handwriting;
+    final fake = _FakeHandwriting('Introducción');
+    handwriting = fake;
+    addTearDown(() => handwriting = saved);
+    await start(t); // el sistema está en es_AR
+    expect(fake.tag, 'es-AR', reason: 'sigue a la app (español) y la región del dispositivo tiene modelo propio');
+    await openSettings(t);
+    // la app en inglés: la escritura la sigue (el dispositivo no está en inglés: modelo genérico) y se cambia de modelo
+    await pickLanguage(t, 'settingsAppLanguage', 'appLang', 'en');
+    expect(fake.tag, 'en');
+    expect(fake.deleted, contains('en'), reason: 'al cambiar de modelo se borran los otros');
+    // la escritura aparte: portugués (el dispositivo no está en portugués: genérico)
+    await pickLanguage(t, 'settingsInkLanguage', 'inkLang', 'pt');
+    expect(fake.tag, 'pt');
+    // español con la app en inglés: el dispositivo sí está en es_AR
+    await pickLanguage(t, 'settingsInkLanguage', 'inkLang', 'es');
+    expect(fake.tag, 'es-AR');
+    await Storage.settleWrites();
+    expect(prefsOf()['inkLanguage'], 'es');
+    // "igual que la app" otra vez: la app está en inglés
+    await pickLanguage(t, 'settingsInkLanguage', 'inkLang', 'app');
+    expect(fake.tag, 'en');
+    // la app vuelve al idioma del sistema (es_AR)
+    await pickLanguage(t, 'settingsAppLanguage', 'appLang', 'system');
+    expect(fake.tag, 'es-AR');
+    await Storage.settleWrites();
+    expect(prefsOf(), containsPair('inkLanguage', 'app'));
+    expect(t.takeException(), isNull);
+  });
 }
 
 /// Reconocimiento de letra de mentira: siempre lee [text].
 class _FakeHandwriting implements HandwritingRecognizer {
   final String text;
   _FakeHandwriting(this.text);
+  @override
+  String tag = 'es';
+  final deleted = <String>[];
+  @override
+  Future<void> deleteUnusedModels(String keepTag) async => deleted.add(keepTag);
   @override
   Future<bool> isModelReady() async => true;
   @override

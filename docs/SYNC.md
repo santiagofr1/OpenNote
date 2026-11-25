@@ -184,7 +184,7 @@ establish the connection.
 - Long validity: the third-party implementation in [9] uses 10 years. Validity recommendation **(unconfirmed)**.
 
 **Pairing (once per pair of devices).**
-1. On device A, "Emparejar otro dispositivo" (Pair another device) shows a QR with: version, name, SHA-256
+1. On device A, "Pair another device" shows a QR with: version, name, SHA-256
    fingerprint of A's certificate, a 128-bit single-use secret, and A's IP:port. It expires after 2 minutes.
 2. Device B scans the QR. **The scanner has to be Android, iOS or macOS**, because `mobile_scanner` does not support
    Linux or Windows [21]. If B is a PC, it is A (the tablet) that scans the QR the PC shows. If both are PCs, another
@@ -197,7 +197,7 @@ establish the connection.
 5. The secret is burned when used or when it expires. An attacker on the LAN only sees TLS traffic: they cannot
    impersonate A (different fingerprint) nor complete the HMAC (they do not know the secret).
 6. Remaining risk: whoever photographs the QR can pair during the 2 minutes. Mitigation: the QR is shown only when the
-   user enters "Emparejar" (Pair), and A asks for confirmation "¿Aceptar a <nombre>?" (Accept <name>?) before saving.
+   user enters "Pair", and A asks for confirmation "Accept <name>?" before saving.
 
 **Daily connection (mutual TLS with pinned certificates).**
 - Server: `HttpServer.bindSecure` with `requestClientCertificate: true` [12]. The `SecurityContext` carries the own
@@ -220,7 +220,7 @@ establish the connection.
   check whether `bonsoir` does it by itself **(unconfirmed)**.
 
 **Revoke (from settings).**
-- "Ajustes" (Settings) > "Dispositivos" (Devices): the fingerprint is removed from the list, the `SecurityContext` is
+- "Settings" > "Devices": the fingerprint is removed from the list, the `SecurityContext` is
   rebuilt and active connections are cut.
 - If a tablet is lost, it is revoked from the other one. That is not enough for the cloud key (section 3): it must be
   rotated.
@@ -230,8 +230,8 @@ establish the connection.
 
 - **Android in the background.** According to the summary of Android's power docs, foreground apps have no execution
   limits; in the background Doze and App Standby apply [24]. Sync happens when the app opens, when it returns to the
-  foreground, shortly after each save, and every 45 s while the app is visible (see "Cuándo sincroniza" (When sync
-  happens)). Continuous sync would need a foreground service with a notification **(unconfirmed how the system treats it in practice)**.
+  foreground, shortly after each save, and every 45 s while the app is visible (see "When sync
+  happens"). Continuous sync would need a foreground service with a notification **(unconfirmed how the system treats it in practice)**.
 - **Networks that block multicast.** Guest Wi-Fi, access points with client isolation **(unconfirmed: I did not look)**. Fallback: IP:port in the QR or typing the IP by hand.
 - **Key theft.** The app's private folder is the only place with the identity. On PC, the file must have permissions
   for the user only **(unconfirmed on Windows)**.
@@ -422,12 +422,12 @@ and whether losing the passphrase is acceptable for the user.
 **Decided by the user (2026-11-21):** sync goes through **Google Drive**. The tablet (Android) and the Linux app connect
 once with Google and from then on sync on their own. Scope `drive.file` (the app only sees what it creates), folder
 `Vynote` in "Mi unidad" (My Drive). The Google Cloud project is created once by the owner; the client IDs go inside the
-published app. Users only tap "Conectar con Google" (Connect with Google).
+published app. Users only tap "Connect with Google".
 
 Code: `lib/sync/`. The engine (`sync_engine.dart`, `sync_merge.dart`, `sync_state.dart`) knows nothing about Google: it
 talks to the `RemoteStore` interface (`remote_store.dart`), which has an in-memory version for the tests
 (`fake_remote_store.dart`) and the real one (`drive_remote_store.dart`, `googleapis` Drive v3). The login is in
-`google_auth.dart`; the screen is in the ⋮ menu of the library ("Sincronización con Google Drive" (Google Drive sync)).
+`google_auth.dart`; the screen is in the ⋮ menu of the library ("Google Drive sync").
 
 ### Remote structure
 
@@ -437,7 +437,7 @@ It is the same structure as on disk, under `Vynote/` in "Mi unidad" (My Drive):
 Vynote/
   index.json                         notebooks and folders
   notebooks/<id>/notebook.json       order and sheet data of the notebook
-  notebooks/<id>/sheets/<hoja>.sheet one sheet (binary)
+  notebooks/<id>/sheets/<sheet>.sheet one sheet (binary)
   media/<name>                       images and audio (unique name, only ever added)
 ```
 
@@ -489,10 +489,10 @@ overwritten between devices.
 - **New notebooks and folders:** they appear in `index.json` and in `notebooks/<id>/`; the other side creates them.
   **Renaming or moving** changes only `index.json` (the `id` does not change), so the notebook is not uploaded again.
 - Switching Google account starts from scratch (without deleting anything locally).
-- **Example notebook.** Each installation creates "Mi cuaderno" (My notebook) on first launch. On the FIRST sync of a
+- **Example notebook.** Each installation creates "My notebook" on first launch. On the FIRST sync of a
   device (no base), if the cloud already has notebooks and the local one is that untouched example (only notebook, no
   folders, no PIN, a single empty sheet), it is discarded (deleted from disk without a tombstone, not uploaded) so that
-  two "Mi cuaderno" do not end up existing. If it has anything written, or the cloud is empty, it is kept and uploaded.
+  two copies of the example notebook do not end up existing. If it has anything written, or the cloud is empty, it is kept and uploaded.
 - **Deletion with the app closed (Drive).** The first `changes()` of a new process is always a COMPLETE listing
   (`getStartPageToken` + `files.list`), even if a token is saved: with a delta, what was deleted while the app was not
   running would not appear in the freshly loaded map and would never come out as deleted. The engine treats the complete
@@ -538,11 +538,11 @@ notebook.**
 ### No network, interruptions and errors
 
 Without a network the pass is cut off and retried with **backoff** (30 s, 1 min, 2 min, 4 min, 8 min, and every 10 min
-from then on); returning to the foreground or "Sincronizar ahora" (Sync now) cut the wait short and retry right away. In
+from then on); returning to the foreground or "Sync now" cut the wait short and retry right away. In
 the background there is no retry (it resumes when you return). Nothing is lost. The state is saved **after each file**,
 so repeating the pass converges (it is idempotent). A file that fails does not stop the others. If the session expired
-or was revoked, the state goes to "desconectado" (disconnected) and you have to tap "Conectar con Google" (Connect with
-Google). There is no connectivity plugin: "network is back" is detected by the next retry, the next periodic check or
+or was revoked, the state goes to "disconnected" and you have to tap "Connect with
+Google". There is no connectivity plugin: "network is back" is detected by the next retry, the next periodic check or
 returning to the foreground.
 
 ### When sync happens
@@ -557,7 +557,7 @@ Everything is decided by `SyncController` (`lib/sync/sync_controller.dart`); the
 | Return to foreground | `AppLifecycleState.resumed`: pass right away, and the polling resumes | one pass |
 | Go to background | if there is something saved but not uploaded, it is uploaded now (Android may close the app); no periodic polling | one pass |
 | Close a notebook | when returning to the library | one pass |
-| "Sincronizar ahora" (Sync now) | manual; cuts the backoff short | one pass |
+| "Sync now" | manual; cuts the backoff short | one pass |
 
 **Never two passes at once:** a request that arrives while one is running (poll, debounce, "now"...) does not start
 another: it marks "one more when this finishes", and any that arrive in the meantime are merged into that one. With the
@@ -571,8 +571,8 @@ cloud with a check = synced, spinning cloud = syncing, cloud with an arrow = cha
 
 With the app closed or in the background, a periodic `workmanager` task runs (every **15 min**, Android's minimum, only
 with a network). It is registered when you connect to Google and when the app opens with a session
-(`ExistingPeriodicWorkPolicy.update`); it is cancelled on disconnect. There is a "Sincronizar en segundo plano" (Sync in
-background) switch in the Sync sheet (library ⋮ menu; on by default, saved as `bgSync` in `prefs.json`; only shown on
+(`ExistingPeriodicWorkPolicy.update`); it is cancelled on disconnect. There is a "Sync in
+background" switch in the Sync sheet (library ⋮ menu; on by default, saved as `bgSync` in `prefs.json`; only shown on
 Android: on Linux the timers already run with the window minimized). Code: `lib/sync/background_sync.dart`.
 
 - **Separate isolate, no UI.** The callback (`backgroundSyncDispatcher`) sets up `Storage` + `GoogleBackend.restore()` +
@@ -742,9 +742,9 @@ missing.
      adds it: `keytool -list -v -keystore release.jks`).
    - **Android** `io.github.santiagofr1.vynote.test` with the debug SHA-1:
      `F5:83:13:66:18:80:5D:F9:69:D6:EE:D9:C3:EA:82:AC:07:E2:FF:56`.
-   - **"Aplicación web" (Web application)** (`google_sign_in` asks for it on Android as `serverClientId`; it is not used for
+   - **"Web application"** (`google_sign_in` asks for it on Android as `serverClientId`; it is not used for
      anything else).
-   - **"Aplicación de escritorio" ("Desktop app")** for Linux (gives an ID and a secret).
+   - **"Desktop app"** for Linux (gives an ID and a secret).
 6. Set the values:
 
 | Value | GitHub secret (Settings > Secrets > Actions) | Local (`--dart-define`) |

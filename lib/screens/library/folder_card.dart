@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../domain/domain.dart';
+import '../../l10n/l10n.dart';
 
 /// Tarjeta de una carpeta en la biblioteca: ícono de carpeta, nombre y cuántos cuadernos tiene.
 /// Quien la arma le pone la key `folder-<nombre>` (la usan los tests).
@@ -50,7 +51,7 @@ class FolderCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: cs.onSurface)),
               const SizedBox(height: 2),
-              Text(location ?? '$count ${count == 1 ? 'cuaderno' : 'cuadernos'}',
+              Text(location ?? context.l10n.libraryNotebookCount(count),
                   maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: cs.onSurfaceVariant)),
             ]),
           ),

@@ -43,6 +43,14 @@ BACKUP=1 ./run_tests.sh    # same, but also downloads a copy of your real notebo
 `./run_tests.sh` installs a separate app, **"Vynote Test"** (`io.github.santiagofr1.vynote.test`), with its own data.
 It never touches the real app or your notebooks: at the end, it checks that the real app and its files are still the same.
 
+`INTEGRACION=1 ./test_pc.sh` (on top of the usual unit tests) runs the full integration suite (`app_test.dart` and
+`layout_sizes_test.dart`) in the Linux app, simulating the tablet screen; whatever needs the real pen, ML Kit or the
+background sync still needs a device. The app runs on a virtual display (Xvfb) so no window pops up; use `VER=1` to see it.
+
+Without a tablet you can also use an Android emulator that mimics it (1200 x 2000 at 240 dpi, landscape, 110 % font
+size): `tool/emulador.sh` creates and boots it headless (it needs KVM), then `DEV=emulator-5554 ./run_tests.sh` runs the
+full suite on it, and `tool/emulador.sh parar` shuts it down.
+
 Rule for new features: **every new feature adds a case to `integration_test/app_test.dart`.** If needed, also add a
 pure-logic test in `test/`.
 
@@ -53,7 +61,7 @@ workflow passes them in from secrets. If you fork it and want to test the sync (
 **your own Google Cloud project**: the steps are in [docs/SYNC.md](docs/SYNC.md), "Set up Google Cloud". Copy
 `google_config.example.json` to `google_config.json` (it's in `.gitignore`) and run with
 `--dart-define-from-file=google_config.json`. Without that data, the app still builds and works the same, except that
-**"Conectar con Google"** (Connect with Google) warns that it needs to be configured. The sync tests (`test/sync/`) use
+**Connect with Google** warns that it needs to be configured. The sync tests (`test/sync/`) use
 an in-memory fake remote and don't need anything from Google.
 
 ## Performance
@@ -76,14 +84,23 @@ lib/editor/      page-strip editor, pen input, selection, undo, zoom, toolbar
 lib/screens/     library and open notebook
 lib/widgets/     shared dialogs
 lib/theme/       theme and colors
+lib/l10n/        translations (.arb files) and the generated `L` class
 ```
 
 Each layer only uses the ones above it. If a piece of logic can go in `lib/domain/` without depending on Flutter,
 put it there and cover it with tests.
 
+## Translations
+
+The app is translated with Flutter's `gen-l10n`: Spanish (`app_es.arb`, the base), English (`app_en.arb`) and Brazilian
+Portuguese (`app_pt.arb`). A key missing from a language falls back to Spanish. To add or change a text, edit the
+`.arb` files and run `flutter gen-l10n`; the generated code lives in `lib/l10n/` and is committed. Names of languages
+are always written in their own language and are not translated. The tests run in Spanish.
+
 ## Style
 
-- Comments and interface texts are written in **Spanish**.
+- Comments are written in **Spanish**. Interface texts are never written in the code: they go in `lib/l10n/app_es.arb`
+  (the template, with a `@key` description for each one) and are read with `context.l10n.key`.
 - Follow the rules in `analysis_options.yaml`.
 - Small, focused changes: one PR, one topic.
 

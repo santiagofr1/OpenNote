@@ -14,6 +14,25 @@ import 'package:pdf/widgets.dart' as pw;
 
 import 'hershey_script.dart';
 
+const shotLang = String.fromEnvironment('SHOT_LANG', defaultValue: 'en');
+bool get _en => shotLang == 'en';
+
+/// Elige el texto de ejemplo según el idioma de las capturas (`--dart-define=SHOT_LANG=es|en`; por defecto en, el del README).
+String tr(String es, String en) => _en ? en : es;
+
+// Nombres de los cuadernos (el test los abre por su key `nb-<nombre>`).
+final nbPhysics = tr('Física – Óptica', 'Physics – Optics');
+final nbCalcII = tr('Análisis II', 'Calculus II');
+final nbMeeting = tr('Reunión lunes', 'Monday meeting');
+final nbShopping = tr('Lista de compras', 'Shopping list');
+final nbAlgebra = tr('Álgebra lineal', 'Linear algebra');
+final nbProbability = tr('Probabilidad', 'Probability');
+final nbReport = tr('Informe trimestral', 'Quarterly report');
+final nbAppIdeas = tr('Ideas de app', 'App ideas');
+final nbAnalysis = tr('Análisis Matemático II', 'Mathematical Analysis');
+final nbControl = tr('Sistemas de control', 'Control systems');
+final nbWorksheet = tr('Práctica 3', 'Worksheet 3');
+
 const _ink = '#22211e', _blue = '#1d4ed8', _grey = '#6b6b66';
 
 Stroke _stroke(String kind, String color, double w, List<double> pts, [double o = 1]) =>
@@ -169,144 +188,144 @@ Future<void> seedLibrary(Storage s) async {
   final r = Random(7);
   final books = <(Notebook, List<SheetContent>)>[];
   void save(Notebook nb, List<SheetContent> contents) => books.add((nb, contents));
-  final facultad = Folder.create('Facultad'), trabajo = Folder.create('Trabajo'), ideas = Folder.create('Ideas');
+  final facultad = Folder.create(tr('Facultad', 'University')), trabajo = Folder.create(tr('Trabajo', 'Work')), ideas = Folder.create(tr('Ideas', 'Ideas'));
   final folders = [facultad, trabajo, ideas];
 
   // --- Física – Óptica: el cuaderno de las capturas (3 hojas) ---
-  final fisica = _notebook('Física – Óptica', 3, favorite: true, minutesAgo: 5, titles: ['Lentes delgadas', 'Ley de Snell', 'Ejercicios']);
+  final fisica = _notebook(nbPhysics, 3, favorite: true, minutesAgo: 5, titles: [tr('Lentes delgadas', 'Thin lenses'), tr('Ley de Snell', "Snell's law"), tr('Ejercicios', 'Exercises')]);
   fisica.sheets[1].bookmark = true;
   final h1 = _hand(r, 10, [
-    'Los rayos paralelos al eje se desvían hacia el foco F.',
-    'Distancia focal: f = 15 cm (lente biconvexa).',
-    'Ecuación de lentes: 1/f = 1/do + 1/di',
-    'Aumento: A = -di/do = hi/ho',
-    'Si do > 2f la imagen es real, invertida y menor.',
+    tr('Los rayos paralelos al eje se desvían hacia el foco F.', 'Rays parallel to the axis bend toward the focus F.'),
+    tr('Distancia focal: f = 15 cm (lente biconvexa).', 'Focal length: f = 15 cm (biconvex lens).'),
+    tr('Ecuación de lentes: 1/f = 1/do + 1/di', 'Lens equation: 1/f = 1/do + 1/di'),
+    tr('Aumento: A = -di/do = hi/ho', 'Magnification: M = -di/do = hi/ho'),
+    tr('Si do > 2f la imagen es real, invertida y menor.', 'If do > 2f the image is real, inverted and smaller.'),
   ]);
   h1.texts.add(typed(_textY(2) - 8, [
-    _title('Óptica geométrica'),
+    _title(tr('Óptica geométrica', 'Geometric optics')),
     Para([
-      const Run('Una '),
-      const Run('lente convergente', RunStyle(bold: true)),
-      const Run(' desvía los rayos paralelos al eje hacia el foco.'),
+      Run(tr('Una ', 'A ')),
+      Run(tr('lente convergente', 'converging lens'), RunStyle(bold: true)),
+      Run(tr(' desvía los rayos paralelos al eje hacia el foco.', ' bends rays parallel to the axis toward the focus.')),
     ]),
   ], w: 500));
-  h1.items.add(sticky(690, 95, 'Repasar para el parcial del viernes', w: 250, h: 175));
-  final label = write(r, _rule(17), 'Lente convergente', x0: 150, color: _blue);
+  h1.items.add(sticky(690, 95, tr('Repasar para el parcial del viernes', 'Review for the Friday midterm'), w: 250, h: 175));
+  final label = write(r, _rule(17), tr('Lente convergente', 'Converging lens'), x0: 150, color: _blue);
   final eq = span(h1.strokes.where((s) => s.bounds.center.dy > _rule(11) && s.bounds.center.dy < _rule(12)).toList());
   h1.strokes
     ..add(highlighter(eq.left - 6, eq.right + 6, eq.center.dy + 3))
     ..addAll(lensDiagram(r, axisY: 760))
     ..addAll(label)
     ..add(underline(r, 150, span(label).right, _rule(17) + 6, _blue))
-    ..addAll(write(r, _rule(24), 'Con f = 15 cm y do = 40 cm: di = 24 cm.'))
-    ..addAll(write(r, _rule(25), 'La imagen es real, invertida y más chica.'));
+    ..addAll(write(r, _rule(24), tr('Con f = 15 cm y do = 40 cm: di = 24 cm.', 'With f = 15 cm and do = 40 cm: di = 24 cm.')))
+    ..addAll(write(r, _rule(25), tr('La imagen es real, invertida y más chica.', 'The image is real, inverted and smaller.')));
   final h2 = _hand(r, 5, [
-    'Al pasar de un medio a otro, el rayo se desvía.',
-    'n1 y n2: índices de refracción de cada medio.',
-    'n_1 sen θ_1 = n_2 sen θ_2',
-    'Aire a vidrio (n = 1,5), θ_1 = 30 grados:',
-    'sen θ_2 = 0,33  =>  θ_2 = 19,5 grados',
-    'Más denso: el rayo se acerca a la normal.',
-    'Reflexión total interna: sen θ_c = n_2 / n_1',
-    '(solo si n_1 > n_2)',
+    tr('Al pasar de un medio a otro, el rayo se desvía.', 'Going from one medium to another, the ray bends.'),
+    tr('n1 y n2: índices de refracción de cada medio.', 'n1 and n2: refractive index of each medium.'),
+    tr('n_1 sen θ_1 = n_2 sen θ_2', 'n_1 sin θ_1 = n_2 sin θ_2'),
+    tr('Aire a vidrio (n = 1,5), θ_1 = 30 grados:', 'Air to glass (n = 1.5), θ_1 = 30 degrees:'),
+    tr('sen θ_2 = 0,33  =>  θ_2 = 19,5 grados', 'sin θ_2 = 0.33  =>  θ_2 = 19.5 degrees'),
+    tr('Más denso: el rayo se acerca a la normal.', 'Denser medium: the ray bends toward the normal.'),
+    tr('Reflexión total interna: sen θ_c = n_2 / n_1', 'Total internal reflection: sin θ_c = n_2 / n_1'),
+    tr('(solo si n_1 > n_2)', '(only if n_1 > n_2)'),
   ], blue: {2});
   final snell = span(h2.strokes.where((s) => s.bounds.center.dy > _rule(6) && s.bounds.center.dy < _rule(7)).toList());
-  h2.texts.add(typed(_textY(2), [_title('Ley de Snell')], w: 600));
+  h2.texts.add(typed(_textY(2), [_title(tr('Ley de Snell', "Snell's law"))], w: 600));
   h2.strokes
     ..add(highlighter(snell.left - 6, snell.right + 6, snell.center.dy + 3))
-    ..addAll(write(r, _rule(15), 'Intensidad en función del tiempo', x0: 200, color: _blue))
+    ..addAll(write(r, _rule(15), tr('Intensidad en función del tiempo', 'Intensity as a function of time'), x0: 200, color: _blue))
     ..addAll(graph(r, const Offset(200, 620), 620, 300));
   final h3 = _hand(r, 5, [
-    '1) Lente con f = 20 cm y objeto a 50 cm.',
-    'Hallar la posición de la imagen y el aumento.',
+    tr('1) Lente con f = 20 cm y objeto a 50 cm.', '1) Lens with f = 20 cm and object at 50 cm.'),
+    tr('Hallar la posición de la imagen y el aumento.', 'Find the image position and the magnification.'),
     '1/di = 1/20 - 1/50 = 3/100',
-    'di = 33,3 cm  (imagen real)',
-    'A = -di/do = -0,67  (invertida y menor)',
-    '2) Repetir con do = 10 cm (menor que f).',
+    tr('di = 33,3 cm  (imagen real)', 'di = 33.3 cm  (real image)'),
+    tr('A = -di/do = -0,67  (invertida y menor)', 'M = -di/do = -0.67  (inverted and smaller)'),
+    tr('2) Repetir con do = 10 cm (menor que f).', '2) Repeat with do = 10 cm (less than f).'),
   ]);
-  h3.texts.add(typed(_textY(2), [_title('Ejercicios')], w: 600));
+  h3.texts.add(typed(_textY(2), [_title(tr('Ejercicios', 'Exercises'))], w: 600));
   h3.strokes.addAll(lensDiagram(r, axisY: 620));
   save(fisica, [h1, h2, h3]);
 
   // --- Análisis II (favorito) ---
-  final analisis = _notebook('Análisis II', 2, favorite: true, minutesAgo: 90, folder: null);
+  final analisis = _notebook(nbCalcII, 2, favorite: true, minutesAgo: 90, folder: null);
   final a1 = _hand(r, 7, [
-    'lim f(x) = L (x -> a) si para todo e > 0',
-    'existe d > 0 con |x - a| < d => |f(x) - L| < e.',
-    'Ejemplo: lim (2x + 1) = 5 cuando x -> 2',
-    'Dado e, tomo d = e/2: |2x - 4| = 2|x - 2| < e.',
-    'f es continua en a si lim f(x) = f(a).',
-    'Discontinuidades: evitable, de salto y esencial.',
-    'Hacer los ejercicios 4 al 9 de la práctica 3.',
+    tr('lim f(x) = L (x -> a) si para todo e > 0', 'lim f(x) = L (x -> a) if for every e > 0'),
+    tr('existe d > 0 con |x - a| < d => |f(x) - L| < e.', 'there is d > 0 with |x - a| < d => |f(x) - L| < e.'),
+    tr('Ejemplo: lim (2x + 1) = 5 cuando x -> 2', 'Example: lim (2x + 1) = 5 as x -> 2'),
+    tr('Dado e, tomo d = e/2: |2x - 4| = 2|x - 2| < e.', 'Given e, take d = e/2: |2x - 4| = 2|x - 2| < e.'),
+    tr('f es continua en a si lim f(x) = f(a).', 'f is continuous at a if lim f(x) = f(a).'),
+    tr('Discontinuidades: evitable, de salto y esencial.', 'Discontinuities: removable, jump and essential.'),
+    tr('Hacer los ejercicios 4 al 9 de la práctica 3.', 'Do exercises 4 to 9 of worksheet 3.'),
   ], blue: {1});
   a1.texts.add(typed(_textY(2), [
-    _title('Límites y continuidad'),
-    Para([const Run('Definición ε–δ', RunStyle(bold: true)), const Run(' y ejemplos resueltos.')]),
+    _title(tr('Límites y continuidad', 'Limits and continuity')),
+    Para([Run(tr('Definición ε–δ', 'ε–δ definition'), RunStyle(bold: true)), Run(tr(' y ejemplos resueltos.', ' and worked examples.'))]),
   ]));
   a1.strokes.addAll(graph(r, const Offset(250, 760), 520, 280));
   final a2 = _hand(r, 5, [
-    'Teorema del valor intermedio',
-    'Si f es continua en [a, b] y k está entre f(a) y f(b),',
-    'existe c en [a, b] tal que f(c) = k.',
-    'Ejemplo: cos(x) = x tiene solución en [0, 1].',
-    'Sea f(x) = cos(x) - x. Entonces f(0) = 1 > 0',
-    'y f(1) = cos(1) - 1 < 0, así que hay una raíz.',
-    'Bolzano es el caso particular con k = 0.',
+    tr('Teorema del valor intermedio', 'Intermediate value theorem'),
+    tr('Si f es continua en [a, b] y k está entre f(a) y f(b),', 'If f is continuous on [a, b] and f(a) < k < f(b),'),
+    tr('existe c en [a, b] tal que f(c) = k.', 'there is c in [a, b] such that f(c) = k.'),
+    tr('Ejemplo: cos(x) = x tiene solución en [0, 1].', 'Example: cos(x) = x has a solution in [0, 1].'),
+    tr('Sea f(x) = cos(x) - x. Entonces f(0) = 1 > 0', 'Let f(x) = cos(x) - x. Then f(0) = 1 > 0'),
+    tr('y f(1) = cos(1) - 1 < 0, así que hay una raíz.', 'and f(1) = cos(1) - 1 < 0, so there is a root.'),
+    tr('Bolzano es el caso particular con k = 0.', 'Bolzano is the special case with k = 0.'),
   ]);
   save(analisis, [a1, a2]);
 
   // --- Reunión lunes ---
-  final reunion = _notebook('Reunión lunes', 1, minutesAgo: 200);
+  final reunion = _notebook(nbMeeting, 1, minutesAgo: 200);
   final m = _hand(r, 14, [
-    'Notas de la reunión:',
-    '- Ana cierra el informe el jueves',
-    '- Pedir presupuesto del servidor',
-    '- Demo con el cliente: martes',
+    tr('Notas de la reunión:', 'Meeting notes:'),
+    tr('- Ana cierra el informe el jueves', '- Ana closes the report on Thursday'),
+    tr('- Pedir presupuesto del servidor', '- Ask for the server quote'),
+    tr('- Demo con el cliente: martes', '- Client demo: Tuesday'),
   ], blue: {2}, maxWidth: 480);
   m.texts.add(typed(_textY(2), [
-    _title('Reunión de equipo'),
-    _list(ListKind.bullet, 'Revisar el avance del trimestre'),
-    _list(ListKind.bullet, 'Definir prioridades de la semana'),
-    _list(ListKind.bullet, 'Fecha de la próxima demo'),
+    _title(tr('Reunión de equipo', 'Team meeting')),
+    _list(ListKind.bullet, tr('Revisar el avance del trimestre', 'Review progress this quarter')),
+    _list(ListKind.bullet, tr('Definir prioridades de la semana', 'Set priorities for the week')),
+    _list(ListKind.bullet, tr('Fecha de la próxima demo', 'Date of the next demo')),
   ]));
-  m.items.add(sticky(660, 560, 'Mandar el resumen antes del miércoles', color: '#bfdbfe', w: 240, h: 150));
+  m.items.add(sticky(660, 560, tr('Mandar el resumen antes del miércoles', 'Send the summary before Wednesday'), color: '#bfdbfe', w: 240, h: 150));
   save(reunion, [m]);
 
   // --- Lista de compras ---
-  final compras = _notebook('Lista de compras', 1, minutesAgo: 600);
+  final compras = _notebook(nbShopping, 1, minutesAgo: 600);
   final l = SheetContent();
   l.texts.add(typed(_textY(2), [
-    _title('Lista de compras'),
-    _list(ListKind.checklist, 'Yerba', checked: true),
-    _list(ListKind.checklist, 'Leche', checked: true),
-    _list(ListKind.checklist, 'Pan y facturas'),
-    _list(ListKind.checklist, 'Tomates'),
-    _list(ListKind.checklist, 'Café'),
-    _list(ListKind.checklist, 'Detergente'),
+    _title(nbShopping),
+    _list(ListKind.checklist, tr('Yerba', 'Coffee beans'), checked: true),
+    _list(ListKind.checklist, tr('Leche', 'Milk'), checked: true),
+    _list(ListKind.checklist, tr('Pan y facturas', 'Bread and pastries')),
+    _list(ListKind.checklist, tr('Tomates', 'Tomatoes')),
+    _list(ListKind.checklist, tr('Café', 'Tea')),
+    _list(ListKind.checklist, tr('Detergente', 'Detergent')),
   ]));
   save(compras, [l]);
 
   // --- adentro de las carpetas ---
-  const notes = {
-    'Álgebra lineal': [
-      ['Matrices y determinantes', 'det(A) = ad - bc para A de 2x2', 'A tiene inversa si det(A) no es 0', 'Autovalores: det(A - L I) = 0', 'Ejemplo: A = [2 1 ; 1 2] => L = 1 y 3'],
-      ['Espacios vectoriales', 'Base: vectores L.I. que generan el espacio', 'dim(R3) = 3', 'Rango de A = dim del espacio columna', 'Teorema: rango + nulidad = n'],
+  final notes = {
+    nbAlgebra: [
+      [tr('Matrices y determinantes', 'Matrices and determinants'), tr('det(A) = ad - bc para A de 2x2', 'det(A) = ad - bc for a 2x2 A'), tr('A tiene inversa si det(A) no es 0', 'A has an inverse if det(A) is not 0'), tr('Autovalores: det(A - L I) = 0', 'Eigenvalues: det(A - L I) = 0'), tr('Ejemplo: A = [2 1 ; 1 2] => L = 1 y 3', 'Example: A = [2 1 ; 1 2] => L = 1 and 3')],
+      [tr('Espacios vectoriales', 'Vector spaces'), tr('Base: vectores L.I. que generan el espacio', 'Basis: independent vectors that span it'), 'dim(R3) = 3', tr('Rango de A = dim del espacio columna', 'Rank of A = dim of the column space'), tr('Teorema: rango + nulidad = n', 'Theorem: rank + nullity = n')],
     ],
-    'Probabilidad': [
-      ['Probabilidad condicional', 'P(A|B) = P(A y B) / P(B)', 'Independientes: P(A y B) = P(A) P(B)', 'Bayes: P(A|B) = P(B|A) P(A) / P(B)', 'Ejemplo: dos dados, P(suma = 7) = 1/6']
+    nbProbability: [
+      [tr('Probabilidad condicional', 'Conditional probability'), tr('P(A|B) = P(A y B) / P(B)', 'P(A|B) = P(A and B) / P(B)'), tr('Independientes: P(A y B) = P(A) P(B)', 'Independent: P(A and B) = P(A) P(B)'), 'Bayes: P(A|B) = P(B|A) P(A) / P(B)', tr('Ejemplo: dos dados, P(suma = 7) = 1/6', 'Example: two dice, P(sum = 7) = 1/6')]
     ],
-    'Informe trimestral': [
-      ['Resumen del trimestre', 'Ventas: +12 % respecto del anterior', 'Pendiente: cerrar el balance de marzo', 'Mandar el borrador a Laura el lunes', 'Revisar los números con contaduría']
+    nbReport: [
+      [tr('Resumen del trimestre', 'Quarter summary'), tr('Ventas: +12 % respecto del anterior', 'Sales: +12 % over the previous one'), tr('Pendiente: cerrar el balance de marzo', 'Pending: close the March books'), tr('Mandar el borrador a Laura el lunes', 'Send the draft to Laura on Monday'), tr('Revisar los números con contaduría', 'Check the numbers with accounting')]
     ],
-    'Ideas de app': [
-      ['Ideas para la app', 'Recordatorios por voz con aviso', 'Modo oscuro automático al anochecer', 'Exportar notas a PDF y a texto', 'Probar con tres usuarios esta semana']
+    nbAppIdeas: [
+      [tr('Ideas para la app', 'Ideas for the app'), tr('Recordatorios por voz con aviso', 'Voice reminders with an alert'), tr('Modo oscuro automático al anochecer', 'Automatic dark mode at dusk'), tr('Exportar notas a PDF y a texto', 'Export notes to PDF and text'), tr('Probar con tres usuarios esta semana', 'Test with three users this week')]
     ],
   };
   for (final (name, f, n, ago) in [
-    ('Álgebra lineal', facultad, 2, 1500),
-    ('Probabilidad', facultad, 1, 2000),
-    ('Informe trimestral', trabajo, 1, 800),
-    ('Ideas de app', ideas, 1, 3000),
+    (nbAlgebra, facultad, 2, 1500),
+    (nbProbability, facultad, 1, 2000),
+    (nbReport, trabajo, 1, 800),
+    (nbAppIdeas, ideas, 1, 3000),
   ]) {
     final nb = _notebook(name, n, folder: f.id, minutesAgo: ago);
     save(nb, [for (var i = 0; i < n; i++) _hand(r, 9, notes[name]![i], blue: {0})]);
@@ -355,8 +374,8 @@ Future<void> seedExtras(Storage s) async {
   final now = DateTime.now().millisecondsSinceEpoch;
 
   // --- Análisis Matemático II: 4 hojas con títulos a mano marcados en el índice ---
-  final am = Notebook(newId('n'), 'Análisis Matemático II', favorite: true, updated: now);
-  for (final t in ['Límites', 'Continuidad', 'Derivadas', 'Aplicaciones']) {
+  final am = Notebook(newId('n'), nbAnalysis, favorite: true, updated: now);
+  for (final t in [tr('Límites', 'Limits'), tr('Continuidad', 'Continuity'), tr('Derivadas', 'Derivatives'), tr('Aplicaciones', 'Applications')]) {
     am.sheets.add(SheetMeta(newId('h'), title: t));
   }
   final c1 = SheetContent(), c2 = SheetContent(), c3 = SheetContent(), c4 = SheetContent();
@@ -366,54 +385,54 @@ Future<void> seedExtras(Storage s) async {
     }
   }
 
-  _headed(r, am.sheets[0], c1, 1, _rule(3), 'Límites');
-  _headed(r, am.sheets[0], c1, 2, _rule(5), 'Definición');
-  lines(c1, 6, ['lim f(x) = L (x -> a) si para todo e > 0', 'existe d > 0 con |x - a| < d => |f(x) - L| < e.', 'Ejemplo: lim (2x + 1) = 5 cuando x -> 2'], blue: {0});
-  _headed(r, am.sheets[0], c1, 2, _rule(11), 'Propiedades');
-  lines(c1, 12, ['lim (f + g) = lim f + lim g', 'lim (f . g) = lim f . lim g', 'lim (f / g) = lim f / lim g  si lim g no es 0']);
-  _headed(r, am.sheets[1], c2, 2, _rule(3), 'Continuidad');
-  lines(c2, 4, ['f es continua en a si lim f(x) = f(a).', 'Discontinuidades: evitable, de salto y esencial.'], blue: {0});
-  _headed(r, am.sheets[1], c2, 2, _rule(8), 'Valor intermedio');
-  lines(c2, 9, ['Si f es continua en [a, b] y k está entre f(a) y f(b),', 'existe c en [a, b] tal que f(c) = k.', 'Bolzano es el caso k = 0.']);
-  _headed(r, am.sheets[2], c3, 1, _rule(3), 'Derivadas');
-  lines(c3, 4, ["f'(a) = lim (f(a + h) - f(a)) / h  cuando h -> 0", 'Es la pendiente de la recta tangente en a.']);
-  _headed(r, am.sheets[2], c3, 2, _rule(8), 'Regla de la cadena');
-  lines(c3, 9, ["(f o g)'(x) = f'(g(x)) . g'(x)", 'Ejemplo: h(x) = sen(x^2)  =>  h\'(x) = 2x cos(x^2)'], blue: {0});
-  _headed(r, am.sheets[2], c3, 2, _rule(13), 'Regla del producto');
+  _headed(r, am.sheets[0], c1, 1, _rule(3), tr('Límites', 'Limits'));
+  _headed(r, am.sheets[0], c1, 2, _rule(5), tr('Definición', 'Definition'));
+  lines(c1, 6, [tr('lim f(x) = L (x -> a) si para todo e > 0', 'lim f(x) = L (x -> a) if for every e > 0'), tr('existe d > 0 con |x - a| < d => |f(x) - L| < e.', 'there is d > 0 with |x - a| < d => |f(x) - L| < e.'), tr('Ejemplo: lim (2x + 1) = 5 cuando x -> 2', 'Example: lim (2x + 1) = 5 as x -> 2')], blue: {0});
+  _headed(r, am.sheets[0], c1, 2, _rule(11), tr('Propiedades', 'Properties'));
+  lines(c1, 12, ['lim (f + g) = lim f + lim g', 'lim (f . g) = lim f . lim g', tr('lim (f / g) = lim f / lim g  si lim g no es 0', 'lim (f / g) = lim f / lim g  if lim g is not 0')]);
+  _headed(r, am.sheets[1], c2, 2, _rule(3), tr('Continuidad', 'Continuity'));
+  lines(c2, 4, [tr('f es continua en a si lim f(x) = f(a).', 'f is continuous at a if lim f(x) = f(a).'), tr('Discontinuidades: evitable, de salto y esencial.', 'Discontinuities: removable, jump and essential.')], blue: {0});
+  _headed(r, am.sheets[1], c2, 2, _rule(8), tr('Valor intermedio', 'Intermediate value'));
+  lines(c2, 9, [tr('Si f es continua en [a, b] y k está entre f(a) y f(b),', 'If f is continuous on [a, b] and f(a) < k < f(b),'), tr('existe c en [a, b] tal que f(c) = k.', 'there is c in [a, b] such that f(c) = k.'), tr('Bolzano es el caso k = 0.', 'Bolzano is the case k = 0.')]);
+  _headed(r, am.sheets[2], c3, 1, _rule(3), tr('Derivadas', 'Derivatives'));
+  lines(c3, 4, [tr("f'(a) = lim (f(a + h) - f(a)) / h  cuando h -> 0", "f'(a) = lim (f(a + h) - f(a)) / h  as h -> 0"), tr('Es la pendiente de la recta tangente en a.', 'It is the slope of the tangent line at a.')]);
+  _headed(r, am.sheets[2], c3, 2, _rule(8), tr('Regla de la cadena', 'Chain rule'));
+  lines(c3, 9, ["(f o g)'(x) = f'(g(x)) . g'(x)", tr('Ejemplo: h(x) = sen(x^2)  =>  h\'(x) = 2x cos(x^2)', "Example: h(x) = sin(x^2)  =>  h'(x) = 2x cos(x^2)")], blue: {0});
+  _headed(r, am.sheets[2], c3, 2, _rule(13), tr('Regla del producto', 'Product rule'));
   lines(c3, 14, ["(f . g)' = f' . g + f . g'"]);
-  _headed(r, am.sheets[3], c4, 1, _rule(3), 'Aplicaciones');
-  lines(c4, 4, ['Optimizar: buscar los puntos donde f\'(x) = 0.']);
-  _headed(r, am.sheets[3], c4, 2, _rule(7), 'Máximos y mínimos');
-  lines(c4, 8, ["Si f'(c) = 0 y f''(c) < 0, c es un máximo local.", "Si f'(c) = 0 y f''(c) > 0, c es un mínimo local."], blue: {0});
+  _headed(r, am.sheets[3], c4, 1, _rule(3), tr('Aplicaciones', 'Applications'));
+  lines(c4, 4, [tr('Optimizar: buscar los puntos donde f\'(x) = 0.', "Optimizing: look for the points where f'(x) = 0.")]);
+  _headed(r, am.sheets[3], c4, 2, _rule(7), tr('Máximos y mínimos', 'Maxima and minima'));
+  lines(c4, 8, [tr("Si f'(c) = 0 y f''(c) < 0, c es un máximo local.", "If f'(c) = 0 and f''(c) < 0, c is a local maximum."), tr("Si f'(c) = 0 y f''(c) > 0, c es un mínimo local.", "If f'(c) = 0 and f''(c) > 0, c is a local minimum.")], blue: {0});
   final nbAm = NotebookDoc.fromSheets(am, [c1, c2, c3, c4]);
 
   // --- Sistema de control: diagrama de bloques con figuras limpias ---
-  final sc = Notebook(newId('n'), 'Sistemas de control', updated: now - 60000);
-  sc.sheets.add(SheetMeta(newId('h'), title: 'Lazo cerrado', bg: 'grid'));
+  final sc = Notebook(newId('n'), nbControl, updated: now - 60000);
+  sc.sheets.add(SheetMeta(newId('h'), title: tr('Lazo cerrado', 'Closed loop'), bg: 'grid'));
   final d = SheetContent();
   d.strokes
-    ..addAll(write(r, 170, 'Control de temperatura', x0: 130, size: 1.65, maxWidth: 740))
+    ..addAll(write(r, 170, tr('Control de temperatura', 'Temperature control'), x0: 130, size: 1.65, maxWidth: 740))
     ..addAll(_centered(r, 'Ref.', 190, 300, color: _blue))
     ..add(_shape(ShapeFit(ShapeKind.circle, const [], const Offset(190, 285), rx: 55, ry: 55)))
     ..addAll(_arrow(const Offset(190, 341), const Offset(190, 447)))
     ..add(_shape(_rect(80, 450, 300, 590)))
     ..addAll(_centered(r, 'Sensor', 190, 532))
     ..add(_shape(_rect(400, 450, 700, 590)))
-    ..addAll(_centered(r, 'Microcontrolador', 550, 532))
+    ..addAll(_centered(r, tr('Microcontrolador', 'Microcontroller'), 550, 532))
     ..add(_shape(_rect(780, 450, 960, 590)))
-    ..addAll(_centered(r, 'Actuador', 870, 532))
+    ..addAll(_centered(r, tr('Actuador', 'Actuator'), 870, 532))
     ..addAll(_arrow(const Offset(300, 520), const Offset(398, 520)))
     ..addAll(_arrow(const Offset(700, 520), const Offset(778, 520)))
     ..add(_shape(ShapeFit(ShapeKind.ellipse, const [], const Offset(520, 800), rx: 260, ry: 80)))
-    ..addAll(_centered(r, 'Entorno (horno)', 520, 812))
+    ..addAll(_centered(r, tr('Entorno (horno)', 'Environment (oven)'), 520, 812))
     ..addAll(_arrow(const Offset(860, 592), const Offset(762, 770)))
     ..addAll(_arrow(const Offset(282, 770), const Offset(190, 592)))
-    ..addAll(write(r, 1000, 'El sensor mide y se compara con la referencia.', x0: 130, maxWidth: 760))
-    ..addAll(write(r, 1040, 'Si falta calor, el actuador enciende la resistencia.', x0: 130, maxWidth: 760));
+    ..addAll(write(r, 1000, tr('El sensor mide y se compara con la referencia.', 'The sensor reading is compared with the setpoint.'), x0: 130, maxWidth: 760))
+    ..addAll(write(r, 1040, tr('Si falta calor, el actuador enciende la resistencia.', 'If it is too cold, the heater turns on.'), x0: 130, maxWidth: 760));
   final nbSc = NotebookDoc.fromSheets(sc, [d]);
 
   // --- Práctica 3: una hoja vacía (el PDF se importa en la captura 06) ---
-  final pr = Notebook(newId('n'), 'Práctica 3', updated: now - 120000);
+  final pr = Notebook(newId('n'), nbWorksheet, updated: now - 120000);
   pr.sheets.add(SheetMeta(newId('h')));
   final nbPr = NotebookDoc.fromSheets(pr, [SheetContent()]);
 
@@ -435,26 +454,26 @@ Future<Uint8List> buildPracticePdf() async {
       child: pw.SizedBox(width: width, child: pw.Text(text, style: pw.TextStyle(fontSize: size, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal))));
   pw.Widget page(List<pw.Widget> ch) => pw.Stack(children: ch);
   final ex = [
-    '1) Calcular el límite lim (3x + 1) cuando x tiende a 2.',
-    '2) Calcular lim sen(x) / x cuando x tiende a 0.',
-    '3) Hallar el valor de a para que f sea continua en x = 1.',
-    '4) Probar con la definición que lim (2x - 1) = 3 cuando x -> 2.',
+    tr('1) Calcular el límite lim (3x + 1) cuando x tiende a 2.', '1) Compute the limit lim (3x + 1) as x tends to 2.'),
+    tr('2) Calcular lim sen(x) / x cuando x tiende a 0.', '2) Compute lim sin(x) / x as x tends to 0.'),
+    tr('3) Hallar el valor de a para que f sea continua en x = 1.', '3) Find the value of a so that f is continuous at x = 1.'),
+    tr('4) Probar con la definición que lim (2x - 1) = 3 cuando x -> 2.', '4) Prove from the definition that lim (2x - 1) = 3 as x -> 2.'),
   ];
   d.addPage(pw.Page(
     margin: pw.EdgeInsets.zero,
     build: (_) => page([
-      at(40, 'Análisis Matemático II  ·  Facultad de Ingeniería', size: 10),
-      at(62, 'Práctica 3: Límites y continuidad', size: 22, bold: true),
-      at(100, 'Resolver los ejercicios. Justificar cada paso.', size: 11),
+      at(40, tr('Análisis Matemático II  ·  Facultad de Ingeniería', 'Mathematical Analysis  ·  School of Engineering'), size: 10),
+      at(62, tr('Práctica 3: Límites y continuidad', 'Worksheet 3: Limits and continuity'), size: 22, bold: true),
+      at(100, tr('Resolver los ejercicios. Justificar cada paso.', 'Solve the exercises. Justify every step.'), size: 11),
       for (var i = 0; i < 4; i++) at(practiceTop[i + 1]!, ex[i]),
     ]),
   ));
   d.addPage(pw.Page(
     margin: pw.EdgeInsets.zero,
     build: (_) => page([
-      at(40, 'Análisis Matemático II  ·  Práctica 3', size: 10),
-      at(80, '5) Estudiar la continuidad de f(x) = (x^2 - 1) / (x - 1).'),
-      at(200, '6) Calcular lim (x^2 - 4) / (x - 2) cuando x tiende a 2.'),
+      at(40, tr('Análisis Matemático II  ·  Práctica 3', 'Mathematical Analysis  ·  Worksheet 3'), size: 10),
+      at(80, tr('5) Estudiar la continuidad de f(x) = (x^2 - 1) / (x - 1).', '5) Study the continuity of f(x) = (x^2 - 1) / (x - 1).')),
+      at(200, tr('6) Calcular lim (x^2 - 4) / (x - 2) cuando x tiende a 2.', '6) Compute lim (x^2 - 4) / (x - 2) as x tends to 2.')),
     ]),
   ));
   return Uint8List.fromList(await d.save());
