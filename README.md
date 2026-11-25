@@ -75,16 +75,16 @@ with no accounts and no servers of our own. If you want, you can sync them betwe
 
 <table>
   <tr>
-    <td align="center"><img src="docs/img/01_cuaderno.png" width="260" alt="A physics notebook with handwriting, a lens diagram, a highlighter and a sticky note"><br><sub><b>Notebook</b>: handwriting with pressure, keyboard text, highlighter and notes.</sub></td>
-    <td align="center"><img src="docs/img/02_panel_hojas.png" width="260" alt="The page panel with thumbnails of each page in the notebook"><br><sub><b>Page panel</b>: thumbnails to jump to, move or mark each page.</sub></td>
-    <td align="center"><img src="docs/img/03_biblioteca.png" width="260" alt="The library with folders and notebooks"><br><sub><b>Library</b>: folders, favorites and thumbnails of your notebooks.</sub></td>
+    <td align="center"><img src="docs/img/en/01_cuaderno.png" width="260" alt="A physics notebook with handwriting, a lens diagram, a highlighter and a sticky note"><br><sub><b>Notebook</b>: handwriting with pressure, keyboard text, highlighter and notes.</sub></td>
+    <td align="center"><img src="docs/img/en/02_panel_hojas.png" width="260" alt="The page panel with thumbnails of each page in the notebook"><br><sub><b>Page panel</b>: thumbnails to jump to, move or mark each page.</sub></td>
+    <td align="center"><img src="docs/img/en/03_biblioteca.png" width="260" alt="The library with folders and notebooks"><br><sub><b>Library</b>: folders, favorites and thumbnails of your notebooks.</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/img/04_indice.png" width="260" alt="The Index panel with the notebook titles numbered by level"><br><sub><b>Index</b>: handwritten titles numbered by level, with the panel to jump to each one.</sub></td>
-    <td align="center"><img src="docs/img/05_figuras.png" width="260" alt="Neat shapes drawn from strokes, with handles to stretch and rotate"><br><sub><b>Shapes and selection</b>: neat shapes made from your strokes, with handles to stretch and rotate.</sub></td>
-    <td align="center"><img src="docs/img/06_pdf.png" width="260" alt="An imported PDF with highlighting and handwritten answers on top"><br><sub><b>Annotated PDF</b>: an imported PDF with highlighting and handwritten answers on top.</sub></td>
+    <td align="center"><img src="docs/img/en/04_indice.png" width="260" alt="The Index panel with the notebook titles numbered by level"><br><sub><b>Index</b>: handwritten titles numbered by level, with the panel to jump to each one.</sub></td>
+    <td align="center"><img src="docs/img/en/05_figuras.png" width="260" alt="Neat shapes drawn from strokes, with handles to stretch and rotate"><br><sub><b>Shapes and selection</b>: neat shapes made from your strokes, with handles to stretch and rotate.</sub></td>
+    <td align="center"><img src="docs/img/en/06_pdf.png" width="260" alt="An imported PDF with highlighting and handwritten answers on top"><br><sub><b>Annotated PDF</b>: an imported PDF with highlighting and handwritten answers on top.</sub></td>
   </tr>
-  <tr><td colspan="3" align="center"><img src="docs/img/07_sync.png" width="800" alt="The same notebook open on the tablet and in the Linux app, synced with Google Drive"><br><sub><b>Tablet and PC in sync</b>: the same notebook on the tablet and in the Linux app, with Google Drive.</sub></td></tr>
+  <tr><td colspan="3" align="center"><img src="docs/img/en/07_sync.png" width="800" alt="The same notebook open on the tablet and in the Linux app, synced with Google Drive"><br><sub><b>Tablet and PC in sync</b>: the same notebook on the tablet and in the Linux app, with Google Drive.</sub></td></tr>
 </table>
 
 ## Installation

@@ -37,7 +37,7 @@ void main() {
       await backend.signIn();
       await t.pumpWidget(ApuntesApp(root: root, backend: backend));
       await settle(t, 3000);
-      await t.tap(find.byKey(const Key('nb-Física – Óptica')));
+      await t.tap(find.byKey(Key('nb-$nbPhysics')));
       await settle(t, 3500);
       for (var i = 0; i < 40 && find.byKey(const Key('syncIndicator')).evaluate().isEmpty; i++) {
         await settle(t, 100);
