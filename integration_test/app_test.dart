@@ -1488,6 +1488,66 @@ void main() {
     expect(t.takeException(), isNull);
   });
 
+  testWidgets('importar carpeta: el .zip exportado vuelve con sus subcarpetas y cuadernos', (t) async {
+    await start(t);
+    await createFolder(t, 'Facultad');
+    await t.tap(find.byKey(const Key('folder-Facultad')));
+    await settle(t, 800);
+    await createNotebook(t, 'Apuntes');
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+    await createFolder(t, 'Sub');
+    await t.tap(find.byKey(const Key('folder-Sub')));
+    await settle(t, 800);
+    await createNotebook(t, 'Parcial');
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+    await t.tap(find.byKey(const Key('up')));
+    await settle(t, 800);
+    await t.tap(find.byKey(const Key('up')));
+    await settle(t, 800);
+
+    Uint8List? zipBytes;
+    final savedZip = saveFolderZip, savedPick = Pickers.folderZip;
+    saveFolderZip = (zip, name) async {
+      zipBytes = await zip.readAsBytes();
+      return true;
+    };
+    addTearDown(() {
+      saveFolderZip = savedZip;
+      Pickers.folderZip = savedPick;
+    });
+    await holdOn(t, find.byKey(const Key('folder-Facultad')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('exportFolder')));
+    await settle(t, 600);
+    await t.tap(find.byKey(const Key('folderExport-vynote')));
+    for (var i = 0; i < 200 && zipBytes == null; i++) {
+      await settle(t, 100);
+    }
+    expect(zipBytes, isNotNull);
+    await settle(t, 600);
+
+    Pickers.folderZip = () async => zipBytes;
+    await t.tap(find.byKey(const Key('new')));
+    await settle(t);
+    await t.tap(find.byKey(const Key('importFolder')));
+    for (var i = 0; i < 100 && find.textContaining('importada').evaluate().isEmpty; i++) {
+      await settle(t, 100);
+    }
+    expect(find.textContaining('importada'), findsOneWidget);
+    expect(find.byKey(const Key('folder-Facultad (2)')), findsOneWidget);
+    await t.tap(find.byKey(const Key('folder-Facultad (2)')));
+    await settle(t, 800);
+    // el nombre ya existe en el índice: el cuaderno importado lleva "(importado)"
+    expect(find.byKey(const Key('nb-Apuntes (importado)')), findsOneWidget);
+    expect(find.byKey(const Key('folder-Sub')), findsOneWidget);
+    await t.tap(find.byKey(const Key('folder-Sub')));
+    await settle(t, 800);
+    expect(find.byKey(const Key('nb-Parcial (importado)')), findsOneWidget);
+    expect(t.takeException(), isNull);
+  });
+
   testWidgets('carpetas: crear, meter un cuaderno, renombrar y sacar', (t) async {
     await start(t);
     await createNotebook(t, 'Suelto'); // se abre solo: volver a la biblioteca

@@ -60,6 +60,7 @@ with no accounts and no servers of our own. If you want, you can sync them betwe
 - **Reading mode**: read without touching anything by mistake.
 - **Export and import**: with a single **"Exportar"** (Export) option, you can take notebooks out as PDF or PNG, or whole as an
   `.vynote` file to back them up or move them to another tablet. You can import `.vynote`, PDF, images and audio (old `.opennote` files from before the rename still import).
+  A folder exported as a Vynote `.zip` imports back with its subfolders and notebooks in place.
   An imported PDF goes into the page you're looking at, and its pages open instantly, ready to write on top of.
 - **Google Drive sync (optional)**: connect once with your Google account, and the tablet and the PC apps (Linux and
   Windows) stay in sync on their own. The app only sees its own "Vynote" folder in your Drive, changes made on two

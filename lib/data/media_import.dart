@@ -33,6 +33,13 @@ class Pickers {
     return p == null ? null : File(p).readAsBytes();
   };
 
+  /// El `.zip` de una carpeta exportada en formato Vynote, en bytes para importar; null si se canceló. Sin filtro de extensión.
+  static Future<Uint8List?> Function() folderZip = () async {
+    final r = await FilePicker.pickFiles(type: FileType.any);
+    final p = r.isEmpty ? null : r.first.path;
+    return p == null ? null : File(p).readAsBytes();
+  };
+
   /// Una imagen (PNG / JPG) de la tablet para usar de fondo de hoja; null si se canceló.
   static Future<File?> Function() bgImage = () async {
     final r = await FilePicker.pickFiles(type: FileType.image);

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../data/export.dart';
+import '../../data/import_folder.dart';
 import '../../data/media_import.dart';
 import '../../data/vynote_file.dart';
 import '../../data/storage.dart';
@@ -316,6 +317,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
               ('newNotebook', Symbols.note_add, 'Cuaderno nuevo'),
               ('newFolder', Symbols.create_new_folder, 'Carpeta nueva'),
               ('importNotebook', Symbols.upload_file, 'Importar cuaderno .vynote'),
+              ('importFolder', Symbols.folder_zip, 'Importar carpeta (.zip)'),
             ])
               ListTile(
                 key: Key(key),
@@ -332,6 +334,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     if (v == 'newNotebook') await _createNotebook();
     if (v == 'newFolder') await _createFolder();
     if (v == 'importNotebook') await importVynote();
+    if (v == 'importFolder') await importFolder();
   }
 
   /// Elige un `.vynote` y lo agrega como cuaderno nuevo (en la carpeta actual). También lo usan los tests.
@@ -351,6 +354,67 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     } on VynoteException catch (e) {
       if (mounted) snack(context, 'No se pudo importar: ${e.message}');
     } catch (e) {
+      if (mounted) snack(context, 'No se pudo importar: $e');
+    }
+  }
+
+  /// Elige el `.zip` de una carpeta exportada como Vynote y la recrea (con sus subcarpetas) en la carpeta actual,
+  /// con progreso cancelable. También lo usan los tests.
+  Future<void> importFolder() async {
+    final bytes = await Pickers.folderZip();
+    if (bytes == null || !mounted) return;
+    final progress = ValueNotifier<(int, int, String)>((0, 1, ''));
+    final nav = Navigator.of(context);
+    var cancel = false;
+    unawaited(showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Importando carpeta'),
+        content: ValueListenableBuilder(
+          valueListenable: progress,
+          builder: (ctx, v, _) {
+            final style = TextStyle(color: Theme.of(ctx).colorScheme.onSurfaceVariant);
+            return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              LinearProgressIndicator(value: v.$2 == 0 ? null : v.$1 / v.$2, borderRadius: BorderRadius.circular(4)),
+              const SizedBox(height: 12),
+              Text('Cuaderno ${v.$1 < v.$2 ? v.$1 + 1 : v.$2} de ${v.$2}', style: style),
+              if (v.$3.isNotEmpty) Text(v.$3, style: style.copyWith(fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+            ]);
+          },
+        ),
+        actions: [TextButton(key: const Key('cancelFolderImport'), onPressed: () => cancel = true, child: const Text('Cancelar'))],
+      ),
+    ));
+    try {
+      final before = {for (final n in index!.notebooks) n.id};
+      final r = await importFolderZip(store, index!, bytes,
+          parent: current, onProgress: (a, b, n) => progress.value = (a, b, n), cancelled: () => cancel);
+      if (nav.canPop()) nav.pop();
+      if (!mounted) return;
+      if (cancel) {
+        snack(context, 'Importación cancelada');
+        return;
+      }
+      await store.saveIndex(index!);
+      final loaded = <String, NotebookDoc>{};
+      for (final nb in index!.notebooks.where((n) => !before.contains(n.id))) {
+        final t = await store.loadSheetDoc(nb, 0);
+        if (t != null) loaded[nb.id] = t;
+      }
+      if (!mounted) return;
+      setState(() => thumbs.addAll(loaded));
+      final fail = r.failed.isEmpty ? '' : ' (${r.failed.length} no se pudieron leer)';
+      snack(
+          context,
+          r.folder == null
+              ? 'Importados ${r.imported} cuadernos$fail'
+              : 'Carpeta "${r.folder!.name}" importada: ${r.imported} cuadernos$fail');
+    } on VynoteException catch (e) {
+      if (nav.canPop()) nav.pop();
+      if (mounted) snack(context, 'No se pudo importar: ${e.message}');
+    } catch (e) {
+      if (nav.canPop()) nav.pop();
       if (mounted) snack(context, 'No se pudo importar: $e');
     }
   }
