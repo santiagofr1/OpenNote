@@ -15,10 +15,11 @@ void main() {
   void put(NotebookDoc p, String id, TextBlock? t) => t == null ? p.texts.remove(id) : p.texts[id] = t;
 
   group('History', () {
+    final doc0 = NotebookDoc(Notebook.create('t'));
     test('deshacer y rehacer van y vuelven entre las pilas', () {
       final h = History();
       expect(h.undo(), isNull);
-      const a = EditAction(), b = EditAction();
+      final a = EditAction(doc0), b = EditAction(doc0);
       h.push(a);
       h.push(b);
       expect(h.undo(), same(b));
@@ -26,16 +27,16 @@ void main() {
       expect(h.redo(), same(b));
       expect(h.canRedo, isFalse);
       expect(h.undo(), same(b));
-      h.push(const EditAction());
+      h.push(EditAction(doc0));
       expect(h.canRedo, isFalse, reason: 'una acción nueva borra lo que se podía rehacer');
     });
 
     test('guarda hasta ${History.limit} acciones', () {
       final h = History();
-      final first = EditAction(added: [Stroke('s0', 'pen', '#000000', 1, [])]);
+      final first = EditAction(doc0, added: [Stroke('s0', 'pen', '#000000', 1, [])]);
       h.push(first);
       for (var i = 0; i < History.limit; i++) {
-        h.push(const EditAction());
+        h.push(EditAction(doc0));
       }
       var n = 0;
       EditAction? last;
@@ -66,6 +67,7 @@ void main() {
       final iBefore = page.items['i']!.copy();
       page.items['i']!.x += 30;
       final a = EditAction(
+        page,
         removed: [s],
         added: [m],
         textBefore: {'t': tBefore},
@@ -87,7 +89,7 @@ void main() {
       final page = NotebookDoc(Notebook.create('t'));
       final t = TextBlock('t', 1, 2, 3, 'x');
       final it = Item('i', 'image', 0, 0, 10, 10, file: 'a.png');
-      final a = EditAction(textBefore: absent(['t']), textAfter: {'t': t}, itemBefore: absent(['i']), itemAfter: {'i': it});
+      final a = EditAction(page, textBefore: absent(['t']), textAfter: {'t': t}, itemBefore: absent(['i']), itemAfter: {'i': it});
       a.apply(page, undo: false, putText: (id, t) => put(page, id, t));
       expect(page.texts.keys, ['t']);
       expect(page.items.keys, ['i']);
@@ -102,7 +104,7 @@ void main() {
       page.items['a'] = Item('a', 'image', 0, 0, 100, 100)..z = 0;
       page.items['b'] = Item('b', 'image', 0, 0, 100, 100)..z = 1;
       final ch = page.reorder({'a'}, ZMove.front, (e) => e is Item ? e.rect : Rect.zero)!;
-      final a = EditAction(zBefore: ch.before, zAfter: ch.after);
+      final a = EditAction(page, zBefore: ch.before, zAfter: ch.after);
       expect(page.drawOrder().map((e) => e.id), ['b', 'a']);
       a.apply(page, undo: true, putText: (id, t) => put(page, id, t));
       expect(page.drawOrder().map((e) => e.id), ['a', 'b']);
@@ -124,7 +126,7 @@ void main() {
     EditAction add(NotebookDoc d, int k, String id) {
       final s = on(k, id);
       d.strokes[id] = s;
-      return EditAction(added: [s]);
+      return EditAction(d, added: [s]);
     }
 
     Set<String> ids(NotebookDoc d, Iterable<int> ks) => {for (final k in ks) d.sheets[k].id};

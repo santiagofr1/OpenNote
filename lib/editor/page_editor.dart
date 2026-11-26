@@ -843,7 +843,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       if (_cover != null) {
         _commitCover(erased!);
       } else if (erased!.isNotEmpty) {
-        _pushUndo(EditAction(removed: erased!));
+        _pushUndo(EditAction(doc, removed: erased!));
       }
       erased = null;
       eraserAt = null;
@@ -996,7 +996,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     }
     doc.strokes.remove(d.before.id);
     doc.strokes[w.id] = w;
-    _pushUndo(EditAction(removed: [d.before], added: [w]));
+    _pushUndo(EditAction(doc, removed: [d.before], added: [w]));
     _growIfNeeded(w.bounds.bottom);
     _changed();
     liveTick.value++;
@@ -1093,7 +1093,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     if (smooth) s.smooth(); // una figura limpia no se suaviza
     s.z = doc.nextZ(); // arriba de todo
     doc.strokes[s.id] = s; // avisa a las hojas que toca
-    _pushUndo(EditAction(added: [s]));
+    _pushUndo(EditAction(doc, added: [s]));
     _growIfNeeded(s.bounds.bottom, right: s.bounds.right);
     _changed();
   }
@@ -1113,7 +1113,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   Item? _coverItem; // PDF sobre el que va el gesto
   Stroke? _cover; // corrector en curso (se dibuja en vivo)
   bool _coverColored = false; // ya llegó el color real
-  final _pendingCovers = <String, EditAction>{}; // confirmados que todavía esperan su color
+  final _pendingCovers = <String, (EditAction, Stroke)>{}; // confirmados que todavía esperan su color
 
   /// El PDF (el de z más alta) que contiene [p], o null.
   Item? _pdfAt(Offset p) {
@@ -1162,12 +1162,11 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       liveTick.value++;
       return;
     }
-    final act = _pendingCovers.remove(id);
-    if (act == null) return;
-    final i = act.added.indexWhere((s) => s.id == id);
-    if (i < 0) return;
-    final old = act.added[i], fin = _recolored(old, hex);
-    act.added[i] = fin; // deshacer/rehacer usan el trazo final
+    final pending = _pendingCovers.remove(id);
+    if (pending == null) return;
+    final (act, old) = pending;
+    final fin = _recolored(old, hex);
+    act.mapAdded(id, (local) => _recolored(local, hex)); // deshacer/rehacer usan el trazo final
     if (identical(doc.strokes[id], old)) {
       doc.strokes[id] = fin;
       doc.markDirtyElement(fin);
@@ -1182,8 +1181,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     _endCover();
     s.z = doc.nextZ(); // arriba de todo
     doc.strokes[s.id] = s;
-    final act = EditAction(added: [s], removed: removed);
-    if (!colored) _pendingCovers[s.id] = act;
+    final act = EditAction(doc, added: [s], removed: removed);
+    if (!colored) _pendingCovers[s.id] = (act, s);
     _pushUndo(act);
     _growIfNeeded(s.bounds.bottom, right: s.bounds.right);
     _changed();
@@ -1404,6 +1403,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       itemAfter[id] = it.copy();
     });
     _pushUndo(EditAction(
+        doc,
         removed: removed,
         added: added,
         textBefore: textBefore,
@@ -1442,7 +1442,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       after[t.id] = t.copy();
     }
     if (before.isEmpty) return;
-    _pushUndo(EditAction(textBefore: before, textAfter: after));
+    _pushUndo(EditAction(doc, textBefore: before, textAfter: after));
     _changed();
     setState(() {});
     liveTick.value++;
@@ -1462,6 +1462,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       doc.items.remove(id);
     }
     _pushUndo(EditAction(
+      doc,
       removed: removed,
       textBefore: textBefore,
       textAfter: absent(textBefore.keys),
@@ -1500,7 +1501,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final pad = _loadedAt(r.top - 4) && _loadedAt(r.bottom + 4) ? 4.0 : 0.0;
     final it = Item(newId('i'), 'link', r.left - pad, r.top - pad, r.width + 2 * pad, r.height + 2 * pad, text: dest)..z = doc.nextZ();
     doc.items[it.id] = it;
-    _pushUndo(EditAction(itemBefore: absent([it.id]), itemAfter: {it.id: it.copy()}));
+    _pushUndo(EditAction(doc, itemBefore: absent([it.id]), itemAfter: {it.id: it.copy()}));
     _changed();
     liveTick.value++;
   }
@@ -1514,7 +1515,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     if (dest == null || !mounted || dest == before.text || !doc.items.containsKey(it.id)) return;
     it.text = dest;
     doc.markDirtyElement(it);
-    _pushUndo(EditAction(itemBefore: {it.id: before}, itemAfter: {it.id: it.copy()}));
+    _pushUndo(EditAction(doc, itemBefore: {it.id: before}, itemAfter: {it.id: it.copy()}));
     _changed();
     liveTick.value++;
   }
@@ -1657,6 +1658,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       texts.put(t.id, t);
     }
     _pushUndo(EditAction(
+      doc,
       added: newStrokes,
       textBefore: absent(newTexts.map((t) => t.id)),
       textAfter: {for (final t in newTexts) t.id: t.copy()},
@@ -1679,7 +1681,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   void _reorderSel(ZMove m) {
     final ch = doc.reorder(sel.allIds, m, _rectOf);
     if (ch == null) return;
-    _pushUndo(EditAction(zBefore: ch.before, zAfter: ch.after)); // el cambio de z ya avisó a sus hojas
+    _pushUndo(EditAction(doc, zBefore: ch.before, zAfter: ch.after)); // el cambio de z ya avisó a sus hojas
     liveTick.value++;
     _changed();
   }
@@ -2496,7 +2498,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   /// Hoja agregada al final (tirar o menú): se puede deshacer.
   void _sheetAddedAtEnd() {
-    _pushUndo(EditAction(sheetOps: [SheetPresenceOp.added(doc, doc.sheets.last)]));
+    _pushUndo(EditAction(doc, sheetOps: [SheetPresenceOp.added(doc, doc.sheets.last)]));
     widget.onSheetsChanged?.call(null);
   }
 
@@ -2513,7 +2515,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     it.y = y;
     it.z = doc.nextZ();
     doc.items[it.id] = it;
-    _pushUndo(EditAction(itemBefore: {it.id: null}, itemAfter: {it.id: it.copy()}));
+    _pushUndo(EditAction(doc, itemBefore: {it.id: null}, itemAfter: {it.id: it.copy()}));
     _setTool(Tool.select);
     sel.replace(items: [it.id]);
     _growIfNeeded(it.y + it.h, right: it.x + it.w);
@@ -2558,7 +2560,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final before = it.copy();
     it.text = name;
     doc.markDirtyElement(it);
-    _pushUndo(EditAction(itemBefore: {id: before}, itemAfter: {id: it.copy()}));
+    _pushUndo(EditAction(doc, itemBefore: {id: before}, itemAfter: {id: it.copy()}));
     _changed();
     setState(() {});
   }

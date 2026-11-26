@@ -199,7 +199,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
     final ops = op(d);
     if (ops.isEmpty) return;
     _structure.value++;
-    editorKey.currentState?.sheetsChanged(EditAction(sheetOps: ops));
+    editorKey.currentState?.sheetsChanged(EditAction(d, sheetOps: ops));
     _showSheet(goTo);
     setState(() {});
   }

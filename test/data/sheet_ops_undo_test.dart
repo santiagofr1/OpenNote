@@ -55,7 +55,7 @@ void main() {
     ];
   }
 
-  void run(History h, NotebookDoc d, List<SheetOp> ops) => h.push(EditAction(sheetOps: ops));
+  void run(History h, NotebookDoc d, List<SheetOp> ops) => h.push(EditAction(d, sheetOps: ops));
   void undo(History h, NotebookDoc d) => h.undo()!.apply(d, undo: true, putText: noOp);
   void redo(History h, NotebookDoc d) => h.redo()!.apply(d, undo: false, putText: noOp);
 

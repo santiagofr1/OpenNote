@@ -22,9 +22,10 @@ void main() {
 
   test('History.forgetItem saca el elemento de todo el historial y descarta lo que queda vacío', () {
     final a = audio('Audio 1'), b = audio('Audio 2');
+    final d = NotebookDoc(Notebook.create('t'));
     final h = History()
-      ..push(EditAction(itemBefore: {a.id: null}, itemAfter: {a.id: a.copy()}))
-      ..push(EditAction(itemBefore: {a.id: a.copy(), b.id: b.copy()}, itemAfter: {a.id: a.copy(), b.id: b.copy()}));
+      ..push(EditAction(d, itemBefore: {a.id: null}, itemAfter: {a.id: a.copy()}))
+      ..push(EditAction(d, itemBefore: {a.id: a.copy(), b.id: b.copy()}, itemAfter: {a.id: a.copy(), b.id: b.copy()}));
     h.forgetItem(a.id);
     final last = h.undo()!;
     expect(last.itemBefore.keys, [b.id]);
