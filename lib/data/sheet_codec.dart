@@ -171,6 +171,36 @@ class _Reader {
   }
 }
 
+/// Tope de tamaño de una hoja descomprimida (una hoja real pesa unos MB: 64 MB es muy generoso). Una "bomba" de zlib
+/// (pocos KB que se inflan a GB) en un `.sheet` de la nube o de un `.vynote` no puede reservar toda la memoria. Es una
+/// variable solo para que los tests la bajen.
+int kMaxSheetInflated = 64 * 1024 * 1024;
+
+/// Descomprime en streaming y corta en cuanto se pasa de [kMaxSheetInflated] (sin reservar lo que viene después).
+Uint8List _inflate(Uint8List z) {
+  final out = BytesBuilder(copy: false);
+  final conv = ZLibDecoder().startChunkedConversion(_LimitSink(out));
+  const slice = 16 * 1024;
+  for (var i = 0; i < z.length; i += slice) {
+    conv.add(Uint8List.sublistView(z, i, i + slice > z.length ? z.length : i + slice));
+  }
+  conv.close();
+  return out.takeBytes();
+}
+
+class _LimitSink extends ByteConversionSinkBase {
+  _LimitSink(this._out);
+  final BytesBuilder _out;
+  @override
+  void add(List<int> chunk) {
+    if (_out.length + chunk.length > kMaxSheetInflated) throw SheetFormatException('la hoja descomprimida pasa el tope de $kMaxSheetInflated bytes');
+    _out.add(chunk);
+  }
+
+  @override
+  void close() {}
+}
+
 /// Bytes → hoja. Lanza [SheetFormatException] si el archivo está roto (nunca otra cosa).
 SheetContent decodeSheet(Uint8List bytes) {
   try {
@@ -178,7 +208,7 @@ SheetContent decodeSheet(Uint8List bytes) {
       throw SheetFormatException('no es una hoja (falta "ONS")');
     }
     if (bytes[3] != kSheetVersion) throw SheetFormatException('versión ${bytes[3]} no soportada');
-    final body = Uint8List.fromList(ZLibCodec().decode(Uint8List.sublistView(bytes, 4)));
+    final body = _inflate(Uint8List.sublistView(bytes, 4));
     if (body.length < 4) throw SheetFormatException('cuerpo vacío');
     final len = ByteData.sublistView(body).getUint32(0, Endian.little);
     if (len > body.length - 4) throw SheetFormatException('largo del JSON inválido');

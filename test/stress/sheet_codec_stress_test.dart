@@ -231,6 +231,22 @@ void main() {
       expect(() => back!.strokes.single.color, returnsNormally);
     });
 
+    test('bomba zlib: pocos KB que se inflan muchísimo se cortan en el tope sin reservarlo (tope bajado para el test)', () {
+      final tope = kMaxSheetInflated;
+      addTearDown(() => kMaxSheetInflated = tope);
+      kMaxSheetInflated = 64 * 1024; // el test no reserva memoria: 8 MB de ceros contra un tope de 64 KB
+      final body = BytesBuilder()
+        ..add((ByteData(4)..setUint32(0, 2, Endian.little)).buffer.asUint8List())
+        ..add(utf8.encode('{}'))
+        ..add(Uint8List(8 * 1024 * 1024));
+      final bomba = Uint8List.fromList([0x4F, 0x4E, 0x53, 1, ...ZLibCodec(level: 9).encode(body.takeBytes())]);
+      expect(bomba.length, lessThan(20 * 1024), reason: 'la bomba tiene que ser chica');
+      expect(() => decodeSheet(bomba), throwsA(isA<SheetFormatException>()));
+      // y con el tope normal la hoja legítima de siempre se lee
+      kMaxSheetInflated = tope;
+      expect(() => decodeSheet(encodeSheet(randomSheet(Random(1)))), returnsNormally);
+    });
+
     test('mil trazos de un punto y mil de cero puntos: ida y vuelta', () {
       final cc = SheetContent(strokes: [
         for (var i = 0; i < 1000; i++) Stroke('p$i', 'pen', '#000000', 2, [i / 10, 0, 128 / 255])..z = i,
