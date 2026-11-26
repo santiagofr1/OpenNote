@@ -161,21 +161,19 @@ extension FolderOps on NotesIndex {
     for (final f in folders) {
       if (f.parent != null && !ids.contains(f.parent)) f.parent = null;
     }
+    // ciclos: solo las carpetas que están EN el ciclo (vuelven al inicio); las que cuelgan de él siguen en su lugar
     for (final f in folders) {
-      if (pathOf(f.id).length != _depth(f)) f.parent = null; // ciclo
+      var p = folderById(f.parent);
+      for (var n = 0; p != null && n <= folders.length; n++) {
+        if (identical(p, f)) {
+          f.parent = null;
+          break;
+        }
+        p = folderById(p.parent);
+      }
     }
     for (final n in notebooks) {
       if (n.folder != null && !ids.contains(n.folder)) n.folder = null;
     }
-  }
-
-  int _depth(Folder f) {
-    var d = 1;
-    var p = folderById(f.parent);
-    while (p != null && d <= folders.length) {
-      d++;
-      p = folderById(p.parent);
-    }
-    return d;
   }
 }
