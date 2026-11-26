@@ -1802,6 +1802,11 @@ class LEn extends L {
   String get librarySampleNotebook => 'My notebook';
 
   @override
+  String libraryRecoveredNotebook(int n) {
+    return 'Recovered notebook $n';
+  }
+
+  @override
   String get exportFileNotebook => 'Notebook';
 
   @override

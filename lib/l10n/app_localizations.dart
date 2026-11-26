@@ -3207,6 +3207,12 @@ abstract class L {
   /// **'Mi cuaderno'**
   String get librarySampleNotebook;
 
+  /// Name given to a notebook found on disk whose own name was lost (library index unreadable); n is a counter
+  ///
+  /// In es, this message translates to:
+  /// **'Cuaderno recuperado {n}'**
+  String libraryRecoveredNotebook(int n);
+
   /// Fallback file name for a notebook without a name (exported files)
   ///
   /// In es, this message translates to:

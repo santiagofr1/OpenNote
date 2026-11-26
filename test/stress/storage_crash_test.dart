@@ -135,17 +135,40 @@ void main() {
       }
     });
 
-    test('index.json ilegible: se guarda aparte Y los cuadernos que hay en disco reaparecen', () async {
+    test('index.json ilegible: se guarda aparte Y los cuadernos que hay en disco reaparecen con todos sus datos', () async {
       final d = await persisted(2);
+      final fac = Folder.create('Facultad'), an = Folder.create('Análisis', parent: fac.id);
+      d.nb
+        ..name = 'Física II'
+        ..folder = an.id
+        ..pin = hashPin('1234')
+        ..bg = 'grid'
+        ..paper = '#101010'
+        ..spacing = 7.5
+        ..size = 'a5'
+        ..favorite = true
+        ..touch();
+      final antes = d.nb.toJson()..remove('last');
+      await store.saveIndex(NotesIndex(last: d.id, notebooks: [d.nb], folders: [fac, an]));
+      await Storage.settleWrites();
+      for (final e in root.listSync().whereType<File>().where((e) => e.path.contains('index.json'))) {
+        e.deleteSync(); // sin índice ni respaldo
+      }
       store.indexFile.writeAsStringSync('{"format":3,"notebooks":[{"id":"' + d.id); // cortado
       final s2 = await restart();
       final idx = await s2.loadIndex();
       expect(Directory(root.path).listSync().any((e) => e.path.contains('index.json.corrupto-')), isTrue,
           reason: 'el índice roto tiene que quedar guardado aparte');
-      // Hoy se crea un cuaderno de ejemplo y todos los cuadernos reales quedan huérfanos en notebooks/ (invisibles).
-      // Con notebooks/<id>/notebook.json se puede reconstruir la lista (sin nombre, pero recuperable).
-      expect(idx.notebooks.any((n) => n.id == d.id), isTrue, reason: 'el cuaderno ${d.id} quedó huérfano e invisible');
-    }, skip: 'pendiente: reconstruir la biblioteca desde notebooks/*/notebook.json cambia lo que ve el usuario (nombres perdidos, carpetas); falta decidir el diseño');
+      final nb = idx.notebooks.single; // y NO el cuaderno de ejemplo
+      expect(nb.id, d.id);
+      expect(nb.toJson()..remove('last'), antes, reason: 'nombre, carpeta, PIN y ajustes vuelven como estaban');
+      expect(idx.pathOf(nb.folder).map((f) => (f.id, f.name)), [(fac.id, 'Facultad'), (an.id, 'Análisis')]);
+      expect(idx.pathOf(nb.folder).last.parent, fac.id);
+      final doc = await s2.loadNotebook(nb);
+      expect(doc.texts['t0']!.text, 'hoja 0');
+      expect(doc.texts['t1']!.text, 'hoja 1');
+      expect(doc.strokes.length, 2);
+    });
   });
 
   group('restos de una caída a mitad de escritura', () {

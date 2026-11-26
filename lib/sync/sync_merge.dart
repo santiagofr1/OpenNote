@@ -62,7 +62,21 @@ String mergeNotebookJson(String base, String local, String remote) {
   // las secciones se fusionan igual que las hojas; `active` (y el resto) queda el local. El `section` de cada hoja ya
   // viaja dentro de su objeto.
   final sections = mergeById(_list(b, 'sections'), _list(l, 'sections'), _list(r, 'sections'));
-  return jsonEncode({...l, if (sections.isNotEmpty) 'sections': sections, 'sheets': sheets});
+  final meta = _mergeMeta(b['meta'], l['meta'], r['meta']);
+  return jsonEncode({...l, if (sections.isNotEmpty) 'sections': sections, 'sheets': sheets, if (meta != null) 'meta': meta});
+}
+
+/// `meta` de notebook.json (nombre, carpeta, PIN y ajustes del cuaderno; copia de lo que dice el índice). Es un bloque
+/// entero, como una entrada de [mergeById]: si cambió solo en un lado queda ese; si cambió en los dos, el de `updated`
+/// más nuevo (empate: el local), igual que la entrada del cuaderno en el índice; así los dos archivos coinciden. Un
+/// archivo de una app vieja no lo trae: queda el del otro lado.
+Map? _mergeMeta(Object? b, Object? l, Object? r) {
+  final bm = b is Map ? b : null, lm = l is Map ? l : null, rm = r is Map ? r : null;
+  if (lm == null || rm == null) return lm ?? rm;
+  if (_enc(lm) == _enc(rm)) return lm;
+  if (bm != null && _enc(lm) == _enc(bm)) return rm;
+  if (bm != null && _enc(rm) == _enc(bm)) return lm;
+  return _upd(rm) > _upd(lm) ? rm : lm;
 }
 
 /// Títulos del índice de una hoja que cambió en los dos lados: la hoja que ganó se queda con sus datos, pero sus títulos

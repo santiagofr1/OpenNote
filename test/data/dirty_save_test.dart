@@ -50,7 +50,7 @@ void main() {
         .toSet();
     expect(files, {for (final m in nb.sheets) '${m.id}.sheet'}, reason: '$ctx: sobran o faltan archivos de hojas');
     final j = jsonDecode(File('${store.nbDir(nb.id).path}/notebook.json').readAsStringSync()) as Map;
-    expect(jsonEncode(j), jsonEncode(nb.sheetsJson()), reason: '$ctx: notebook.json distinto');
+    expect(jsonEncode(j..remove('meta')), jsonEncode(nb.sheetsJson()), reason: '$ctx: notebook.json distinto');
   }
 
   Future<void> saveAndVerify(NotebookDoc doc, String ctx) async {

@@ -1808,6 +1808,11 @@ class LEs extends L {
   String get librarySampleNotebook => 'Mi cuaderno';
 
   @override
+  String libraryRecoveredNotebook(int n) {
+    return 'Cuaderno recuperado $n';
+  }
+
+  @override
   String get exportFileNotebook => 'Cuaderno';
 
   @override

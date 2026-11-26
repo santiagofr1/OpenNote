@@ -344,6 +344,25 @@ class Notebook {
         if (canvas) 'canvasW': canvasW,
       };
 
+  /// Los datos del cuaderno que van TAMBIÉN dentro de su `notebook.json` (clave `meta`), como copia de recuperación por si
+  /// el índice se pierde: todo lo de [toJson] menos el id (es el nombre de la carpeta) y `last` (propio de cada dispositivo),
+  /// más [folderPath] (las carpetas donde está, desde el inicio hasta la propia: `{id, name}`) para poder recrearlas.
+  Map<String, dynamic> metaJson(List<Map<String, String>> folderPath) => {
+        ...toJson()..remove('id')..remove('last'),
+        if (folderPath.isNotEmpty) 'folderPath': folderPath,
+      };
+
+  /// El cuaderno [id] según su `meta` de notebook.json (ver [metaJson]); null si no trae un nombre o está mal formado.
+  static Notebook? fromMeta(String id, Map meta) {
+    try {
+      final name = meta['name'];
+      if (name is! String || name.isEmpty) return null;
+      return Notebook.fromJson({...meta, 'id': id, 'last': 0});
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Lo que va en `notebook.json`: las secciones en orden, la activa y TODAS las hojas (de todas las secciones),
   /// agrupadas por sección. Una app vieja que lo abra ve una sola tira con todas las hojas y, si guarda, pierde
   /// la agrupación (no los datos).

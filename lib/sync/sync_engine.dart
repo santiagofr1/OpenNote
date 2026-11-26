@@ -210,7 +210,7 @@ class SyncEngine {
   // de nombre de archivo (los ids son nombres de carpeta y de archivo en disco).
   static bool _entries(Object? l, {bool needId = true}) => l is List && l.every((e) => e is Map && (!needId || isSafeId(e['id'])));
   static bool validNotebook(Map j) =>
-      j['format'] == Notebook.kFormat && _entries(j['sheets']) && (j['sections'] == null || _entries(j['sections'], needId: false));
+      j['format'] == Notebook.kFormat && _entries(j['sheets']) && (j['sections'] == null || _entries(j['sections'], needId: false)) && (j['meta'] == null || j['meta'] is Map);
   static bool validIndex(Map j) =>
       j['format'] == Notebook.kFormat && _entries(j['notebooks']) && (j['folders'] == null || _entries(j['folders'], needId: false));
 
