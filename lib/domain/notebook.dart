@@ -110,8 +110,8 @@ class Section {
   factory Section.fromJson(Map j) => Section(
         j['id'] as String,
         ((j['name'] ?? '') as String).isEmpty ? 'Sección' : j['name'] as String,
-        updated: (j['updated'] ?? 0) as int,
-        last: (j['last'] ?? 0) as int,
+        updated: jsonInt(j['updated']),
+        last: jsonInt(j['last']),
       );
   Map<String, dynamic> toJson() => {'id': id, 'name': name, 'updated': updated, 'last': last};
   Section copy() => Section(id, name, updated: updated, last: last);
@@ -317,8 +317,8 @@ class Notebook {
         paper: (n['paper'] ?? '#fffefb') as String,
         spacing: (n['spacing'] as num?)?.toDouble(),
         size: validPaperSize(n['size']),
-        updated: (n['updated'] ?? 0) as int,
-        last: (n['last'] ?? 0) as int,
+        updated: jsonInt(n['updated']),
+        last: jsonInt(n['last']),
         favorite: (n['favorite'] ?? false) as bool,
         pin: n['pin'] as String?,
         folder: n['folder'] as String?,

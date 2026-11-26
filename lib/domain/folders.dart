@@ -24,7 +24,7 @@ class Folder {
         j['id'] as String,
         (j['name'] ?? '') as String,
         parent: j['parent'] as String?,
-        updated: (j['updated'] ?? 0) as int,
+        updated: jsonInt(j['updated']),
         color: j['color'] as String?,
       );
 
