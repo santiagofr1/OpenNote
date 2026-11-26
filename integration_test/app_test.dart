@@ -76,9 +76,6 @@ void main() {
     await t.pump();
   }
 
-  /// Una muestra de 30 dp de la paleta del panel (el primer color que no es favorito).
-  Finder panelSwatch(String c) => find.byWidgetPredicate((w) => w is Container && w.constraints?.maxWidth == 30 && (w.decoration as BoxDecoration?)?.color == parseColor(c)).first;
-
   /// Toca [f] esperando a que aparezca (hasta 3 s) y llevándolo a la vista (diálogos más altos que la pantalla).
   Future<void> tapV(WidgetTester t, Finder f) async {
     for (var i = 0; i < 60 && f.evaluate().isEmpty; i++) {
@@ -230,7 +227,7 @@ void main() {
     await settle(t, 1200);
   });
 
-  testWidgets('barra: 4 colores favoritos fijos; tocar elige sin reordenar y mantener apretado abre el panel editando ese favorito (issue #23)', (t) async {
+  testWidgets('barra: 4 colores favoritos fijos; tocar elige sin reordenar y mantener apretado guarda ahí el color actual (issue #23)', (t) async {
     await start(t);
     await createNotebook(t, 'Favoritos');
     final ts = editor(t).ts;
@@ -239,19 +236,13 @@ void main() {
     await settle(t);
     expect(ts.pen.color, antes[2]);
     expect(ts.favorites, antes, reason: 'elegir un favorito no los reordena');
+    final nuevo = palette.firstWhere((c) => !antes.contains(c));
+    ts.pen.color = nuevo;
     await t.longPress(find.byKey(const ValueKey('fav-0')));
     await settle(t);
-    expect(find.byKey(const Key('colorSquare')), findsOneWidget, reason: 'mantener apretado abre el panel editando');
-    expect(find.text('Listo'), findsOneWidget);
-    final nuevo = palette.firstWhere((c) => !antes.contains(c));
-    await t.ensureVisible(panelSwatch(nuevo));
-    await t.tap(panelSwatch(nuevo));
-    await settle(t);
+    expect(find.byKey(const Key('eyedropper')), findsNothing, reason: 'mantener apretado ya no abre el panel');
     expect(ts.favorites, [nuevo, antes[1], antes[2], antes[3]]);
-    // cerrar el panel
-    await t.tapAt(const Offset(4, 600));
-    await settle(t);
-    expect(find.byKey(const Key('colorSquare')), findsNothing);
+    expect(ts.pen.color, nuevo, reason: 'el color actual no cambia');
     // dejar los favoritos como estaban
     ts.setFavorite(0, antes[0]);
     editor(t).widget.onPrefsChanged();
@@ -3140,31 +3131,70 @@ void main() {
     expect(ed.doc.items.values.where((i) => i.type == 'image'), isEmpty);
   });
 
-  testWidgets('favoritos: Cambiar en el panel del lápiz y arrastrar en el cuadrado deja el color nuevo en el favorito 0 de la barra', (t) async {
+  testWidgets('rueda de color: arrastrar el anillo cambia el color y mantener apretado un favorito del panel lo guarda; se ve en la barra', (t) async {
     await start(t);
     await createNotebook(t, 'Selector');
     final ts = editor(t).ts;
     final antes = ts.favorites[0];
+    final color0 = ts.pen.color;
     await t.tap(find.byTooltip('Lápiz · tocá de nuevo para opciones'));
     await settle(t);
-    await t.tap(find.byKey(const Key('favEdit')));
+    expect(find.byKey(const Key('favEdit')), findsNothing);
+    await t.tap(find.byKey(const Key('colorViewWheel')));
     await settle(t);
-    final sq = find.byKey(const Key('colorSquare'));
-    await t.ensureVisible(sq);
+    final wheel = find.byKey(const Key('colorWheel'));
+    await t.ensureVisible(wheel);
     await settle(t);
-    await t.dragFrom(t.getTopLeft(sq) + const Offset(60, 40), const Offset(50, 60));
+    final c = t.getCenter(wheel);
+    final r = t.getSize(wheel).width / 2 - 11;
+    await t.dragFrom(c + Offset(r, 0), Offset(-r, r)); // por el anillo, de las 3 a las 6 en punto
     await settle(t);
-    final nuevo = ts.favorites[0];
-    expect(nuevo, isNot(antes));
-    expect(nuevo, ts.pen.color);
+    final nuevo = ts.pen.color;
+    expect(nuevo, isNot(color0));
+    await t.ensureVisible(find.byKey(const ValueKey('panelFav-0')));
+    await t.longPress(find.byKey(const ValueKey('panelFav-0')));
+    await settle(t);
+    expect(ts.favorites[0], nuevo);
     await t.tapAt(const Offset(4, 600)); // cierra el panel
     await settle(t);
-    expect(find.byKey(const Key('colorSquare')), findsNothing);
-    expect(ts.favorites[0], nuevo);
+    expect(find.byKey(const Key('colorWheel')), findsNothing);
     final dot = find.descendant(of: find.byKey(const ValueKey('fav-0')), matching: find.byWidgetPredicate((w) => w is Container && (w.decoration as BoxDecoration?)?.color == parseColor(nuevo)));
     expect(dot, findsOneWidget, reason: 'la barra muestra el color nuevo');
     // dejar el favorito como estaba
     ts.setFavorite(0, antes);
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+  });
+
+  testWidgets('cuentagotas: toma el color de un trazo, lo deja en el lápiz y vuelve a abrir el panel', (t) async {
+    await start(t);
+    await createNotebook(t, 'Cuentagotas');
+    final ed = editor(t);
+    final ts = ed.ts;
+    ts.pen
+      ..color = '#b91c1c'
+      ..width = 14;
+    final c = sheetCenter(t);
+    await stylusLine(t, c, c + const Offset(150, 0));
+    expect(ed.doc.strokes.length, 1);
+    ts.pickColor('#1d4ed8'); // otro color
+    await t.tap(find.byTooltip('Lápiz · tocá de nuevo para opciones'));
+    await settle(t);
+    await t.tap(find.byKey(const Key('eyedropper')));
+    await settle(t, 800);
+    expect(find.text('Tocá la hoja para tomar un color'), findsOneWidget);
+    expect(find.byKey(const Key('eyedropper')), findsNothing, reason: 'el panel se cerró');
+    final g = await t.createGesture(kind: PointerDeviceKind.stylus);
+    await g.down(c + const Offset(75, 0));
+    await t.pump();
+    expect(find.byKey(const Key('eyedropperLoupe')), findsOneWidget);
+    await g.up();
+    await settle(t, 600);
+    expect(ts.pen.color, '#b91c1c', reason: 'el lápiz quedó con el color del trazo');
+    expect(ed.doc.strokes.length, 1, reason: 'no dibujó nada');
+    expect(find.byKey(const Key('eyedropper')), findsOneWidget, reason: 'vuelve el panel');
+    await t.tapAt(const Offset(4, 600)); // cierra el panel
+    await settle(t);
     await t.tap(find.byKey(const Key('back')));
     await settle(t, 1200);
   });
