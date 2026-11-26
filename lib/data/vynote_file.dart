@@ -150,7 +150,12 @@ Future<Notebook> importNotebookBytes(Storage store, Uint8List bytes,
   for (final m in sheets) {
     final f = files['sheets/${m.id}.sheet'];
     if (f == null) continue; // hoja sin archivo: vacía
-    final data = f.readBytes();
+    List<int>? data;
+    try {
+      data = f.readBytes(); // una entrada dañada del zip (CRC, cifrada) tira acá
+    } catch (_) {
+      data = null;
+    }
     if (data == null) throw VynoteException('La hoja ${m.id} está rota.', kind: VynoteError.brokenSheet, arg: m.id);
     final b = Uint8List.fromList(data);
     final ok = await _compute(() {
@@ -169,19 +174,24 @@ Future<Notebook> importNotebookBytes(Storage store, Uint8List bytes,
     if (!f.name.startsWith('media/')) continue;
     final name = f.name.substring(6);
     if (!isSafeFileName(name)) throw VynoteException('El archivo tiene nombres no válidos.', kind: VynoteError.invalidNames);
-    final d = f.readBytes();
+    List<int>? d;
+    try {
+      d = f.readBytes();
+    } catch (_) {
+      throw VynoteException('El archivo está roto.', kind: VynoteError.brokenFile, arg: f.name);
+    }
     if (d != null) media[name] = Uint8List.fromList(d);
   }
 
-  final name = _uniqueName((manifest['name'] as String?)?.trim().isNotEmpty == true ? (manifest['name'] as String).trim() : 'Cuaderno', taken);
+  final name = _uniqueName(manifest['name'] is String && (manifest['name'] as String).trim().isNotEmpty ? (manifest['name'] as String).trim() : 'Cuaderno', taken);
   final nb = Notebook(newId('n'), name,
-      bg: (manifest['bg'] ?? 'lined') as String,
-      image: manifest['image'] as String?,
-      paper: (manifest['paper'] ?? '#fffefb') as String,
-      spacing: (manifest['spacing'] as num?)?.toDouble(),
+      bg: manifest['bg'] is String ? manifest['bg'] as String : 'lined',
+      image: manifest['image'] is String ? manifest['image'] as String : null,
+      paper: manifest['paper'] is String ? manifest['paper'] as String : '#fffefb',
+      spacing: manifest['spacing'] is num ? (manifest['spacing'] as num).toDouble() : null,
       size: validPaperSize(manifest['size']),
       canvas: manifest['canvas'] == true,
-      canvasW: ((manifest['canvasW'] as num?)?.toDouble() ?? kCanvasW0).clamp(kCanvasW0, 1e6).toDouble(),
+      canvasW: (manifest['canvasW'] is num ? (manifest['canvasW'] as num).toDouble() : kCanvasW0).clamp(kCanvasW0, 1e6).toDouble(),
       folder: folder)
     ..loadSheetsJson(nbJson) // secciones y hojas (las secciones se conservan al importar)
     ..touch();
