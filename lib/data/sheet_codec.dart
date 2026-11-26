@@ -46,6 +46,32 @@ void _writeVarint(BytesBuilder b, int v) {
 int _zigzag(int v) => (v << 1) ^ (v >> 63);
 int _unzigzag(int v) => (v >>> 1) ^ -(v & 1);
 
+/// Coordenadas más allá de esto no existen en una hoja (el cuaderno infinito llega a ~1e6): se recortan. Así el delta de
+/// delta cabe en 64 bits y un valor absurdo no corre los puntos que vienen después.
+const _kMaxCoord = 1e9;
+
+/// Los puntos [x, y, presión, ...] listos para guardar: los puntos con x o y no finitos (NaN, infinito: un driver o una
+/// cuenta rota) se descartan, las coordenadas se recortan a ±[_kMaxCoord] y la presión que no es un número pasa a .5.
+/// Un solo punto malo no puede impedir guardar la hoja. Devuelve la misma lista si ya está bien (lo normal: sin copia).
+List<double> _cleanPts(List<double> pts) {
+  var ok = true;
+  for (var i = 0; i + 2 < pts.length; i += 3) {
+    final x = pts[i], y = pts[i + 1], p = pts[i + 2];
+    if (!x.isFinite || !y.isFinite || !p.isFinite || x.abs() > _kMaxCoord || y.abs() > _kMaxCoord) {
+      ok = false;
+      break;
+    }
+  }
+  if (ok) return pts;
+  final out = <double>[];
+  for (var i = 0; i + 2 < pts.length; i += 3) {
+    final x = pts[i], y = pts[i + 1], p = pts[i + 2];
+    if (!x.isFinite || !y.isFinite) continue;
+    out.addAll([x.clamp(-_kMaxCoord, _kMaxCoord).toDouble(), y.clamp(-_kMaxCoord, _kMaxCoord).toDouble(), p.isFinite ? p : .5]);
+  }
+  return out;
+}
+
 void _writePlane(BytesBuilder b, List<double> pts, int off, int n) {
   var prev = 0, prevDelta = 0;
   for (var i = 0; i < n; i++) {
@@ -68,23 +94,36 @@ Uint8List encodeSheet(SheetContent c) {
   for (final e in sortByZ([...c.items, ...c.strokes, ...c.texts])) {
     rank[e.id] = rank.length;
   }
+  // los trazos se limpian una sola vez: lo que se cuenta en el JSON ('n') y lo que se escribe después son lo mismo
+  final clean = [for (final s in c.strokes) _cleanPts(s.pts)];
   final meta = jsonEncode({
     'texts': [for (final t in c.texts) {...t.toJson(), 'z': rank[t.id]}],
     'items': [for (final i in c.items) {...i.toJson(), 'z': rank[i.id]}],
     'strokes': [
-      for (final s in c.strokes)
-        {'id': s.id, 'k': s.k, 'c': s.c, 'w': s.w, if (s.o < 1) 'o': round2(s.o), if (s.pp != null) 'pp': s.pp!.toJson(), if (s.fill != null) 'f': s.fill, 'n': s.n, 'z': rank[s.id]}
+      for (var i = 0; i < c.strokes.length; i++)
+        {
+          'id': c.strokes[i].id,
+          'k': c.strokes[i].k,
+          'c': c.strokes[i].c,
+          'w': c.strokes[i].w.isFinite ? c.strokes[i].w : 2.0,
+          if (c.strokes[i].o < 1 || !c.strokes[i].o.isFinite) 'o': c.strokes[i].o.isFinite ? round2(c.strokes[i].o) : 1.0,
+          if (c.strokes[i].pp != null) 'pp': c.strokes[i].pp!.toJson(),
+          if (c.strokes[i].fill != null) 'f': c.strokes[i].fill,
+          'n': clean[i].length ~/ 3,
+          'z': rank[c.strokes[i].id]
+        }
     ],
   });
   final json = utf8.encode(meta);
   final body = BytesBuilder(copy: false);
   body.add((ByteData(4)..setUint32(0, json.length, Endian.little)).buffer.asUint8List());
   body.add(json);
-  for (final s in c.strokes) {
-    _writePlane(body, s.pts, 0, s.n);
-    _writePlane(body, s.pts, 1, s.n);
-    for (var i = 0; i < s.n; i++) {
-      body.addByte((s.pts[i * 3 + 2] * 255).round().clamp(0, 255));
+  for (final pts in clean) {
+    final n = pts.length ~/ 3;
+    _writePlane(body, pts, 0, n);
+    _writePlane(body, pts, 1, n);
+    for (var i = 0; i < n; i++) {
+      body.addByte((pts[i * 3 + 2] * 255).round().clamp(0, 255));
     }
   }
   final z = ZLibCodec(level: 9).encode(body.takeBytes());
@@ -132,6 +171,36 @@ class _Reader {
   }
 }
 
+/// Tope de tamaño de una hoja descomprimida (una hoja real pesa unos MB: 64 MB es muy generoso). Una "bomba" de zlib
+/// (pocos KB que se inflan a GB) en un `.sheet` de la nube o de un `.vynote` no puede reservar toda la memoria. Es una
+/// variable solo para que los tests la bajen.
+int kMaxSheetInflated = 64 * 1024 * 1024;
+
+/// Descomprime en streaming y corta en cuanto se pasa de [kMaxSheetInflated] (sin reservar lo que viene después).
+Uint8List _inflate(Uint8List z) {
+  final out = BytesBuilder(copy: false);
+  final conv = ZLibDecoder().startChunkedConversion(_LimitSink(out));
+  const slice = 16 * 1024;
+  for (var i = 0; i < z.length; i += slice) {
+    conv.add(Uint8List.sublistView(z, i, i + slice > z.length ? z.length : i + slice));
+  }
+  conv.close();
+  return out.takeBytes();
+}
+
+class _LimitSink extends ByteConversionSinkBase {
+  _LimitSink(this._out);
+  final BytesBuilder _out;
+  @override
+  void add(List<int> chunk) {
+    if (_out.length + chunk.length > kMaxSheetInflated) throw SheetFormatException('la hoja descomprimida pasa el tope de $kMaxSheetInflated bytes');
+    _out.add(chunk);
+  }
+
+  @override
+  void close() {}
+}
+
 /// Bytes → hoja. Lanza [SheetFormatException] si el archivo está roto (nunca otra cosa).
 SheetContent decodeSheet(Uint8List bytes) {
   try {
@@ -139,7 +208,7 @@ SheetContent decodeSheet(Uint8List bytes) {
       throw SheetFormatException('no es una hoja (falta "ONS")');
     }
     if (bytes[3] != kSheetVersion) throw SheetFormatException('versión ${bytes[3]} no soportada');
-    final body = Uint8List.fromList(ZLibCodec().decode(Uint8List.sublistView(bytes, 4)));
+    final body = _inflate(Uint8List.sublistView(bytes, 4));
     if (body.length < 4) throw SheetFormatException('cuerpo vacío');
     final len = ByteData.sublistView(body).getUint32(0, Endian.little);
     if (len > body.length - 4) throw SheetFormatException('largo del JSON inválido');
@@ -193,10 +262,11 @@ String sheetDigest(SheetContent c) {
   for (final e in sortByZ([...c.items, ...c.strokes, ...c.texts])) {
     switch (e) {
       case Stroke s:
-        b.write('S|${s.id}|${s.k}|${s.c}|${s.w}|${s.o < 1 ? round2(s.o) : 1}|${s.pp == null ? '' : jsonEncode(s.pp!.toJson())}${s.fill == null ? '' : '|f${s.fill}'}|${s.n}|');
-        for (var i = 0; i < s.pts.length; i++) {
+        final pts = _cleanPts(s.pts); // lo mismo que se guarda (ver encodeSheet)
+        b.write('S|${s.id}|${s.k}|${s.c}|${s.w.isFinite ? s.w : 2.0}|${s.o.isFinite && s.o < 1 ? round2(s.o) : 1}|${s.pp == null ? '' : jsonEncode(s.pp!.toJson())}${s.fill == null ? '' : '|f${s.fill}'}|${pts.length ~/ 3}|');
+        for (var i = 0; i < pts.length; i++) {
           b
-            ..write(i % 3 == 2 ? (s.pts[i] * 255).round().clamp(0, 255) : (s.pts[i] * 10).round())
+            ..write(i % 3 == 2 ? (pts[i] * 255).round().clamp(0, 255) : (pts[i] * 10).round())
             ..write(',');
         }
       case TextBlock t:

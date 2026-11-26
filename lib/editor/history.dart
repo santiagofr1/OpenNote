@@ -185,7 +185,7 @@ class SheetPresenceOp extends SheetOp {
   @override
   void apply(NotebookDoc doc, {required bool undo}) {
     if (added != undo) {
-      doc.insertSheet(at, meta: meta.copy(), content: content.copy());
+      doc.insertSheet(at, meta: meta.copy(), content: content.copy(), keepZ: true); // con el z que tenía: deshacer deja el orden exacto
     } else {
       final i = doc.indexOfSheet(meta.id);
       if (i < 0) return;

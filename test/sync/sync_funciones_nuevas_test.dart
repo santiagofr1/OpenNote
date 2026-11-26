@@ -772,14 +772,15 @@ void main() {
           await roundTrip(a, b);
           await roundTrip(a, b);
           for (final s in [a, b]) {
-            final ids = <String>{};
+            // la hoja "(conflicto)" tiene ids nuevos: se reconoce cada forma por su relleno
+            final fills = <String?>[];
             final nbS = await nbOf(s, nb.id);
             for (var k = 0; k < nbS.sheets.length; k++) {
-              ids.addAll([
-                for (final x in (await contentOf(s, nb.id, k)).strokes) x.id,
+              fills.addAll([
+                for (final x in (await contentOf(s, nb.id, k)).strokes) x.fill,
               ]);
             }
-            expect(ids, containsAll(['fa', 'fb']));
+            expect(fills, containsAll(['#ff0000', '#00ff00']));
           }
         });
       });

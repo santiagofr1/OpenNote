@@ -67,7 +67,9 @@ class Storage {
     return base ?? await getApplicationDocumentsDirectory();
   }
 
-  File media(String name) => File('${dir.path}/media/$name');
+  /// El archivo de media [name]. Un nombre que no es de archivo suelto (con `..` o rutas: viene de un cuaderno importado o
+  /// sincronizado) no sale de `media/`: da un archivo que no existe.
+  File media(String name) => File('${dir.path}/media/${isSafeFileName(name) ? name : '.nombre-invalido'}');
 
   Future<String> addMedia(List<int> bytes, String ext) async {
     final name = '${newId('m')}.$ext';
@@ -85,10 +87,17 @@ class Storage {
 
   File get indexFile => File('${dir.path}/index.json');
   File get _prefs => File('${dir.path}/prefs.json');
-  Directory nbDir(String id) => Directory('${dir.path}/notebooks/$id');
+  Directory nbDir(String id) {
+    if (!isSafeId(id)) throw ArgumentError('id de cuaderno no válido: $id');
+    return Directory('${dir.path}/notebooks/$id');
+  }
+
   File _nbFile(String id) => File('${nbDir(id).path}/notebook.json');
   Directory _sheetsDir(String id) => Directory('${nbDir(id).path}/sheets');
-  File sheetFile(String nbId, String sheetId) => File('${_sheetsDir(nbId).path}/$sheetId.sheet');
+  File sheetFile(String nbId, String sheetId) {
+    if (!isSafeId(sheetId)) throw ArgumentError('id de hoja no válido: $sheetId');
+    return File('${_sheetsDir(nbId).path}/$sheetId.sheet');
+  }
 
   // escrituras en curso por archivo: dos a la vez pisarían el mismo temporal
   final _writing = <String, Future<void>>{};
@@ -154,7 +163,15 @@ class Storage {
       await saveIndex(idx);
       return idx;
     }
-    if (j['format'] != Notebook.kFormat) return migrateLegacy(this, j);
+    final fmt = j['format'];
+    if (fmt is int && fmt > Notebook.kFormat) {
+      // De una versión más nueva de la app: NO es el formato viejo, no se migra (migrar vacía los cuadernos). Se lee lo que
+      // se entiende, los archivos de los cuadernos no se tocan, y se deja una copia del índice por si esta versión lo pisa.
+      final keep = File('${indexFile.path}.formato-$fmt');
+      if (!await keep.exists()) await indexFile.copy(keep.path);
+    } else if (fmt != Notebook.kFormat) {
+      return migrateLegacy(this, j);
+    }
     final idx = NotesIndex.fromJson(j);
     for (final nb in idx.notebooks) {
       await _readSheetList(nb);
@@ -185,10 +202,42 @@ class Storage {
   /// las hojas de la sección activa y [nb].otherSheets con las demás.
   Future<void> _readSheetList(Notebook nb) async {
     nb.clearSheets();
-    try {
-      nb.loadSheetsJson(jsonDecode(await _nbFile(nb.id).readAsString()) as Map);
-    } catch (_) {
-      nb.clearSheets();
+    final f = _nbFile(nb.id);
+    var damaged = false;
+    if (await f.exists()) {
+      try {
+        nb.loadSheetsJson(jsonDecode(await f.readAsString()) as Map);
+      } catch (_) {
+        nb.clearSheets();
+        damaged = true;
+      }
+    }
+    // notebook.json roto (o sin ninguna hoja pero con archivos de hojas): NUNCA se toma por "cuaderno vacío" (el barrido de
+    // `_sweep` borraría todas las hojas). Se aparta una copia del roto y la lista se arma con los `.sheet` que hay.
+    if (nb.allSheets.isEmpty) await _rebuildSheetList(nb, apart: damaged);
+  }
+
+  /// Arma la lista de hojas de [nb] con los archivos de `sheets/` (más viejos primero: es lo más parecido al orden de
+  /// creación). Se pierden títulos, fondos y secciones de las hojas, no su contenido. [apart]: aparta el notebook.json roto.
+  Future<void> _rebuildSheetList(Notebook nb, {required bool apart}) async {
+    final d = _sheetsDir(nb.id);
+    final found = <(DateTime, String)>[];
+    if (await d.exists()) {
+      await for (final e in d.list(followLinks: false)) {
+        final name = e.uri.pathSegments.last;
+        if (e is File && name.endsWith('.sheet') && isSafeId(name.substring(0, name.length - 6))) {
+          found.add(((await e.stat()).modified, name.substring(0, name.length - 6)));
+        }
+      }
+    }
+    if (apart) {
+      final f = _nbFile(nb.id);
+      await f.rename('${f.path}.corrupto-${DateTime.now().millisecondsSinceEpoch}');
+    }
+    if (found.isEmpty) return;
+    found.sort((a, b) => a.$1 != b.$1 ? a.$1.compareTo(b.$1) : a.$2.compareTo(b.$2));
+    for (final (_, id) in found) {
+      nb.sheets.add(SheetMeta(id, bg: nb.bg, paper: nb.paper, spacing: nb.spacing, size: nb.size, section: nb.active));
     }
   }
 
@@ -634,6 +683,13 @@ class Storage {
   final Map<String, dynamic> _prefsSet = {};
 
   Future<void> savePrefs(Map<String, dynamic> p) {
+    // un valor que no se puede escribir (NaN, un objeto raro) se rechaza ANTES de entrar a [_prefsSet]: si no, como cada
+    // guardado escribe todo lo de la sesión, haría fallar todos los guardados siguientes
+    try {
+      jsonEncode(p);
+    } catch (e, st) {
+      return Future.error(e, st);
+    }
     _prefsSet.addAll(p);
     return _track(_savePrefs(p));
   }

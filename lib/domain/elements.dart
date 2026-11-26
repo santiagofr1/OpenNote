@@ -68,8 +68,8 @@ class Item extends Layered {
         file: j['file'] as String?,
         text: (j['text'] ?? '') as String,
         color: (j['color'] ?? '#fde68a') as String,
-        dur: (j['dur'] ?? 0) as int,
-        page: (j['pg'] ?? 0) as int,
+        dur: j['dur'] is num ? (j['dur'] as num).toInt() : 0,
+        page: j['pg'] is num ? (j['pg'] as num).toInt() : 0,
       )..z = (j['z'] as num? ?? 0).toInt();
   Map<String, dynamic> toJson() => {
         'id': id,
