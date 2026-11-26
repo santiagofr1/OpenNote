@@ -167,11 +167,16 @@ class Stroke extends Layered {
   /// Copia corrida [d] (con otro [id] si se pega o duplica).
   Stroke moved(Offset d, {String? id}) {
     final p = List<double>.of(pts);
-    for (var i = 0; i < p.length; i += 3) {
-      p[i] += d.dx;
-      p[i + 1] += d.dy;
+    if (d != Offset.zero) {
+      for (var i = 0; i < p.length; i += 3) {
+        p[i] += d.dx;
+        p[i + 1] += d.dy;
+      }
     }
-    return Stroke(id ?? this.id, k, c, w, p, o, pp, fill)..z = z;
+    // el rectángulo ya calculado se corre en vez de recalcularlo (recorrer miles de puntos): lo piden el reparto por hojas y el guardado
+    return Stroke(id ?? this.id, k, c, w, p, o, pp, fill)
+      ..z = z
+      .._bounds = _bounds?.shift(d);
   }
 
   /// Copia transformada por [t] (con otro [id] si hace falta): todos los puntos, y el grosor se multiplica por la escala.
