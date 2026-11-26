@@ -125,12 +125,14 @@ class Storage {
     }
   }
 
-  Future<void> _writeBytesRaw(File f, List<int> data) {
+  /// [beforeRename]: se corre con el temporal ya escrito y ANTES de pisar el archivo (la copia de respaldo del índice).
+  Future<void> _writeBytesRaw(File f, List<int> data, {Future<void> Function()? beforeRename}) {
     final prev = _writing[f.path] ?? Future.value();
     final run = prev.catchError((_) {}).then((_) async {
       await f.parent.create(recursive: true);
       final tmp = File('${f.path}.tmp');
       await tmp.writeAsBytes(data, flush: true);
+      if (beforeRename != null) await beforeRename();
       await tmp.rename(f.path);
     });
     _writing[f.path] = run;
@@ -142,8 +144,18 @@ class Storage {
   Future<void> _writeJson(File f, Object data) => _writeBytes(f, utf8.encode(jsonEncode(data)));
 
   // ================= índice =================
+  File get indexBackup => File('${indexFile.path}.bak');
+
+  /// El último índice conocido (para sacar el camino de carpetas de cada cuaderno al escribir su notebook.json).
+  NotesIndex? _idx;
+
   /// Lee el índice. Si está en el formato viejo (páginas), lo convierte antes (ver [migrateLegacy]).
-  Future<NotesIndex> loadIndex({String sampleName = 'Mi cuaderno'}) async {
+  ///
+  /// Si index.json no se puede leer se aparta como `.corrupto-*` y la biblioteca se rearma (ver [_recoverLibrary]): primero
+  /// con la copia de respaldo `index.json.bak`, y si tampoco sirve, con los notebook.json de los cuadernos que hay en disco.
+  /// El cuaderno de ejemplo solo se crea si no hay ningún cuaderno en disco. [recoveredName]: nombre de un cuaderno
+  /// recuperado que perdió el suyo (traducido por quien llama; [n] cuenta desde 1).
+  Future<NotesIndex> loadIndex({String sampleName = 'Mi cuaderno', String Function(int n)? recoveredName}) async {
     Map? j;
     try {
       final text = await indexFile.readAsString();
@@ -156,17 +168,27 @@ class Storage {
       }
     }
     if (j == null) {
-      // primera vez: cuaderno de ejemplo
-      final nb = Notebook.create(sampleName);
-      final idx = NotesIndex(last: nb.id, notebooks: [nb]);
-      await saveNotebook(NotebookDoc(nb));
+      final idx = await _recoverLibrary(recoveredName ?? (n) => 'Cuaderno recuperado $n');
+      if (idx.notebooks.isEmpty) {
+        // primera vez (nada en disco): cuaderno de ejemplo
+        final nb = Notebook.create(sampleName);
+        idx.notebooks.add(nb);
+        idx.last = nb.id;
+        await saveNotebook(NotebookDoc(nb));
+      } else {
+        for (final nb in idx.notebooks) {
+          await _readSheetList(nb);
+        }
+      }
       await saveIndex(idx);
       return idx;
     }
     final fmt = j['format'];
+    var future = false;
     if (fmt is int && fmt > Notebook.kFormat) {
       // De una versión más nueva de la app: NO es el formato viejo, no se migra (migrar vacía los cuadernos). Se lee lo que
       // se entiende, los archivos de los cuadernos no se tocan, y se deja una copia del índice por si esta versión lo pisa.
+      future = true;
       final keep = File('${indexFile.path}.formato-$fmt');
       if (!await keep.exists()) await indexFile.copy(keep.path);
     } else if (fmt != Notebook.kFormat) {
@@ -176,6 +198,8 @@ class Storage {
     for (final nb in idx.notebooks) {
       await _readSheetList(nb);
     }
+    _idx = idx;
+    if (!future) unawaited(_syncMetas(idx, onlyMissing: true)); // los cuadernos viejos (sin copia de sus datos) la reciben acá
     await archiveLegacyPages(this); // por si la migración se cortó justo antes de mover `pages/`
     return idx;
   }
@@ -189,13 +213,209 @@ class Storage {
 
   Future<void> saveIndex(NotesIndex idx) {
     idx.rev++;
+    _idx = idx;
     final data = jsonEncode(idx.toJson());
     // solo avisa si cambió algo que se sincroniza (abrir un cuaderno cambia `last`, que no se sube); sin dato previo, avisa
     final cloud = _cloudIndexKey(data);
     final changed = cloud != _lastIndexCloud;
     _lastIndexCloud = cloud;
-    final w = _writeBytes(indexFile, utf8.encode(data));
+    final w = _writeIndexBytes(utf8.encode(data));
+    unawaited(_track(w.then((_) => _syncMetas(idx), onError: (_) {}))); // la copia en cada notebook.json no hace esperar a quien guarda
     return changed ? w.then((_) => onSaved?.call(null)) : w;
+  }
+
+  /// Escribe index.json; la versión buena que había pasa a `index.json.bak` justo antes (si la que había no sirve, el
+  /// respaldo anterior se queda). Un solo archivo chico de más por guardado.
+  Future<void> _writeIndexBytes(List<int> data) => _track(_writeBytesRaw(indexFile, data, beforeRename: _rotateIndexBackup));
+
+  Future<void> _rotateIndexBackup() async {
+    // síncrono a propósito: es un archivo chico y así no suma esperas al guardado
+    try {
+      final bytes = indexFile.readAsBytesSync();
+      if (_validIndexBackup(jsonDecode(utf8.decode(bytes)))) {
+        final tmp = File('${indexBackup.path}.tmp');
+        tmp.writeAsBytesSync(bytes, flush: true);
+        tmp.renameSync(indexBackup.path);
+      }
+    } catch (_) {
+      // no había índice, o no sirve: el respaldo que hay se queda
+    }
+  }
+
+  static bool _validIndexBackup(Object? j) => j is Map && j['format'] == Notebook.kFormat && j['notebooks'] is List;
+
+  // ---- los datos del cuaderno dentro de su notebook.json ----
+  // El índice guarda el nombre, la carpeta, el PIN y los ajustes de cada cuaderno; si se pierde, sin copia esos datos se
+  // pierden. Por eso cada notebook.json lleva también `meta` (ver [Notebook.metaJson]), siempre igual a lo que dice el índice.
+
+  /// Lo último que se sabe que hay en el `meta` del notebook.json de cada cuaderno (para no releerlo en cada guardado).
+  final _metaDone = <String, String>{};
+
+  List<Map<String, String>> _folderPath(Notebook nb, NotesIndex? idx) {
+    final out = <Map<String, String>>[];
+    final seen = <String>{};
+    var f = idx?.folderById(nb.folder);
+    while (f != null && seen.add(f.id)) {
+      out.insert(0, {'id': f.id, 'name': f.name});
+      f = idx?.folderById(f.parent);
+    }
+    return out;
+  }
+
+  Map<String, dynamic> _metaOf(Notebook nb, [NotesIndex? idx]) => nb.metaJson(_folderPath(nb, idx ?? _idx));
+
+  /// Lo que se escribe en notebook.json: [Notebook.sheetsJson] más los datos del cuaderno (el `.vynote` NO los lleva: ahí
+  /// el PIN y la carpeta no tienen que viajar).
+  Map<String, dynamic> _diskJson(Notebook nb) => {...nb.sheetsJson(), 'meta': _metaOf(nb)};
+
+  /// Deja el `meta` de cada notebook.json igual a lo que dice [idx]. Solo toca el archivo si cambió (y nunca uno roto).
+  /// [onlyMissing]: al leer el índice solo se completan los que no la tienen (los demás los actualiza quien guarda el índice).
+  Future<void> _syncMetas(NotesIndex idx, {bool onlyMissing = false}) {
+    final job = _track(() async {
+      for (final nb in List.of(idx.notebooks)) {
+        try {
+          await _syncMeta(nb, idx, onlyMissing: onlyMissing);
+        } catch (_) {
+          // un cuaderno que no se pudo actualizar no frena a los demás: se reintenta en el próximo guardado
+        }
+      }
+    }());
+    _metaJobs.add(job);
+    return job.whenComplete(() => _metaJobs.remove(job));
+  }
+
+  final _metaJobs = <Future<void>>{}; // actualizaciones de notebook.json en curso (borrar un cuaderno las espera)
+
+  Future<void> _syncMeta(Notebook nb, NotesIndex idx, {bool onlyMissing = false}) async {
+    final meta = _metaOf(nb, idx), enc = jsonEncode(meta);
+    if (_metaDone[nb.id] == enc) return;
+    final f = _nbFile(nb.id);
+    while (true) {
+      await _idle(nb.id);
+      final w = _writing[f.path];
+      if (w != null) {
+        await w.catchError((_) {});
+        continue;
+      }
+      // desde acá hasta encolar la escritura no hay ningún await: ningún guardado se cuela con hojas más nuevas
+      if (!f.existsSync()) return;
+      final Map j;
+      try {
+        j = jsonDecode(f.readAsStringSync()) as Map;
+      } catch (_) {
+        return; // roto: lo maneja _readSheetList
+      }
+      if (j['sheets'] is! List) return;
+      if (onlyMissing && j['meta'] != null) return; // leer el índice no reescribe lo que ya tiene su copia
+      if (j['meta'] != null && jsonEncode(j['meta']) == enc) {
+        _metaDone[nb.id] = enc;
+        return;
+      }
+      j['meta'] = meta;
+      final write = _writeBytes(f, utf8.encode(jsonEncode(j)));
+      final st = _disk[nb.id];
+      if (st != null && st.meta.isNotEmpty) {
+        try {
+          st.meta = jsonEncode((jsonDecode(st.meta) as Map)..['meta'] = meta); // lo que se recuerda de disco sigue siendo cierto
+        } catch (_) {}
+      }
+      await write;
+      _metaDone[nb.id] = enc;
+      return;
+    }
+  }
+
+  // ---- recuperar la biblioteca ----
+  /// Rearma el índice cuando index.json no se pudo leer: parte de `index.json.bak` si sirve (si no, lo aparta como
+  /// `.bak.corrupto-*`) y le suma lo que dice cada `notebooks/<id>/notebook.json`: el `meta` de un cuaderno (que es de
+  /// lo último que se guardó) pisa lo del respaldo, y un cuaderno que está en disco y no en el respaldo se agrega. Un
+  /// cuaderno del respaldo sin archivos en disco se descarta (se borró). Las carpetas se recrean con el camino de cada
+  /// cuaderno; si una no se puede reconstruir, el cuaderno queda en el inicio. NUNCA se borra nada.
+  /// Solo se hace con el índice roto: con uno legible, un cuaderno que falta en el índice puede ser uno que se borró
+  /// (acá o en otro dispositivo) y cuyos archivos todavía no se limpiaron: no hay que resucitarlo.
+  Future<NotesIndex> _recoverLibrary(String Function(int n) recoveredName) async {
+    var idx = NotesIndex();
+    final bak = indexBackup;
+    if (await bak.exists()) {
+      try {
+        final j = jsonDecode(await bak.readAsString());
+        if (!_validIndexBackup(j)) throw const FormatException('respaldo no válido');
+        idx = NotesIndex.fromJson(j as Map);
+      } catch (_) {
+        await bak.rename('${bak.path}.corrupto-${DateTime.now().millisecondsSinceEpoch}');
+      }
+    }
+    // lo que hay en disco: id → su notebook.json (null si no se puede leer pero tiene hojas)
+    final found = <String, Map?>{};
+    final root = Directory('${dir.path}/notebooks');
+    if (await root.exists()) {
+      await for (final d in root.list(followLinks: false)) {
+        final id = d.uri.pathSegments.where((p) => p.isNotEmpty).last;
+        if (d is! Directory || !isSafeId(id)) continue;
+        Map? j;
+        try {
+          final m = jsonDecode(await File('${d.path}/notebook.json').readAsString());
+          if (m is Map && m['sheets'] is List) j = m;
+        } catch (_) {}
+        var hasSheets = false;
+        final sd = Directory('${d.path}/sheets');
+        if (j == null && await sd.exists()) {
+          hasSheets = await sd.list().any((e) => e is File && e.path.endsWith('.sheet'));
+        }
+        if (j != null || hasSheets) found[id] = j;
+      }
+    }
+    idx.notebooks.removeWhere((n) => !found.containsKey(n.id)); // sin archivos: se borró
+    final ids = found.keys.toList()..sort();
+    int updatedOf(String id) => jsonInt((found[id]?['meta'] as Map?)?['updated']);
+    // los más viejos primero: si dos cuadernos no coinciden en el nombre de una carpeta, gana el más reciente
+    ids.sort((a, b) => updatedOf(a) != updatedOf(b) ? updatedOf(a).compareTo(updatedOf(b)) : a.compareTo(b));
+    var unnamed = 0;
+    final fresh = <Notebook>[];
+    for (final id in ids) {
+      final meta = found[id]?['meta'];
+      final have = idx.notebooks.where((n) => n.id == id).firstOrNull;
+      var nb = meta is Map ? Notebook.fromMeta(id, meta) : null;
+      if (nb != null && have != null) nb.last = have.last;
+      nb ??= have;
+      if (nb == null) {
+        nb = Notebook(id, '');
+        fresh.add(nb);
+      } else if (have == null) {
+        fresh.add(nb);
+      } else {
+        idx.notebooks[idx.notebooks.indexOf(have)] = nb;
+      }
+      // las carpetas: el camino de la copia pisa lo que diga el respaldo (es más nuevo)
+      final path = meta is Map ? meta['folderPath'] : null;
+      if (path is List && path.isNotEmpty && path.every((e) => e is Map && e['id'] is String && (e['id'] as String).isNotEmpty && e['name'] is String)) {
+        String? parent;
+        for (final e in path.cast<Map>()) {
+          final fid = e['id'] as String;
+          final f = idx.folderById(fid);
+          if (f == null) {
+            idx.folders.add(Folder(fid, e['name'] as String, parent: parent));
+          } else {
+            f
+              ..name = e['name'] as String
+              ..parent = parent;
+          }
+          parent = fid;
+        }
+        nb.folder = parent;
+      }
+    }
+    // los que perdieron el nombre (sin meta ni respaldo) se numeran en el orden de sus carpetas, no de su fecha
+    for (final id in found.keys.toList()..sort()) {
+      final nb = idx.notebooks.followedBy(fresh).where((n) => n.id == id).firstOrNull;
+      if (nb != null && nb.name.isEmpty) nb.name = recoveredName(++unnamed);
+    }
+    for (final nb in fresh.reversed) {
+      if (!idx.notebooks.contains(nb)) idx.notebooks.insert(0, nb); // lo más reciente arriba
+    }
+    idx.repairFolders(); // una carpeta que no se pudo reconstruir deja al cuaderno en el inicio
+    if (idx.notebooks.every((n) => n.id != idx.last)) idx.last = idx.notebooks.isEmpty ? null : idx.notebooks.first.id;
+    return idx;
   }
 
   /// Completa [nb] (secciones y hojas) con lo que dice su notebook.json (vacío si falta o está roto). [nb].sheets queda con
@@ -262,7 +482,7 @@ class Storage {
     final onDisk = {for (final s in nb.allSheets) s.id};
     final doc = NotebookDoc.lazy(nb);
     // los hashes de las hojas sin cargar son desconocidos: no se tocan hasta leerlas
-    _disk[nb.id] = _DiskState({}, jsonEncode(nb.sheetsJson()), onDisk);
+    _disk[nb.id] = _DiskState({}, jsonEncode(_diskJson(nb)), onDisk);
     final n = nb.sheets.length;
     if (radius >= 0 && n > 0) {
       final from = (around - radius).clamp(0, n - 1), to = (around + radius).clamp(0, n - 1);
@@ -452,7 +672,7 @@ class Storage {
       await from.copy(tmp.path);
       await tmp.rename(to.path);
     }
-    await _writeJson(_nbFile(copy.id), copy.sheetsJson());
+    await _writeJson(_nbFile(copy.id), _diskJson(copy));
   }
 
   /// Espera a que termine el guardado en curso de [nbId] (para leer sus archivos al exportar).
@@ -465,7 +685,7 @@ class Storage {
       for (final e in sheetFiles.entries) {
         await _writeBytes(sheetFile(nb.id, e.key), e.value);
       }
-      await _writeJson(_nbFile(nb.id), nb.sheetsJson());
+      await _writeJson(_nbFile(nb.id), _diskJson(nb));
     } catch (_) {
       await removeNotebookFiles(nb.id);
       rethrow;
@@ -578,10 +798,11 @@ class Storage {
         state.hashes[m.id] = hash;
         state.digests[m.id] = digest; // ya está en disco: si algo falla más adelante, el hash es el cierto
       }
-      final metaJson = jsonEncode(nb.sheetsJson());
-            if (metaJson != state.meta || !await _nbFile(nb.id).exists()) {
+      final metaJson = jsonEncode(_diskJson(nb));
+      if (metaJson != state.meta || !await _nbFile(nb.id).exists()) {
         await _writeBytes(_nbFile(nb.id), utf8.encode(metaJson));
         state.meta = metaJson;
+        _metaDone[nb.id] = jsonEncode(_metaOf(nb));
         wrote = true;
       }
       // las hojas borradas, al final: si se corta antes, solo sobran archivos
@@ -619,7 +840,11 @@ class Storage {
   /// Saca del disco todo lo de un cuaderno (después de esperar que termine de guardarse).
   Future<void> removeNotebookFiles(String id) async {
     await _queues[id]?.running?.catchError((_) {});
+    while (_metaJobs.isNotEmpty) {
+      await Future.wait(_metaJobs.toList()); // que no reescriba notebook.json a mitad del borrado
+    }
     _disk.remove(id);
+    _metaDone.remove(id);
     final d = nbDir(id);
     if (await d.exists()) await d.delete(recursive: true);
   }
@@ -647,8 +872,15 @@ class Storage {
   Future<void> writeSyncFile(String rel, List<int> bytes) async {
     final nb = notebookIdOf(_checkSyncPath(rel));
     if (nb != null) await _idle(nb);
-    await _writeBytes(syncFile(rel), bytes);
-    if (nb != null) _disk.remove(nb); // lo que recuerda del disco ya no vale: al abrir se vuelve a leer
+    if (rel == 'index.json') {
+      await _writeIndexBytes(bytes); // el índice bueno de antes pasa a index.json.bak
+    } else {
+      await _writeBytes(syncFile(rel), bytes);
+    }
+    if (nb != null) {
+      _disk.remove(nb); // lo que recuerda del disco ya no vale: al abrir se vuelve a leer
+      _metaDone.remove(nb);
+    }
   }
 
   Future<void> deleteSyncFile(String rel) async {
@@ -656,7 +888,10 @@ class Storage {
     if (nb != null) await _idle(nb);
     final f = syncFile(rel);
     if (await f.exists()) await f.delete();
-    if (nb != null) _disk.remove(nb);
+    if (nb != null) {
+      _disk.remove(nb);
+      _metaDone.remove(nb);
+    }
   }
 
   /// Saca las carpetas vacías de un cuaderno al que la sincronización le borró todos los archivos.

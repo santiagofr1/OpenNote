@@ -1810,6 +1810,11 @@ class LPt extends L {
   String get librarySampleNotebook => 'Meu caderno';
 
   @override
+  String libraryRecoveredNotebook(int n) {
+    return 'Caderno recuperado $n';
+  }
+
+  @override
   String get exportFileNotebook => 'Caderno';
 
   @override

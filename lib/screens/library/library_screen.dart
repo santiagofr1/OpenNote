@@ -129,7 +129,8 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
       tools.load(prefs);
     } catch (_) {} // ajustes ilegibles: se queda con los de fábrica, la biblioteca tiene que cargar igual
     updPrefs = UpdatePrefs.from(prefs);
-    final idx = await store.loadIndex(sampleName: mounted ? context.l10n.librarySampleNotebook : 'Mi cuaderno');
+    final idx = await store.loadIndex(sampleName: mounted ? context.l10n.librarySampleNotebook : 'Mi cuaderno',
+        recoveredName: mounted ? context.l10n.libraryRecoveredNotebook : null);
     setState(() => index = idx);
     unawaited(sync.init());
     WidgetsBinding.instance.addPostFrameCallback((_) => _autoUpdateCheck());
@@ -192,7 +193,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
       return;
     }
     _staleAfterSync = false;
-    final idx = await store.loadIndex();
+    final idx = await store.loadIndex(recoveredName: context.l10n.libraryRecoveredNotebook);
     if (!mounted || _openId != null) return;
     setState(() {
       index = idx;

@@ -518,6 +518,7 @@
   "paintSize": "Size",
   "shapeMeasureTriangle": "base {base} · height {height} mm",
   "librarySampleNotebook": "My notebook",
+  "libraryRecoveredNotebook": "Recovered notebook {n}",
   "exportFileNotebook": "Notebook",
   "exportFileFolder": "Folder",
   "exportFileSection": "Section",

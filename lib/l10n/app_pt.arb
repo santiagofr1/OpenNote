@@ -518,6 +518,7 @@
   "paintSize": "Tamanho",
   "shapeMeasureTriangle": "base {base} · altura {height} mm",
   "librarySampleNotebook": "Meu caderno",
+  "libraryRecoveredNotebook": "Caderno recuperado {n}",
   "exportFileNotebook": "Caderno",
   "exportFileFolder": "Pasta",
   "exportFileSection": "Seção",

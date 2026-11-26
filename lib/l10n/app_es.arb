@@ -2505,6 +2505,15 @@
   "@librarySampleNotebook": {
     "description": "Name of the sample notebook created on the first launch (also add the translation to kSampleNotebookNames in domain/notebook.dart)"
   },
+  "libraryRecoveredNotebook": "Cuaderno recuperado {n}",
+  "@libraryRecoveredNotebook": {
+    "description": "Name given to a notebook found on disk whose own name was lost (library index unreadable); n is a counter",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
   "exportFileNotebook": "Cuaderno",
   "@exportFileNotebook": {
     "description": "Fallback file name for a notebook without a name (exported files)"
