@@ -27,7 +27,7 @@ void main() {
     }
   }
 
-  testWidgets('BUG sospechado: duplicar un cuaderno con PIN deja una copia SIN PIN (se abre sin pedir nada)', (t) async {
+  testWidgets('duplicar un cuaderno con PIN pide el PIN y la copia queda con el mismo PIN', (t) async {
     t.view.physicalSize = const Size(1600, 1000);
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.reset);
@@ -49,7 +49,19 @@ void main() {
     await t.longPress(find.byKey(const Key('nb-Secreto')));
     await settle(t, 400);
     await t.tap(find.text('Duplicar'));
-    await settle(t, 1500);
+    await settle(t, 600);
+    // con un PIN equivocado no se copia nada
+    await t.enterText(find.byKey(const Key('pinField')), '0000');
+    await t.tap(find.byKey(const Key('pinOk')));
+    await settle(t, 800);
+    expect(find.byKey(const Key('nb-Secreto (copia)')), findsNothing);
+    await t.longPress(find.byKey(const Key('nb-Secreto')));
+    await settle(t, 400);
+    await t.tap(find.text('Duplicar'));
+    await settle(t, 600);
+    await t.enterText(find.byKey(const Key('pinField')), '1234');
+    await t.tap(find.byKey(const Key('pinOk')));
+    await settle(t, 3000);
     expect(find.byKey(const Key('nb-Secreto (copia)')), findsOneWidget, reason: 'se creó la copia');
 
     NotesIndex? idx;
