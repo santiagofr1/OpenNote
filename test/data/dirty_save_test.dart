@@ -50,7 +50,7 @@ void main() {
         .toSet();
     expect(files, {for (final m in nb.sheets) '${m.id}.sheet'}, reason: '$ctx: sobran o faltan archivos de hojas');
     final j = jsonDecode(File('${store.nbDir(nb.id).path}/notebook.json').readAsStringSync()) as Map;
-    expect(jsonEncode(j), jsonEncode(nb.sheetsJson()), reason: '$ctx: notebook.json distinto');
+    expect(jsonEncode(j..remove('meta')), jsonEncode(nb.sheetsJson()), reason: '$ctx: notebook.json distinto');
   }
 
   Future<void> saveAndVerify(NotebookDoc doc, String ctx) async {
@@ -188,7 +188,7 @@ void main() {
               final s = trazo(r, y: anyY());
               s.z = doc.nextZ();
               doc.strokes[s.id] = s;
-              undo.add(EditAction(added: [s]));
+              undo.add(EditAction(doc, added: [s]));
               redo.clear();
               doc.growFor(s.bounds.bottom);
             case 2: // goma
@@ -196,7 +196,7 @@ void main() {
               final id = pick(doc.strokes.keys);
               if (id == null) continue;
               final s = doc.strokes.remove(id)!;
-              undo.add(EditAction(removed: [s]));
+              undo.add(EditAction(doc, removed: [s]));
               redo.clear();
             case 3: // mover trazos a otra hoja (como soltar una selección)
               name = 'mover trazos';
@@ -211,7 +211,7 @@ void main() {
                 added.add(m);
                 doc.strokes[id] = m;
               }
-              undo.add(EditAction(removed: removed, added: added));
+              undo.add(EditAction(doc, removed: removed, added: added));
               redo.clear();
               for (final s in added) {
                 doc.growFor(s.bounds.bottom);
@@ -221,7 +221,7 @@ void main() {
               final t = TextBlock(newId('t'), 40 + r.nextDouble() * 400, doc.snapTextY(anyY()), 500, 'texto ${r.nextInt(99)}')
                 ..z = doc.nextZ();
               doc.texts[t.id] = t;
-              undo.add(EditAction(textBefore: {t.id: null}, textAfter: {t.id: t.copy()}));
+              undo.add(EditAction(doc, textBefore: {t.id: null}, textAfter: {t.id: t.copy()}));
               redo.clear();
             case 5: // editar un texto en el lugar (como al tipear)
               name = 'editar texto';
@@ -243,7 +243,7 @@ void main() {
               final it = Item(newId('i'), r.nextBool() ? 'sticky' : 'image', 100, anyY(), 200, 150, text: 'n${r.nextInt(9)}', file: 'x.png')
                 ..z = doc.nextZ();
               doc.items[it.id] = it;
-              undo.add(EditAction(itemBefore: {it.id: null}, itemAfter: {it.id: it.copy()}));
+              undo.add(EditAction(doc, itemBefore: {it.id: null}, itemAfter: {it.id: it.copy()}));
               redo.clear();
             case 8: // redimensionar / editar una nota en el lugar
               name = 'redimensionar';
@@ -264,7 +264,7 @@ void main() {
               for (final s in copias) {
                 doc.strokes[s.id] = s;
               }
-              undo.add(EditAction(added: copias));
+              undo.add(EditAction(doc, added: copias));
               redo.clear();
               for (final s in copias) {
                 doc.growFor(s.bounds.bottom);
@@ -281,7 +281,7 @@ void main() {
                     _ => Rect.fromLTWH((e as TextBlock).x, e.y, 100, 40),
                   });
               if (ch != null) {
-                undo.add(EditAction(zBefore: ch.before, zAfter: ch.after));
+                undo.add(EditAction(doc, zBefore: ch.before, zAfter: ch.after));
                 redo.clear();
               }
             case 11 || 12: // deshacer / rehacer

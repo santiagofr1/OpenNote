@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:ui' show Offset;
 
 import 'package:crypto/crypto.dart';
 
@@ -205,8 +206,13 @@ class SyncEngine {
     }
   }
 
-  static bool validNotebook(Map j) => j['format'] == Notebook.kFormat && j['sheets'] is List;
-  static bool validIndex(Map j) => j['format'] == Notebook.kFormat && j['notebooks'] is List;
+  // Lo que viene de la nube se revisa a fondo antes de pisar lo local: cada entrada tiene que ser un mapa con un id que sirva
+  // de nombre de archivo (los ids son nombres de carpeta y de archivo en disco).
+  static bool _entries(Object? l, {bool needId = true}) => l is List && l.every((e) => e is Map && (!needId || isSafeId(e['id'])));
+  static bool validNotebook(Map j) =>
+      j['format'] == Notebook.kFormat && _entries(j['sheets']) && (j['sections'] == null || _entries(j['sections'], needId: false)) && (j['meta'] == null || j['meta'] is Map);
+  static bool validIndex(Map j) =>
+      j['format'] == Notebook.kFormat && _entries(j['notebooks']) && (j['folders'] == null || _entries(j['folders'], needId: false));
 
   // ---------- local ----------
   Future<Set<String>> _localPaths() async {
@@ -374,10 +380,17 @@ class SyncEngine {
   /// después. Las dos se suben, así el otro dispositivo también recibe las dos.
   Future<void> _sheetConflict(String p, String L) async {
     final nbId = notebookIdOf(p)!, sid = sheetIdOf(p);
-    final bytes = await _download(p);
-    decodeSheet(bytes);
+    final remoteBytes = await _download(p);
+    final remoteContent = decodeSheet(remoteBytes);
+    if (_md5(remoteBytes) == L) return _markBase(p, L);
+    // La copia "(conflicto)" tiene que tener ids NUEVOS en todos sus elementos: con los de la original, al abrir el cuaderno
+    // las dos hojas se pisarían en los mapas por id y se perdería contenido al guardar.
+    final bytes = encodeSheet(SheetContent(
+      strokes: [for (final s in remoteContent.strokes) s.moved(Offset.zero, id: newId('s'))],
+      texts: [for (final t in remoteContent.texts) t.copy(id: newId('t'))],
+      items: [for (final i in remoteContent.items) i.copy(id: newId('i'))],
+    ));
     final rMd5 = _md5(bytes);
-    if (rMd5 == L) return _markBase(p, L);
     final njPath = notebookJsonPath(nbId);
     final njFile = store.syncFile(njPath);
     if (await njFile.exists()) {
@@ -393,7 +406,9 @@ class SyncEngine {
         'id': newSid,
         'title': title.isEmpty ? '(conflicto)' : '$title (conflicto)',
         'updated': DateTime.now().millisecondsSinceEpoch,
-      }..remove('bookmark');
+      }
+        ..remove('bookmark')
+        ..remove('heads'); // los títulos del índice apuntan a elementos de la hoja original
       list.insert(at >= 0 ? at + 1 : list.length, copy);
       final np = sheetPath(nbId, newSid);
       await store.writeSyncFile(np, bytes);

@@ -34,14 +34,17 @@ PenAction? penActionFor(PointerDownEvent e, Tool tool) {
 double pressureOf(PointerEvent e) {
   if (!isStylus(e)) return .5;
   final range = e.pressureMax - e.pressureMin;
-  return range > 0 ? ((e.pressure - e.pressureMin) / range).clamp(0.0, 1.0) : .5;
+  final p = range > 0 ? ((e.pressure - e.pressureMin) / range).clamp(0.0, 1.0) : .5;
+  return p.isFinite ? p : .5; // un driver que manda NaN no puede arruinar el trazo
 }
 
 /// Agrega un punto al trazo en curso. Descarta los que casi no se movieron
 /// y suaviza la presión para que el grosor no salte.
 void appendInkPoint(Stroke s, Offset p, double pressure) {
+  // un punto con coordenadas que no son números (NaN, infinito) no entra: rompería el guardado de toda la hoja
+  if (!p.dx.isFinite || !p.dy.isFinite) return;
   final pts = s.pts;
-  var pr = pressure;
+  var pr = pressure.isFinite ? pressure : .5;
   if (pts.isNotEmpty) {
     final lx = pts[pts.length - 3], ly = pts[pts.length - 2];
     if ((p.dx - lx).abs() + (p.dy - ly).abs() < .6) return;

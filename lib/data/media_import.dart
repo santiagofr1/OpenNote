@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' show Size;
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:file_picker/file_picker.dart';
@@ -138,7 +139,8 @@ Future<List<(SheetMeta, SheetContent)>> importPdf(Storage store, {void Function(
   }
   final out = <(SheetMeta, SheetContent)>[];
   for (var i = 0; i < sizes.length; i++) {
-    final s = sizes[i];
+    var s = sizes[i];
+    if (!(s.width > 0 && s.height > 0) || !s.width.isFinite || !s.height.isFinite) s = const Size(595, 842); // página sin tamaño: A4
     // que entre en la hoja respetando la proporción
     var w = kW, h = kW * s.height / s.width;
     if (h > kSheetH) {

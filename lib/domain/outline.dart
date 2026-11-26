@@ -24,7 +24,7 @@ class Heading {
         level: ((j['l'] ?? 1) as num).toInt().clamp(1, 99),
         title: (j['t'] ?? '') as String,
         y: jsonDouble(j['y']),
-        ids: [for (final e in (j['ids'] as List? ?? const [])) e as String],
+        ids: [for (final e in (j['ids'] as List? ?? const [])) if (e is String) e],
         hidden: (j['x'] ?? false) as bool,
         box: _boxFrom(j['b']),
       );

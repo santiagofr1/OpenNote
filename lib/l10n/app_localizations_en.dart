@@ -1709,15 +1709,8 @@ class LEn extends L {
   String get penFavorites => 'Favorites';
 
   @override
-  String get penFavEdit => 'Change';
-
-  @override
-  String get penFavHelpEditing =>
-      'Choose a color from the palette or the picker: it\'s saved to the marked favorite.';
-
-  @override
   String get penFavHelp =>
-      'Tap \"Change\" or press and hold a favorite to choose its color.';
+      'Press and hold a favorite to save the current color there.';
 
   @override
   String get penPanelHighlighter => 'Highlighter';
@@ -1742,9 +1735,6 @@ class LEn extends L {
 
   @override
   String get penColor => 'Color';
-
-  @override
-  String get penCustomColor => 'Custom color';
 
   @override
   String get penEraser => 'Eraser (press the pen button)';
@@ -1810,6 +1800,11 @@ class LEn extends L {
 
   @override
   String get librarySampleNotebook => 'My notebook';
+
+  @override
+  String libraryRecoveredNotebook(int n) {
+    return 'Recovered notebook $n';
+  }
 
   @override
   String get exportFileNotebook => 'Notebook';
@@ -1898,4 +1893,22 @@ class LEn extends L {
 
   @override
   String get updateUpToDate => 'You have the latest version';
+
+  @override
+  String get colorViewPalette => 'Palette';
+
+  @override
+  String get colorViewWheel => 'Wheel';
+
+  @override
+  String get colorEyedropper => 'Eyedropper';
+
+  @override
+  String get eyedropperHint => 'Tap the page to pick a color';
+
+  @override
+  String get eyedropperCancel => 'Cancel eyedropper';
+
+  @override
+  String get colorRecent => 'Recent';
 }

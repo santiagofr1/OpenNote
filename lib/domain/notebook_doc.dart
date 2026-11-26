@@ -437,7 +437,8 @@ class NotebookDoc {
 
   /// Hoja nueva en la posición [at] (0..cantidad): lo que estaba desde ahí baja una hoja.
   /// [content] (coordenadas locales) se pone adentro; se usa tal cual, sin copiar.
-  SheetMeta insertSheet(int at, {SheetMeta? meta, SheetContent? content}) {
+  /// [keepZ]: el contenido ya trae el orden de dibujo del documento (deshacer / rehacer de hojas): no se renumera arriba de todo.
+  SheetMeta insertSheet(int at, {SheetMeta? meta, SheetContent? content, bool keepZ = false}) {
     at = at.clamp(0, sheets.length);
     if (at < sheets.length) {
       markAllDirty(); // corre las de abajo
@@ -448,7 +449,7 @@ class NotebookDoc {
     final m = meta ?? nb.newSheet();
     sheets.insert(at, m);
     _loaded.add(m.id); // una hoja nueva está entera en memoria
-    if (content != null) _place(content, at * kSheetStep);
+    if (content != null) _place(content, at * kSheetStep, keepZ: keepZ);
     _dirty.add(m.id); // hay que escribirla (también al restaurar una borrada: en disco puede haber algo viejo)
     _touch(m.id);
     return m;
@@ -586,10 +587,13 @@ class NotebookDoc {
 
   /// Agrega [c] (coordenadas locales) corrido [top] hacia abajo, sin copiar.
   /// Los elementos quedan arriba de todo, en el orden de [Layered.z] que traía la hoja.
-  void _place(SheetContent c, double top) {
-    var z = nextZ();
-    for (final e in sortByZ([...c.items, ...c.strokes, ...c.texts])) {
-      e.z = z++;
+  /// Con [keepZ] los [Layered.z] se dejan como vienen (son los globales de cuando se sacó la hoja).
+  void _place(SheetContent c, double top, {bool keepZ = false}) {
+    if (!keepZ) {
+      var z = nextZ();
+      for (final e in sortByZ([...c.items, ...c.strokes, ...c.texts])) {
+        e.z = z++;
+      }
     }
     for (final s in c.strokes) {
       if (top != 0) s.translateY(top);

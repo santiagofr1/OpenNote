@@ -3027,22 +3027,10 @@ abstract class L {
   /// **'Favoritos'**
   String get penFavorites;
 
-  /// Pen panel: button that starts editing the favorite colors
-  ///
-  /// In es, this message translates to:
-  /// **'Cambiar'**
-  String get penFavEdit;
-
-  /// Pen panel: help while editing the favorite colors
-  ///
-  /// In es, this message translates to:
-  /// **'Elegí un color de la paleta o del selector: se guarda en el favorito marcado.'**
-  String get penFavHelpEditing;
-
   /// Pen panel: help for the favorite colors
   ///
   /// In es, this message translates to:
-  /// **'Tocá «Cambiar» o mantené apretado un favorito para elegir su color.'**
+  /// **'Mantené apretado un favorito para guardar ahí el color actual.'**
   String get penFavHelp;
 
   /// Pen panel title for the highlighter
@@ -3092,12 +3080,6 @@ abstract class L {
   /// In es, this message translates to:
   /// **'Color'**
   String get penColor;
-
-  /// Pen panel: button that opens the custom color picker
-  ///
-  /// In es, this message translates to:
-  /// **'Color personalizado'**
-  String get penCustomColor;
 
   /// Pen panel: section title of the eraser size
   ///
@@ -3224,6 +3206,12 @@ abstract class L {
   /// In es, this message translates to:
   /// **'Mi cuaderno'**
   String get librarySampleNotebook;
+
+  /// Name given to a notebook found on disk whose own name was lost (library index unreadable); n is a counter
+  ///
+  /// In es, this message translates to:
+  /// **'Cuaderno recuperado {n}'**
+  String libraryRecoveredNotebook(int n);
 
   /// Fallback file name for a notebook without a name (exported files)
   ///
@@ -3398,6 +3386,42 @@ abstract class L {
   /// In es, this message translates to:
   /// **'Ya tenés la última versión'**
   String get updateUpToDate;
+
+  /// Color chooser: tooltip of the palette view button
+  ///
+  /// In es, this message translates to:
+  /// **'Paleta'**
+  String get colorViewPalette;
+
+  /// Color chooser: tooltip of the color wheel view button
+  ///
+  /// In es, this message translates to:
+  /// **'Rueda'**
+  String get colorViewWheel;
+
+  /// Color chooser: tooltip of the eyedropper button
+  ///
+  /// In es, this message translates to:
+  /// **'Cuentagotas'**
+  String get colorEyedropper;
+
+  /// Banner shown over the page while the eyedropper is active
+  ///
+  /// In es, this message translates to:
+  /// **'Tocá la hoja para tomar un color'**
+  String get eyedropperHint;
+
+  /// Tooltip of the button that cancels the eyedropper
+  ///
+  /// In es, this message translates to:
+  /// **'Cancelar cuentagotas'**
+  String get eyedropperCancel;
+
+  /// Color chooser: caption of the row of recently used colors
+  ///
+  /// In es, this message translates to:
+  /// **'Recientes'**
+  String get colorRecent;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

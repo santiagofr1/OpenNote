@@ -4,6 +4,7 @@ import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart' show RenderRepaintBoundary;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -31,6 +32,7 @@ import 'format_bar.dart';
 import 'handwriting.dart';
 import 'heading_dialog.dart';
 import 'history.dart';
+import 'eyedropper.dart';
 import 'ink.dart';
 import 'items_layer.dart';
 import 'link_dialog.dart';
@@ -188,6 +190,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   Timer? _zoomPillTimer;
   final _saveTimers = <String, Timer>{}; // textos y notas: se guarda al dejar de escribir
   final _viewportKey = GlobalKey(), _sheetKey = GlobalKey();
+  final _eyeKey = GlobalKey(); // el RepaintBoundary del visor: de ahí sale la captura del cuentagotas
+  ({EyeTarget target, ui.Image image, PixelBuffer pixels})? _eye; // modo cuentagotas (null: apagado)
 
   // scroll solo al llevar lo seleccionado hasta el borde del visor (solo al mover, no con las manijas)
   late final _edgeY = AutoScroller(scroll, _viewportKey, onScrolled: _edgeScrolled);
@@ -255,6 +259,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   @override
   void dispose() {
+    _eye?.image.dispose();
     final pending = _saveTimers.values.any((t) => t.isActive);
     for (final t in _saveTimers.values) {
       t.cancel();
@@ -838,7 +843,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       if (_cover != null) {
         _commitCover(erased!);
       } else if (erased!.isNotEmpty) {
-        _pushUndo(EditAction(removed: erased!));
+        _pushUndo(EditAction(doc, removed: erased!));
       }
       erased = null;
       eraserAt = null;
@@ -991,7 +996,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     }
     doc.strokes.remove(d.before.id);
     doc.strokes[w.id] = w;
-    _pushUndo(EditAction(removed: [d.before], added: [w]));
+    _pushUndo(EditAction(doc, removed: [d.before], added: [w]));
     _growIfNeeded(w.bounds.bottom);
     _changed();
     liveTick.value++;
@@ -1088,7 +1093,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     if (smooth) s.smooth(); // una figura limpia no se suaviza
     s.z = doc.nextZ(); // arriba de todo
     doc.strokes[s.id] = s; // avisa a las hojas que toca
-    _pushUndo(EditAction(added: [s]));
+    _pushUndo(EditAction(doc, added: [s]));
     _growIfNeeded(s.bounds.bottom, right: s.bounds.right);
     _changed();
   }
@@ -1108,7 +1113,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   Item? _coverItem; // PDF sobre el que va el gesto
   Stroke? _cover; // corrector en curso (se dibuja en vivo)
   bool _coverColored = false; // ya llegó el color real
-  final _pendingCovers = <String, EditAction>{}; // confirmados que todavía esperan su color
+  final _pendingCovers = <String, (EditAction, Stroke)>{}; // confirmados que todavía esperan su color
 
   /// El PDF (el de z más alta) que contiene [p], o null.
   Item? _pdfAt(Offset p) {
@@ -1157,12 +1162,11 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       liveTick.value++;
       return;
     }
-    final act = _pendingCovers.remove(id);
-    if (act == null) return;
-    final i = act.added.indexWhere((s) => s.id == id);
-    if (i < 0) return;
-    final old = act.added[i], fin = _recolored(old, hex);
-    act.added[i] = fin; // deshacer/rehacer usan el trazo final
+    final pending = _pendingCovers.remove(id);
+    if (pending == null) return;
+    final (act, old) = pending;
+    final fin = _recolored(old, hex);
+    act.mapAdded(id, (local) => _recolored(local, hex)); // deshacer/rehacer usan el trazo final
     if (identical(doc.strokes[id], old)) {
       doc.strokes[id] = fin;
       doc.markDirtyElement(fin);
@@ -1177,8 +1181,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     _endCover();
     s.z = doc.nextZ(); // arriba de todo
     doc.strokes[s.id] = s;
-    final act = EditAction(added: [s], removed: removed);
-    if (!colored) _pendingCovers[s.id] = act;
+    final act = EditAction(doc, added: [s], removed: removed);
+    if (!colored) _pendingCovers[s.id] = (act, s);
     _pushUndo(act);
     _growIfNeeded(s.bounds.bottom, right: s.bounds.right);
     _changed();
@@ -1399,6 +1403,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       itemAfter[id] = it.copy();
     });
     _pushUndo(EditAction(
+        doc,
         removed: removed,
         added: added,
         textBefore: textBefore,
@@ -1437,7 +1442,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       after[t.id] = t.copy();
     }
     if (before.isEmpty) return;
-    _pushUndo(EditAction(textBefore: before, textAfter: after));
+    _pushUndo(EditAction(doc, textBefore: before, textAfter: after));
     _changed();
     setState(() {});
     liveTick.value++;
@@ -1457,6 +1462,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       doc.items.remove(id);
     }
     _pushUndo(EditAction(
+      doc,
       removed: removed,
       textBefore: textBefore,
       textAfter: absent(textBefore.keys),
@@ -1495,7 +1501,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final pad = _loadedAt(r.top - 4) && _loadedAt(r.bottom + 4) ? 4.0 : 0.0;
     final it = Item(newId('i'), 'link', r.left - pad, r.top - pad, r.width + 2 * pad, r.height + 2 * pad, text: dest)..z = doc.nextZ();
     doc.items[it.id] = it;
-    _pushUndo(EditAction(itemBefore: absent([it.id]), itemAfter: {it.id: it.copy()}));
+    _pushUndo(EditAction(doc, itemBefore: absent([it.id]), itemAfter: {it.id: it.copy()}));
     _changed();
     liveTick.value++;
   }
@@ -1509,7 +1515,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     if (dest == null || !mounted || dest == before.text || !doc.items.containsKey(it.id)) return;
     it.text = dest;
     doc.markDirtyElement(it);
-    _pushUndo(EditAction(itemBefore: {it.id: before}, itemAfter: {it.id: it.copy()}));
+    _pushUndo(EditAction(doc, itemBefore: {it.id: before}, itemAfter: {it.id: it.copy()}));
     _changed();
     liveTick.value++;
   }
@@ -1652,6 +1658,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       texts.put(t.id, t);
     }
     _pushUndo(EditAction(
+      doc,
       added: newStrokes,
       textBefore: absent(newTexts.map((t) => t.id)),
       textAfter: {for (final t in newTexts) t.id: t.copy()},
@@ -1674,7 +1681,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   void _reorderSel(ZMove m) {
     final ch = doc.reorder(sel.allIds, m, _rectOf);
     if (ch == null) return;
-    _pushUndo(EditAction(zBefore: ch.before, zAfter: ch.after)); // el cambio de z ya avisó a sus hojas
+    _pushUndo(EditAction(doc, zBefore: ch.before, zAfter: ch.after)); // el cambio de z ya avisó a sus hojas
     liveTick.value++;
     _changed();
   }
@@ -1919,19 +1926,68 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     widget.onPrefsChanged();
   }
 
-  Future<void> _openPanel({int? editFav}) async {
+  Future<void> _openPanel() async {
     final align = switch (ts.dock) {
       'left' => Alignment.centerLeft,
       'right' => Alignment.centerRight,
       _ => Alignment.topCenter
     };
-    await showPenPanel(context, ts, () {
+    final eye = await showPenPanel(context, ts, () {
       if (!mounted) return; // el panel se cierra (dispose) después del editor: ya no hay a quién avisar
       setState(() {});
       widget.onPrefsChanged();
-    }, align: align, editFav: editFav);
+    }, align: align);
     if (mounted) setState(() {});
+    if (eye != null && mounted) await _startEyedropper(eye);
   }
+
+  // ---------------- cuentagotas ----------------
+
+  /// Modo cuentagotas: se saca una captura de lo que se ve de las hojas (tinta, PDF, imagen o fondo) y se pone una capa
+  /// encima que lee el color de donde se toca. Al soltar se aplica al [target] y se vuelve a abrir el panel.
+  Future<void> _startEyedropper(EyeTarget target) async {
+    final box = _eyeKey.currentContext?.findRenderObject();
+    if (box is! RenderRepaintBoundary) return;
+    final cap = await captureBoundary(box, View.of(context).devicePixelRatio);
+    if (cap == null) return;
+    if (!mounted) {
+      cap.image.dispose();
+      return;
+    }
+    setState(() => _eye = (target: target, image: cap.image, pixels: cap.pixels));
+  }
+
+  /// Sale del modo cuentagotas sin cambiar nada. Devuelve si estaba activo (lo usa el botón atrás).
+  bool cancelEyedropper() {
+    final e = _eye;
+    if (e == null) return false;
+    setState(() => _eye = null);
+    e.image.dispose();
+    return true;
+  }
+
+  void _eyedropperPicked(String hex) {
+    final e = _eye;
+    if (e == null) return;
+    setState(() {
+      _eye = null;
+      switch (e.target) {
+        case EyeTarget.tool:
+          ts.pickColor(hex);
+        case EyeTarget.shapeFill:
+          ts.shapeFillColor = hex;
+        case EyeTarget.paintShape:
+          ts.paintParams = ts.paintParams.copyWith(shapeColor: hex);
+      }
+    });
+    e.image.dispose();
+    widget.onPrefsChanged();
+    _openPanel(); // se vuelve al panel: se ve el resultado y se lo puede guardar en un favorito
+  }
+
+  /// Modo cuentagotas activo (lo usan los tests).
+  @visibleForTesting
+  EyeTarget? get eyedropperTarget => _eye?.target;
 
   /// Colores y grosor: desde texto/seleccionar, vuelve al lápiz.
   void _openPanelForDrawing() {
@@ -1939,10 +1995,15 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     _openPanel();
   }
 
-  /// Mantener un favorito de la barra: abre el panel editando ese favorito.
-  void _editFavorite(int slot) {
+  /// Mantener un favorito de la barra: guarda ahí el color actual de la herramienta (desde texto o seleccionar, del lápiz).
+  bool _saveFavorite(int slot) {
     if (!ts.drawing) _setTool(Tool.pen);
-    _openPanel(editFav: slot);
+    final changed = ts.saveFavorite(slot);
+    if (changed) {
+      setState(() {});
+      widget.onPrefsChanged();
+    }
+    return changed;
   }
 
   void _pickQuick(String c) {
@@ -2437,7 +2498,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   /// Hoja agregada al final (tirar o menú): se puede deshacer.
   void _sheetAddedAtEnd() {
-    _pushUndo(EditAction(sheetOps: [SheetPresenceOp.added(doc, doc.sheets.last)]));
+    _pushUndo(EditAction(doc, sheetOps: [SheetPresenceOp.added(doc, doc.sheets.last)]));
     widget.onSheetsChanged?.call(null);
   }
 
@@ -2454,7 +2515,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     it.y = y;
     it.z = doc.nextZ();
     doc.items[it.id] = it;
-    _pushUndo(EditAction(itemBefore: {it.id: null}, itemAfter: {it.id: it.copy()}));
+    _pushUndo(EditAction(doc, itemBefore: {it.id: null}, itemAfter: {it.id: it.copy()}));
     _setTool(Tool.select);
     sel.replace(items: [it.id]);
     _growIfNeeded(it.y + it.h, right: it.x + it.w);
@@ -2499,7 +2560,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final before = it.copy();
     it.text = name;
     doc.markDirtyElement(it);
-    _pushUndo(EditAction(itemBefore: {id: before}, itemAfter: {id: it.copy()}));
+    _pushUndo(EditAction(doc, itemBefore: {id: before}, itemAfter: {id: it.copy()}));
     _changed();
     setState(() {});
   }
@@ -2650,7 +2711,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             _openPanel();
           },
           onPickColor: _pickQuick,
-          onEditFavorite: _editFavorite,
+          onSaveFavorite: _saveFavorite,
           onOpenPanel: _openPanelForDrawing,
           onUndo: () => _undoRedo(undo: true),
           onRedo: () => _undoRedo(undo: false),
@@ -2685,7 +2746,9 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             ? const NeverScrollableScrollPhysics()
             : const NoCtrlWheelPhysics(parent: ClampingScrollPhysics());
         return Stack(children: [
-          Listener(
+          RepaintBoundary(
+            key: _eyeKey,
+            child: Listener(
             key: _viewportKey,
             onPointerDown: _touchDown,
             onPointerMove: _touchMove,
@@ -2746,6 +2809,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
               ),
             ),
           ),
+          ),
           // hermano del visor: el dedo sobre el pulgar no llega a los manejadores de toque del visor
           Positioned(
             top: 0,
@@ -2768,6 +2832,11 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
               child: ZoomIndicator(visible: _zoomPill || touch.pinching, zoom: ts.zoom, locked: ts.zoomLocked),
             ),
           ),
+          // cuentagotas: encima de todo, se come los toques
+          if (_eye case final e?)
+            Positioned.fill(
+              child: EyedropperOverlay(image: e.image, pixels: e.pixels, onPick: _eyedropperPicked, onCancel: cancelEyedropper),
+            ),
         ]);
       }),
     );

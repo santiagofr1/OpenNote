@@ -125,9 +125,12 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     final prefs = await store.loadPrefs();
     if (mounted) LanguageScope.maybeOf(context)?.load(prefs);
     _setupBackgroundSync(prefs);
-    tools.load(prefs);
+    try {
+      tools.load(prefs);
+    } catch (_) {} // ajustes ilegibles: se queda con los de fábrica, la biblioteca tiene que cargar igual
     updPrefs = UpdatePrefs.from(prefs);
-    final idx = await store.loadIndex(sampleName: mounted ? context.l10n.librarySampleNotebook : 'Mi cuaderno');
+    final idx = await store.loadIndex(sampleName: mounted ? context.l10n.librarySampleNotebook : 'Mi cuaderno',
+        recoveredName: mounted ? context.l10n.libraryRecoveredNotebook : null);
     setState(() => index = idx);
     unawaited(sync.init());
     WidgetsBinding.instance.addPostFrameCallback((_) => _autoUpdateCheck());
@@ -190,7 +193,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
       return;
     }
     _staleAfterSync = false;
-    final idx = await store.loadIndex();
+    final idx = await store.loadIndex(recoveredName: context.l10n.libraryRecoveredNotebook);
     if (!mounted || _openId != null) return;
     setState(() {
       index = idx;
@@ -241,15 +244,21 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
   Future<void> _openSyncSheet() =>
       showSafeSheet<void>(context, (ctx) => SyncSheet(sync: sync, missing: widget.backend?.missingConfig ?? GoogleConfig.missing));
 
-  Future<void> _open(Notebook nb, {bool askedPin = false}) async {
-    if (nb.pin != null && !askedPin) {
-      final p = await askPin(context, nb.name, subtitle: context.l10n.libraryLockedNotebook);
-      if (p == null || !mounted) return;
-      if (hashPin(p) != nb.pin) {
-        snack(context, context.l10n.libraryWrongPin);
-        return;
-      }
+  /// Pide el PIN de un cuaderno bloqueado (true si no tiene PIN o si se escribió bien). Todo lo que saca el contenido de un
+  /// cuaderno bloqueado (abrir, duplicar, exportar) tiene que pasar por acá.
+  Future<bool> _unlock(Notebook nb) async {
+    if (nb.pin == null) return true;
+    final p = await askPin(context, nb.name, subtitle: context.l10n.libraryLockedNotebook);
+    if (p == null || !mounted) return false;
+    if (hashPin(p) != nb.pin) {
+      snack(context, context.l10n.libraryWrongPin);
+      return false;
     }
+    return true;
+  }
+
+  Future<void> _open(Notebook nb, {bool askedPin = false}) async {
+    if (!askedPin && !await _unlock(nb)) return;
     _openId = nb.id;
     final result = await Navigator.of(context).push<Object?>(PageRouteBuilder<Object?>(
       transitionDuration: const Duration(milliseconds: 320),
@@ -449,8 +458,9 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
   }
 
   Future<void> _duplicate(Notebook nb) async {
+    if (!await _unlock(nb)) return;
     // se copian los archivos de las hojas: no se carga ni se decodifica nada del cuaderno
-    final copy = Notebook(newId('n'), context.l10n.libraryCopySuffix(nb.name), bg: nb.bg, image: nb.image, paper: nb.paper, spacing: nb.spacing, size: nb.size, folder: nb.folder, canvas: nb.canvas, canvasW: nb.canvasW)
+    final copy = Notebook(newId('n'), context.l10n.libraryCopySuffix(nb.name), bg: nb.bg, image: nb.image, paper: nb.paper, spacing: nb.spacing, size: nb.size, folder: nb.folder, canvas: nb.canvas, canvasW: nb.canvasW, pin: nb.pin)
       ..copySectionsFrom(nb) // las secciones y las hojas de TODAS (los archivos se copian todos)
       ..touch();
     await store.copyNotebookFiles(nb, copy);
@@ -464,6 +474,7 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
 
   /// "Exportar" de la biblioteca: la misma hoja que el cuaderno, sin "PDF de esta hoja".
   Future<void> _export(Notebook nb) async {
+    if (!await _unlock(nb)) return;
     final v = await showExportSheet(context, store, tools);
     if (v == null || !mounted) return;
     switch (v) {

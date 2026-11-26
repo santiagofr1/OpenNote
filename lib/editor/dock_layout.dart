@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
+
 import '../l10n/l10n.dart';
 
 /// Barra acoplable arriba / izquierda / derecha. Se mueve arrastrando su agarradera:
@@ -26,6 +27,9 @@ class DockLayout extends StatefulWidget {
 
 class _DockLayoutState extends State<DockLayout> {
   final _key = GlobalKey();
+  // el lienzo conserva su estado al esconder la barra (modo lectura) o cambiarla de lado: es el mismo elemento en cualquier árbol
+  final _canvasKey = GlobalKey();
+  bool _cancelled = false; // el gesto de la agarradera lo canceló el sistema (un cancelado no cambia la barra de lugar)
   String? _preview; // dónde quedaría si se suelta ahora
   Offset? _dragPos; // dónde está el dedo (coordenadas de este widget)
 
@@ -33,7 +37,8 @@ class _DockLayoutState extends State<DockLayout> {
 
   String _dockFor(Offset global) {
     final p = _box.globalToLocal(global), s = _box.size;
-    if (p.dy < s.height * .22 && p.dx > s.width * .2 && p.dx < s.width * .8) return 'top';
+    if (p.dy < s.height * .22 && p.dx > s.width * .2 && p.dx < s.width * .8)
+      return 'top';
     return p.dx < s.width / 2 ? 'left' : 'right';
   }
 
@@ -59,7 +64,14 @@ class _DockLayoutState extends State<DockLayout> {
   Widget build(BuildContext context) {
     final dock = widget.dock;
     // misma forma de árbol con y sin barra: así el lienzo no se reconstruye al entrar al modo lectura
-    if (widget.hideToolbar) return Stack(key: _key, children: [Column(children: [Expanded(child: widget.canvas)])]);
+    final canvas = KeyedSubtree(key: _canvasKey, child: widget.canvas);
+    if (widget.hideToolbar)
+      return Stack(
+        key: _key,
+        children: [
+          Column(children: [Expanded(child: canvas)]),
+        ],
+      );
     final bar = TweenAnimationBuilder<double>(
       key: ValueKey(dock),
       tween: Tween(begin: 0, end: 1),
@@ -71,7 +83,7 @@ class _DockLayoutState extends State<DockLayout> {
           translation: switch (dock) {
             'left' => Offset(-(1 - t) * .5, 0),
             'right' => Offset((1 - t) * .5, 0),
-            _ => Offset(0, -(1 - t) * .5)
+            _ => Offset(0, -(1 - t) * .5),
           },
           child: child,
         ),
@@ -82,21 +94,25 @@ class _DockLayoutState extends State<DockLayout> {
         child: widget.toolbar(dock != 'top', _grip(dock != 'top')),
       ),
     );
-    final canvas = Expanded(child: widget.canvas);
+    final lienzo = Expanded(child: canvas);
     final body = dock == 'top'
-        ? Column(children: [bar, canvas])
-        : Row(children: dock == 'left' ? [bar, canvas] : [canvas, bar]);
-    return Stack(key: _key, children: [
-      body,
-      if (_preview != null) Positioned.fill(child: IgnorePointer(child: _DockZone(_preview!))),
-      if (_dragPos != null)
-        AnimatedPositioned(
-          duration: const Duration(milliseconds: 60),
-          left: _dragPos!.dx - (_preview == 'top' ? 120 : 30),
-          top: _dragPos!.dy - (_preview == 'top' ? 30 : 110),
-          child: IgnorePointer(child: _BarGhost(vertical: _preview != 'top')),
-        ),
-    ]);
+        ? Column(children: [bar, lienzo])
+        : Row(children: dock == 'left' ? [bar, lienzo] : [lienzo, bar]);
+    return Stack(
+      key: _key,
+      children: [
+        body,
+        if (_preview != null)
+          Positioned.fill(child: IgnorePointer(child: _DockZone(_preview!))),
+        if (_dragPos != null)
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 60),
+            left: _dragPos!.dx - (_preview == 'top' ? 120 : 30),
+            top: _dragPos!.dy - (_preview == 'top' ? 30 : 110),
+            child: IgnorePointer(child: _BarGhost(vertical: _preview != 'top')),
+          ),
+      ],
+    );
   }
 
   /// Agarradera para mover la barra (arrastrala a un costado o arriba).
@@ -108,18 +124,28 @@ class _DockLayoutState extends State<DockLayout> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onPanStart: (d) {
+          _cancelled = false;
           HapticFeedback.lightImpact();
           _dragTo(d.globalPosition);
         },
         onPanUpdate: (d) => _dragTo(d.globalPosition),
-        onPanEnd: (_) => _endDrag(drop: true),
+        onPanEnd: (_) => _endDrag(drop: !_cancelled),
         onPanCancel: () => _endDrag(drop: false),
-        child: SizedBox(
-          width: vertical ? 60 : 26,
-          height: vertical ? 26 : 56,
-          child: RotatedBox(
-            quarterTurns: vertical ? 1 : 0,
-            child: Icon(Symbols.drag_indicator, size: 18, weight: 300, color: cs.onSurfaceVariant.withValues(alpha: .6)),
+        child: Listener(
+          // adentro del detector: recibe el pointer cancel ANTES que él (que lo trata como un fin de arrastre)
+          onPointerCancel: (_) => _cancelled = true,
+          child: SizedBox(
+            width: vertical ? 60 : 26,
+            height: vertical ? 26 : 56,
+            child: RotatedBox(
+              quarterTurns: vertical ? 1 : 0,
+              child: Icon(
+                Symbols.drag_indicator,
+                size: 18,
+                weight: 300,
+                color: cs.onSurfaceVariant.withValues(alpha: .6),
+              ),
+            ),
           ),
         ),
       ),
@@ -142,10 +168,27 @@ class _BarGhost extends StatelessWidget {
       borderRadius: BorderRadius.circular(18),
       child: Padding(
         padding: const EdgeInsets.all(6),
-        child: Flex(direction: vertical ? Axis.vertical : Axis.horizontal, mainAxisSize: MainAxisSize.min, children: [
-          for (final i in [Symbols.stylus, Symbols.ink_highlighter, Symbols.keyboard, Symbols.highlight_alt])
-            Padding(padding: const EdgeInsets.all(8), child: Icon(i, size: 20, weight: 300, color: cs.onSurfaceVariant)),
-        ]),
+        child: Flex(
+          direction: vertical ? Axis.vertical : Axis.horizontal,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final i in [
+              Symbols.stylus,
+              Symbols.ink_highlighter,
+              Symbols.keyboard,
+              Symbols.highlight_alt,
+            ])
+              Padding(
+                padding: const EdgeInsets.all(8),
+                child: Icon(
+                  i,
+                  size: 20,
+                  weight: 300,
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -167,9 +210,18 @@ class _DockZone extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.all(6),
       child: switch (dock) {
-        'top' => Align(alignment: Alignment.topCenter, child: SizedBox(height: 56, width: double.infinity, child: zone)),
-        'left' => Align(alignment: Alignment.centerLeft, child: SizedBox(width: 64, height: double.infinity, child: zone)),
-        _ => Align(alignment: Alignment.centerRight, child: SizedBox(width: 64, height: double.infinity, child: zone)),
+        'top' => Align(
+          alignment: Alignment.topCenter,
+          child: SizedBox(height: 56, width: double.infinity, child: zone),
+        ),
+        'left' => Align(
+          alignment: Alignment.centerLeft,
+          child: SizedBox(width: 64, height: double.infinity, child: zone),
+        ),
+        _ => Align(
+          alignment: Alignment.centerRight,
+          child: SizedBox(width: 64, height: double.infinity, child: zone),
+        ),
       },
     );
   }

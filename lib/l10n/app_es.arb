@@ -2377,15 +2377,7 @@
   "@penFavorites": {
     "description": "Pen panel: section title of the favorite colors"
   },
-  "penFavEdit": "Cambiar",
-  "@penFavEdit": {
-    "description": "Pen panel: button that starts editing the favorite colors"
-  },
-  "penFavHelpEditing": "Elegí un color de la paleta o del selector: se guarda en el favorito marcado.",
-  "@penFavHelpEditing": {
-    "description": "Pen panel: help while editing the favorite colors"
-  },
-  "penFavHelp": "Tocá «Cambiar» o mantené apretado un favorito para elegir su color.",
+  "penFavHelp": "Mantené apretado un favorito para guardar ahí el color actual.",
   "@penFavHelp": {
     "description": "Pen panel: help for the favorite colors"
   },
@@ -2420,10 +2412,6 @@
   "penColor": "Color",
   "@penColor": {
     "description": "Pen panel: section title of the colors"
-  },
-  "penCustomColor": "Color personalizado",
-  "@penCustomColor": {
-    "description": "Pen panel: button that opens the custom color picker"
   },
   "penEraser": "Goma (apretá el botón del lápiz)",
   "@penEraser": {
@@ -2516,6 +2504,15 @@
   "librarySampleNotebook": "Mi cuaderno",
   "@librarySampleNotebook": {
     "description": "Name of the sample notebook created on the first launch (also add the translation to kSampleNotebookNames in domain/notebook.dart)"
+  },
+  "libraryRecoveredNotebook": "Cuaderno recuperado {n}",
+  "@libraryRecoveredNotebook": {
+    "description": "Name given to a notebook found on disk whose own name was lost (library index unreadable); n is a counter",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
   },
   "exportFileNotebook": "Cuaderno",
   "@exportFileNotebook": {
@@ -2632,5 +2629,29 @@
   "updateUpToDate": "Ya tenés la última versión",
   "@updateUpToDate": {
     "description": "Snackbar when the app is up to date"
+  },
+  "colorViewPalette": "Paleta",
+  "@colorViewPalette": {
+    "description": "Color chooser: tooltip of the palette view button"
+  },
+  "colorViewWheel": "Rueda",
+  "@colorViewWheel": {
+    "description": "Color chooser: tooltip of the color wheel view button"
+  },
+  "colorEyedropper": "Cuentagotas",
+  "@colorEyedropper": {
+    "description": "Color chooser: tooltip of the eyedropper button"
+  },
+  "eyedropperHint": "Tocá la hoja para tomar un color",
+  "@eyedropperHint": {
+    "description": "Banner shown over the page while the eyedropper is active"
+  },
+  "eyedropperCancel": "Cancelar cuentagotas",
+  "@eyedropperCancel": {
+    "description": "Tooltip of the button that cancels the eyedropper"
+  },
+  "colorRecent": "Recientes",
+  "@colorRecent": {
+    "description": "Color chooser: caption of the row of recently used colors"
   }
 }

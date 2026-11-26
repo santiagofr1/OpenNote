@@ -74,8 +74,8 @@ class SheetMeta {
         paper: (j['paper'] ?? '#fffefb') as String,
         spacing: (j['spacing'] as num?)?.toDouble(), // los archivos viejos no lo tienen: el por defecto del fondo
         size: validPaperSize(j['size']), // los archivos viejos no lo tienen: A4
-        rev: (j['rev'] ?? 0) as int,
-        updated: (j['updated'] ?? 0) as int,
+        rev: j['rev'] is num ? (j['rev'] as num).toInt() : 0,
+        updated: j['updated'] is num ? (j['updated'] as num).toInt() : 0,
         section: (j['section'] ?? '') as String, // los archivos viejos no la tienen
         heads: [for (final h in (j['heads'] as List? ?? const [])) Heading.fromJson(h as Map)],
       );
@@ -110,8 +110,8 @@ class Section {
   factory Section.fromJson(Map j) => Section(
         j['id'] as String,
         ((j['name'] ?? '') as String).isEmpty ? 'Sección' : j['name'] as String,
-        updated: (j['updated'] ?? 0) as int,
-        last: (j['last'] ?? 0) as int,
+        updated: jsonInt(j['updated']),
+        last: jsonInt(j['last']),
       );
   Map<String, dynamic> toJson() => {'id': id, 'name': name, 'updated': updated, 'last': last};
   Section copy() => Section(id, name, updated: updated, last: last);
@@ -224,7 +224,8 @@ class Notebook {
       if (e is Map && e['id'] is String && (e['id'] as String).isNotEmpty && !secs.any((s) => s.id == e['id'])) secs.add(Section.fromJson(e));
     }
     if (secs.isEmpty) secs.add(Section(kGeneralSection, 'General'));
-    final all = [for (final s in (j['sheets'] as List)) SheetMeta.fromJson(s as Map)];
+    // las hojas con un id que no sirve de nombre de archivo se ignoran (el id viene de disco o de la nube)
+    final all = [for (final s in (j['sheets'] as List)) if (s is Map && isSafeId(s['id'])) SheetMeta.fromJson(s)];
     sections
       ..clear()
       ..addAll(secs);
@@ -316,8 +317,8 @@ class Notebook {
         paper: (n['paper'] ?? '#fffefb') as String,
         spacing: (n['spacing'] as num?)?.toDouble(),
         size: validPaperSize(n['size']),
-        updated: (n['updated'] ?? 0) as int,
-        last: (n['last'] ?? 0) as int,
+        updated: jsonInt(n['updated']),
+        last: jsonInt(n['last']),
         favorite: (n['favorite'] ?? false) as bool,
         pin: n['pin'] as String?,
         folder: n['folder'] as String?,
@@ -342,6 +343,25 @@ class Notebook {
         if (canvas) 'canvas': true,
         if (canvas) 'canvasW': canvasW,
       };
+
+  /// Los datos del cuaderno que van TAMBIÉN dentro de su `notebook.json` (clave `meta`), como copia de recuperación por si
+  /// el índice se pierde: todo lo de [toJson] menos el id (es el nombre de la carpeta) y `last` (propio de cada dispositivo),
+  /// más [folderPath] (las carpetas donde está, desde el inicio hasta la propia: `{id, name}`) para poder recrearlas.
+  Map<String, dynamic> metaJson(List<Map<String, String>> folderPath) => {
+        ...toJson()..remove('id')..remove('last'),
+        if (folderPath.isNotEmpty) 'folderPath': folderPath,
+      };
+
+  /// El cuaderno [id] según su `meta` de notebook.json (ver [metaJson]); null si no trae un nombre o está mal formado.
+  static Notebook? fromMeta(String id, Map meta) {
+    try {
+      final name = meta['name'];
+      if (name is! String || name.isEmpty) return null;
+      return Notebook.fromJson({...meta, 'id': id, 'last': 0});
+    } catch (_) {
+      return null;
+    }
+  }
 
   /// Lo que va en `notebook.json`: las secciones en orden, la activa y TODAS las hojas (de todas las secciones),
   /// agrupadas por sección. Una app vieja que lo abra ve una sola tira con todas las hojas y, si guarda, pierde
@@ -373,12 +393,27 @@ class NotesIndex {
       : notebooks = notebooks ?? [],
         folders = folders ?? [];
 
+  /// Lee el índice sin tirar por una entrada rara: los cuadernos con id inválido (es el nombre de su carpeta) o mal
+  /// formados se ignoran, igual que las carpetas rotas. Sus archivos en disco no se tocan.
   factory NotesIndex.fromJson(Map j) => NotesIndex(
-        rev: (j['rev'] ?? 0) as int,
-        last: j['last'] as String?,
-        notebooks: [for (final n in (j['notebooks'] as List? ?? [])) Notebook.fromJson(n as Map)],
-        folders: [for (final f in (j['folders'] as List? ?? [])) Folder.fromJson(f as Map)],
+        rev: j['rev'] is int ? j['rev'] as int : 0,
+        last: j['last'] is String ? j['last'] as String : null,
+        notebooks: [
+          for (final n in (j['notebooks'] is List ? j['notebooks'] as List : const []))
+            if (n is Map && isSafeId(n['id'])) ?_tryParse(() => Notebook.fromJson(n)),
+        ],
+        folders: [
+          for (final f in (j['folders'] is List ? j['folders'] as List : const [])) if (f is Map) ?_tryParse(() => Folder.fromJson(f)),
+        ],
       )..repairFolders();
+
+  static T? _tryParse<T>(T Function() f) {
+    try {
+      return f();
+    } catch (_) {
+      return null;
+    }
+  }
   Map<String, dynamic> toJson() => {
         'format': Notebook.kFormat,
         'rev': rev,
