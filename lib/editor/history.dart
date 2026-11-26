@@ -1,55 +1,143 @@
+import 'dart:ui' show Offset;
+
 import '../domain/domain.dart';
+
+/// Un elemento de una acción puesto en SU hoja: [v] es una copia en coordenadas LOCALES de la hoja [sheet] (y = 0 es el
+/// borde de arriba de esa hoja). Al aplicar la acción se vuelve a global contra el documento de ese momento, sin
+/// importar dónde esté la hoja ni qué pasó con las demás. [top] es el lugar de la hoja cuando se tomó la copia: solo se usa
+/// si la hoja ya no existe (por ejemplo, la última vacía que el editor quitó sola).
+class _At<T> {
+  final String sheet;
+  final double top;
+  final T v;
+  const _At(this.sheet, this.top, this.v);
+
+  /// Desplazamiento de local a global en [doc] ahora.
+  double shift(NotebookDoc doc) {
+    final k = doc.indexOfSheet(sheet);
+    return k < 0 ? top : k * kSheetStep;
+  }
+}
 
 /// Una acción deshacible: trazos que salieron/entraron y cómo estaban textos y elementos antes/después.
 /// En los mapas, null = no existía (antes) o ya no existe (después).
+///
+/// La acción NO guarda objetos del documento: cada trazo, texto y elemento queda como una copia en coordenadas locales
+/// de su hoja (id de hoja + posición dentro de ella), tomada al crearla. Al deshacer o rehacer se resuelve contra el
+/// documento de ese momento (hoja por id, elemento por id). Así las operaciones de hojas que corren o restauran
+/// copias (mover, borrar, restaurar) no pueden dejar nada corrido. Como deshacer y rehacer se aplican siempre en
+/// orden estricto, el documento al aplicar una acción es el mismo que cuando se hizo.
+/// Una acción con [sheetOps] no mezcla elementos (las operaciones de hojas van solas).
 class EditAction {
-  final List<Stroke> removed, added;
-  final Map<String, TextBlock?> textBefore, textAfter;
-  final Map<String, Item?> itemBefore, itemAfter;
+  /// Operaciones de hojas (agregar, duplicar, mover, borrar). Se hacen en este orden al rehacer y al revés al deshacer.
+  final List<SheetOp> sheetOps;
+  final List<_At<Stroke>> _removed, _added;
+  final Map<String, _At<TextBlock>?> _textBefore, _textAfter;
+  final Map<String, _At<Item>?> _itemBefore, _itemAfter;
 
   /// Cambios de orden de dibujo: [z] de cada elemento (por id) antes y después.
   final Map<String, int> zBefore, zAfter;
 
-  /// Operaciones de hojas (agregar, duplicar, mover, borrar). Se hacen en este orden al rehacer y al revés al deshacer.
-  final List<SheetOp> sheetOps;
-  const EditAction({
-    this.sheetOps = const [],
-    this.removed = const [],
-    this.added = const [],
-    this.textBefore = const {},
-    this.textAfter = const {},
-    this.itemBefore = const {},
-    this.itemAfter = const {},
-    this.zBefore = const {},
-    this.zAfter = const {},
-  });
+  /// Hoja de cada elemento de [zBefore] / [zAfter] cuando se creó la acción.
+  final Map<String, String> _zSheet;
 
-  /// Ids de las hojas que toca esta acción: donde están ahora y donde estaban (antes/después) sus elementos.
-  /// Mientras la acción esté en el historial esas hojas no se pueden descargar: deshacer/rehacer las necesita en memoria.
+  const EditAction._(this.sheetOps, this._removed, this._added, this._textBefore, this._textAfter, this._itemBefore,
+      this._itemAfter, this.zBefore, this.zAfter, this._zSheet);
+
+  /// Acción sin nada (relleno en pruebas).
+  const EditAction.empty() : this._(const [], const [], const [], const {}, const {}, const {}, const {}, const {}, const {}, const {});
+
+  /// Arma la acción DESPUÉS de hacer el cambio en [doc]: los elementos se toman en las hojas donde están ahora o
+  /// donde estaban (el reparto de hojas es el mismo, porque las operaciones de hojas van solas).
+  factory EditAction(
+    NotebookDoc doc, {
+    List<SheetOp> sheetOps = const [],
+    List<Stroke> removed = const [],
+    List<Stroke> added = const [],
+    Map<String, TextBlock?> textBefore = const {},
+    Map<String, TextBlock?> textAfter = const {},
+    Map<String, Item?> itemBefore = const {},
+    Map<String, Item?> itemAfter = const {},
+    Map<String, int> zBefore = const {},
+    Map<String, int> zAfter = const {},
+  }) {
+    assert(
+        sheetOps.isEmpty ||
+            (removed.isEmpty && added.isEmpty && textBefore.isEmpty && textAfter.isEmpty && itemBefore.isEmpty && itemAfter.isEmpty && zBefore.isEmpty),
+        'las operaciones de hojas no se mezclan con elementos en una misma acción');
+    _At<Stroke> stroke(Stroke s) {
+      final k = doc.sheetOfElement(s), top = k * kSheetStep;
+      return _At(doc.sheets[k].id, top, s.moved(Offset(0, -top)));
+    }
+
+    _At<TextBlock>? text(TextBlock? t) {
+      if (t == null) return null;
+      final k = doc.sheetOfY(t.y), top = k * kSheetStep;
+      return _At(doc.sheets[k].id, top, t.copy(d: Offset(0, -top)));
+    }
+
+    _At<Item>? item(Item? it) {
+      if (it == null) return null;
+      final k = doc.sheetOfY(it.y), top = k * kSheetStep;
+      return _At(doc.sheets[k].id, top, it.copy(d: Offset(0, -top)));
+    }
+
+    final zs = <String, String>{};
+    for (final id in zBefore.keys.followedBy(zAfter.keys)) {
+      final sh = doc.sheetIdOfElementId(id);
+      if (sh != null) zs[id] = sh;
+    }
+    return EditAction._(
+      sheetOps,
+      [for (final s in removed) stroke(s)],
+      [for (final s in added) stroke(s)],
+      {for (final e in textBefore.entries) e.key: text(e.value)},
+      {for (final e in textAfter.entries) e.key: text(e.value)},
+      {for (final e in itemBefore.entries) e.key: item(e.value)},
+      {for (final e in itemAfter.entries) e.key: item(e.value)},
+      Map.of(zBefore),
+      Map.of(zAfter),
+      zs,
+    );
+  }
+
+  /// Los elementos que la acción deja antes / después (copias locales; null = no existía / ya no existe). Para mirar
+  /// qué toca la acción (sus ids), no para ponerlos en el documento.
+  Map<String, Item?> get itemBefore => {for (final e in _itemBefore.entries) e.key: e.value?.v};
+  Map<String, Item?> get itemAfter => {for (final e in _itemAfter.entries) e.key: e.value?.v};
+
+  /// Cambia el trazo [id] de lo que la acción pone ([added]) por lo que devuelve [f] (que recibe la copia LOCAL y la
+  /// devuelve ya cambiada, en la misma posición). Lo usa el corrector cuando llega el color de un trazo ya confirmado.
+  void mapAdded(String id, Stroke Function(Stroke local) f) {
+    final i = _added.indexWhere((a) => a.v.id == id);
+    if (i < 0) return;
+    final a = _added[i];
+    _added[i] = _At(a.sheet, a.top, f(a.v));
+  }
+
+  /// Ids de las hojas que toca esta acción: donde están (antes y después) sus elementos, y las de sus operaciones de
+  /// hojas. Solo cuenta las que existen ahora. Mientras la acción esté en el historial esas hojas no se pueden
+  /// descargar: deshacer/rehacer las necesita en memoria.
   Set<String> sheetIds(NotebookDoc doc) {
     final out = <String>{for (final op in sheetOps) ...op.sheetIds(doc)};
-    void byId(String id) {
-      final s = doc.sheetIdOfElementId(id);
-      if (s != null) out.add(s);
+    void add(String id) {
+      if (!out.contains(id) && doc.indexOfSheet(id) >= 0) out.add(id);
     }
 
-    for (final s in [...removed, ...added]) {
-      out.addAll(doc.sheetIdsOfRect(s.bounds));
-      byId(s.id);
+    for (final a in _removed.followedBy(_added)) {
+      add(a.sheet);
     }
-    for (final m in [textBefore, textAfter]) {
-      m.forEach((id, t) {
-        if (t != null) out.add(doc.sheets[doc.sheetOfY(t.y)].id);
-        byId(id);
-      });
+    for (final m in [_textBefore, _textAfter]) {
+      for (final a in m.values) {
+        if (a != null) add(a.sheet);
+      }
     }
-    for (final m in [itemBefore, itemAfter]) {
-      m.forEach((id, it) {
-        if (it != null) out.add(doc.sheets[doc.sheetOfY(it.y)].id);
-        byId(id);
-      });
+    for (final m in [_itemBefore, _itemAfter]) {
+      for (final a in m.values) {
+        if (a != null) add(a.sheet);
+      }
     }
-    zBefore.keys.followedBy(zAfter.keys).forEach(byId);
+    _zSheet.values.forEach(add);
     return out;
   }
 
@@ -59,20 +147,26 @@ class EditAction {
     for (final op in undo ? sheetOps.reversed : sheetOps) {
       op.apply(doc, undo: undo);
     }
-    for (final s in undo ? added : removed) {
-      doc.strokes.remove(s.id);
+    for (final a in undo ? _added : _removed) {
+      doc.strokes.remove(a.v.id);
     }
-    for (final s in undo ? removed : added) {
-      doc.strokes[s.id] = s;
+    for (final a in undo ? _removed : _added) {
+      doc.strokes[a.v.id] = a.v.moved(Offset(0, a.shift(doc))); // copia: lo guardado en la acción no se toca
     }
-    // se aplican copias: lo guardado en la acción no se toca al seguir editando
-    (undo ? textBefore : textAfter).forEach((id, t) {
+    (undo ? _textBefore : _textAfter).forEach((id, a) {
       final cur = doc.texts[id];
       if (cur != null) doc.markDirtyElement(cur); // la hoja de donde sale
-      putText(id, t?.copy());
+      final t = a == null ? null : a.v.copy(d: Offset(0, a.shift(doc)));
+      putText(id, t);
       if (t != null) doc.markDirtyElement(t); // y la de donde queda
     });
-    (undo ? itemBefore : itemAfter).forEach((id, it) => it == null ? doc.items.remove(id) : doc.items[id] = it.copy());
+    (undo ? _itemBefore : _itemAfter).forEach((id, a) {
+      if (a == null) {
+        doc.items.remove(id);
+      } else {
+        doc.items[id] = a.v.copy(d: Offset(0, a.shift(doc)));
+      }
+    });
     (undo ? zBefore : zAfter).forEach(doc.setZ);
   }
 }
@@ -84,24 +178,15 @@ extension EditActionForget on EditAction {
           for (final e in m.entries)
             if (e.key != id) e.key: e.value,
         };
-    final a = EditAction(
-      sheetOps: sheetOps,
-      removed: removed,
-      added: added,
-      textBefore: textBefore,
-      textAfter: textAfter,
-      itemBefore: drop(itemBefore),
-      itemAfter: drop(itemAfter),
-      zBefore: drop(zBefore),
-      zAfter: drop(zAfter),
-    );
+    final a = EditAction._(sheetOps, _removed, _added, _textBefore, _textAfter, drop(_itemBefore), drop(_itemAfter),
+        drop(zBefore), drop(zAfter), drop(_zSheet));
     final empty = a.sheetOps.isEmpty &&
-        a.removed.isEmpty &&
-        a.added.isEmpty &&
-        a.textBefore.isEmpty &&
-        a.textAfter.isEmpty &&
-        a.itemBefore.isEmpty &&
-        a.itemAfter.isEmpty &&
+        a._removed.isEmpty &&
+        a._added.isEmpty &&
+        a._textBefore.isEmpty &&
+        a._textAfter.isEmpty &&
+        a._itemBefore.isEmpty &&
+        a._itemAfter.isEmpty &&
         a.zBefore.isEmpty &&
         a.zAfter.isEmpty;
     return empty ? null : a;
@@ -219,6 +304,10 @@ class History {
   bool get canUndo => _undo.isNotEmpty;
   bool get canRedo => _redo.isNotEmpty;
 
+  /// Cuántas acciones se pueden deshacer / rehacer.
+  int get undoCount => _undo.length;
+  int get redoCount => _redo.length;
+
   /// Una acción nueva borra lo que se podía rehacer.
   void push(EditAction a) {
     _undo.add(a);
@@ -230,9 +319,9 @@ class History {
   /// Lo usa la grabación de voz: el audio se inserta con duración 0 y cuando termina se le pone la real.
   void patchItem(String id, void Function(Item it) f) {
     for (final a in [..._undo, ..._redo]) {
-      for (final m in [a.itemBefore, a.itemAfter]) {
+      for (final m in [a._itemBefore, a._itemAfter]) {
         final it = m[id];
-        if (it != null) f(it);
+        if (it != null) f(it.v);
       }
     }
   }
