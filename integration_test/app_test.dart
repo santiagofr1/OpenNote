@@ -15,6 +15,7 @@ import 'package:apuntes/data/media_import.dart';
 import 'package:apuntes/data/sheet_codec.dart';
 import 'package:apuntes/data/storage.dart';
 import 'package:apuntes/data/templates.dart';
+import 'package:apuntes/data/vynote_file.dart';
 import 'package:apuntes/data/system_clipboard.dart';
 import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/l10n/l10n.dart';
@@ -3933,6 +3934,57 @@ void main() {
     expect(fake.tag, 'es-AR');
     await Storage.settleWrites();
     expect(prefsOf(), containsPair('inkLanguage', 'app'));
+    expect(t.takeException(), isNull);
+  });
+  // ---------------- casos agresivos (ver test/stress) ----------------
+  testWidgets('importar PDFs inválidos (0 bytes, truncado, basura, "encriptado" falso): no importa nada, no tira y no deja archivos huérfanos', (t) async {
+    final store = Storage(root: root);
+    await store.init();
+    final savedPick = Pickers.pdf;
+    addTearDown(() => Pickers.pdf = savedPick);
+    final good = Uint8List.fromList(await (pw.Document()..addPage(pw.Page(build: (_) => pw.Text('hola')))).save());
+    final malos = <String, Uint8List>{
+      '0 bytes': Uint8List(0),
+      'truncado': Uint8List.sublistView(good, 0, good.length ~/ 2),
+      'basura': Uint8List.fromList(List.generate(2000, (i) => (i * 31) & 0xFF)),
+      'cabecera sola': Uint8List.fromList(utf8.encode('%PDF-1.7\n')),
+      'encriptado falso': Uint8List.fromList(utf8.encode('%PDF-1.7\n1 0 obj<</Encrypt 2 0 R>>endobj\ntrailer<</Encrypt 2 0 R>>\n%%EOF')),
+    };
+    int mediaCount() => Directory('${root.path}/media').listSync().length;
+    for (final e in malos.entries) {
+      final antes = mediaCount();
+      Pickers.pdf = () async => (e.value, 'malo');
+      final hojas = await importPdf(store);
+      expect(hojas, isEmpty, reason: 'PDF ${e.key}: no tendría que importar hojas');
+      expect(mediaCount(), antes, reason: 'PDF ${e.key}: quedó el archivo en media/');
+    }
+    // y uno bueno después sigue andando (el lector no quedó trabado)
+    Pickers.pdf = () async => (good, 'bueno');
+    expect(await importPdf(store), hasLength(1));
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('un .vynote cortado o con bytes pisados se rechaza y la biblioteca sigue andando', (t) async {
+    final store = Storage(root: root);
+    await store.init();
+    final nb = Notebook.create('Original');
+    final doc = NotebookDoc(nb);
+    doc.texts['t'] = TextBlock('t', 90, 44, 800, 'hola');
+    await store.saveNotebook(doc);
+    await store.saveIndex(NotesIndex(notebooks: [nb]));
+    final bytes = await exportNotebookBytes(store, nb);
+    final rnd = Random(3);
+    var rechazados = 0;
+    for (var i = 0; i < 40; i++) {
+      final b = Uint8List.fromList(i.isEven ? bytes.sublist(0, rnd.nextInt(bytes.length)) : bytes);
+      if (i.isOdd) b[rnd.nextInt(b.length)] ^= 0xFF;
+      try {
+        await importNotebookBytes(store, b, taken: {});
+      } on VynoteException {
+        rechazados++;
+      }
+    }
+    expect(rechazados, greaterThan(10));
     expect(t.takeException(), isNull);
   });
 }
