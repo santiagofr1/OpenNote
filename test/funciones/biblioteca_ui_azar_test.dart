@@ -142,10 +142,11 @@ void main() {
             pantalla(log('renombrar $n a $nuevo'));
           case 4: // mover un cuaderno
             if (cuadernos.isEmpty) break;
+            final destinos = <String?>[null, ...padre.keys].where((d) => d != actual).toList();
+            if (destinos.isEmpty) break;
             final n = cuadernos[r.nextInt(cuadernos.length)];
             await hold(t, k('nb-$n'));
             await tap(t, k('moveTo'));
-            final destinos = <String?>[null, ...padre.keys].where((d) => d != actual).toList();
             final d = destinos[r.nextInt(destinos.length)];
             final clave = k('moveTarget-${d ?? 'Inicio'}');
             expect(clave, findsOneWidget, reason: log('mover $n: el destino ${d ?? 'Inicio'} se ofrece'));
@@ -155,9 +156,10 @@ void main() {
           case 5: // mover una carpeta
             if (hijas.isEmpty) break;
             final n = hijas[r.nextInt(hijas.length)];
+            final prohibidas = {n, ...subarbol(n)};
+            if (<String?>[null, ...padre.keys.where((x) => !prohibidas.contains(x))].where((d) => d != actual).isEmpty) break;
             await hold(t, k('folder-$n'));
             await tap(t, k('moveTo'));
-            final prohibidas = {n, ...subarbol(n)};
             for (final p in prohibidas) {
               if (p != n) expect(k('moveTarget-$p'), findsNothing, reason: log('mover $n: no puede ir adentro de su hija $p'));
             }
@@ -171,10 +173,14 @@ void main() {
           case 6: // borrar carpeta
             if (hijas.isEmpty || total < 3) break;
             final n = hijas[r.nextInt(hijas.length)];
-            final todo = r.nextBool();
+            final vacia = hijasDe(n).isEmpty && cuadernosDe(n).isEmpty;
+            final todo = vacia || r.nextBool();
             await hold(t, k('folder-$n'));
             await tap(t, find.text('Borrar'));
-            if (todo) {
+            if (vacia) {
+              await tap(t, k('confirmDelete')); // una carpeta vacía solo pide confirmar
+              padre.remove(n);
+            } else if (todo) {
               await tap(t, k('folderDeleteAll'));
               await tap(t, k('confirmDelete'));
               final fuera = {n, ...subarbol(n)};

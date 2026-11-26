@@ -65,6 +65,7 @@ void main() {
 
     testWidgets('BUG sospechado: entrar y salir del modo lectura no reconstruye el lienzo (lo dice el comentario de DockLayout)', (t) async {
       for (final dock in ['top', 'left']) {
+        await t.pumpWidget(const SizedBox()); // árbol limpio
         lienzosCreados = 0;
         await t.pumpWidget(montar(dock: dock, onDock: (_) {}, verticales: []));
         await t.pump(const Duration(milliseconds: 400));
@@ -155,8 +156,11 @@ void main() {
         addTearDown(t.view.reset);
         addTearDown(t.platformDispatcher.clearPlatformBrightnessTestValue);
         await t.pumpWidget(ApuntesApp(root: root));
-        await settle(t, 1500);
-        expect(find.text('Cuadernos'), findsOneWidget);
+        for (var i = 0; i < 100 && find.byKey(const Key('new')).evaluate().isEmpty; i++) {
+          await settle(t, 100);
+        }
+        await settle(t, 600);
+        expect(find.byKey(const Key('new')), findsOneWidget);
         final fondo = t.widget<Scaffold>(find.byType(Scaffold).first).backgroundColor ?? Theme.of(t.element(find.byType(Scaffold).first)).colorScheme.surface;
         expect(fondo.computeLuminance() < .5, b == Brightness.dark, reason: 'fondo $fondo en modo ${b.name}');
         final cs = Theme.of(t.element(find.byType(Scaffold).first)).colorScheme;
