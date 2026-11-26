@@ -1716,15 +1716,7 @@ class LPt extends L {
   String get penFavorites => 'Favoritos';
 
   @override
-  String get penFavEdit => 'Alterar';
-
-  @override
-  String get penFavHelpEditing =>
-      'Escolha uma cor da paleta ou do seletor: ela é salva no favorito marcado.';
-
-  @override
-  String get penFavHelp =>
-      'Toque em \"Alterar\" ou segure um favorito para escolher a cor dele.';
+  String get penFavHelp => 'Segure um favorito para salvar nele a cor atual.';
 
   @override
   String get penPanelHighlighter => 'Marca-texto';
@@ -1750,9 +1742,6 @@ class LPt extends L {
 
   @override
   String get penColor => 'Cor';
-
-  @override
-  String get penCustomColor => 'Cor personalizada';
 
   @override
   String get penEraser => 'Borracha (pressione o botão da caneta)';
@@ -1908,4 +1897,22 @@ class LPt extends L {
 
   @override
   String get updateUpToDate => 'Você já tem a versão mais recente';
+
+  @override
+  String get colorViewPalette => 'Paleta';
+
+  @override
+  String get colorViewWheel => 'Roda';
+
+  @override
+  String get colorEyedropper => 'Conta-gotas';
+
+  @override
+  String get eyedropperHint => 'Toque na folha para pegar uma cor';
+
+  @override
+  String get eyedropperCancel => 'Cancelar conta-gotas';
+
+  @override
+  String get colorRecent => 'Recentes';
 }

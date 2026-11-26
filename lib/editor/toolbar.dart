@@ -1,10 +1,12 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../domain/domain.dart';
 import '../l10n/l10n.dart';
+import 'color_chooser.dart' show SavePulse;
 
 /// Barra de herramientas del editor. Zonas de tamaño fijo para que nada salte al cambiar de herramienta.
 /// Arriba:   [mover][herramientas] | [colores][más colores][grosor] | [deshacer][rehacer][candado]
@@ -16,7 +18,8 @@ class EditorToolbar extends StatelessWidget {
   final bool canUndo, canRedo;
   final ValueChanged<Tool> onToolTap, onToolLongPress;
   final ValueChanged<String> onPickColor;
-  final ValueChanged<int> onEditFavorite;
+  /// Mantener apretado un favorito: guarda ahí el color actual. Devuelve si cambió algo.
+  final bool Function(int slot) onSaveFavorite;
   final VoidCallback onOpenPanel, onUndo, onRedo, onToggleZoomLock;
 
   const EditorToolbar({
@@ -29,7 +32,7 @@ class EditorToolbar extends StatelessWidget {
     required this.onToolTap,
     required this.onToolLongPress,
     required this.onPickColor,
-    required this.onEditFavorite,
+    required this.onSaveFavorite,
     required this.onOpenPanel,
     required this.onUndo,
     required this.onRedo,
@@ -186,28 +189,36 @@ class EditorToolbar extends StatelessWidget {
 
   Size get _slot => vertical ? const Size(48, 34) : const Size(32, 44);
 
-  Widget _swatch(ColorScheme cs, String c, bool on, {int? slot}) => InkWell(
-        key: slot == null ? null : ValueKey('fav-$slot'),
-        customBorder: const CircleBorder(),
-        onTap: () => onPickColor(c),
-        onLongPress: slot == null ? null : () => onEditFavorite(slot),
-        child: SizedBox.fromSize(
-          size: _slot,
-          child: Center(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 140),
-              width: on ? 21 : 16,
-              height: on ? 21 : 16,
-              padding: EdgeInsets.all(on ? 2.5 : 0),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: on ? Border.all(color: cs.primary, width: 1.5) : null,
-              ),
-              child: Container(
+  Widget _swatch(ColorScheme cs, String c, bool on, {int? slot}) => SavePulse(
+        builder: (context, pulse) => InkWell(
+          key: slot == null ? null : ValueKey('fav-$slot'),
+          customBorder: const CircleBorder(),
+          onTap: () => onPickColor(c),
+          onLongPress: slot == null
+              ? null
+              : () {
+                  if (!onSaveFavorite(slot)) return;
+                  HapticFeedback.mediumImpact();
+                  pulse();
+                },
+          child: SizedBox.fromSize(
+            size: _slot,
+            child: Center(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 140),
+                width: on ? 21 : 16,
+                height: on ? 21 : 16,
+                padding: EdgeInsets.all(on ? 2.5 : 0),
                 decoration: BoxDecoration(
-                  color: parseColor(c),
                   shape: BoxShape.circle,
-                  border: Border.all(color: cs.outline.withValues(alpha: .6), width: .8),
+                  border: on ? Border.all(color: cs.primary, width: 1.5) : null,
+                ),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: parseColor(c),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: cs.outline.withValues(alpha: .6), width: .8),
+                  ),
                 ),
               ),
             ),

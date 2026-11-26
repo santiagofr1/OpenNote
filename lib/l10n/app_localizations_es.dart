@@ -1713,15 +1713,8 @@ class LEs extends L {
   String get penFavorites => 'Favoritos';
 
   @override
-  String get penFavEdit => 'Cambiar';
-
-  @override
-  String get penFavHelpEditing =>
-      'Elegí un color de la paleta o del selector: se guarda en el favorito marcado.';
-
-  @override
   String get penFavHelp =>
-      'Tocá «Cambiar» o mantené apretado un favorito para elegir su color.';
+      'Mantené apretado un favorito para guardar ahí el color actual.';
 
   @override
   String get penPanelHighlighter => 'Resaltador';
@@ -1747,9 +1740,6 @@ class LEs extends L {
 
   @override
   String get penColor => 'Color';
-
-  @override
-  String get penCustomColor => 'Color personalizado';
 
   @override
   String get penEraser => 'Goma (apretá el botón del lápiz)';
@@ -1904,4 +1894,22 @@ class LEs extends L {
 
   @override
   String get updateUpToDate => 'Ya tenés la última versión';
+
+  @override
+  String get colorViewPalette => 'Paleta';
+
+  @override
+  String get colorViewWheel => 'Rueda';
+
+  @override
+  String get colorEyedropper => 'Cuentagotas';
+
+  @override
+  String get eyedropperHint => 'Tocá la hoja para tomar un color';
+
+  @override
+  String get eyedropperCancel => 'Cancelar cuentagotas';
+
+  @override
+  String get colorRecent => 'Recientes';
 }

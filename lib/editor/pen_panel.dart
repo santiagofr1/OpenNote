@@ -1,13 +1,14 @@
 import 'dart:math';
 import 'dart:ui' show Vertices, VertexMode;
 
-import 'package:flutter/gestures.dart' show EagerGestureRecognizer;
 import 'package:flutter/material.dart';
 
 import '../domain/domain.dart';
 import '../l10n/l10n.dart';
 import '../rendering/stroke_painter.dart';
 import '../theme/colors.dart';
+import 'color_chooser.dart';
+import 'eyedropper.dart';
 
 /// Trazo de muestra (una ola con presión variable) para previsualizar una punta.
 Stroke _sampleStroke(String tip, String color, double w, double o, Size size, [PaintParams? pp]) {
@@ -47,10 +48,10 @@ class _SamplePainter extends CustomPainter {
 /// color y goma. [align]: del lado de la barra. [onChange] se llama en cada cambio.
 /// Al cerrarse, el color elegido entra a "recientes" y se avisa con [onChange]. Va después del cierre y no en el `dispose`
 /// del panel: ahí el árbol está bloqueado y el `setState` del editor tira una excepción.
-/// [editFav]: favorito que se abre editando (con el selector a la vista).
-Future<void> showPenPanel(BuildContext context, ToolState ts, VoidCallback onChange,
-    {Alignment align = Alignment.topCenter, int? editFav}) {
-  return showDialog<void>(
+/// Devuelve el destino del cuentagotas si se lo tocó (el panel se cierra y el editor pone el modo cuentagotas), o null.
+Future<EyeTarget?> showPenPanel(BuildContext context, ToolState ts, VoidCallback onChange,
+    {Alignment align = Alignment.topCenter}) {
+  return showDialog<EyeTarget>(
     context: context,
     barrierColor: Colors.black12,
     builder: (ctx) => Align(
@@ -68,18 +69,19 @@ Future<void> showPenPanel(BuildContext context, ToolState ts, VoidCallback onCha
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: 460, maxHeight: MediaQuery.of(ctx).size.height - 90),
             child: ts.tool == Tool.paint
-                ? _PaintPanel(ts: ts, onChange: onChange, editFav: editFav)
+                ? _PaintPanel(ts: ts, onChange: onChange)
                 : ts.tool == Tool.shape
                     ? _ShapePanel(ts: ts, onChange: onChange)
-                    : _PenPanel(ts: ts, onChange: onChange, editFav: editFav),
+                    : _PenPanel(ts: ts, onChange: onChange),
           ),
         ),
       ),
     ),
-  ).then((_) {
+  ).then((target) {
     ts.pickColor(ts.current.color);
     if (ts.tool == Tool.paint) ts.rememberShapeColor();
     onChange();
+    return target;
   });
 }
 
@@ -96,96 +98,51 @@ mixin _PanelParts<T extends StatefulWidget> on State<T> {
         SizedBox(width: 44, child: Text(value, textAlign: TextAlign.right, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]))),
       ]);
 
-  /// Rótulo "Favoritos" con el botón Cambiar / Listo.
-  Widget _favHeader(bool editing, VoidCallback onToggle) => Row(children: [
-        Expanded(child: _label(context.l10n.penFavorites)),
-        TextButton(key: const Key('favEdit'), onPressed: onToggle, child: Text(editing ? context.l10n.commonDone : context.l10n.penFavEdit)),
-      ]);
-
-  Widget _favHelp(bool editing) => Text(
-        editing
-            ? context.l10n.penFavHelpEditing
-            : context.l10n.penFavHelp,
-        style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
-      );
-
-  /// Un favorito: mantener apretado lo edita; el que se edita lleva anillo y un lápiz abajo a la derecha.
-  /// El toque lo maneja [swatch].
-  Widget _favTile(int i, Widget swatch, bool editingThis, VoidCallback onLong) => GestureDetector(
-        key: ValueKey('panelFav-$i'),
-        onLongPress: onLong,
-        child: Stack(clipBehavior: Clip.none, children: [
-          swatch,
-          if (editingThis)
-            Positioned.fill(
-              child: IgnorePointer(child: DecoratedBox(decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: kAccent, width: 3)))),
-            ),
-          if (editingThis)
-            Positioned(
-              right: -4,
-              bottom: -4,
-              child: IgnorePointer(
-                child: Container(
-                  width: 16,
-                  height: 16,
-                  decoration: const BoxDecoration(color: kAccent, shape: BoxShape.circle),
-                  child: const Icon(Icons.edit, size: 12, color: Colors.white),
-                ),
+  /// Favoritos: tocar uno usa ese color; mantenerlo apretado guarda ahí el color actual de la herramienta.
+  Widget _favSection(ToolState ts, String current, ValueChanged<String> onUse, VoidCallback onSaved) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _label(context.l10n.penFavorites),
+          Wrap(children: [
+            for (final (i, c) in ts.favorites.indexed)
+              FavoriteDot(
+                key: ValueKey('panelFav-$i'),
+                color: c,
+                selected: c == current,
+                onTap: () => onUse(c),
+                onSave: () {
+                  final ok = ts.saveFavorite(i);
+                  if (ok) onSaved();
+                  return ok;
+                },
               ),
-            ),
-        ]),
+          ]),
+          const SizedBox(height: 2),
+          Text(context.l10n.penFavHelp, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        ],
       );
 }
 
 class _PenPanel extends StatefulWidget {
   final ToolState ts;
   final VoidCallback onChange;
-  final int? editFav;
-  const _PenPanel({required this.ts, required this.onChange, this.editFav});
+  const _PenPanel({required this.ts, required this.onChange});
   @override
   State<_PenPanel> createState() => _PenPanelState();
 }
 
 class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
   ToolState get ts => widget.ts;
-  bool custom = false;
-  int? editFav; // favorito que se está editando (null: ninguno)
-
   bool get isHl => ts.tool == Tool.hl;
 
-  @override
-  void initState() {
-    super.initState();
-    final e = widget.editFav;
-    if (e != null && e >= 0 && e < ts.favorites.length) {
-      editFav = e;
-      custom = true;
-      ts.current.color = ts.favorites[e];
-    }
-  }
-
-  /// Elige un color; si se edita un favorito, también queda guardado ahí.
+  /// Elige un color (de la rueda no entra a "recientes" en cada movimiento).
   void _choose(String c, {bool remember = true}) => _set(() {
         if (remember) {
           ts.pickColor(c);
         } else {
           ts.current.color = c;
         }
-        if (editFav != null) ts.setFavorite(editFav!, c);
       });
-
-  /// Edita el favorito [i] y usa su color.
-  void _editFav(int i) => _set(() {
-        editFav = i;
-        custom = true;
-        ts.pickColor(ts.favorites[i]);
-      });
-
-  void _toggleEdit() {
-    if (editFav != null) return setState(() => editFav = null);
-    final i = ts.favorites.indexOf(ts.current.color);
-    _editFav(i < 0 ? 0 : i);
-  }
 
   void _set(VoidCallback f) {
     setState(f);
@@ -243,43 +200,31 @@ class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
         ]),
         const SizedBox(height: 6),
 
-        _favHeader(editFav != null, _toggleEdit),
-        Wrap(spacing: 6, runSpacing: 6, children: [
-          for (final (i, c) in ts.favorites.indexed)
-            _favTile(i, _swatch(c, c == p.color && editFav != i, onTap: () => editFav == null ? _choose(c) : _editFav(i)), editFav == i, () => _editFav(i)),
-        ]),
-        const SizedBox(height: 4),
-        _favHelp(editFav != null),
-        const SizedBox(height: 10),
-        _label(context.l10n.penColor),
-        if (isHl)
-          Wrap(spacing: 6, runSpacing: 6, children: [for (final c in hlPalette) _swatch(c, c == p.color)])
-        else ...[
-          // grises arriba; abajo cada columna es una familia, de oscuro a claro
-          Wrap(spacing: 6, children: [for (final c in palette.take(7)) _swatch(c, c == p.color)]),
-          const SizedBox(height: 8),
-          for (var tone = 0; tone < 4; tone++)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Wrap(spacing: 6, children: [
-                for (var fam = 0; fam < 10; fam++) _swatch(palette[7 + fam * 4 + tone], palette[7 + fam * 4 + tone] == p.color),
-              ]),
-            ),
-        ],
-        const SizedBox(height: 10),
-        TextButton.icon(
-          onPressed: () => setState(() => custom = !custom),
-          icon: Icon(custom ? Icons.expand_less : Icons.palette_outlined, size: 18),
-          label: Text(context.l10n.penCustomColor),
+        _favSection(ts, p.color, _choose, () => _set(() {})),
+        const SizedBox(height: 12),
+        ColorChooser(
+          color: p.color,
+          view: ts.colorView,
+          onViewChanged: (v) => _set(() => ts.colorView = v),
+          recent: ts.recent,
+          onPick: (hex, {required fromWheel}) => _choose(hex, remember: !fromWheel),
+          onEyedropper: () => Navigator.of(context).pop(EyeTarget.tool),
+          palette: isHl
+              ? DotGrid(colors: hlPalette, perRow: 8, selected: p.color, onTap: _choose)
+              // grises arriba; abajo cada columna es una familia, de oscuro a claro
+              : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  DotGrid(colors: palette.take(7).toList(), perRow: 10, selected: p.color, onTap: _choose),
+                  for (var tone = 0; tone < 4; tone++)
+                    DotGrid(colors: [for (var fam = 0; fam < 10; fam++) palette[7 + fam * 4 + tone]], perRow: 10, selected: p.color, onTap: _choose),
+                ]),
         ),
-        if (custom) _ColorPicker(color: p.color, onChanged: (hex) => _choose(hex, remember: false)),
 
         if (!isHl) ...[
           const SizedBox(height: 14),
           const Divider(height: 1),
           const SizedBox(height: 12),
           _label(context.l10n.penEraser),
-          Row(children: [
+          Wrap(runSpacing: 6, children: [
             for (var i = 0; i < 3; i++)
               Padding(
                 padding: const EdgeInsets.only(right: 8),
@@ -323,20 +268,6 @@ class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
       ),
     );
   }
-
-  Widget _swatch(String c, bool on, {VoidCallback? onTap}) => GestureDetector(
-        onTap: onTap ?? () => _choose(c),
-        child: Container(
-          width: 30,
-          height: 30,
-          decoration: BoxDecoration(
-            color: parseColor(c),
-            shape: BoxShape.circle,
-            border: Border.all(color: on ? Colors.white : const Color(0x22000000), width: on ? 3 : 1),
-            boxShadow: on ? const [BoxShadow(color: kAccent, spreadRadius: 2)] : null,
-          ),
-        ),
-      );
 }
 
 /// Opciones de la herramienta Formas: qué forma, relleno con color y pegar a la cuadrícula. El borde usa el lápiz.
@@ -350,7 +281,6 @@ class _ShapePanel extends StatefulWidget {
 
 class _ShapePanelState extends State<_ShapePanel> with _PanelParts<_ShapePanel> {
   ToolState get ts => widget.ts;
-  bool custom = false;
 
   void _set(VoidCallback f) {
     setState(f);
@@ -372,7 +302,7 @@ class _ShapePanelState extends State<_ShapePanel> with _PanelParts<_ShapePanel> 
         _label(context.l10n.shapesBorder),
         Text(context.l10n.shapesBorderHint, style: sub),
         const SizedBox(height: 8),
-        Wrap(spacing: 6, runSpacing: 6, children: [for (final c in ts.penFav) _dot(c, c == ts.pen.color, () => _set(() => ts.pickColor(c)), key: Key('shapePen-${c.substring(1)}'))]),
+        Wrap(children: [for (final c in ts.penFav) ColorDot(key: Key('shapePen-${c.substring(1)}'), color: c, selected: c == ts.pen.color, onTap: () => _set(() => ts.pickColor(c)))]),
         const Divider(height: 24),
         Row(children: [
           Expanded(child: _label(context.l10n.shapesFill)),
@@ -381,14 +311,17 @@ class _ShapePanelState extends State<_ShapePanel> with _PanelParts<_ShapePanel> 
         if (!shapeFillable(ts.shapeKind)) Text(context.l10n.shapesNoFill, style: sub),
         if (ts.shapeFill) ...[
           const SizedBox(height: 6),
-          Wrap(spacing: 6, runSpacing: 6, children: [for (final c in fills) _dot(c, c == ts.shapeFillColor, () => _set(() => ts.shapeFillColor = c), key: Key('shapeFill-${c.substring(1)}'))]),
-          TextButton.icon(
-            key: const Key('shapeFillCustom'),
-            onPressed: () => setState(() => custom = !custom),
-            icon: Icon(custom ? Icons.expand_less : Icons.palette_outlined, size: 18),
-            label: Text(context.l10n.penCustomColor),
+          ColorChooser(
+            color: ts.shapeFillColor,
+            view: ts.colorView,
+            onViewChanged: (v) => _set(() => ts.colorView = v),
+            onPick: (hex, {required fromWheel}) => _set(() => ts.shapeFillColor = hex),
+            onEyedropper: () => Navigator.of(context).pop(EyeTarget.shapeFill),
+            palette: Wrap(children: [
+              for (final c in fills)
+                ColorDot(key: Key('shapeFill-${c.substring(1)}'), color: c, selected: c == ts.shapeFillColor, onTap: () => _set(() => ts.shapeFillColor = c)),
+            ]),
           ),
-          if (custom) _ColorPicker(color: ts.shapeFillColor, onChanged: (hex) => _set(() => ts.shapeFillColor = hex)),
         ],
         const Divider(height: 24),
         Row(children: [
@@ -428,21 +361,6 @@ class _ShapePanelState extends State<_ShapePanel> with _PanelParts<_ShapePanel> 
       ),
     );
   }
-
-  Widget _dot(String c, bool on, VoidCallback onTap, {Key? key}) => GestureDetector(
-        onTap: onTap,
-        child: Container(
-          key: key,
-          width: 30,
-          height: 30,
-          decoration: BoxDecoration(
-            color: parseColor(c),
-            shape: BoxShape.circle,
-            border: Border.all(color: on ? Colors.white : const Color(0x22000000), width: on ? 3 : 1),
-            boxShadow: on ? const [BoxShadow(color: kAccent, spreadRadius: 2)] : null,
-          ),
-        ),
-      );
 }
 
 /// Dibujito de una forma del panel (las mismas que genera [exactShapePoints], en un cuadro de 30 x 30).
@@ -473,109 +391,6 @@ class _KindIconPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_KindIconPainter o) => o.kind != kind || o.color != color;
-}
-
-/// Selector de color libre: cuadrado de saturación y brillo, barra de tono y el hex. Mantiene su propio HSV (para que
-/// el tono no se pierda en los grises) y se vuelve a sincronizar si el color cambia desde afuera. Lo usan el lápiz y el
-/// Decorador.
-class _ColorPicker extends StatefulWidget {
-  final String color;
-  final ValueChanged<String> onChanged;
-  const _ColorPicker({required this.color, required this.onChanged});
-  @override
-  State<_ColorPicker> createState() => _ColorPickerState();
-}
-
-class _ColorPickerState extends State<_ColorPicker> {
-  late HSVColor hsv = HSVColor.fromColor(parseColor(widget.color));
-
-  static String _hex(Color c) => '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
-
-  @override
-  void didUpdateWidget(_ColorPicker old) {
-    super.didUpdateWidget(old);
-    // un cambio de afuera (otro color elegido); el que salió de acá vuelve igual y no se toca
-    if (widget.color != old.color && widget.color != _hex(hsv.toColor())) hsv = HSVColor.fromColor(parseColor(widget.color));
-  }
-
-  void _set(HSVColor c) {
-    setState(() => hsv = c);
-    widget.onChanged(_hex(c.toColor()));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    const h = 160.0, cursor = 22.0;
-    final cur = hsv.toColor();
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      LayoutBuilder(builder: (context, box) {
-        final w = box.maxWidth;
-        void at(Offset p) => _set(hsv.withSaturation((p.dx / w).clamp(0.0, 1.0)).withValue(1 - (p.dy / h).clamp(0.0, 1.0)));
-        // el recognizer "eager" gana la arena al instante: arrastrar acá nunca scrollea el panel
-        return RawGestureDetector(
-          gestures: {EagerGestureRecognizer: GestureRecognizerFactoryWithHandlers<EagerGestureRecognizer>(EagerGestureRecognizer.new, (_) {})},
-          child: Listener(
-            key: const Key('colorSquare'),
-            onPointerDown: (e) => at(e.localPosition),
-            onPointerMove: (e) => at(e.localPosition),
-            child: SizedBox(
-              height: h,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Stack(clipBehavior: Clip.none, children: [
-                  Positioned.fill(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(gradient: LinearGradient(colors: [Colors.white, HSVColor.fromAHSV(1, hsv.hue, 1, 1).toColor()])),
-                    ),
-                  ),
-                  const Positioned.fill(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0x00000000), Colors.black]),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: (hsv.saturation * w - cursor / 2).clamp(0.0, max(0.0, w - cursor)),
-                    top: ((1 - hsv.value) * h - cursor / 2).clamp(0.0, h - cursor),
-                    child: Container(
-                      width: cursor,
-                      height: cursor,
-                      decoration: BoxDecoration(
-                        color: cur,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 3),
-                        boxShadow: const [BoxShadow(color: Color(0x55000000), blurRadius: 3)],
-                      ),
-                    ),
-                  ),
-                ]),
-              ),
-            ),
-          ),
-        );
-      }),
-      const SizedBox(height: 10),
-      KeyedSubtree(
-        key: const Key('colorHue'),
-        child: _GradientBar(
-          colors: [for (var h = 0; h <= 360; h += 30) HSVColor.fromAHSV(1, h.toDouble(), 1, 1).toColor()],
-          value: hsv.hue / 360,
-          onChanged: (v) => _set(hsv.withHue(v * 360)),
-        ),
-      ),
-      const SizedBox(height: 10),
-      Row(children: [
-        Container(
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(color: cur, shape: BoxShape.circle, border: Border.all(color: const Color(0x22000000))),
-        ),
-        const SizedBox(width: 10),
-        Text(_hex(cur).toUpperCase(), key: const Key('colorHex'), style: const TextStyle(fontSize: 14, fontFeatures: [FontFeature.tabularFigures()])),
-      ]),
-    ]);
-  }
 }
 
 /// Vértices de una forma suelta (para la muestra de las celdas).
@@ -618,8 +433,7 @@ class _ShapePainter extends CustomPainter {
 class _PaintPanel extends StatefulWidget {
   final ToolState ts;
   final VoidCallback onChange;
-  final int? editFav;
-  const _PaintPanel({required this.ts, required this.onChange, this.editFav});
+  const _PaintPanel({required this.ts, required this.onChange});
   @override
   State<_PaintPanel> createState() => _PaintPanelState();
 }
@@ -628,42 +442,15 @@ class _PaintPanelState extends State<_PaintPanel> with _PanelParts<_PaintPanel> 
   ToolState get ts => widget.ts;
   PenPreset get p => ts.paint;
   PaintParams get pp => ts.paintParams;
-  bool bgCustom = false, shapeCustom = false;
-  int? editFav; // favorito del Fondo que se está editando (null: ninguno)
 
-  @override
-  void initState() {
-    super.initState();
-    final e = widget.editFav;
-    if (e != null && pp.bg && e >= 0 && e < ts.paintFav.length) {
-      editFav = e;
-      bgCustom = true;
-      p.color = ts.paintFav[e];
-    }
-  }
-
-  /// Elige un color del Fondo; si se edita un favorito, también queda guardado ahí.
+  /// Elige un color del Fondo (de la rueda no entra a "recientes" en cada movimiento).
   void _choose(String c, {bool remember = true}) => _set(() {
         if (remember) {
           ts.pickColor(c);
         } else {
           p.color = c;
         }
-        if (editFav != null) ts.setFavorite(editFav!, c);
       });
-
-  /// Edita el favorito [i] y usa su color.
-  void _editFav(int i) => _set(() {
-        editFav = i;
-        bgCustom = true;
-        ts.pickColor(ts.paintFav[i]);
-      });
-
-  void _toggleEdit() {
-    if (editFav != null) return setState(() => editFav = null);
-    final i = ts.paintFav.indexOf(p.color);
-    _editFav(i < 0 ? 0 : i);
-  }
 
   void _set(VoidCallback f) {
     setState(f);
@@ -718,24 +505,19 @@ class _PaintPanelState extends State<_PaintPanel> with _PanelParts<_PaintPanel> 
             const Divider(height: 20),
             _switchRow(context.l10n.paintBackground, const Key('paintBgSwitch'), pp.bg, _canOff(false, true, true), (on) => _pp((q) => q.copyWith(bg: on))),
             if (pp.bg) ...[
-              _favHeader(editFav != null, _toggleEdit),
-              Wrap(spacing: 6, runSpacing: 6, children: [
-                for (final (i, c) in ts.paintFav.indexed)
-                  _favTile(i, _dot(c, c == p.color && editFav != i, () => editFav == null ? _choose(c) : _editFav(i), key: Key('paintFav-$i')), editFav == i, () => _editFav(i)),
-              ]),
-              const SizedBox(height: 4),
-              _favHelp(editFav != null),
-              const SizedBox(height: 10),
-              Wrap(spacing: 6, runSpacing: 6, children: [
-                for (final c in [...paintPalette, ...ts.paintRecent.where((c) => !paintPalette.contains(c))]) _dot(c, c == p.color, () => _choose(c)),
-              ]),
-              TextButton.icon(
-                key: const Key('paintBgCustom'),
-                onPressed: () => setState(() => bgCustom = !bgCustom),
-                icon: Icon(bgCustom ? Icons.expand_less : Icons.palette_outlined, size: 18),
-                label: Text(context.l10n.penCustomColor),
+              _favSection(ts, p.color, _choose, () => _set(() {})),
+              const SizedBox(height: 12),
+              ColorChooser(
+                color: p.color,
+                view: ts.colorView,
+                onViewChanged: (v) => _set(() => ts.colorView = v),
+                recent: ts.paintRecent,
+                onPick: (hex, {required fromWheel}) => _choose(hex, remember: !fromWheel),
+                onEyedropper: () => Navigator.of(context).pop(EyeTarget.tool),
+                palette: Wrap(children: [
+                  for (final c in paintPalette) ColorDot(key: Key('paint-${c.substring(1)}'), color: c, selected: c == p.color, onTap: () => _choose(c)),
+                ]),
               ),
-              if (bgCustom) _ColorPicker(color: p.color, onChanged: (hex) => _choose(hex, remember: false)),
               const SizedBox(height: 4),
               _sliderRow(context.l10n.penOpacity, '${(p.opacity * 100).round()}%', Slider(
                 value: p.opacity.clamp(.2, 1.0),
@@ -824,31 +606,37 @@ class _PaintPanelState extends State<_PaintPanel> with _PanelParts<_PaintPanel> 
           ),
       ]),
       const SizedBox(height: 12),
-      Wrap(spacing: 6, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
-        // "Auto": el color de cada forma (blanco, fondo aclarado, dorado)
-        GestureDetector(
-          onTap: () => _pp((q) => q.copyWith(autoColor: true)),
-          child: Container(
-            key: const Key('paintShapeAuto'),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: pp.shapeColor == null ? kAccent : const Color(0x33000000), width: pp.shapeColor == null ? 2 : 1),
+      ColorChooser(
+        color: custom,
+        view: ts.colorView,
+        onViewChanged: (v) => _set(() => ts.colorView = v),
+        recent: ts.paintRecent,
+        onPick: (hex, {required fromWheel}) => _pp((q) => q.copyWith(shapeColor: hex)),
+        onEyedropper: () => Navigator.of(context).pop(EyeTarget.paintShape),
+        palette: Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
+          // "Auto": el color de cada forma (blanco, fondo aclarado, dorado)
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _pp((q) => q.copyWith(autoColor: true)),
+            child: Container(
+              key: const Key('paintShapeAuto'),
+              constraints: const BoxConstraints(minHeight: 40),
+              margin: const EdgeInsets.only(right: 6),
+              alignment: Alignment.center,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(15),
+                  border: Border.all(color: pp.shapeColor == null ? kAccent : const Color(0x33000000), width: pp.shapeColor == null ? 2 : 1),
+                ),
+                child: Text(context.l10n.paintAuto, style: const TextStyle(fontSize: 12)),
+              ),
             ),
-            child: Text(context.l10n.paintAuto, style: const TextStyle(fontSize: 12)),
           ),
-        ),
-        for (final c in paintShapeColors) _dot(_shapeSwatch(c), c == pp.shapeColor, () => _pp((q) => q.copyWith(shapeColor: c)), key: Key('shapeColor-$c')),
-        for (final c in ts.paintRecent.where((c) => !paintShapeColors.contains(c)).take(5))
-          _dot(c, c == pp.shapeColor, () => _pp((q) => q.copyWith(shapeColor: c)), key: Key('shapeColor-$c')),
-      ]),
-      TextButton.icon(
-        key: const Key('paintShapeCustom'),
-        onPressed: () => setState(() => shapeCustom = !shapeCustom),
-        icon: Icon(shapeCustom ? Icons.expand_less : Icons.palette_outlined, size: 18),
-        label: Text(context.l10n.penCustomColor),
+          for (final c in paintShapeColors)
+            ColorDot(key: Key('shapeColor-$c'), color: _shapeSwatch(c), selected: c == pp.shapeColor, onTap: () => _pp((q) => q.copyWith(shapeColor: c))),
+        ]),
       ),
-      if (shapeCustom) _ColorPicker(color: custom, onChanged: (hex) => _pp((q) => q.copyWith(shapeColor: hex))),
       const SizedBox(height: 6),
       _sliderRow(context.l10n.paintAmount, '${(pp.density * 100).round()}%', Slider(
         value: pp.density,
@@ -867,61 +655,5 @@ class _PaintPanelState extends State<_PaintPanel> with _PanelParts<_PaintPanel> 
     final bg = parseColor(p.color);
     final t = c == 'light' ? Color.lerp(bg, Colors.white, .6)! : Color.lerp(bg, Colors.black, .35)!;
     return '#${(t.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
-  }
-
-  Widget _dot(String c, bool on, VoidCallback onTap, {Key? key}) => GestureDetector(
-        onTap: onTap,
-        child: Container(
-          key: key ?? Key('paint-${c.substring(1)}'),
-          width: 30,
-          height: 30,
-          decoration: BoxDecoration(
-            color: parseColor(c),
-            shape: BoxShape.circle,
-            border: Border.all(color: on ? Colors.white : const Color(0x22000000), width: on ? 3 : 1),
-            boxShadow: on ? const [BoxShadow(color: kAccent, spreadRadius: 2)] : null,
-          ),
-        ),
-      );
-}
-
-/// Barra con degradé que se arrastra (para tono, saturación, brillo)
-class _GradientBar extends StatelessWidget {
-  final List<Color> colors;
-  final double value;
-  final ValueChanged<double> onChanged;
-  const _GradientBar({required this.colors, required this.value, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, box) {
-      final w = box.maxWidth;
-      void at(Offset p) => onChanged((p.dx / w).clamp(0.0, 1.0));
-      return GestureDetector(
-        onTapDown: (d) => at(d.localPosition),
-        onHorizontalDragUpdate: (d) => at(d.localPosition),
-        child: SizedBox(
-          height: 30,
-          child: Stack(clipBehavior: Clip.none, alignment: Alignment.centerLeft, children: [
-            Container(
-              height: 22,
-              decoration: BoxDecoration(borderRadius: BorderRadius.circular(11), gradient: LinearGradient(colors: colors)),
-            ),
-            Positioned(
-              left: (value * w - 13).clamp(-2.0, w - 24),
-              child: Container(
-                width: 26,
-                height: 26,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 3),
-                  boxShadow: const [BoxShadow(color: Color(0x55000000), blurRadius: 3)],
-                ),
-              ),
-            ),
-          ]),
-        ),
-      );
-    });
   }
 }

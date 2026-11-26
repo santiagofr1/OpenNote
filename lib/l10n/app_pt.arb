@@ -488,9 +488,7 @@
   "shapeKindEllipse": "Elipse",
   "shapeKindTriangle": "Triângulo",
   "penFavorites": "Favoritos",
-  "penFavEdit": "Alterar",
-  "penFavHelpEditing": "Escolha uma cor da paleta ou do seletor: ela é salva no favorito marcado.",
-  "penFavHelp": "Toque em \"Alterar\" ou segure um favorito para escolher a cor dele.",
+  "penFavHelp": "Segure um favorito para salvar nele a cor atual.",
   "penPanelHighlighter": "Marca-texto",
   "penPanelPencil": "Caneta",
   "penTip": "Ponta",
@@ -499,7 +497,6 @@
   "penSmartShapes": "Formas inteligentes",
   "penSmartShapesHint": "Mantenha a caneta parada ao final de uma forma",
   "penColor": "Cor",
-  "penCustomColor": "Cor personalizada",
   "penEraser": "Borracha (pressione o botão da caneta)",
   "penEraserSmall": "Pequena",
   "penEraserMedium": "Média",
@@ -549,5 +546,11 @@
   "settingsPrivacy": "Política de privacidade",
   "updateChecking": "Verificando atualizações…",
   "updateCheckFailed": "Não foi possível verificar atualizações agora",
-  "updateUpToDate": "Você já tem a versão mais recente"
+  "updateUpToDate": "Você já tem a versão mais recente",
+  "colorViewPalette": "Paleta",
+  "colorViewWheel": "Roda",
+  "colorEyedropper": "Conta-gotas",
+  "eyedropperHint": "Toque na folha para pegar uma cor",
+  "eyedropperCancel": "Cancelar conta-gotas",
+  "colorRecent": "Recentes"
 }

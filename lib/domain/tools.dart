@@ -127,6 +127,7 @@ class ToolState {
   bool shapeFill = false; // relleno con color (solo formas cerradas)
   String shapeFillColor = '#93c5fd';
   bool shapeGrid = true; // pegar a la cuadrícula del fondo
+  String colorView = 'palette'; // vista del selector de color: 'palette' | 'wheel'
   bool exportBackground = true; // exportar con el fondo de la hoja (papel, rayado, imagen) o solo lo escrito
   final clipboard = SelectionClipboard(); // no se guarda
 
@@ -145,6 +146,13 @@ class ToolState {
   /// Guarda un color en un lugar de los favoritos de la herramienta actual (puede repetirse).
   void setFavorite(int slot, String c) {
     if (slot >= 0 && slot < kFavCount) favorites[slot] = c;
+  }
+
+  /// Guarda el color actual de la herramienta en un favorito. Devuelve si cambió algo (ya estaba ahí: no).
+  bool saveFavorite(int slot) {
+    if (slot < 0 || slot >= kFavCount || favorites[slot] == current.color) return false;
+    favorites[slot] = current.color;
+    return true;
   }
 
   static List<String> _favs(Object? v, List<String> def) {
@@ -187,6 +195,7 @@ class ToolState {
         'shapeFillColor': shapeFillColor,
         'shapeGrid': shapeGrid,
         'exportBg': exportBackground,
+        'colorView': colorView,
       };
 
   void load(Map? j) {
@@ -218,6 +227,7 @@ class ToolState {
     final fc = j['shapeFillColor'];
     if (fc is String && RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(fc)) shapeFillColor = fc;
     shapeGrid = j['shapeGrid'] is bool ? j['shapeGrid'] as bool : true;
+    if (j['colorView'] == 'palette' || j['colorView'] == 'wheel') colorView = j['colorView'] as String;
     exportBackground = j['exportBg'] is bool ? j['exportBg'] as bool : true;
   }
 }
