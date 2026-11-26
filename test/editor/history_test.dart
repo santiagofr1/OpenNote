@@ -221,5 +221,46 @@ void main() {
         expect(left.length <= max || blocked || (remainingUndo.isEmpty && remainingRedo.isEmpty), isTrue, reason: 'ronda $round');
       }
     });
+
+    test('un elemento movido a una hoja SIN cargar: deshacer/rehacer cuando esa hoja se carga después no corre nada', () {
+      final nb = Notebook.create('t');
+      while (nb.sheets.length < 4) {
+        nb.sheets.add(nb.newSheet());
+      }
+      final d = NotebookDoc.lazy(nb);
+      final h2 = nb.sheets[2].id, h0 = nb.sheets[0].id;
+      // hoja 0 cargada con un trazo, un texto y un item; la 2 sigue en disco con su propio texto (coordenadas locales)
+      d.attachSheet(
+          h0,
+          SheetContent(
+            strokes: [Stroke('s', 'pen', '#000000', 2, [100, 100, .5, 200, 150, .5, 300, 100, .5])],
+            texts: [TextBlock('t', 50, 80, 300, 'uno')],
+            items: [Item('i', 'sticky', 40, 300, 200, 100, text: 'nota')],
+          ));
+      final disk2 = SheetContent(texts: [TextBlock('t2', 70, 90, 300, 'en disco')]);
+      expect(d.isLoaded(h2), isFalse);
+      final base = snapshot(d);
+      final top2 = 2 * kSheetStep;
+      // se los arrastra a la hoja 2 (sin cargar)
+      final s0 = d.strokes['s']!, t0 = d.texts['t']!, i0 = d.items['i']!;
+      final s1 = s0.moved(Offset(10, top2 + 20)), t1 = t0.copy(d: Offset(5, top2 + 40)), i1 = i0.copy(d: Offset(7, top2 + 60));
+      final tBefore = t0.copy(), iBefore = i0.copy();
+      d.strokes.remove('s');
+      d.strokes[s1.id] = s1;
+      d.texts['t'] = t1;
+      d.items['i'] = i1;
+      final act = EditAction(d, removed: [s0], added: [s1], textBefore: {'t': tBefore}, textAfter: {'t': t1}, itemBefore: {'i': iBefore}, itemAfter: {'i': i1});
+      expect(d.misplacedSheets, {h2});
+      expect(act.sheetIds(d), containsAll({h0, h2}), reason: 'la hoja de destino se fija aunque todavía no esté cargada');
+      // la hoja 2 llega de disco con el movimiento pendiente
+      d.attachSheet(h2, disk2);
+      final withDisk = snapshot(d);
+      act.apply(d, undo: true, putText: (id, t) => put(d, id, t));
+      expect(snapshot(d), base.replaceFirst('"text":"uno"}', '"text":"uno"},{"id":"t2","x":70.0,"y":${top2 + 90},"w":300.0,"text":"en disco"}'),
+          reason: 'deshacer deja la hoja 0 como estaba y la 2 con lo de disco');
+      act.apply(d, undo: false, putText: (id, t) => put(d, id, t));
+      expect(snapshot(d), withDisk, reason: 'rehacer vuelve a poner todo en su lugar de la hoja 2');
+      expect(withDisk.contains('en disco'), isTrue);
+    });
   });
 }
