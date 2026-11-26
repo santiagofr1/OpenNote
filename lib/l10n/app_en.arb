@@ -488,9 +488,7 @@
   "shapeKindEllipse": "Ellipse",
   "shapeKindTriangle": "Triangle",
   "penFavorites": "Favorites",
-  "penFavEdit": "Change",
-  "penFavHelpEditing": "Choose a color from the palette or the picker: it's saved to the marked favorite.",
-  "penFavHelp": "Tap \"Change\" or press and hold a favorite to choose its color.",
+  "penFavHelp": "Press and hold a favorite to save the current color there.",
   "penPanelHighlighter": "Highlighter",
   "penPanelPencil": "Pen",
   "penTip": "Tip",
@@ -499,7 +497,6 @@
   "penSmartShapes": "Smart shapes",
   "penSmartShapesHint": "Hold the pen still at the end of a shape",
   "penColor": "Color",
-  "penCustomColor": "Custom color",
   "penEraser": "Eraser (press the pen button)",
   "penEraserSmall": "Small",
   "penEraserMedium": "Medium",
@@ -549,5 +546,11 @@
   "settingsPrivacy": "Privacy policy",
   "updateChecking": "Checking for updates…",
   "updateCheckFailed": "Couldn't check for updates right now",
-  "updateUpToDate": "You have the latest version"
+  "updateUpToDate": "You have the latest version",
+  "colorViewPalette": "Palette",
+  "colorViewWheel": "Wheel",
+  "colorEyedropper": "Eyedropper",
+  "eyedropperHint": "Tap the page to pick a color",
+  "eyedropperCancel": "Cancel eyedropper",
+  "colorRecent": "Recent"
 }

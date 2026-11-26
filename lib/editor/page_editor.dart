@@ -4,6 +4,7 @@ import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart' show RenderRepaintBoundary;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -31,6 +32,7 @@ import 'format_bar.dart';
 import 'handwriting.dart';
 import 'heading_dialog.dart';
 import 'history.dart';
+import 'eyedropper.dart';
 import 'ink.dart';
 import 'items_layer.dart';
 import 'link_dialog.dart';
@@ -188,6 +190,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   Timer? _zoomPillTimer;
   final _saveTimers = <String, Timer>{}; // textos y notas: se guarda al dejar de escribir
   final _viewportKey = GlobalKey(), _sheetKey = GlobalKey();
+  final _eyeKey = GlobalKey(); // el RepaintBoundary del visor: de ahí sale la captura del cuentagotas
+  ({EyeTarget target, ui.Image image, PixelBuffer pixels})? _eye; // modo cuentagotas (null: apagado)
 
   // scroll solo al llevar lo seleccionado hasta el borde del visor (solo al mover, no con las manijas)
   late final _edgeY = AutoScroller(scroll, _viewportKey, onScrolled: _edgeScrolled);
@@ -255,6 +259,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   @override
   void dispose() {
+    _eye?.image.dispose();
     final pending = _saveTimers.values.any((t) => t.isActive);
     for (final t in _saveTimers.values) {
       t.cancel();
@@ -1919,19 +1924,68 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     widget.onPrefsChanged();
   }
 
-  Future<void> _openPanel({int? editFav}) async {
+  Future<void> _openPanel() async {
     final align = switch (ts.dock) {
       'left' => Alignment.centerLeft,
       'right' => Alignment.centerRight,
       _ => Alignment.topCenter
     };
-    await showPenPanel(context, ts, () {
+    final eye = await showPenPanel(context, ts, () {
       if (!mounted) return; // el panel se cierra (dispose) después del editor: ya no hay a quién avisar
       setState(() {});
       widget.onPrefsChanged();
-    }, align: align, editFav: editFav);
+    }, align: align);
     if (mounted) setState(() {});
+    if (eye != null && mounted) await _startEyedropper(eye);
   }
+
+  // ---------------- cuentagotas ----------------
+
+  /// Modo cuentagotas: se saca una captura de lo que se ve de las hojas (tinta, PDF, imagen o fondo) y se pone una capa
+  /// encima que lee el color de donde se toca. Al soltar se aplica al [target] y se vuelve a abrir el panel.
+  Future<void> _startEyedropper(EyeTarget target) async {
+    final box = _eyeKey.currentContext?.findRenderObject();
+    if (box is! RenderRepaintBoundary) return;
+    final cap = await captureBoundary(box, View.of(context).devicePixelRatio);
+    if (cap == null) return;
+    if (!mounted) {
+      cap.image.dispose();
+      return;
+    }
+    setState(() => _eye = (target: target, image: cap.image, pixels: cap.pixels));
+  }
+
+  /// Sale del modo cuentagotas sin cambiar nada. Devuelve si estaba activo (lo usa el botón atrás).
+  bool cancelEyedropper() {
+    final e = _eye;
+    if (e == null) return false;
+    setState(() => _eye = null);
+    e.image.dispose();
+    return true;
+  }
+
+  void _eyedropperPicked(String hex) {
+    final e = _eye;
+    if (e == null) return;
+    setState(() {
+      _eye = null;
+      switch (e.target) {
+        case EyeTarget.tool:
+          ts.pickColor(hex);
+        case EyeTarget.shapeFill:
+          ts.shapeFillColor = hex;
+        case EyeTarget.paintShape:
+          ts.paintParams = ts.paintParams.copyWith(shapeColor: hex);
+      }
+    });
+    e.image.dispose();
+    widget.onPrefsChanged();
+    _openPanel(); // se vuelve al panel: se ve el resultado y se lo puede guardar en un favorito
+  }
+
+  /// Modo cuentagotas activo (lo usan los tests).
+  @visibleForTesting
+  EyeTarget? get eyedropperTarget => _eye?.target;
 
   /// Colores y grosor: desde texto/seleccionar, vuelve al lápiz.
   void _openPanelForDrawing() {
@@ -1939,10 +1993,15 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     _openPanel();
   }
 
-  /// Mantener un favorito de la barra: abre el panel editando ese favorito.
-  void _editFavorite(int slot) {
+  /// Mantener un favorito de la barra: guarda ahí el color actual de la herramienta (desde texto o seleccionar, del lápiz).
+  bool _saveFavorite(int slot) {
     if (!ts.drawing) _setTool(Tool.pen);
-    _openPanel(editFav: slot);
+    final changed = ts.saveFavorite(slot);
+    if (changed) {
+      setState(() {});
+      widget.onPrefsChanged();
+    }
+    return changed;
   }
 
   void _pickQuick(String c) {
@@ -2650,7 +2709,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             _openPanel();
           },
           onPickColor: _pickQuick,
-          onEditFavorite: _editFavorite,
+          onSaveFavorite: _saveFavorite,
           onOpenPanel: _openPanelForDrawing,
           onUndo: () => _undoRedo(undo: true),
           onRedo: () => _undoRedo(undo: false),
@@ -2685,7 +2744,9 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             ? const NeverScrollableScrollPhysics()
             : const NoCtrlWheelPhysics(parent: ClampingScrollPhysics());
         return Stack(children: [
-          Listener(
+          RepaintBoundary(
+            key: _eyeKey,
+            child: Listener(
             key: _viewportKey,
             onPointerDown: _touchDown,
             onPointerMove: _touchMove,
@@ -2746,6 +2807,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
               ),
             ),
           ),
+          ),
           // hermano del visor: el dedo sobre el pulgar no llega a los manejadores de toque del visor
           Positioned(
             top: 0,
@@ -2768,6 +2830,11 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
               child: ZoomIndicator(visible: _zoomPill || touch.pinching, zoom: ts.zoom, locked: ts.zoomLocked),
             ),
           ),
+          // cuentagotas: encima de todo, se come los toques
+          if (_eye case final e?)
+            Positioned.fill(
+              child: EyedropperOverlay(image: e.image, pixels: e.pixels, onPick: _eyedropperPicked, onCancel: cancelEyedropper),
+            ),
         ]);
       }),
     );

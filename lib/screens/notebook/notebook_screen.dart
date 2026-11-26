@@ -902,6 +902,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
       // atrás del sistema: primero cierra la búsqueda o la pantalla completa
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
+        if (editorKey.currentState?.cancelEyedropper() ?? false) return;
         if (searching) {
           setState(() => searching = false);
         } else if (fullscreen) {
