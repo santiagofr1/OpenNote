@@ -65,17 +65,19 @@ double tenth(Random r, {double span = 3000}) {
 Stroke randomStroke(Random r, String id, {int? n, double yBase = 0, double span = 900, bool jumps = true}) {
   n ??= switch (r.nextInt(10)) { 0 => 0, 1 => 1, 2 => 2, 3 => 3, _ => 4 + r.nextInt(120) };
   final pts = <double>[];
-  var x = (jumps ? tenth(r, span: span) : r.nextInt(5000) / 10).abs(), y = yBase + (jumps ? tenth(r, span: span) : r.nextInt(3000) / 10).abs();
+  // coordenadas como ENTEROS en décimas (x / 10): así son exactamente representables en disco (sumar décimas en double no lo es)
+  var xi = ((jumps ? tenth(r, span: span) : r.nextInt(5000) / 10).abs() * 10).round(),
+      yi = ((yBase + (jumps ? tenth(r, span: span) : r.nextInt(3000) / 10).abs()) * 10).round();
   for (var i = 0; i < n; i++) {
     // a veces un salto enorme (el delta de delta tiene que aguantarlo)
     if (jumps && r.nextInt(25) == 0) {
-      x = tenth(r);
-      y = yBase + tenth(r);
+      xi = (tenth(r) * 10).round();
+      yi = ((yBase + tenth(r)) * 10).round();
     } else {
-      x += (r.nextInt(41) - 20) / 10;
-      y += (r.nextInt(41) - 20) / 10;
+      xi += r.nextInt(41) - 20;
+      yi += r.nextInt(41) - 20;
     }
-    pts.addAll([x, y, r.nextInt(256) / 255]);
+    pts.addAll([xi / 10, yi / 10, r.nextInt(256) / 255]);
   }
   final kinds = ['pen', 'fountain', 'pencil', 'fine', 'calli', 'hl'];
   return Stroke(id, kinds[r.nextInt(kinds.length)], '#22211e', 1 + r.nextInt(40) / 10, pts, r.nextInt(4) == 0 ? .5 : 1);
@@ -101,7 +103,7 @@ SheetContent randomSheet(Random r, {int maxStrokes = 12, String prefix = 'e'}) {
   return c;
 }
 
-const _raros = ['', 'a', 'ñandú', '日本語', '😀🧑‍💻', 'a/b', '..', 'x\ny', '\u0000', 'a‮b', '"comillas"', r'back\slash'];
+const _raros = ['', 'a', 'ñandú', '日本語', '😀🧑‍💻', 'a/b', '..', 'x\ny', '\u0000', 'a\u202Eb', '"comillas"', r'back\slash'];
 String _texto(Random r) => _raros[r.nextInt(_raros.length)] + (r.nextInt(8) == 0 ? 'z' * r.nextInt(3000) : '');
 
 /// Nombres de archivo / cuaderno hostiles.

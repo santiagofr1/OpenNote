@@ -1,0 +1,4 @@
+tags:
+  # Tests de estrés que tardan más de ~20 s (cuadernos enormes, etc.)
+  lento:
+    timeout: 3x

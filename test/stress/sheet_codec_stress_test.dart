@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
@@ -230,8 +231,8 @@ void main() {
 
     test('mil trazos de un punto y mil de cero puntos: ida y vuelta', () {
       final cc = SheetContent(strokes: [
-        for (var i = 0; i < 1000; i++) Stroke('p$i', 'pen', '#000000', 2, [i / 10, 0, .5]),
-        for (var i = 0; i < 1000; i++) Stroke('v$i', 'pen', '#000000', 2, []),
+        for (var i = 0; i < 1000; i++) Stroke('p$i', 'pen', '#000000', 2, [i / 10, 0, 128 / 255])..z = i,
+        for (var i = 0; i < 1000; i++) Stroke('v$i', 'pen', '#000000', 2, [])..z = 1000 + i,
       ]);
       expect(sig(decodeSheet(encodeSheet(cc))), sig(cc));
     });
