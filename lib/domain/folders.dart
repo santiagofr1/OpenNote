@@ -37,12 +37,14 @@ class Folder {
       };
 }
 
-/// Minúsculas y sin tildes, para buscar sin importar cómo se escribió ("Análisis" = "analisis").
+/// Minúsculas y sin tildes, para buscar sin importar cómo se escribió ("Análisis" = "analisis"). Saca las marcas
+/// combinantes (la tilde "descompuesta", a + U+0301) y las de las letras latinas con diacríticos (ñ, ç, ž, ő...).
 String normalizeSearch(String s) {
-  const from = 'áàäâãéèëêíìïîóòöôõúùüûñç';
-  const to = 'aaaaaeeeeiiiiooooouuuunc';
+  const from = 'àáâãäåçèéêëìíîïñòóôõöùúûüýÿāăąćĉċčďēĕėęěĝğġģĥĩīĭįĵķĺļľńņňōŏőŕŗřśŝşšţťũūŭůűųŵŷźżžøłđħı';
+  const to = 'aaaaaaceeeeiiiinooooouuuuyyaaaccccdeeeeegggghiiiijklllnnnooorrrssssttuuuuuuwyzzzoldhi';
   final b = StringBuffer();
   for (final r in s.toLowerCase().runes) {
+    if (r >= 0x300 && r <= 0x36F) continue; // marca combinante suelta
     final c = String.fromCharCode(r);
     final i = from.indexOf(c);
     b.write(i >= 0 ? to[i] : c);
