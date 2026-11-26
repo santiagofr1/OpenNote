@@ -683,6 +683,13 @@ class Storage {
   final Map<String, dynamic> _prefsSet = {};
 
   Future<void> savePrefs(Map<String, dynamic> p) {
+    // un valor que no se puede escribir (NaN, un objeto raro) se rechaza ANTES de entrar a [_prefsSet]: si no, como cada
+    // guardado escribe todo lo de la sesión, haría fallar todos los guardados siguientes
+    try {
+      jsonEncode(p);
+    } catch (e, st) {
+      return Future.error(e, st);
+    }
     _prefsSet.addAll(p);
     return _track(_savePrefs(p));
   }
