@@ -77,9 +77,9 @@ void main() {
     expect(s.n, greaterThanOrEqualTo(10), reason: 'se descartaron puntos del gesto');
     expect(h.changes, isNotEmpty);
     // y el editor sigue vivo: un segundo trazo normal
-    final g2 = await t.startGesture(const Offset(200, 700), kind: PointerDeviceKind.stylus);
-    await g2.moveTo(const Offset(400, 750));
-    await g2.moveTo(const Offset(600, 700));
+    final g2 = await t.startGesture(const Offset(600, 700), kind: PointerDeviceKind.stylus);
+    await g2.moveTo(const Offset(700, 750));
+    await g2.moveTo(const Offset(800, 700));
     await g2.up();
     await t.pump(const Duration(milliseconds: 400));
     expect(h.doc.strokes.length, 2);
@@ -101,9 +101,9 @@ void main() {
     }
     // el siguiente gesto anda
     final antes = h.doc.strokes.length;
-    final g2 = await t.startGesture(const Offset(200, 600), kind: PointerDeviceKind.stylus);
-    await g2.moveTo(const Offset(400, 650));
-    await g2.moveTo(const Offset(600, 600));
+    final g2 = await t.startGesture(const Offset(600, 600), kind: PointerDeviceKind.stylus);
+    await g2.moveTo(const Offset(700, 650));
+    await g2.moveTo(const Offset(800, 600));
     await g2.up();
     await t.pump(const Duration(milliseconds: 400));
     expect(h.doc.strokes.length, antes + 1, reason: 'después de la rotación el editor quedó con un gesto trabado');
