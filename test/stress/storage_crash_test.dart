@@ -239,12 +239,16 @@ void main() {
             case 0:
               final s = randomStroke(r, 'n$i', yBase: k * kSheetStep, n: 2 + r.nextInt(30));
               d.strokes[s.id] = s;
+              d.markDirtyElement(s); // como el editor: la hoja del trazo queda sucia
             case 1:
+              if (d.strokes.isEmpty) break;
               final id = d.strokes.keys.elementAt(r.nextInt(d.strokes.length));
+              d.markDirtyElement(d.strokes[id]!);
               d.strokes.remove(id);
             case 2:
-              d.texts['t${r.nextInt(4)}']!.text = 'edit $i';
-              d.markDirtyAt(r.nextInt(4) * kSheetStep + 44);
+              final j = r.nextInt(4); // el texto tj está en la hoja j: se marca ESA hoja, como hace el editor
+              d.texts['t$j']!.text = 'edit $i';
+              d.markDirtyAt(j * kSheetStep + 44);
             case 3:
               d.addSheet();
             case 4:
