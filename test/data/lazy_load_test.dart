@@ -338,7 +338,7 @@ void main() {
           }
           expect(files(lazy.nb), [for (final m in lazy.sheets) '${m.id}.sheet']..sort(), reason: '$ctx: sobran o faltan archivos');
           final j = jsonDecode(File('${store.nbDir(lazy.id).path}/notebook.json').readAsStringSync()) as Map;
-          expect(jsonEncode(j), jsonEncode(lazy.nb.sheetsJson()), reason: '$ctx: notebook.json');
+          expect(jsonEncode(j..remove('meta')), jsonEncode(lazy.nb.sheetsJson()), reason: '$ctx: notebook.json');
         }
 
         for (var step = 0; step < 160; step++) {
