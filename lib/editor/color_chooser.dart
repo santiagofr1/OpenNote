@@ -261,8 +261,8 @@ class _ColorChooserState extends State<ColorChooser> {
         padding: const EdgeInsets.all(2),
         decoration: BoxDecoration(color: cs.onSurface.withValues(alpha: .06), borderRadius: BorderRadius.circular(12)),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          _seg(cs, const Key('colorViewPalette'), Icons.grid_view_rounded, context.l10n.colorViewPalette, !wheel, kColorViewPalette),
-          _seg(cs, const Key('colorViewWheel'), Icons.palette_outlined, context.l10n.colorViewWheel, wheel, kColorViewWheel),
+          _seg(cs, const Key('colorViewPalette'), (c) => Icon(Icons.grid_view_rounded, size: 20, color: c), context.l10n.colorViewPalette, !wheel, kColorViewPalette),
+          _seg(cs, const Key('colorViewWheel'), (c) => _HueRingIcon(on: wheel), context.l10n.colorViewWheel, wheel, kColorViewWheel),
         ]),
       ),
       if (widget.onEyedropper != null) ...[
@@ -278,7 +278,7 @@ class _ColorChooserState extends State<ColorChooser> {
     ]);
   }
 
-  Widget _seg(ColorScheme cs, Key key, IconData icon, String tip, bool on, String view) => Tooltip(
+  Widget _seg(ColorScheme cs, Key key, Widget Function(Color) icon, String tip, bool on, String view) => Tooltip(
         message: tip,
         child: Semantics(
           button: true,
@@ -299,7 +299,7 @@ class _ColorChooserState extends State<ColorChooser> {
                 borderRadius: BorderRadius.circular(10),
                 boxShadow: on ? const [BoxShadow(color: Color(0x22000000), blurRadius: 3, offset: Offset(0, 1))] : null,
               ),
-              child: Icon(icon, size: 20, color: on ? cs.primary : cs.onSurfaceVariant),
+              child: Center(child: icon(on ? cs.primary : cs.onSurfaceVariant)),
             ),
           ),
         ),
@@ -495,4 +495,32 @@ class _WheelPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_WheelPainter o) => o.hue != hue || o.square != square;
+}
+
+/// Ícono de la vista Rueda: un anillito con todos los tonos (apagado cuando la vista no está elegida).
+class _HueRingIcon extends StatelessWidget {
+  final bool on;
+  const _HueRingIcon({required this.on});
+  @override
+  Widget build(BuildContext context) =>
+      Opacity(opacity: on ? 1 : .55, child: const SizedBox.square(dimension: 18, child: CustomPaint(painter: _HueRingPainter())));
+}
+
+class _HueRingPainter extends CustomPainter {
+  const _HueRingPainter();
+  @override
+  void paint(Canvas c, Size size) {
+    final r = Offset.zero & size;
+    c.drawCircle(
+        r.center,
+        size.shortestSide / 2 - 2.5,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 5
+          ..shader = SweepGradient(colors: [for (var h = 0; h <= 360; h += 60) HSVColor.fromAHSV(1, h.toDouble(), .85, .95).toColor()])
+              .createShader(r));
+  }
+
+  @override
+  bool shouldRepaint(_HueRingPainter o) => false;
 }
