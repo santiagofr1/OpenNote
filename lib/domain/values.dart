@@ -7,6 +7,16 @@ final _rnd = Random.secure();
 String newId(String prefix) =>
     prefix + List.generate(6, (_) => _rnd.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
 
+final _safeId = RegExp(r'^[A-Za-z0-9_-]{1,64}$');
+final _safeFileName = RegExp(r'^[A-Za-z0-9_-][A-Za-z0-9._-]{0,127}$');
+
+/// ¿[v] sirve de id que se usa como nombre de carpeta o de archivo (cuaderno, hoja, plantilla)? Solo letras, números, `_` y `-`:
+/// sin `..`, sin separadores. Los ids vienen de disco, de la nube o de un `.vynote`: se validan SIEMPRE con esto.
+bool isSafeId(Object? v) => v is String && _safeId.hasMatch(v);
+
+/// ¿[v] sirve de nombre de archivo suelto dentro de `media/`? (sin rutas, no empieza con punto).
+bool isSafeFileName(Object? v) => v is String && _safeFileName.hasMatch(v) && !v.contains('..');
+
 /// '#rrggbb' → Color opaco.
 Color parseColor(String s) => Color(int.parse(s.substring(1), radix: 16) | 0xFF000000);
 

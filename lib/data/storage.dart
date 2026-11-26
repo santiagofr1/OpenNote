@@ -67,7 +67,9 @@ class Storage {
     return base ?? await getApplicationDocumentsDirectory();
   }
 
-  File media(String name) => File('${dir.path}/media/$name');
+  /// El archivo de media [name]. Un nombre que no es de archivo suelto (con `..` o rutas: viene de un cuaderno importado o
+  /// sincronizado) no sale de `media/`: da un archivo que no existe.
+  File media(String name) => File('${dir.path}/media/${isSafeFileName(name) ? name : '.nombre-invalido'}');
 
   Future<String> addMedia(List<int> bytes, String ext) async {
     final name = '${newId('m')}.$ext';
@@ -85,10 +87,17 @@ class Storage {
 
   File get indexFile => File('${dir.path}/index.json');
   File get _prefs => File('${dir.path}/prefs.json');
-  Directory nbDir(String id) => Directory('${dir.path}/notebooks/$id');
+  Directory nbDir(String id) {
+    if (!isSafeId(id)) throw ArgumentError('id de cuaderno no válido: $id');
+    return Directory('${dir.path}/notebooks/$id');
+  }
+
   File _nbFile(String id) => File('${nbDir(id).path}/notebook.json');
   Directory _sheetsDir(String id) => Directory('${nbDir(id).path}/sheets');
-  File sheetFile(String nbId, String sheetId) => File('${_sheetsDir(nbId).path}/$sheetId.sheet');
+  File sheetFile(String nbId, String sheetId) {
+    if (!isSafeId(sheetId)) throw ArgumentError('id de hoja no válido: $sheetId');
+    return File('${_sheetsDir(nbId).path}/$sheetId.sheet');
+  }
 
   // escrituras en curso por archivo: dos a la vez pisarían el mismo temporal
   final _writing = <String, Future<void>>{};

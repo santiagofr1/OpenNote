@@ -205,8 +205,13 @@ class SyncEngine {
     }
   }
 
-  static bool validNotebook(Map j) => j['format'] == Notebook.kFormat && j['sheets'] is List;
-  static bool validIndex(Map j) => j['format'] == Notebook.kFormat && j['notebooks'] is List;
+  // Lo que viene de la nube se revisa a fondo antes de pisar lo local: cada entrada tiene que ser un mapa con un id que sirva
+  // de nombre de archivo (los ids son nombres de carpeta y de archivo en disco).
+  static bool _entries(Object? l, {bool needId = true}) => l is List && l.every((e) => e is Map && (!needId || isSafeId(e['id'])));
+  static bool validNotebook(Map j) =>
+      j['format'] == Notebook.kFormat && _entries(j['sheets']) && (j['sections'] == null || _entries(j['sections'], needId: false));
+  static bool validIndex(Map j) =>
+      j['format'] == Notebook.kFormat && _entries(j['notebooks']) && (j['folders'] == null || _entries(j['folders'], needId: false));
 
   // ---------- local ----------
   Future<Set<String>> _localPaths() async {

@@ -96,9 +96,6 @@ Set<String> _mediaOf(Uint8List sheet) {
   }
 }
 
-final _safeId = RegExp(r'^[A-Za-z0-9_-]{1,64}$');
-final _safeFile = RegExp(r'^[A-Za-z0-9_-][A-Za-z0-9._-]{0,127}$');
-
 /// Importa el `.vynote` [bytes] como un cuaderno NUEVO (id nuevo; no pisa nada) y lo devuelve ya escrito en disco,
 /// pero sin agregarlo al índice (eso lo hace quien llama). [taken]: nombres de cuadernos que ya existen: si el del
 /// archivo choca se llama "X (importado)". Valida todo antes de escribir; si el archivo está roto lanza [VynoteException]
@@ -146,7 +143,7 @@ Future<Notebook> importNotebookBytes(Storage store, Uint8List bytes,
   final ids = <String>{};
   for (final m in sheets) {
     // los ids son nombres de archivo: nada de rutas ni repetidos
-    if (!_safeId.hasMatch(m.id) || !ids.add(m.id)) throw VynoteException('La lista de hojas está rota.', kind: VynoteError.brokenSheetList);
+    if (!isSafeId(m.id) || !ids.add(m.id)) throw VynoteException('La lista de hojas está rota.', kind: VynoteError.brokenSheetList);
   }
 
   final sheetFiles = <String, Uint8List>{};
@@ -171,7 +168,7 @@ Future<Notebook> importNotebookBytes(Storage store, Uint8List bytes,
   for (final f in files.values) {
     if (!f.name.startsWith('media/')) continue;
     final name = f.name.substring(6);
-    if (!_safeFile.hasMatch(name) || name.contains('..')) throw VynoteException('El archivo tiene nombres no válidos.', kind: VynoteError.invalidNames);
+    if (!isSafeFileName(name)) throw VynoteException('El archivo tiene nombres no válidos.', kind: VynoteError.invalidNames);
     final d = f.readBytes();
     if (d != null) media[name] = Uint8List.fromList(d);
   }

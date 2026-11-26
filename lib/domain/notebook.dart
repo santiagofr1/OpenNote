@@ -224,7 +224,8 @@ class Notebook {
       if (e is Map && e['id'] is String && (e['id'] as String).isNotEmpty && !secs.any((s) => s.id == e['id'])) secs.add(Section.fromJson(e));
     }
     if (secs.isEmpty) secs.add(Section(kGeneralSection, 'General'));
-    final all = [for (final s in (j['sheets'] as List)) SheetMeta.fromJson(s as Map)];
+    // las hojas con un id que no sirve de nombre de archivo se ignoran (el id viene de disco o de la nube)
+    final all = [for (final s in (j['sheets'] as List)) if (s is Map && isSafeId(s['id'])) SheetMeta.fromJson(s)];
     sections
       ..clear()
       ..addAll(secs);
@@ -373,12 +374,27 @@ class NotesIndex {
       : notebooks = notebooks ?? [],
         folders = folders ?? [];
 
+  /// Lee el índice sin tirar por una entrada rara: los cuadernos con id inválido (es el nombre de su carpeta) o mal
+  /// formados se ignoran, igual que las carpetas rotas. Sus archivos en disco no se tocan.
   factory NotesIndex.fromJson(Map j) => NotesIndex(
-        rev: (j['rev'] ?? 0) as int,
-        last: j['last'] as String?,
-        notebooks: [for (final n in (j['notebooks'] as List? ?? [])) Notebook.fromJson(n as Map)],
-        folders: [for (final f in (j['folders'] as List? ?? [])) Folder.fromJson(f as Map)],
+        rev: j['rev'] is int ? j['rev'] as int : 0,
+        last: j['last'] is String ? j['last'] as String : null,
+        notebooks: [
+          for (final n in (j['notebooks'] is List ? j['notebooks'] as List : const []))
+            if (n is Map && isSafeId(n['id'])) ?_tryParse(() => Notebook.fromJson(n)),
+        ],
+        folders: [
+          for (final f in (j['folders'] is List ? j['folders'] as List : const [])) if (f is Map) ?_tryParse(() => Folder.fromJson(f)),
+        ],
       )..repairFolders();
+
+  static T? _tryParse<T>(T Function() f) {
+    try {
+      return f();
+    } catch (_) {
+      return null;
+    }
+  }
   Map<String, dynamic> toJson() => {
         'format': Notebook.kFormat,
         'rev': rev,
