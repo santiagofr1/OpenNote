@@ -46,6 +46,32 @@ void _writeVarint(BytesBuilder b, int v) {
 int _zigzag(int v) => (v << 1) ^ (v >> 63);
 int _unzigzag(int v) => (v >>> 1) ^ -(v & 1);
 
+/// Coordenadas más allá de esto no existen en una hoja (el cuaderno infinito llega a ~1e6): se recortan. Así el delta de
+/// delta cabe en 64 bits y un valor absurdo no corre los puntos que vienen después.
+const _kMaxCoord = 1e9;
+
+/// Los puntos [x, y, presión, ...] listos para guardar: los puntos con x o y no finitos (NaN, infinito: un driver o una
+/// cuenta rota) se descartan, las coordenadas se recortan a ±[_kMaxCoord] y la presión que no es un número pasa a .5.
+/// Un solo punto malo no puede impedir guardar la hoja. Devuelve la misma lista si ya está bien (lo normal: sin copia).
+List<double> _cleanPts(List<double> pts) {
+  var ok = true;
+  for (var i = 0; i + 2 < pts.length; i += 3) {
+    final x = pts[i], y = pts[i + 1], p = pts[i + 2];
+    if (!x.isFinite || !y.isFinite || !p.isFinite || x.abs() > _kMaxCoord || y.abs() > _kMaxCoord) {
+      ok = false;
+      break;
+    }
+  }
+  if (ok) return pts;
+  final out = <double>[];
+  for (var i = 0; i + 2 < pts.length; i += 3) {
+    final x = pts[i], y = pts[i + 1], p = pts[i + 2];
+    if (!x.isFinite || !y.isFinite) continue;
+    out.addAll([x.clamp(-_kMaxCoord, _kMaxCoord).toDouble(), y.clamp(-_kMaxCoord, _kMaxCoord).toDouble(), p.isFinite ? p : .5]);
+  }
+  return out;
+}
+
 void _writePlane(BytesBuilder b, List<double> pts, int off, int n) {
   var prev = 0, prevDelta = 0;
   for (var i = 0; i < n; i++) {
@@ -68,23 +94,36 @@ Uint8List encodeSheet(SheetContent c) {
   for (final e in sortByZ([...c.items, ...c.strokes, ...c.texts])) {
     rank[e.id] = rank.length;
   }
+  // los trazos se limpian una sola vez: lo que se cuenta en el JSON ('n') y lo que se escribe después son lo mismo
+  final clean = [for (final s in c.strokes) _cleanPts(s.pts)];
   final meta = jsonEncode({
     'texts': [for (final t in c.texts) {...t.toJson(), 'z': rank[t.id]}],
     'items': [for (final i in c.items) {...i.toJson(), 'z': rank[i.id]}],
     'strokes': [
-      for (final s in c.strokes)
-        {'id': s.id, 'k': s.k, 'c': s.c, 'w': s.w, if (s.o < 1) 'o': round2(s.o), if (s.pp != null) 'pp': s.pp!.toJson(), if (s.fill != null) 'f': s.fill, 'n': s.n, 'z': rank[s.id]}
+      for (var i = 0; i < c.strokes.length; i++)
+        {
+          'id': c.strokes[i].id,
+          'k': c.strokes[i].k,
+          'c': c.strokes[i].c,
+          'w': c.strokes[i].w.isFinite ? c.strokes[i].w : 2.0,
+          if (c.strokes[i].o < 1 || !c.strokes[i].o.isFinite) 'o': c.strokes[i].o.isFinite ? round2(c.strokes[i].o) : 1.0,
+          if (c.strokes[i].pp != null) 'pp': c.strokes[i].pp!.toJson(),
+          if (c.strokes[i].fill != null) 'f': c.strokes[i].fill,
+          'n': clean[i].length ~/ 3,
+          'z': rank[c.strokes[i].id]
+        }
     ],
   });
   final json = utf8.encode(meta);
   final body = BytesBuilder(copy: false);
   body.add((ByteData(4)..setUint32(0, json.length, Endian.little)).buffer.asUint8List());
   body.add(json);
-  for (final s in c.strokes) {
-    _writePlane(body, s.pts, 0, s.n);
-    _writePlane(body, s.pts, 1, s.n);
-    for (var i = 0; i < s.n; i++) {
-      body.addByte((s.pts[i * 3 + 2] * 255).round().clamp(0, 255));
+  for (final pts in clean) {
+    final n = pts.length ~/ 3;
+    _writePlane(body, pts, 0, n);
+    _writePlane(body, pts, 1, n);
+    for (var i = 0; i < n; i++) {
+      body.addByte((pts[i * 3 + 2] * 255).round().clamp(0, 255));
     }
   }
   final z = ZLibCodec(level: 9).encode(body.takeBytes());
@@ -193,10 +232,11 @@ String sheetDigest(SheetContent c) {
   for (final e in sortByZ([...c.items, ...c.strokes, ...c.texts])) {
     switch (e) {
       case Stroke s:
-        b.write('S|${s.id}|${s.k}|${s.c}|${s.w}|${s.o < 1 ? round2(s.o) : 1}|${s.pp == null ? '' : jsonEncode(s.pp!.toJson())}${s.fill == null ? '' : '|f${s.fill}'}|${s.n}|');
-        for (var i = 0; i < s.pts.length; i++) {
+        final pts = _cleanPts(s.pts); // lo mismo que se guarda (ver encodeSheet)
+        b.write('S|${s.id}|${s.k}|${s.c}|${s.w.isFinite ? s.w : 2.0}|${s.o.isFinite && s.o < 1 ? round2(s.o) : 1}|${s.pp == null ? '' : jsonEncode(s.pp!.toJson())}${s.fill == null ? '' : '|f${s.fill}'}|${pts.length ~/ 3}|');
+        for (var i = 0; i < pts.length; i++) {
           b
-            ..write(i % 3 == 2 ? (s.pts[i] * 255).round().clamp(0, 255) : (s.pts[i] * 10).round())
+            ..write(i % 3 == 2 ? (pts[i] * 255).round().clamp(0, 255) : (pts[i] * 10).round())
             ..write(',');
         }
       case TextBlock t:

@@ -18,7 +18,8 @@ bool isSafeId(Object? v) => v is String && _safeId.hasMatch(v);
 bool isSafeFileName(Object? v) => v is String && _safeFileName.hasMatch(v) && !v.contains('..');
 
 /// '#rrggbb' → Color opaco.
-Color parseColor(String s) => Color(int.parse(s.substring(1), radix: 16) | 0xFF000000);
+/// Un color mal escrito (de un archivo roto o de otra versión) no tira: cae al negro tinta de siempre.
+Color parseColor(String s) => Color((int.tryParse(s.length > 1 ? s.substring(1) : '', radix: 16) ?? 0x22211e) & 0xFFFFFF | 0xFF000000);
 
 /// Número del JSON como double (los archivos viejos pueden traer int o nada).
 double jsonDouble(dynamic v, [double d = 0]) => v is num ? v.toDouble() : d;

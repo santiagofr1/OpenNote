@@ -120,8 +120,10 @@ void main() {
       expect(good.length, greaterThan(40));
       for (var len = 0; len < good.length; len++) {
         try {
+          // sin los 4 bytes del checksum final de zlib el cuerpo está completo y se lee igual: está bien SI es idéntico
           final back = decodeSheet(Uint8List.sublistView(good, 0, len));
-          fail('cortado a $len de ${good.length} bytes se leyó como válido: ${back.strokes.length} trazos (pérdida silenciosa)');
+          expect(len, greaterThanOrEqualTo(good.length - 4), reason: 'cortado a $len de ${good.length} bytes se leyó como válido (pérdida silenciosa)');
+          expect(sig(back), sig(c), reason: 'cortado a $len bytes: leyó OTRO contenido sin avisar');
         } on SheetFormatException {
           // bien
         }

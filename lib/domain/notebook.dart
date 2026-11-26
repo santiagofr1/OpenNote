@@ -74,8 +74,8 @@ class SheetMeta {
         paper: (j['paper'] ?? '#fffefb') as String,
         spacing: (j['spacing'] as num?)?.toDouble(), // los archivos viejos no lo tienen: el por defecto del fondo
         size: validPaperSize(j['size']), // los archivos viejos no lo tienen: A4
-        rev: (j['rev'] ?? 0) as int,
-        updated: (j['updated'] ?? 0) as int,
+        rev: j['rev'] is num ? (j['rev'] as num).toInt() : 0,
+        updated: j['updated'] is num ? (j['updated'] as num).toInt() : 0,
         section: (j['section'] ?? '') as String, // los archivos viejos no la tienen
         heads: [for (final h in (j['heads'] as List? ?? const [])) Heading.fromJson(h as Map)],
       );
