@@ -125,7 +125,9 @@ class _LibraryState extends State<Library> with WidgetsBindingObserver {
     final prefs = await store.loadPrefs();
     if (mounted) LanguageScope.maybeOf(context)?.load(prefs);
     _setupBackgroundSync(prefs);
-    tools.load(prefs);
+    try {
+      tools.load(prefs);
+    } catch (_) {} // ajustes ilegibles: se queda con los de fábrica, la biblioteca tiene que cargar igual
     updPrefs = UpdatePrefs.from(prefs);
     final idx = await store.loadIndex(sampleName: mounted ? context.l10n.librarySampleNotebook : 'Mi cuaderno');
     setState(() => index = idx);
