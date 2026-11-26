@@ -24,6 +24,9 @@ Color parseColor(String s) => Color((int.tryParse(s.length > 1 ? s.substring(1) 
 /// Número del JSON como double (los archivos viejos pueden traer int o nada).
 double jsonDouble(dynamic v, [double d = 0]) => v is num ? v.toDouble() : d;
 
+/// Número entero del JSON: acepta también los escritos con decimales (1700000000000.0, como los escriben otros programas).
+int jsonInt(dynamic v, [int d = 0]) => v is num && v.isFinite ? v.toInt() : d;
+
 /// Redondeo a un decimal: achica los archivos sin perder nada visible.
 double round1(double v) => (v * 10).round() / 10;
 

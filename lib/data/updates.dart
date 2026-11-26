@@ -102,7 +102,7 @@ class UpdatePrefs {
   factory UpdatePrefs.from(Map? j) => UpdatePrefs(
         auto: j?['updAuto'] != false,
         lastCheck: j?['updLastCheck'] is int ? j!['updLastCheck'] as int : 0,
-        skipped: j?['updSkipped'] as String?,
+        skipped: j?['updSkipped'] is String ? j!['updSkipped'] as String : null,
       );
 
   Map<String, dynamic> toJson() => {'updAuto': auto, 'updLastCheck': lastCheck, 'updSkipped': skipped};

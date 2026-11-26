@@ -85,12 +85,15 @@ class PenPreset {
   double width, opacity;
   PenPreset(this.tip, this.color, this.width, this.opacity);
   Map<String, dynamic> toJson() => {'tip': tip, 'color': color, 'width': width, 'opacity': opacity};
-  void load(Map? j) {
-    if (j == null) return;
-    tip = (j['tip'] ?? tip) as String;
-    color = (j['color'] ?? color) as String;
-    width = ((j['width'] ?? width) as num).toDouble();
-    opacity = ((j['opacity'] ?? opacity) as num).toDouble();
+  /// Lee un lápiz guardado. Los valores de otro tipo o fuera de rango se ignoran / acotan: cargar los ajustes nunca tira.
+  void load(Object? j) {
+    if (j is! Map) return;
+    if (j['tip'] is String) tip = j['tip'] as String;
+    if (j['color'] is String) color = j['color'] as String;
+    final w = j['width'];
+    if (w is num && w.isFinite) width = w.toDouble().clamp(.1, 200.0);
+    final o = j['opacity'];
+    if (o is num && o.isFinite) opacity = o.toDouble().clamp(0.0, 1.0);
   }
 }
 
@@ -162,6 +165,16 @@ class ToolState {
     return List<String>.from(def);
   }
 
+  /// Lista de colores recientes: solo textos, sin repetidos y hasta 7; si no es una lista, se deja [def].
+  static List<String> _recents(Object? v, List<String> def) {
+    if (v is! List) return def;
+    final out = <String>[];
+    for (final e in v) {
+      if (e is String && !out.contains(e) && out.length < 7) out.add(e);
+    }
+    return out;
+  }
+
   static void _remember(List<String> r, String c) {
     r..remove(c)..insert(0, c);
     if (r.length > 7) r.removeLast();
@@ -201,9 +214,9 @@ class ToolState {
   void load(Map? j) {
     if (j == null) return;
     tool = Tool.values.firstWhere((t) => t.name == j['tool'], orElse: () => Tool.pen);
-    pen.load(j['pen'] as Map?);
-    hl.load(j['hl'] as Map?);
-    paint.load(j['paint'] as Map?);
+    pen.load(j['pen']);
+    hl.load(j['hl']);
+    paint.load(j['paint']);
     paintParams = j['paintParams'] is Map ? PaintParams.fromJson(j['paintParams'] as Map) : const PaintParams();
     if (paint.tip == 'paint-none') {
       // la vieja opción "Ninguna" ahora es tener las formas apagadas
@@ -211,16 +224,18 @@ class ToolState {
       paintParams = paintParams.copyWith(shapes: false);
     }
     if (!isPaint(paint.tip)) paint.tip = 'paint-stars'; // una forma que ya no existe
-    if (j['penRecent'] is List) penRecent = List<String>.from(j['penRecent'] as List);
-    if (j['hlRecent'] is List) hlRecent = List<String>.from(j['hlRecent'] as List);
-    if (j['paintRecent'] is List) paintRecent = List<String>.from(j['paintRecent'] as List);
+    penRecent = _recents(j['penRecent'], penRecent);
+    hlRecent = _recents(j['hlRecent'], hlRecent);
+    paintRecent = _recents(j['paintRecent'], paintRecent);
     penFav = _favs(j['penFav'], penFav);
     hlFav = _favs(j['hlFav'], hlFav);
     paintFav = _favs(j['paintFav'], paintFav);
-    eraserSize = ((j['eraserSize'] ?? 1) as int).clamp(0, 2);
+    final es = j['eraserSize'];
+    eraserSize = es is num && es.isFinite ? es.round().clamp(0, 2) : 1;
     if (const ['top', 'left', 'right'].contains(j['dock'])) dock = j['dock'] as String;
-    zoom = ((j['zoom'] ?? 1) as num).toDouble().clamp(.5, 4.0);
-    zoomLocked = (j['zoomLocked'] ?? false) as bool;
+    final z = j['zoom'];
+    zoom = z is num && z.isFinite ? z.toDouble().clamp(.5, 4.0) : 1.0;
+    zoomLocked = j['zoomLocked'] is bool ? j['zoomLocked'] as bool : false;
     shapeSnap = j['shapeSnap'] is bool ? j['shapeSnap'] as bool : true;
     if (shapeKinds.any((k) => k.$1 == j['shapeKind'])) shapeKind = j['shapeKind'] as String;
     shapeFill = j['shapeFill'] is bool ? j['shapeFill'] as bool : false;

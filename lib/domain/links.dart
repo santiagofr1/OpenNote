@@ -47,11 +47,15 @@ LinkTarget? parseLink(String s) {
 final _hasScheme = RegExp(r'^[a-zA-Z][a-zA-Z0-9+.\-]*://');
 final _otherScheme = RegExp(r'^(mailto|javascript|data|file|tel|sms|intent):', caseSensitive: false);
 
+/// Caracteres de control o invisibles (NUL, escapes, cero ancho, inversión de texto): no van en una dirección.
+bool _invisible(int c) =>
+    c < 0x20 || (c >= 0x7f && c <= 0x9f) || (c >= 0x200b && c <= 0x200f) || (c >= 0x202a && c <= 0x202e) || (c >= 0x2066 && c <= 0x2069) || c == 0xfeff;
+
 /// Lo que se escribió como dirección, listo para guardar: sin espacios de los bordes y con 'https://' si no traía
 /// esquema. Solo acepta http / https con un dominio (con punto, o localhost); si no, devuelve ''.
 String normalizeUrl(String input) {
   final t = input.trim();
-  if (t.isEmpty || t.contains(RegExp(r'\s')) || _otherScheme.hasMatch(t)) return '';
+  if (t.isEmpty || t.contains(RegExp(r'\s')) || _otherScheme.hasMatch(t) || t.runes.any(_invisible)) return '';
   final s = _hasScheme.hasMatch(t) ? t : 'https://$t';
   final u = Uri.tryParse(s);
   if (u == null || !(u.scheme == 'http' || u.scheme == 'https')) return '';

@@ -47,6 +47,7 @@ import 'package:pdf/pdf.dart' show PdfColor;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import 'hershey_script.dart';
 import 'tablet_sim.dart';
 
 void main() {
@@ -3987,6 +3988,135 @@ void main() {
     expect(rechazados, greaterThan(10));
     expect(t.takeException(), isNull);
   });
+
+  // ---------------- cobertura de funciones básicas: caminata al azar y letra real ----------------
+  testWidgets('cuaderno: 30 acciones al azar con el lápiz (trazo, agregar, mover, borrar hoja, deshacer, rehacer): el documento es siempre lo esperado, deshacer vuelve a cada foto y lo guardado es lo que se ve', (t) async {
+    await start(t);
+    await createNotebook(t, 'Azar');
+    final ed = editor(t);
+    await t.tap(find.byKey(const Key('pagesBtn')));
+    await settle(t, 600);
+
+    /// Foto: orden de hojas y, por hoja, los ids de sus trazos (ordenados).
+    String foto() => [
+          for (var k = 0; k < ed.doc.sheetCount; k++)
+            '${ed.doc.sheets[k].id}:${([for (final s in ed.doc.strokes.values) if (ed.doc.sheetOfElement(s) == k) s.id]..sort()).join(',')}'
+        ].join(' | ');
+    int trazosEn(int k) => ed.doc.strokes.values.where((s) => ed.doc.sheetOfElement(s) == k).length;
+
+    final deshacer = <String>[], rehacer = <String>[];
+    final r = Random(7);
+    final log = <String>[];
+    for (var paso = 0; paso < 30; paso++) {
+      final antes = foto();
+      final hojas = ed.doc.sheetCount;
+      final trazos = ed.doc.strokes.length;
+      switch (r.nextInt(6)) {
+        case 0 || 1: // un trazo con el lápiz
+          final c = sheetCenter(t) + Offset(r.nextInt(100) - 50.0, r.nextInt(100) - 50.0);
+          await stylusLine(t, c, c + Offset(80 + r.nextInt(100).toDouble(), r.nextInt(60) - 30.0));
+          log.add('$paso: trazo');
+          expect(ed.doc.strokes.length, trazos + 1, reason: log.join(' | '));
+          deshacer.add(antes);
+          rehacer.clear();
+        case 2: // agregar hoja
+          await t.tap(find.byKey(const Key('addPage')));
+          await settle(t, 900);
+          log.add('$paso: agregar');
+          expect(ed.doc.sheetCount, hojas + 1, reason: log.join(' | '));
+          expect(ed.doc.strokes.length, trazos);
+          deshacer.add(antes);
+          rehacer.clear();
+        case 3: // mover una hoja hacia abajo con el menú largo
+          final n = 1 + r.nextInt(hojas);
+          await holdOn(t, find.byKey(Key('thumb-$n')));
+          await settle(t, 500);
+          if (find.text('Mover después').evaluate().isEmpty) {
+            await t.tapAt(const Offset(5, 5));
+            await settle(t, 400);
+            break;
+          }
+          await t.tap(find.text('Mover después'));
+          await settle(t, 900);
+          log.add('$paso: mover $n');
+          expect(ed.doc.sheetCount, hojas, reason: log.join(' | '));
+          expect(ed.doc.strokes.length, trazos, reason: 'mover una hoja no pierde trazos: ${log.join(' | ')}');
+          deshacer.add(antes);
+          rehacer.clear();
+        case 4: // borrar una hoja (si hay más de una)
+          if (hojas < 2) break;
+          final n = 1 + r.nextInt(hojas);
+          final seVan = trazosEn(n - 1);
+          await holdOn(t, find.byKey(Key('thumb-$n')));
+          await settle(t, 500);
+          await t.tap(find.text('Borrar'));
+          await settle(t, 500);
+          await t.tap(find.byKey(const Key('confirmDelete')));
+          await settle(t, 900);
+          log.add('$paso: borrar $n');
+          expect(ed.doc.sheetCount, hojas - 1, reason: log.join(' | '));
+          expect(ed.doc.strokes.length, trazos - seVan, reason: 'se va solo lo de esa hoja: ${log.join(' | ')}');
+          deshacer.add(antes);
+          rehacer.clear();
+        default: // deshacer y a veces rehacer
+          if (deshacer.isEmpty) break;
+          await t.tap(find.byTooltip('Deshacer'));
+          await settle(t, 800);
+          log.add('$paso: deshacer');
+          final esperado = deshacer.removeLast();
+          expect(foto(), esperado, reason: 'deshacer vuelve a la foto de antes de la acción: ${log.join(' | ')}');
+          rehacer.add(antes);
+          if (r.nextBool()) {
+            await t.tap(find.byTooltip('Rehacer'));
+            await settle(t, 800);
+            log.add('$paso: rehacer');
+            expect(foto(), rehacer.last, reason: 'rehacer vuelve a donde estaba: ${log.join(' | ')}');
+            deshacer.add(esperado);
+            rehacer.removeLast();
+          }
+      }
+      expect(t.takeException(), isNull, reason: log.join(' | '));
+      expect(ed.doc.sheetCount, greaterThanOrEqualTo(1));
+    }
+
+    // lo que se ve es lo que se guarda
+    final ids = ed.doc.strokes.keys.toSet();
+    final hojasIds = [for (final m in ed.doc.sheets) m.id];
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1500);
+    final nb = await savedNotebook('Azar');
+    final s = Storage(root: root);
+    await s.init();
+    final doc = await s.loadNotebook(nb);
+    expect(doc.strokes.keys.toSet(), ids, reason: 'los trazos de disco son los de la pantalla: ${log.join(' | ')}');
+    expect([for (final m in doc.sheets) m.id], hojasIds, reason: 'mismo orden de hojas');
+  });
+
+  testWidgets('letra real (ML Kit, solo en la tablet con el modelo bajado): una palabra escrita a mano se lee, y los casos raros no cuelgan ni tiran', (t) async {
+    final ml = MlKitHandwriting();
+    ml.tag = 'es';
+    if (!await ml.ensureModel()) {
+      markTestSkipped('sin el modelo de letra (hace falta red la primera vez)');
+      return;
+    }
+    // sin trazos y con trazos de 0 y 1 punto: no tira
+    expect(await ml.recognize([]), isNull);
+    expect(await ml.recognize([Stroke('a', 'pen', '#22211e', 2, const [], 1)]), isNull);
+    expect(await ml.recognize([Stroke('a', 'pen', '#22211e', 2, const [10, 10, .5], 1)]), anyOf(isNull, isA<String>()));
+    // una palabra de verdad
+    for (final palabra in ['hola', 'casa']) {
+      final texto = await ml.recognize(handwrite(palabra, const Offset(100, 200), size: 2.5));
+      expect(texto, isNotNull, reason: 'no leyó "$palabra"');
+      expect(texto!.toLowerCase().replaceAll(' ', ''), palabra, reason: 'leyó "$texto" en vez de "$palabra"');
+    }
+    // dos lecturas a la vez no se pisan
+    final rs = await Future.wait([
+      ml.recognize(handwrite('hola', const Offset(100, 200), size: 2.5)),
+      ml.recognize(handwrite('casa', const Offset(100, 200), size: 2.5)),
+    ]);
+    expect(rs[0]?.toLowerCase(), 'hola');
+    expect(rs[1]?.toLowerCase(), 'casa');
+  }, skip: !Platform.isAndroid);
 }
 
 /// Reconocimiento de letra de mentira: siempre lee [text].
