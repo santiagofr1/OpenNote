@@ -11,6 +11,7 @@ import '../domain/domain.dart';
 import '../rendering/pdf_pages.dart';
 import '../rendering/sheet_render.dart';
 import '../rendering/text_layout.dart';
+import 'export_raster.dart';
 import 'storage.dart';
 
 /// Resolución de cada hoja exportada (ancho en píxeles): ~200 ppp en A4.
@@ -327,10 +328,9 @@ Future<Uint8List> renderSheetPng(NotebookDoc doc, int sheet,
   final c = ui.Canvas(rec);
   c.scale(k);
   paintSheet(c, doc, sheet, k, images: images, region: region, background: background);
-  final img = await rec.endRecording().toImage(_pxWidth.round(), ((region?.height ?? kSheetH) * k).round());
-  final data = await img.toByteData(format: ui.ImageByteFormat.png);
-  img.dispose();
-  return data!.buffer.asUint8List();
+  final w = _pxWidth.round(), h = ((region?.height ?? kSheetH) * k).round();
+  // los píxeles se leen con cuidado (ver [rasterizeStable]): el PNG directo del motor salía roto en algunas tablets
+  return opaquePng(await rasterizeStable(rec.endRecording(), w, h), w, h);
 }
 
 /// Textos de los archivos que se exportan y de los diálogos de guardado del sistema. La app los cambia al idioma
@@ -358,8 +358,9 @@ ExportTexts exportTexts = const ExportTexts();
 String safeFileName(String name) => name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '-');
 
 /// Abre el selector del sistema para elegir carpeta y nombre, y guarda el PDF.
-/// Devuelve false si el usuario canceló.
-Future<bool> savePdf(Uint8List bytes, String name) async {
+/// Devuelve false si el usuario canceló. Es una variable para que los tests la reemplacen (no pueden manejar el diálogo
+/// del sistema).
+Future<bool> Function(Uint8List bytes, String name) savePdf = (bytes, name) async {
   final safe = safeFileName(name).trim();
   final uri = await FilePicker.saveFile(
     dialogTitle: exportTexts.savePdf,
@@ -368,14 +369,21 @@ Future<bool> savePdf(Uint8List bytes, String name) async {
     mimeType: 'application/pdf',
   );
   return uri != null;
-}
+};
 
 /// Guarda la hoja [sheet] como PNG, preguntando dónde. Devuelve false si el usuario canceló.
 Future<bool> saveSheetPng(Storage store, NotebookDoc doc, int sheet, String name,
     {bool background = true}) async {
   final (src, i) = await sheetSource(store, doc, sheet);
-  final png = await renderSheetPng(src, i,
-      images: await loadImages(store, src, sheet: i, background: background), background: background);
+  final images = await loadImages(store, src, sheet: i, background: background);
+  final Uint8List png;
+  try {
+    png = await renderSheetPng(src, i, images: images, background: background);
+  } finally {
+    for (final img in images.values) {
+      img.dispose();
+    }
+  }
   final uri = await FilePicker.saveFile(
     dialogTitle: exportTexts.saveImage,
     fileName: safeFileName('$name.png'),
