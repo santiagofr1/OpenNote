@@ -2290,6 +2290,30 @@
   "@tipCalligraphy": {
     "description": "Name of the pen tip \"calli\" in the pen panel"
   },
+  "tipDotted": "Punteado",
+  "@tipDotted": {
+    "description": "Name of the pen tip \"dotted\" in the pen panel"
+  },
+  "tipDashed": "Discontinuo",
+  "@tipDashed": {
+    "description": "Name of the pen tip \"dashed\" in the pen panel"
+  },
+  "tipChalk": "Tiza",
+  "@tipChalk": {
+    "description": "Name of the pen tip \"chalk\" in the pen panel"
+  },
+  "tipChisel": "Rotulador biselado",
+  "@tipChisel": {
+    "description": "Name of the pen tip \"chisel\" in the pen panel"
+  },
+  "tipNeon": "Neón",
+  "@tipNeon": {
+    "description": "Name of the pen tip \"neon\" in the pen panel"
+  },
+  "tipDouble": "Doble línea",
+  "@tipDouble": {
+    "description": "Name of the pen tip \"double\" in the pen panel"
+  },
   "paintStyleBrush": "Pincel",
   "@paintStyleBrush": {
     "description": "Name of the decorator stroke style \"brush\""

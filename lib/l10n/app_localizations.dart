@@ -2901,6 +2901,42 @@ abstract class L {
   /// **'Caligrafía'**
   String get tipCalligraphy;
 
+  /// Name of the pen tip "dotted" in the pen panel
+  ///
+  /// In es, this message translates to:
+  /// **'Punteado'**
+  String get tipDotted;
+
+  /// Name of the pen tip "dashed" in the pen panel
+  ///
+  /// In es, this message translates to:
+  /// **'Discontinuo'**
+  String get tipDashed;
+
+  /// Name of the pen tip "chalk" in the pen panel
+  ///
+  /// In es, this message translates to:
+  /// **'Tiza'**
+  String get tipChalk;
+
+  /// Name of the pen tip "chisel" in the pen panel
+  ///
+  /// In es, this message translates to:
+  /// **'Rotulador biselado'**
+  String get tipChisel;
+
+  /// Name of the pen tip "neon" in the pen panel
+  ///
+  /// In es, this message translates to:
+  /// **'Neón'**
+  String get tipNeon;
+
+  /// Name of the pen tip "double" in the pen panel
+  ///
+  /// In es, this message translates to:
+  /// **'Doble línea'**
+  String get tipDouble;
+
   /// Name of the decorator stroke style "brush"
   ///
   /// In es, this message translates to:
