@@ -1710,7 +1710,13 @@ class LEn extends L {
 
   @override
   String get penFavHelp =>
-      'Press and hold a favorite to replace it with the current color.';
+      'Tap a favorite and change its color with the wheel. Press and hold it to delete it.';
+
+  @override
+  String get penFavAdd => 'Add color';
+
+  @override
+  String get penFavDelete => 'Delete color';
 
   @override
   String get penPanelHighlighter => 'Highlighter';
@@ -1902,7 +1908,4 @@ class LEn extends L {
 
   @override
   String get eyedropperCancel => 'Cancel eyedropper';
-
-  @override
-  String get colorRecent => 'Recent';
 }

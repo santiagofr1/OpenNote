@@ -88,14 +88,12 @@ class ToolState {
   final hl = PenPreset('hl', '#f7d22c', 22, .4);
   final paint = PenPreset('paint-stars', '#f4a7c3', 34, .85);
   PaintParams paintParams = const PaintParams(); // brillo, formitas (color, cantidad, tamaño) de la pintura
-  List<String> penRecent = ['#22211e', '#1d4ed8', '#b91c1c', '#15803d', '#c2410c', '#7e22ce'];
-  List<String> hlRecent = ['#f7d22c', '#5ee08a', '#ff86c8', '#5bc8ff'];
-  List<String> paintRecent = ['#f4a7c3', '#8fd8e0', '#e3cfa0', '#c9b3ec'];
-  // Los 4 colores favoritos de la barra: fijos (elegirlos no los reordena), se cambian a mano.
+  // Colores favoritos de la barra (1 a [kFavMax]): lugares editables; el elegido ([penFavSel]...) sigue al color de la herramienta.
   List<String> penFav = ['#22211e', '#1d4ed8', '#b91c1c', '#15803d'];
   List<String> hlFav = ['#f7d22c', '#5ee08a', '#ff86c8', '#5bc8ff'];
   List<String> paintFav = ['#f4a7c3', '#8fd8e0', '#e3cfa0', '#c9b3ec'];
-  static const kFavCount = 4;
+  static const kFavMax = 8;
+  int penFavSel = 0, hlFavSel = 0, paintFavSel = 0; // favorito elegido de cada herramienta (-1 = ninguno)
   int eraserSize = 1;
   String dock = 'top'; // top | left | right
   double zoom = 1; // 1 = la hoja entra justa a lo ancho
@@ -111,69 +109,64 @@ class ToolState {
 
   bool get drawing => tool == Tool.pen || tool == Tool.hl || tool == Tool.paint || tool == Tool.shape;
   PenPreset get current => switch (tool) { Tool.hl => hl, Tool.paint => paint, _ => pen };
-  List<String> get recent => switch (tool) { Tool.hl => hlRecent, Tool.paint => paintRecent, _ => penRecent };
   List<String> get favorites => switch (tool) { Tool.hl => hlFav, Tool.paint => paintFav, _ => penFav };
   double get eraserRadius => eraserSizes[eraserSize];
 
-  /// Reloj (los tests lo reemplazan para avanzar el tiempo).
-  static DateTime Function() clock = DateTime.now;
-  ({String prev, String now, Tool tool, DateTime at})? _lastPick; // último cambio de color hecho por [pickColor]
-
-  /// Elige un color y lo pone primero en "recientes" (hasta 7).
-  void pickColor(String c) {
-    if (c != current.color) _lastPick = (prev: current.color, now: c, tool: tool, at: clock());
-    current.color = c;
-    _remember(recent, c);
-  }
-
-  /// Guarda un color en un lugar de los favoritos de la herramienta actual (puede repetirse).
-  void setFavorite(int slot, String c) {
-    if (slot >= 0 && slot < kFavCount) favorites[slot] = c;
-  }
-
-  /// Guarda el color actual de la herramienta en un favorito. Devuelve si cambió algo (ya estaba ahí: no).
-  /// Un toque que cae justo antes del mantener apretado sobre el mismo favorito (pasa con el S Pen / el dedo en la
-  /// tablet) no debe tragarse el color que el usuario quería guardar: se deshace ese toque y se guarda el color anterior.
-  bool saveFavorite(int slot) {
-    final r = _lastPick;
-    _lastPick = null;
-    if (r != null && r.tool == tool && current.color == r.now && slot >= 0 && slot < kFavCount && favorites[slot] == r.now &&
-        clock().difference(r.at) <= const Duration(seconds: 2) && r.prev != r.now) {
-      current.color = r.prev;
-      _remember(recent, r.prev);
+  /// Favorito elegido de la herramienta actual (-1 = ninguno).
+  int get favSel => switch (tool) { Tool.hl => hlFavSel, Tool.paint => paintFavSel, _ => penFavSel };
+  set favSel(int v) {
+    switch (tool) {
+      case Tool.hl:
+        hlFavSel = v;
+      case Tool.paint:
+        paintFavSel = v;
+      default:
+        penFavSel = v;
     }
-    if (slot < 0 || slot >= kFavCount || favorites[slot] == current.color) return false;
-    favorites[slot] = current.color;
+  }
+
+  /// Elige el favorito [i]: queda elegido y su color pasa a ser el de la herramienta.
+  void useFavorite(int i) {
+    if (i < 0 || i >= favorites.length) return;
+    favSel = i;
+    current.color = favorites[i];
+  }
+
+  /// Cambia el color de la herramienta; el favorito elegido (si hay) lo sigue.
+  void setColor(String c) {
+    current.color = c;
+    if (favSel >= 0 && favSel < favorites.length) favorites[favSel] = c;
+  }
+
+  /// Suma el color actual como favorito nuevo (queda elegido). Falso si ya están los [kFavMax].
+  bool addFavorite() {
+    if (favorites.length >= kFavMax) return false;
+    favorites.add(current.color);
+    favSel = favorites.length - 1;
+    return true;
+  }
+
+  /// Borra el favorito [i] (siempre queda al menos uno). Falso si no se pudo.
+  bool removeFavorite(int i) {
+    if (favorites.length <= 1 || i < 0 || i >= favorites.length) return false;
+    favorites.removeAt(i);
+    if (favSel == i) {
+      favSel = -1;
+    } else if (favSel > i) {
+      favSel--;
+    }
     return true;
   }
 
   static List<String> _favs(Object? v, List<String> def) {
-    if (v is List && v.length == kFavCount && v.every((e) => e is String && e.startsWith('#'))) {
+    if (v is List && v.isNotEmpty && v.length <= kFavMax && v.every((e) => e is String && e.startsWith('#'))) {
       return List<String>.from(v);
     }
     return List<String>.from(def);
   }
 
-  /// Lista de colores recientes: solo textos, sin repetidos y hasta 7; si no es una lista, se deja [def].
-  static List<String> _recents(Object? v, List<String> def) {
-    if (v is! List) return def;
-    final out = <String>[];
-    for (final e in v) {
-      if (e is String && !out.contains(e) && out.length < 7) out.add(e);
-    }
-    return out;
-  }
-
-  static void _remember(List<String> r, String c) {
-    r..remove(c)..insert(0, c);
-    if (r.length > 7) r.removeLast();
-  }
-
-  /// Al cerrar el panel del Decorador: el color de las formas (si es un hex propio) entra a "recientes".
-  void rememberShapeColor() {
-    final c = paintParams.shapeColor;
-    if (c != null && c.startsWith('#')) _remember(paintRecent, c);
-  }
+  /// Favorito elegido guardado si es un índice válido; si no, el que tenga el color de la herramienta (o -1).
+  static int _sel(Object? v, List<String> favs, String color) => v is int && v >= 0 && v < favs.length ? v : favs.indexOf(color);
 
   Map<String, dynamic> toJson() => {
         'tool': tool.name,
@@ -181,12 +174,12 @@ class ToolState {
         'hl': hl.toJson(),
         'paint': paint.toJson(),
         'paintParams': paintParams.toJson(),
-        'penRecent': penRecent,
-        'hlRecent': hlRecent,
-        'paintRecent': paintRecent,
         'penFav': penFav,
         'hlFav': hlFav,
         'paintFav': paintFav,
+        'penFavSel': penFavSel,
+        'hlFavSel': hlFavSel,
+        'paintFavSel': paintFavSel,
         'eraserSize': eraserSize,
         'dock': dock,
         'zoom': zoom,
@@ -212,12 +205,12 @@ class ToolState {
       paintParams = paintParams.copyWith(shapes: false);
     }
     if (!isPaint(paint.tip)) paint.tip = 'paint-stars'; // una forma que ya no existe
-    penRecent = _recents(j['penRecent'], penRecent);
-    hlRecent = _recents(j['hlRecent'], hlRecent);
-    paintRecent = _recents(j['paintRecent'], paintRecent);
     penFav = _favs(j['penFav'], penFav);
     hlFav = _favs(j['hlFav'], hlFav);
     paintFav = _favs(j['paintFav'], paintFav);
+    penFavSel = _sel(j['penFavSel'], penFav, pen.color);
+    hlFavSel = _sel(j['hlFavSel'], hlFav, hl.color);
+    paintFavSel = _sel(j['paintFavSel'], paintFav, paint.color);
     final es = j['eraserSize'];
     eraserSize = es is num && es.isFinite ? es.round().clamp(0, 2) : 1;
     if (const ['top', 'left', 'right'].contains(j['dock'])) dock = j['dock'] as String;

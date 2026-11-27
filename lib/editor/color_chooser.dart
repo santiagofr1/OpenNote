@@ -46,64 +46,63 @@ class ColorDot extends StatelessWidget {
       );
 }
 
-/// Envuelve un widget con la animación corta de "se guardó" (escala 1 → 1.15 → 1 en 220 ms). [builder] recibe la
-/// función que la dispara.
-class SavePulse extends StatefulWidget {
-  final Widget Function(BuildContext context, VoidCallback pulse) builder;
-  const SavePulse({super.key, required this.builder});
-  @override
-  State<SavePulse> createState() => _SavePulseState();
-}
-
-class _SavePulseState extends State<SavePulse> with SingleTickerProviderStateMixin {
-  late final _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 220));
-  late final _scale = TweenSequence<double>([
-    TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.15).chain(CurveTween(curve: Curves.easeOut)), weight: 1),
-    TweenSequenceItem(tween: Tween(begin: 1.15, end: 1.0).chain(CurveTween(curve: Curves.easeOut)), weight: 1),
-  ]).animate(_c);
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => ScaleTransition(scale: _scale, child: widget.builder(context, () => _c.forward(from: 0)));
-}
-
-/// Un favorito: tocar lo usa; mantener apretado guarda ahí el color actual ([onSave] devuelve si cambió algo; si fue
-/// así hay vibración y la muestra hace la animación de confirmación).
+/// Un favorito: tocar lo elige; mantener apretado ([onLongPress]) abre el menú para borrarlo.
 class FavoriteDot extends StatelessWidget {
   final String color;
   final bool selected;
   final VoidCallback onTap;
-  final bool Function() onSave;
-  const FavoriteDot({super.key, required this.color, required this.selected, required this.onTap, required this.onSave});
+  final VoidCallback? onLongPress;
+  const FavoriteDot({super.key, required this.color, required this.selected, required this.onTap, this.onLongPress});
 
   @override
-  Widget build(BuildContext context) => SavePulse(
-        builder: (context, pulse) => GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onTap,
-          onLongPress: () {
-            if (!onSave()) return;
-            HapticFeedback.mediumImpact();
-            pulse();
-          },
-          child: SizedBox(width: 40, height: 40, child: Center(child: ColorDot._dot(context, color, selected, 30))),
-        ),
+  Widget build(BuildContext context) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: SizedBox(width: 40, height: 40, child: Center(child: ColorDot._dot(context, color, selected, 30))),
       );
 }
 
-/// El selector de color de todos los paneles: encabezado (color actual y cuentagotas), la rueda con el campo hex y la
-/// fila de recientes. [extras] va entre el encabezado y la rueda (el Decorador pone ahí Auto / Claro / Oscuro).
-/// [onPick] avisa un color nuevo: [fromWheel] es verdadero si sale de la rueda o del hex (que no entra a "recientes"
-/// en cada movimiento). Con [onEyedropper] nulo no hay cuentagotas.
+/// El "+" que suma un favorito nuevo (con el color actual).
+class AddFavoriteDot extends StatelessWidget {
+  final VoidCallback onTap;
+  const AddFavoriteDot({super.key, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final label = context.l10n.penFavAdd;
+    return Tooltip(
+      message: label,
+      child: Semantics(
+        button: true,
+        label: label,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: SizedBox(
+            width: 40,
+            height: 40,
+            child: Center(
+              child: Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: cs.outline, width: 1.5)),
+                child: Icon(Icons.add, size: 18, color: cs.onSurfaceVariant),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// El selector de color de todos los paneles: encabezado (color actual y cuentagotas) y la rueda con el campo hex. [extras] va entre el encabezado y la rueda (el Decorador pone ahí Auto / Claro / Oscuro).
+/// [onPick] avisa un color nuevo: [fromWheel] es verdadero si sale de la rueda o del hex. Con [onEyedropper] nulo no hay cuentagotas.
 class ColorChooser extends StatefulWidget {
   final String color;
   final Widget? extras;
-  final List<String> recent;
   final void Function(String hex, {required bool fromWheel}) onPick;
   final VoidCallback? onEyedropper;
   const ColorChooser({
@@ -111,7 +110,6 @@ class ColorChooser extends StatefulWidget {
     required this.color,
     required this.onPick,
     this.extras,
-    this.recent = const [],
     this.onEyedropper,
   });
   @override
@@ -184,15 +182,6 @@ class _ColorChooserState extends State<ColorChooser> {
       if (widget.extras != null) ...[const SizedBox(height: 8), widget.extras!],
       const SizedBox(height: 8),
       _wheelBody(cs),
-      if (widget.recent.isNotEmpty) ...[
-        const SizedBox(height: 8),
-        Text(context.l10n.colorRecent, style: TextStyle(fontSize: 11.5, color: cs.onSurfaceVariant, fontWeight: FontWeight.w600)),
-        const SizedBox(height: 2),
-        Wrap(key: const Key('colorRecent'), children: [
-          for (final c in widget.recent)
-            ColorDot(color: c, selected: c == widget.color, onTap: () => widget.onPick(c, fromWheel: false)),
-        ]),
-      ],
     ]);
   }
 

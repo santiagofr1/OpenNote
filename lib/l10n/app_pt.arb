@@ -488,7 +488,9 @@
   "shapeKindEllipse": "Elipse",
   "shapeKindTriangle": "Triângulo",
   "penFavorites": "Favoritos",
-  "penFavHelp": "Segure um favorito para substituí-lo pela cor atual.",
+  "penFavAdd": "Adicionar cor",
+  "penFavDelete": "Apagar cor",
+  "penFavHelp": "Toque um favorito e mude a cor dele com a roda. Segure para apagá-lo.",
   "penPanelHighlighter": "Marca-texto",
   "penPanelPencil": "Caneta",
   "penTip": "Ponta",
@@ -550,6 +552,5 @@
   "updateUpToDate": "Você já tem a versão mais recente",
   "colorEyedropper": "Conta-gotas",
   "eyedropperHint": "Toque na folha para pegar uma cor",
-  "eyedropperCancel": "Cancelar conta-gotas",
-  "colorRecent": "Recentes"
+  "eyedropperCancel": "Cancelar conta-gotas"
 }

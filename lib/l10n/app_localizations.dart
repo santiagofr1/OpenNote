@@ -3030,8 +3030,20 @@ abstract class L {
   /// Pen panel: help for the favorite colors
   ///
   /// In es, this message translates to:
-  /// **'Mantené apretado un favorito para reemplazarlo por el color actual.'**
+  /// **'Tocá un favorito y cambiale el color con la rueda. Mantenelo apretado para borrarlo.'**
   String get penFavHelp;
+
+  /// Pen panel: tooltip of the button that adds a favorite color
+  ///
+  /// In es, this message translates to:
+  /// **'Agregar color'**
+  String get penFavAdd;
+
+  /// Pen panel: menu item that deletes a favorite color
+  ///
+  /// In es, this message translates to:
+  /// **'Borrar color'**
+  String get penFavDelete;
 
   /// Pen panel title for the highlighter
   ///
@@ -3404,12 +3416,6 @@ abstract class L {
   /// In es, this message translates to:
   /// **'Cancelar cuentagotas'**
   String get eyedropperCancel;
-
-  /// Color chooser: caption of the row of recently used colors
-  ///
-  /// In es, this message translates to:
-  /// **'Recientes'**
-  String get colorRecent;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

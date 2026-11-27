@@ -1717,7 +1717,13 @@ class LPt extends L {
 
   @override
   String get penFavHelp =>
-      'Segure um favorito para substituí-lo pela cor atual.';
+      'Toque um favorito e mude a cor dele com a roda. Segure para apagá-lo.';
+
+  @override
+  String get penFavAdd => 'Adicionar cor';
+
+  @override
+  String get penFavDelete => 'Apagar cor';
 
   @override
   String get penPanelHighlighter => 'Marca-texto';
@@ -1912,7 +1918,4 @@ class LPt extends L {
 
   @override
   String get eyedropperCancel => 'Cancelar conta-gotas';
-
-  @override
-  String get colorRecent => 'Recentes';
 }

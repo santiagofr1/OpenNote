@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:math' show cos, sin;
 
 import 'package:apuntes/domain/domain.dart';
-import 'package:apuntes/editor/color_chooser.dart';
 import 'package:apuntes/editor/eyedropper.dart';
 import 'package:apuntes/editor/pen_panel.dart';
 import 'package:apuntes/l10n/l10n.dart';
@@ -44,13 +43,6 @@ void main() {
     await t.enterText(find.byKey(const Key('colorHex')), digits);
     await t.pump();
   }
-
-  DateTime now = DateTime(2026, 1, 1);
-  setUp(() {
-    now = DateTime(2026, 1, 1);
-    ToolState.clock = () => now;
-  });
-  tearDown(() => ToolState.clock = DateTime.now);
 
   double scrollPos(WidgetTester t) => t.state<ScrollableState>(find.byType(Scrollable).first).position.pixels;
 
@@ -219,19 +211,6 @@ void main() {
       expect(scrollPos(t), isNot(pos0));
     });
 
-    testWidgets('mover la rueda no suma a recientes; sí al cerrar el panel', (t) async {
-      await open(t);
-      await setHex(t, '3B82F6');
-      final rec0 = List<String>.from(ts.recent);
-      await t.tapAt(onRing(t, 0));
-      await t.pump();
-      expect(ts.recent, rec0);
-      final c = ts.pen.color;
-      await t.tapAt(const Offset(5, 5));
-      await t.pumpAndSettle();
-      expect(ts.recent.first, c);
-    });
-
     testWidgets('si el color cambia desde afuera, la rueda se resincroniza', (t) async {
       await open(t);
       await t.tap(find.byKey(const ValueKey('panelFav-2'))); // #b91c1c: el color cambia desde afuera de la rueda
@@ -282,143 +261,126 @@ void main() {
   });
 
   group('favoritos', () {
-    testWidgets('no hay botón Cambiar y la ayuda explica el mantener apretado', (t) async {
+    Future<void> longPressDot(WidgetTester t, Finder f) async {
+      await t.ensureVisible(f);
+      await t.pumpAndSettle();
+      await t.longPress(f);
+      await t.pumpAndSettle();
+    }
+
+    testWidgets('la ayuda explica que se edita con la rueda y que mantener apretado borra; no hay Cambiar', (t) async {
       await open(t);
       expect(find.byKey(const Key('favEdit')), findsNothing);
       expect(find.text('Cambiar'), findsNothing);
-      expect(find.text('Mantené apretado un favorito para reemplazarlo por el color actual.'), findsOneWidget);
-      expect(find.byIcon(Icons.edit), findsNothing);
+      expect(find.text('Tocá un favorito y cambiale el color con la rueda. Mantenelo apretado para borrarlo.'), findsOneWidget);
     });
 
-    testWidgets('mantener apretado un favorito guarda ahí el color actual y solo cambia ese', (t) async {
-      await open(t);
-      final favs0 = List<String>.from(ts.favorites);
-      const c = '#7b3a43';
-      await setHex(t, '7B3A43');
-      await t.longPress(find.byKey(const ValueKey('panelFav-2')));
-      await t.pumpAndSettle();
-      expect(ts.favorites[2], c);
-      for (final i in [0, 1, 3]) {
-        expect(ts.favorites[i], favs0[i]);
-      }
-      expect(ts.pen.color, c, reason: 'el color actual no cambia');
-    });
-
-    testWidgets('guarda también un color de la rueda', (t) async {
-      await open(t);
-      await t.tapAt(onRing(t, 200));
-      await t.pump();
-      final c = ts.pen.color;
-      await t.longPress(find.byKey(const ValueKey('panelFav-0')));
-      await t.pumpAndSettle();
-      expect(ts.favorites[0], c);
-    });
-
-    testWidgets('la animación de confirmación escala la muestra y vuelve', (t) async {
-      await open(t);
-      ts.pen.color = '#7b3a43';
-      final f = find.byKey(const ValueKey('panelFav-1'));
-      final g = await t.startGesture(t.getCenter(f));
-      await t.pump(const Duration(milliseconds: 600)); // pasa el tiempo del toque largo
-      await g.up();
-      await t.pump();
-      await t.pump(const Duration(milliseconds: 110));
-      final scale = find.descendant(of: f, matching: find.byType(ScaleTransition)).evaluate().isEmpty
-          ? find.ancestor(of: f, matching: find.byType(ScaleTransition))
-          : find.descendant(of: f, matching: find.byType(ScaleTransition));
-      final peak = t.widget<ScaleTransition>(scale.first).scale.value;
-      expect(peak, greaterThan(1.05));
-      await t.pumpAndSettle();
-      expect(t.widget<ScaleTransition>(scale.first).scale.value, 1.0);
-    });
-
-    testWidgets('si el favorito ya tiene ese color no hace nada', (t) async {
-      await open(t);
-      final favs0 = List<String>.from(ts.favorites);
-      await t.tap(find.byKey(const ValueKey('panelFav-1')));
-      await t.pump();
-      expect(ts.pen.color, favs0[1]);
-      now = now.add(const Duration(seconds: 3)); // ya no cuenta como el toque de recién
-      await t.longPress(find.byKey(const ValueKey('panelFav-1')));
-      await t.pumpAndSettle();
-      expect(ts.favorites, favs0);
-      expect(ts.saveFavorite(1), isFalse);
-    });
-
-    testWidgets('tocar un favorito usa ese color y no toca los favoritos', (t) async {
+    testWidgets('tocar un favorito lo elige y usa su color sin tocar los favoritos', (t) async {
       await open(t);
       final favs0 = List<String>.from(ts.favorites);
       await t.tap(find.byKey(const ValueKey('panelFav-3')));
       await t.pump();
       expect(ts.pen.color, favs0[3]);
+      expect(ts.favSel, 3);
       expect(ts.favorites, favs0);
     });
 
-    testWidgets('elegir un color en la rueda no toca los favoritos', (t) async {
+    testWidgets('elegir un favorito y escribir un hex lo edita, y el encabezado lo muestra', (t) async {
       await open(t);
       final favs0 = List<String>.from(ts.favorites);
-      await setHex(t, '7B3A43');
-      expect(ts.pen.color, '#7b3a43');
-      expect(ts.favorites, favs0);
-    });
-
-    testWidgets('un toque justo antes del mantener apretado no se traga el color: se guarda el de la rueda', (t) async {
-      await open(t);
-      await setHex(t, '7B3A43');
-      final f = find.byKey(const ValueKey('panelFav-0'));
-      await t.tap(f);
-      await t.longPress(f);
-      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('panelFav-0')));
+      await t.pump();
+      await t.ensureVisible(find.byKey(const Key('colorHex')));
+      await t.enterText(find.byKey(const Key('colorHex')), '7B3A43');
+      await t.testTextInput.receiveAction(TextInputAction.done);
+      await t.pump();
       expect(ts.favorites[0], '#7b3a43');
-      expect(ts.pen.color, '#7b3a43', reason: 'el toque se deshizo');
-      expect(find.text('#7B3A43'), findsOneWidget, reason: 'el encabezado muestra el color restaurado');
-    });
-
-    testWidgets('si el mantener apretado llega más de 2 s después del toque, no hace nada', (t) async {
-      await open(t);
-      final fav0 = ts.favorites[0];
-      await setHex(t, '7B3A43');
-      final f = find.byKey(const ValueKey('panelFav-0'));
-      await t.tap(f);
-      now = now.add(const Duration(seconds: 3));
-      await t.longPress(f);
-      await t.pumpAndSettle();
-      expect(ts.favorites[0], fav0);
-      expect(ts.pen.color, fav0);
-    });
-
-    testWidgets('mantener apretado sin toque previo guarda el color actual', (t) async {
-      await open(t);
-      await setHex(t, '7B3A43');
-      await t.longPress(find.byKey(const ValueKey('panelFav-0')));
-      await t.pumpAndSettle();
-      expect(ts.favorites[0], '#7b3a43');
+      expect(ts.favorites.sublist(1), favs0.sublist(1));
       expect(ts.pen.color, '#7b3a43');
+      expect(find.text('#7B3A43'), findsOneWidget);
+    });
+
+    testWidgets('mover la rueda edita el favorito elegido', (t) async {
+      await open(t);
+      await t.tap(find.byKey(const ValueKey('panelFav-1')));
+      await t.tapAt(onRing(t, 200));
+      await t.pump();
+      expect(ts.favorites[1], ts.pen.color);
+      expect(ts.favorites[1], isNot(ToolState().penFav[1]));
+    });
+
+    testWidgets('el + suma un favorito con el color actual, lo elige y el hex solo cambia ese', (t) async {
+      await open(t);
+      final favs0 = List<String>.from(ts.favorites);
+      final add = find.byKey(const ValueKey('panelFavAdd'));
+      await t.ensureVisible(add);
+      await t.tap(add);
+      await t.pump();
+      expect(ts.favorites.length, 5);
+      expect(ts.favorites[4], ts.pen.color);
+      expect(ts.favSel, 4);
+      await setHex(t, '7B3A43');
+      expect(ts.favorites[4], '#7b3a43');
+      expect(ts.favorites.sublist(0, 4), favs0);
+    });
+
+    testWidgets('mantener apretado un favorito ofrece borrarlo', (t) async {
+      await open(t);
+      final favs0 = List<String>.from(ts.favorites);
+      await longPressDot(t, find.byKey(const ValueKey('panelFav-1')));
+      expect(find.byKey(const ValueKey('panelFavDelete')), findsOneWidget);
+      expect(find.text('Borrar color'), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('panelFavDelete')));
+      await t.pumpAndSettle();
+      expect(ts.favorites, [favs0[0], favs0[2], favs0[3]]);
+      expect(find.byKey(const ValueKey('panelFav-3')), findsNothing);
+    });
+
+    testWidgets('con un solo favorito mantener apretado no abre menú', (t) async {
+      await open(t);
+      while (ts.favorites.length > 1) {
+        ts.removeFavorite(0);
+      }
+      await t.tap(find.byKey(const ValueKey('panelFav-0'))); // se redibuja el panel con un solo favorito
+      await t.pump();
+      expect(find.byKey(const ValueKey('panelFav-1')), findsNothing);
+      await longPressDot(t, find.byKey(const ValueKey('panelFav-0')));
+      expect(find.byKey(const ValueKey('panelFavDelete')), findsNothing);
+      expect(ts.favorites.length, 1);
+    });
+
+    testWidgets('con 8 favoritos no hay +', (t) async {
+      await open(t);
+      final add = find.byKey(const ValueKey('panelFavAdd'));
+      await t.ensureVisible(add);
+      for (var i = 0; i < 4; i++) {
+        await t.tap(add);
+        await t.pump();
+      }
+      expect(ts.favorites.length, 8);
+      expect(add, findsNothing);
+    });
+
+    testWidgets('ya no hay fila de recientes', (t) async {
+      await open(t);
+      expect(find.byKey(const Key('colorRecent')), findsNothing);
+      await open(t, tool: Tool.paint);
+      expect(find.byKey(const Key('colorRecent')), findsNothing);
     });
 
     testWidgets('en el Decorador los favoritos del fondo funcionan igual', (t) async {
       await open(t, tool: Tool.paint);
       final favs0 = List<String>.from(ts.paintFav);
-      ts.paint.color = '#7b3a43';
       await t.ensureVisible(find.byKey(const ValueKey('panelFav-0')));
-      await t.longPress(find.byKey(const ValueKey('panelFav-0')));
-      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('panelFav-0')));
+      await t.pump();
+      await t.enterText(find.byKey(const Key('colorHex')).first, '7B3A43'); // el panel tiene otra rueda (formas)
+      await t.pump();
       expect(ts.paintFav[0], '#7b3a43');
       expect(ts.paintFav.sublist(1), favs0.sublist(1));
+      expect(ts.paint.color, '#7b3a43');
       expect(ts.penFav, ToolState().penFav, reason: 'los del lápiz no se tocan');
     });
-  });
-
-  group('recientes', () {
-    testWidgets('hay una fila de recientes y tocar uno lo usa', (t) async {
-      await open(t);
-      expect(find.byKey(const Key('colorRecent')), findsOneWidget);
-      final c = ts.recent[3];
-      await t.tap(find.descendant(of: find.byKey(const Key('colorRecent')), matching: find.byType(ColorDot)).at(3));
-      await t.pump();
-      expect(ts.pen.color, c);
-    });
-
   });
 
   group('ToolState', () {
@@ -427,16 +389,6 @@ void main() {
       expect(b.toJson().containsKey('colorView'), isFalse);
       expect(() => ToolState().load({'colorView': 'otra'}), returnsNormally);
       expect(jsonDecode(jsonEncode(b.toJson())), isA<Map>());
-    });
-
-    test('saveFavorite guarda el color actual de la herramienta en curso', () {
-      final a = ToolState()..tool = Tool.hl;
-      a.hl.color = '#123456';
-      expect(a.saveFavorite(2), isTrue);
-      expect(a.hlFav[2], '#123456');
-      expect(a.penFav, ToolState().penFav);
-      expect(a.saveFavorite(2), isFalse);
-      expect(a.saveFavorite(9), isFalse);
     });
   });
 

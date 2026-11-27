@@ -1714,7 +1714,13 @@ class LEs extends L {
 
   @override
   String get penFavHelp =>
-      'Mantené apretado un favorito para reemplazarlo por el color actual.';
+      'Tocá un favorito y cambiale el color con la rueda. Mantenelo apretado para borrarlo.';
+
+  @override
+  String get penFavAdd => 'Agregar color';
+
+  @override
+  String get penFavDelete => 'Borrar color';
 
   @override
   String get penPanelHighlighter => 'Resaltador';
@@ -1908,7 +1914,4 @@ class LEs extends L {
 
   @override
   String get eyedropperCancel => 'Cancelar cuentagotas';
-
-  @override
-  String get colorRecent => 'Recientes';
 }

@@ -2377,9 +2377,17 @@
   "@penFavorites": {
     "description": "Pen panel: section title of the favorite colors"
   },
-  "penFavHelp": "Mantené apretado un favorito para reemplazarlo por el color actual.",
+  "penFavHelp": "Tocá un favorito y cambiale el color con la rueda. Mantenelo apretado para borrarlo.",
   "@penFavHelp": {
     "description": "Pen panel: help for the favorite colors"
+  },
+  "penFavAdd": "Agregar color",
+  "@penFavAdd": {
+    "description": "Pen panel: tooltip of the button that adds a favorite color"
+  },
+  "penFavDelete": "Borrar color",
+  "@penFavDelete": {
+    "description": "Pen panel: menu item that deletes a favorite color"
   },
   "penPanelHighlighter": "Resaltador",
   "@penPanelHighlighter": {
@@ -2641,9 +2649,5 @@
   "eyedropperCancel": "Cancelar cuentagotas",
   "@eyedropperCancel": {
     "description": "Tooltip of the button that cancels the eyedropper"
-  },
-  "colorRecent": "Recientes",
-  "@colorRecent": {
-    "description": "Color chooser: caption of the row of recently used colors"
   }
 }
