@@ -66,7 +66,9 @@ void _paintFill(Canvas c, Stroke s) {
 /// oscurezcan sus propias uniones (el lápiz lleva el alfa en los colores de los vértices).
 /// El resaltador va siempre en una capa que se compone multiplicando con lo de abajo: blanco × color = color,
 /// negro × color = negro (así el texto de un PDF queda por encima).
-void paintStroke(Canvas c, Stroke s) {
+/// [cull]: si no toca el trazo no se arma ni su malla.
+void paintStroke(Canvas c, Stroke s, {Rect? cull}) {
+  if (cull != null && !s.bounds.overlaps(cull)) return;
   final m = s.ensureMesh();
   if (m == null) return;
   if (s.fill != null) _paintFill(c, s);
@@ -108,15 +110,16 @@ void _pass(Canvas c, List<Stroke> list, Rect? cull, bool hl) {
     if (s.fill != null || isHighlighter(s.k) || _layered(s)) {
       // con relleno, resaltador o capa va solo (no entra en lotes): el relleno va antes del borde
       flush();
-      if (cull == null || s.bounds.overlaps(cull)) paintStroke(c, s);
+      paintStroke(c, s, cull: cull);
       continue;
     }
-    final m = s.ensureMesh();
-    if (m == null) continue;
-    final k = m.colored ? 0 : s.color.toARGB32();
-    if (group.isNotEmpty && (k != key || verts + m.vertexCount > kBatchVertices)) flush();
+    // el lote se decide sin armar mallas (estimación y color salen del trazo): así no depende de `cull` ni de qué
+    // mallas existan, y los trazos que no se ven no arman la suya
+    final k = meshIsColored(s) ? 0 : s.color.toARGB32();
+    final v = estimateMeshVertices(s);
+    if (group.isNotEmpty && (k != key || verts + v > kBatchVertices)) flush();
     group.add(s);
-    verts += m.vertexCount;
+    verts += v;
     key = k;
   }
   flush();
@@ -124,7 +127,7 @@ void _pass(Canvas c, List<Stroke> list, Rect? cull, bool hl) {
 
 void _drawGroup(Canvas c, List<Stroke> g, Rect? cull) {
   if (g.length == 1) {
-    if (cull == null || g[0].bounds.overlaps(cull)) paintStroke(c, g[0]);
+    paintStroke(c, g[0], cull: cull);
     return;
   }
   if (cull != null) {
@@ -134,8 +137,12 @@ void _drawGroup(Canvas c, List<Stroke> g, Rect? cull) {
     }
     if (!r.overlaps(cull)) return;
   }
+  for (final s in g) {
+    s.ensureMesh();
+  }
   final b = _batchOf(g);
   final colored = g.first.mesh!.colored;
+  assert(colored == meshIsColored(g.first));
   c.drawVertices(b.vertices, colored ? BlendMode.dst : BlendMode.srcOver, Paint()..color = g.first.color);
 }
 
