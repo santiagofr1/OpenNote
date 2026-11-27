@@ -2331,11 +2331,11 @@ abstract class L {
   /// **'Buscar en \"{name}\"'**
   String notebookSearchIn(String name);
 
-  /// Counter under the notebook title: optional sheet title prefix, current sheet and total
+  /// Counter under the notebook title: current sheet and total
   ///
   /// In es, this message translates to:
-  /// **'{title}{n} / {total}'**
-  String notebookSheetCounter(String title, int n, int total);
+  /// **'{n} / {total}'**
+  String notebookSheetCounter(int n, int total);
 
   /// Prefix of the default name of audio recordings (followed by a number), and hint of the audio rename field
   ///
@@ -3030,8 +3030,20 @@ abstract class L {
   /// Pen panel: help for the favorite colors
   ///
   /// In es, this message translates to:
-  /// **'Mantené apretado un favorito para guardar ahí el color actual.'**
+  /// **'Tocá un favorito y cambiale el color con la rueda. Mantenelo apretado para borrarlo.'**
   String get penFavHelp;
+
+  /// Pen panel: tooltip of the button that adds a favorite color
+  ///
+  /// In es, this message translates to:
+  /// **'Agregar color'**
+  String get penFavAdd;
+
+  /// Pen panel: menu item that deletes a favorite color
+  ///
+  /// In es, this message translates to:
+  /// **'Borrar color'**
+  String get penFavDelete;
 
   /// Pen panel title for the highlighter
   ///
@@ -3387,18 +3399,6 @@ abstract class L {
   /// **'Ya tenés la última versión'**
   String get updateUpToDate;
 
-  /// Color chooser: tooltip of the palette view button
-  ///
-  /// In es, this message translates to:
-  /// **'Paleta'**
-  String get colorViewPalette;
-
-  /// Color chooser: tooltip of the color wheel view button
-  ///
-  /// In es, this message translates to:
-  /// **'Rueda'**
-  String get colorViewWheel;
-
   /// Color chooser: tooltip of the eyedropper button
   ///
   /// In es, this message translates to:
@@ -3416,12 +3416,6 @@ abstract class L {
   /// In es, this message translates to:
   /// **'Cancelar cuentagotas'**
   String get eyedropperCancel;
-
-  /// Color chooser: caption of the row of recently used colors
-  ///
-  /// In es, this message translates to:
-  /// **'Recientes'**
-  String get colorRecent;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

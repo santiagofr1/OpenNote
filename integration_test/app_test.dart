@@ -229,7 +229,7 @@ void main() {
     await settle(t, 1200);
   });
 
-  testWidgets('barra: 4 colores favoritos fijos; tocar elige sin reordenar y mantener apretado guarda ahí el color actual (issue #23)', (t) async {
+  testWidgets('barra: tocar un favorito lo elige (sin reordenar) y el color que se cambie edita ese favorito (issue #23)', (t) async {
     await start(t);
     await createNotebook(t, 'Favoritos');
     final ts = editor(t).ts;
@@ -237,18 +237,19 @@ void main() {
     await t.tap(find.byKey(const ValueKey('fav-2')));
     await settle(t);
     expect(ts.pen.color, antes[2]);
+    expect(ts.favSel, 2);
     expect(ts.favorites, antes, reason: 'elegir un favorito no los reordena');
-    final nuevo = palette.firstWhere((c) => !antes.contains(c));
-    ts.pen.color = nuevo;
+    const nuevo = '#7b3a43';
+    ts.setColor(nuevo); // lo que hacen la rueda, el hex y el cuentagotas
+    editor(t).widget.onPrefsChanged();
+    await t.tap(find.byKey(const ValueKey('fav-0')));
+    await settle(t);
+    expect(ts.pen.color, antes[0]);
+    expect(ts.favorites, [antes[0], antes[1], nuevo, antes[3]]);
     await t.longPress(find.byKey(const ValueKey('fav-0')));
     await settle(t);
-    expect(find.byKey(const Key('eyedropper')), findsNothing, reason: 'mantener apretado ya no abre el panel');
-    expect(ts.favorites, [nuevo, antes[1], antes[2], antes[3]]);
-    expect(ts.pen.color, nuevo, reason: 'el color actual no cambia');
-    // dejar los favoritos como estaban
-    ts.setFavorite(0, antes[0]);
-    editor(t).widget.onPrefsChanged();
-    expect(ts.favorites, antes);
+    expect(find.byKey(const Key('eyedropper')), findsNothing, reason: 'mantener apretado en la barra no hace nada');
+    expect(ts.favorites.length, 4);
     await t.tap(find.byKey(const Key('back')));
     await settle(t, 1200);
   });
@@ -277,8 +278,9 @@ void main() {
       await t.tap(find.byKey(Key('paintSt-${estilos[i]}')));
       await settle(t);
       expect(editor(t).ts.paintParams.style, estilos[i]);
-      await t.ensureVisible(find.byKey(Key('paint-${fondos[i]}')));
-      await t.tap(find.byKey(Key('paint-${fondos[i]}')));
+      final hexFondo = find.byKey(const Key('colorHex')).first; // el del fondo (el de las formitas va después)
+      await t.ensureVisible(hexFondo);
+      await t.enterText(hexFondo, fondos[i]);
       await settle(t);
       expect(editor(t).ts.paint.color, '#${fondos[i]}');
       if (i == 3) {
@@ -3133,16 +3135,16 @@ void main() {
     expect(ed.doc.items.values.where((i) => i.type == 'image'), isEmpty);
   });
 
-  testWidgets('rueda de color: arrastrar el anillo cambia el color y mantener apretado un favorito del panel lo guarda; se ve en la barra', (t) async {
+  testWidgets('rueda de color: tocar un favorito del panel y mover la rueda o el hex lo edita (se ve en la barra); + suma y mantener apretado borra', (t) async {
     await start(t);
     await createNotebook(t, 'Selector');
     final ts = editor(t).ts;
-    final antes = ts.favorites[0];
-    final color0 = ts.pen.color;
+    final antes = List<String>.from(ts.favorites);
     await t.tap(find.byTooltip('Lápiz · tocá de nuevo para opciones'));
     await settle(t);
     expect(find.byKey(const Key('favEdit')), findsNothing);
-    await t.tap(find.byKey(const Key('colorViewWheel')));
+    await t.ensureVisible(find.byKey(const ValueKey('panelFav-0')));
+    await t.tap(find.byKey(const ValueKey('panelFav-0')));
     await settle(t);
     final wheel = find.byKey(const Key('colorWheel'));
     await t.ensureVisible(wheel);
@@ -3152,18 +3154,32 @@ void main() {
     await t.dragFrom(c + Offset(r, 0), Offset(-r, r)); // por el anillo, de las 3 a las 6 en punto
     await settle(t);
     final nuevo = ts.pen.color;
-    expect(nuevo, isNot(color0));
-    await t.ensureVisible(find.byKey(const ValueKey('panelFav-0')));
-    await t.longPress(find.byKey(const ValueKey('panelFav-0')));
+    expect(nuevo, isNot(antes[0]));
+    expect(ts.favorites[0], nuevo, reason: 'la rueda edita el favorito elegido');
+    await t.enterText(find.byKey(const Key('colorHex')), 'AB3C5D');
     await settle(t);
-    expect(ts.favorites[0], nuevo);
+    expect(ts.favorites[0], '#ab3c5d');
+    expect(ts.favorites.sublist(1), antes.sublist(1));
+    // + suma un favorito con el color actual
+    await t.ensureVisible(find.byKey(const ValueKey('panelFavAdd')));
+    await t.tap(find.byKey(const ValueKey('panelFavAdd')));
+    await settle(t);
+    expect(ts.favorites.length, 5);
+    expect(ts.favSel, 4);
+    // mantener apretado el segundo: aparece Borrar color
+    await t.ensureVisible(find.byKey(const ValueKey('panelFav-1')));
+    await holdOn(t, find.byKey(const ValueKey('panelFav-1')));
+    await settle(t);
+    await t.tap(find.byKey(const ValueKey('panelFavDelete')));
+    await settle(t);
+    expect(ts.favorites.length, 4);
+    expect(ts.favorites, ['#ab3c5d', antes[2], antes[3], '#ab3c5d']);
+    expect(ts.favSel, 3, reason: 'el elegido corrió un lugar');
     await t.tapAt(const Offset(4, 600)); // cierra el panel
     await settle(t);
     expect(find.byKey(const Key('colorWheel')), findsNothing);
-    final dot = find.descendant(of: find.byKey(const ValueKey('fav-0')), matching: find.byWidgetPredicate((w) => w is Container && (w.decoration as BoxDecoration?)?.color == parseColor(nuevo)));
+    final dot = find.descendant(of: find.byKey(const ValueKey('fav-0')), matching: find.byWidgetPredicate((w) => w is Container && (w.decoration as BoxDecoration?)?.color == parseColor('#ab3c5d')));
     expect(dot, findsOneWidget, reason: 'la barra muestra el color nuevo');
-    // dejar el favorito como estaba
-    ts.setFavorite(0, antes);
     await t.tap(find.byKey(const Key('back')));
     await settle(t, 1200);
   });
@@ -3179,7 +3195,7 @@ void main() {
     final c = sheetCenter(t);
     await stylusLine(t, c, c + const Offset(150, 0));
     expect(ed.doc.strokes.length, 1);
-    ts.pickColor('#1d4ed8'); // otro color
+    ts.setColor('#1d4ed8'); // otro color
     await t.tap(find.byTooltip('Lápiz · tocá de nuevo para opciones'));
     await settle(t);
     await t.tap(find.byKey(const Key('eyedropper')));

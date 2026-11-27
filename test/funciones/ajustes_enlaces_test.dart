@@ -23,10 +23,11 @@ void main() {
       'hl': [5, 'x', [], true],
       'paint': [5, 'x', [], true],
       'paintParams': [5, 'x', [], {'g': 'a'}],
-      'penRecent': [5, 'x', {}, [1, 2], [null], ['#fff', 3]],
-      'hlRecent': [[1], 'x'],
-      'paintRecent': [[true], 'x'],
-      'penFav': [5, [1, 2, 3, 4], ['#a', '#b'], 'x'],
+      'penFav': [5, [1, 2, 3, 4], ['#a', '#b'], 'x', [], List.generate(9, (i) => '#00000$i')],
+      'penFavSel': [5.5, -1, 99, 'x', null, [], true],
+      'hlFavSel': [-7, 1e20, {}],
+      'paintFavSel': [-7, 1e20, {}],
+      'penRecent': [5, 'x', [1, 2]], // clave vieja: se ignora
       'eraserSize': [1.0, 1.5, 'x', null, -4, 99, true, 1e20],
       'dock': [5, 'abajo', null, []],
       'zoom': ['x', 0, -3, 1e9, 1e-9, null, true],
@@ -83,7 +84,7 @@ void main() {
       final t = ToolState()..load({'zoom': 1e9, 'eraserSize': 99, 'penFav': ['#1', '#2', '#3', '#4']});
       expect(t.zoom, inInclusiveRange(.5, 4));
       expect(t.eraserSize, inInclusiveRange(0, 2));
-      expect(t.penFav.length, ToolState.kFavCount);
+      expect(t.penFav.length, inInclusiveRange(1, ToolState.kFavMax));
       final u = ToolState()..load({'zoom': -7, 'eraserSize': -7});
       expect(u.zoom, inInclusiveRange(.5, 4));
       expect(u.eraserSize, inInclusiveRange(0, 2));
@@ -105,18 +106,23 @@ void main() {
             ..shapeFill = r.nextBool()
             ..shapeFillColor = color()
             ..shapeGrid = r.nextBool()
-            ..colorView = r.nextBool() ? 'palette' : 'wheel'
             ..exportBackground = r.nextBool();
           t.pen
             ..color = color()
             ..width = 1 + r.nextInt(300) / 10
             ..opacity = r.nextInt(101) / 100;
           for (var i = 0; i < r.nextInt(10); i++) {
-            t.pickColor(color());
+            t.setColor(color());
           }
           for (var i = 0; i < 4; i++) {
-            t.setFavorite(i, color());
+            t.useFavorite(i);
+            t.setColor(color());
           }
+          if (r.nextBool()) t.addFavorite();
+          if (r.nextBool()) t.removeFavorite(r.nextInt(5));
+          if (r.nextBool()) t.favSel = -1;
+          // sin elegido y con un color fuera de los favoritos es como se guarda ese estado (si no, al cargar se elige el que coincida)
+          if (t.favSel < 0) t.current.color = '#00000${r.nextInt(10)}';
           final j = jsonEncode(t.toJson());
           final u = ToolState()..load(jsonDecode(j) as Map);
           expect(jsonEncode(u.toJson()), j, reason: 'it $it');
@@ -124,32 +130,29 @@ void main() {
       });
     }
 
-    test('colores recientes: sin repetidos, el último elegido primero, nunca más de 7', () {
-      final r = Random(2);
-      final t = ToolState();
-      for (var i = 0; i < 500; i++) {
-        final c = '#${r.nextInt(12).toRadixString(16).padLeft(6, '0')}';
-        t.pickColor(c);
-        expect(t.recent.first, c);
-        expect(t.recent.toSet().length, t.recent.length, reason: 'repetidos en ${t.recent}');
-        expect(t.recent.length, lessThanOrEqualTo(7));
-        expect(t.current.color, c);
-      }
-    });
-
-    test('favoritos: fuera de rango no hace nada; guardar el mismo color dos veces dice que no cambió', () {
+    test('favoritos: fuera de rango no hace nada; nunca menos de 1 ni más de kFavMax', () {
       final t = ToolState();
       final antes = List.of(t.penFav);
-      t.setFavorite(-1, '#000000');
-      t.setFavorite(4, '#000000');
-      t.setFavorite(99, '#000000');
-      expect(t.saveFavorite(-1), isFalse);
-      expect(t.saveFavorite(4), isFalse);
+      t.useFavorite(-1);
+      t.useFavorite(99);
+      expect(t.removeFavorite(-1), isFalse);
+      expect(t.removeFavorite(99), isFalse);
       expect(t.penFav, antes);
-      t.pickColor('#123456');
-      expect(t.saveFavorite(2), isTrue);
-      expect(t.saveFavorite(2), isFalse);
-      expect(t.penFav[2], '#123456');
+      final r = Random(2);
+      for (var i = 0; i < 500; i++) {
+        switch (r.nextInt(4)) {
+          case 0:
+            t.addFavorite();
+          case 1:
+            t.removeFavorite(r.nextInt(10) - 1);
+          case 2:
+            t.useFavorite(r.nextInt(10) - 1);
+          default:
+            t.setColor('#${r.nextInt(1 << 24).toRadixString(16).padLeft(6, '0')}');
+        }
+        expect(t.penFav.length, inInclusiveRange(1, ToolState.kFavMax));
+        expect(t.favSel, inInclusiveRange(-1, t.penFav.length - 1));
+      }
     });
   });
 

@@ -11,7 +11,7 @@ void main() {
     double h = 56,
     bool vertical = false,
     bool clip = false,
-    bool Function(int)? onSave,
+    ValueChanged<int>? onUse,
   }) async {
     final ts = ToolState()..dock = vertical ? 'left' : 'top';
     if (clip) ts.clipboard.strokes.add(Stroke('a', 'pen', '#000000', 1, [0, 0, .5, 1, 1, .5]));
@@ -41,8 +41,7 @@ void main() {
                 canRedo: false,
                 onToolTap: (_) {},
                 onToolLongPress: (_) {},
-                onPickColor: (_) {},
-                onSaveFavorite: onSave ?? (_) => false,
+                onUseFavorite: onUse ?? (_) {},
                 onOpenPanel: () {},
                 onUndo: () {},
                 onRedo: () {},
@@ -64,30 +63,50 @@ void main() {
     }
   });
 
-  testWidgets('mantener apretado un favorito pide guardar el color actual ahí y la muestra hace la animación', (t) async {
+  testWidgets('tocar un favorito pide elegirlo', (t) async {
     final pedidos = <int>[];
-    await pump(t, 1400, onSave: (i) {
-      pedidos.add(i);
-      return true;
-    });
+    await pump(t, 1400, onUse: pedidos.add);
     final fav = find.byKey(const ValueKey('fav-1'));
-    final scale = find.ancestor(of: fav, matching: find.byType(ScaleTransition)).first;
-    expect(t.widget<ScaleTransition>(scale).scale.value, 1.0);
-    await t.longPress(fav);
-    await t.pump(const Duration(milliseconds: 110));
+    await t.tap(fav);
     expect(pedidos, [1]);
-    expect(t.widget<ScaleTransition>(scale).scale.value, greaterThan(1.05));
-    await t.pumpAndSettle();
-    expect(t.widget<ScaleTransition>(scale).scale.value, 1.0);
   });
 
-  testWidgets('si no cambia nada (ya estaba ese color) no hay animación', (t) async {
-    await pump(t, 1400); // onSave devuelve false
-    final fav = find.byKey(const ValueKey('fav-1'));
-    final scale = find.ancestor(of: fav, matching: find.byType(ScaleTransition)).first;
-    await t.longPress(fav);
-    await t.pump(const Duration(milliseconds: 110));
-    expect(t.widget<ScaleTransition>(scale).scale.value, 1.0);
+  testWidgets('barra al costado: muestra todos los favoritos (hasta 8)', (t) async {
+    final ts = ToolState()..dock = 'left';
+    while (ts.addFavorite()) {}
+    await t.binding.setSurfaceSize(const Size(300, 800));
+    t.view.devicePixelRatio = 1;
+    addTearDown(() => t.binding.setSurfaceSize(null));
+    await t.pumpWidget(MaterialApp(
+      localizationsDelegates: L.localizationsDelegates,
+      supportedLocales: L.supportedLocales,
+      home: Scaffold(
+        body: Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: 60,
+            height: 800,
+            child: EditorToolbar(
+              ts: ts,
+              vertical: true,
+              grip: const SizedBox(width: 60, height: 26),
+              canUndo: false,
+              canRedo: false,
+              onToolTap: (_) {},
+              onToolLongPress: (_) {},
+              onUseFavorite: (_) {},
+              onOpenPanel: () {},
+              onUndo: () {},
+              onRedo: () {},
+              onToggleZoomLock: () {},
+            ),
+          ),
+        ),
+      ),
+    ));
+    for (var i = 0; i < 8; i++) {
+      expect(find.byKey(ValueKey('fav-$i')), findsOneWidget);
+    }
   });
 
   testWidgets('sin botones de Pegar ni de fondo (issue #29); sin colores no desborda con el ancho fijo', (t) async {

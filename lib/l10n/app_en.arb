@@ -372,7 +372,7 @@
   "notebookMore": "More options",
   "notebookRemoteChanges": "There are changes from another device",
   "notebookSearchIn": "Search in \"{name}\"",
-  "notebookSheetCounter": "{title}{n} / {total}",
+  "notebookSheetCounter": "{n} / {total}",
   "audioPrefix": "Audio",
   "errVoiceBusy": "A recording is already in progress",
   "errVoiceNoPermission": "No permission to use the microphone",
@@ -488,7 +488,9 @@
   "shapeKindEllipse": "Ellipse",
   "shapeKindTriangle": "Triangle",
   "penFavorites": "Favorites",
-  "penFavHelp": "Press and hold a favorite to save the current color there.",
+  "penFavAdd": "Add color",
+  "penFavDelete": "Delete color",
+  "penFavHelp": "Tap a favorite and change its color with the wheel. Press and hold it to delete it.",
   "penPanelHighlighter": "Highlighter",
   "penPanelPencil": "Pen",
   "penTip": "Tip",
@@ -548,10 +550,7 @@
   "updateChecking": "Checking for updates…",
   "updateCheckFailed": "Couldn't check for updates right now",
   "updateUpToDate": "You have the latest version",
-  "colorViewPalette": "Palette",
-  "colorViewWheel": "Wheel",
   "colorEyedropper": "Eyedropper",
   "eyedropperHint": "Tap the page to pick a color",
-  "eyedropperCancel": "Cancel eyedropper",
-  "colorRecent": "Recent"
+  "eyedropperCancel": "Cancel eyedropper"
 }

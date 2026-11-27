@@ -1349,8 +1349,8 @@ class LPt extends L {
   }
 
   @override
-  String notebookSheetCounter(String title, int n, int total) {
-    return '$title$n / $total';
+  String notebookSheetCounter(int n, int total) {
+    return '$n / $total';
   }
 
   @override
@@ -1716,7 +1716,14 @@ class LPt extends L {
   String get penFavorites => 'Favoritos';
 
   @override
-  String get penFavHelp => 'Segure um favorito para salvar nele a cor atual.';
+  String get penFavHelp =>
+      'Toque um favorito e mude a cor dele com a roda. Segure para apagá-lo.';
+
+  @override
+  String get penFavAdd => 'Adicionar cor';
+
+  @override
+  String get penFavDelete => 'Apagar cor';
 
   @override
   String get penPanelHighlighter => 'Marca-texto';
@@ -1904,12 +1911,6 @@ class LPt extends L {
   String get updateUpToDate => 'Você já tem a versão mais recente';
 
   @override
-  String get colorViewPalette => 'Paleta';
-
-  @override
-  String get colorViewWheel => 'Roda';
-
-  @override
   String get colorEyedropper => 'Conta-gotas';
 
   @override
@@ -1917,7 +1918,4 @@ class LPt extends L {
 
   @override
   String get eyedropperCancel => 'Cancelar conta-gotas';
-
-  @override
-  String get colorRecent => 'Recentes';
 }

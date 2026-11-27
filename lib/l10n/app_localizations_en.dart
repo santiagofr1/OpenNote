@@ -1343,8 +1343,8 @@ class LEn extends L {
   }
 
   @override
-  String notebookSheetCounter(String title, int n, int total) {
-    return '$title$n / $total';
+  String notebookSheetCounter(int n, int total) {
+    return '$n / $total';
   }
 
   @override
@@ -1710,7 +1710,13 @@ class LEn extends L {
 
   @override
   String get penFavHelp =>
-      'Press and hold a favorite to save the current color there.';
+      'Tap a favorite and change its color with the wheel. Press and hold it to delete it.';
+
+  @override
+  String get penFavAdd => 'Add color';
+
+  @override
+  String get penFavDelete => 'Delete color';
 
   @override
   String get penPanelHighlighter => 'Highlighter';
@@ -1895,12 +1901,6 @@ class LEn extends L {
   String get updateUpToDate => 'You have the latest version';
 
   @override
-  String get colorViewPalette => 'Palette';
-
-  @override
-  String get colorViewWheel => 'Wheel';
-
-  @override
   String get colorEyedropper => 'Eyedropper';
 
   @override
@@ -1908,7 +1908,4 @@ class LEn extends L {
 
   @override
   String get eyedropperCancel => 'Cancel eyedropper';
-
-  @override
-  String get colorRecent => 'Recent';
 }

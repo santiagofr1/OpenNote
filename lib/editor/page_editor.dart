@@ -1973,7 +1973,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       _eye = null;
       switch (e.target) {
         case EyeTarget.tool:
-          ts.pickColor(hex);
+          ts.setColor(hex);
         case EyeTarget.shapeFill:
           ts.shapeFillColor = hex;
         case EyeTarget.paintShape:
@@ -1982,7 +1982,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     });
     e.image.dispose();
     widget.onPrefsChanged();
-    _openPanel(); // se vuelve al panel: se ve el resultado y se lo puede guardar en un favorito
+    _openPanel(); // se vuelve al panel: se ve el resultado
   }
 
   /// Modo cuentagotas activo (lo usan los tests).
@@ -1995,20 +1995,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     _openPanel();
   }
 
-  /// Mantener un favorito de la barra: guarda ahí el color actual de la herramienta (desde texto o seleccionar, del lápiz).
-  bool _saveFavorite(int slot) {
+  /// Tocar un favorito de la barra: lo elige (desde texto o seleccionar, vuelve al lápiz).
+  void _useFavorite(int slot) {
     if (!ts.drawing) _setTool(Tool.pen);
-    final changed = ts.saveFavorite(slot);
-    if (changed) {
-      setState(() {});
-      widget.onPrefsChanged();
-    }
-    return changed;
-  }
-
-  void _pickQuick(String c) {
-    if (!ts.drawing) _setTool(Tool.pen);
-    setState(() => ts.pickColor(c));
+    setState(() => ts.useFavorite(slot));
     widget.onPrefsChanged();
   }
 
@@ -2710,8 +2700,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             _setTool(t);
             _openPanel();
           },
-          onPickColor: _pickQuick,
-          onSaveFavorite: _saveFavorite,
+          onUseFavorite: _useFavorite,
           onOpenPanel: _openPanelForDrawing,
           onUndo: () => _undoRedo(undo: true),
           onRedo: () => _undoRedo(undo: false),
