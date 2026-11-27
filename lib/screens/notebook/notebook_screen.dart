@@ -19,6 +19,7 @@ import '../../editor/page_editor.dart';
 import '../../editor/voice_recorder.dart';
 import '../../sync/sync_controller.dart';
 import '../../widgets/dialogs.dart';
+import '../../widgets/mind_map_export.dart';
 import '../../widgets/pdf_progress.dart';
 import '../../widgets/shortcuts_dialog.dart';
 import '../library/sync_indicator.dart';
@@ -1088,6 +1089,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
           refresh: Listenable.merge([_headings, _structure]),
           onOpen: _openEntry,
           onAction: _entryAction,
+          onMindMap: () => exportMindMapFlow(context, nb),
         );
 
   /// Abre el destino de un link: la web en el navegador, otra hoja (de esta o de otra sección) o otro cuaderno

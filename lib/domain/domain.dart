@@ -11,6 +11,7 @@ export 'links.dart';
 export 'notebook.dart';
 export 'paint_shapes.dart';
 export 'notebook_doc.dart';
+export 'mind_map.dart';
 export 'outline.dart';
 export 'paper_layout.dart';
 export 'rich_text.dart';

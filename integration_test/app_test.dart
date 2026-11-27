@@ -2977,6 +2977,55 @@ void main() {
     await t.tap(find.byKey(const Key('back')));
     await settle(t, 1200);
   });
+  testWidgets('índice: exportar el mapa conceptual como imagen y como archivo .mm (issue #17)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Mapa & Co');
+    final ed = editor(t);
+    await t.tap(find.byKey(const Key('indexBtn')));
+    await settle(t, 600);
+    expect(find.byKey(const Key('indexMindMap')), findsNothing, reason: 'sin títulos no hay mapa que exportar');
+    await t.tap(find.byKey(const Key('indexBtn'))); // cierra el panel
+    await settle(t, 600);
+    // dos títulos marcados (uno de segundo nivel)
+    ed.doc.sheets[0].heads
+      ..add(Heading('h-uno', title: 'Introducción', ids: ['x1']))
+      ..add(Heading('h-dos', level: 2, title: 'Objetivos <básicos>', y: 100, ids: ['x2']));
+    await t.tap(find.byKey(const Key('indexBtn')));
+    await settle(t, 600);
+    expect(find.byKey(const Key('indexMindMap')), findsOneWidget);
+
+    final savedMap = saveMindMap;
+    addTearDown(() => saveMindMap = savedMap);
+    final files = <String, Uint8List>{};
+    saveMindMap = (bytes, name, mime) async {
+      files[name] = bytes;
+      return true;
+    };
+
+    await t.tap(find.byKey(const Key('indexMindMap')));
+    await settle(t, 600);
+    await t.tap(find.byKey(const Key('mindMapPng')));
+    await settle(t, 3000);
+    final png = files['Mapa & Co - mapa.png']!;
+    expect(png.sublist(0, 8), [137, 80, 78, 71, 13, 10, 26, 10], reason: 'un PNG válido');
+    final dim = ByteData.sublistView(png);
+    expect(dim.getUint32(16), greaterThan(200));
+    expect(dim.getUint32(20), greaterThan(100));
+
+    await t.tap(find.byKey(const Key('indexMindMap')));
+    await settle(t, 600);
+    await t.tap(find.byKey(const Key('mindMapFreemind')));
+    await settle(t, 800);
+    final mm = utf8.decode(files['Mapa & Co - mapa.mm']!);
+    expect(mm, contains('<map version="1.0.1">'));
+    expect(mm, contains('TEXT="Mapa &amp; Co"'));
+    expect(mm, contains('TEXT="Introducción"'));
+    expect(mm, contains('TEXT="Objetivos &lt;básicos&gt;"'));
+    expect(files.length, 2);
+
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+  });
   // ---------------- fondos y plantillas (#31, #33) ----------------
   testWidgets('fondos nuevos: milimetrado y ejes cartesianos (issue #31)', (t) async {
     await start(t);

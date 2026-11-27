@@ -566,5 +566,12 @@
   "updateUpToDate": "Você já tem a versão mais recente",
   "colorEyedropper": "Conta-gotas",
   "eyedropperHint": "Toque na folha para pegar uma cor",
-  "eyedropperCancel": "Cancelar conta-gotas"
+  "eyedropperCancel": "Cancelar conta-gotas",
+  "indexMindMap": "Exportar como mapa conceitual",
+  "mindMapTitle": "Mapa conceitual do índice",
+  "mindMapPng": "Imagem (PNG)",
+  "mindMapFreemind": "Mapa editável (.mm)",
+  "mindMapSaved": "Mapa salvo",
+  "mindMapUntitled": "Sem título",
+  "exportSaveMindMap": "Salvar mapa conceitual"
 }

@@ -15,7 +15,9 @@ class IndexPanel extends StatelessWidget {
   final Listenable refresh; // cambian los títulos, las hojas o la sección abierta
   final ValueChanged<OutlineEntry> onOpen;
   final void Function(OutlineEntry entry, IndexAction action) onAction;
-  const IndexPanel({super.key, required this.nb, required this.refresh, required this.onOpen, required this.onAction});
+  final VoidCallback onMindMap;
+  const IndexPanel(
+      {super.key, required this.nb, required this.refresh, required this.onOpen, required this.onAction, required this.onMindMap});
 
   @override
   Widget build(BuildContext context) {
@@ -33,8 +35,17 @@ class IndexPanel extends StatelessWidget {
           final all = buildOutline(nb);
           return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Text(context.l10n.indexTitle, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+              padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+              child: Row(children: [
+                Expanded(child: Text(context.l10n.indexTitle, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700))),
+                if (all.isNotEmpty)
+                  IconButton(
+                    key: const Key('indexMindMap'),
+                    tooltip: context.l10n.indexMindMap,
+                    icon: const Icon(Symbols.account_tree),
+                    onPressed: onMindMap,
+                  ),
+              ]),
             ),
             Expanded(
               child: all.isEmpty

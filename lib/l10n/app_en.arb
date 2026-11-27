@@ -566,5 +566,12 @@
   "updateUpToDate": "You have the latest version",
   "colorEyedropper": "Eyedropper",
   "eyedropperHint": "Tap the page to pick a color",
-  "eyedropperCancel": "Cancel eyedropper"
+  "eyedropperCancel": "Cancel eyedropper",
+  "indexMindMap": "Export as mind map",
+  "mindMapTitle": "Index mind map",
+  "mindMapPng": "Image (PNG)",
+  "mindMapFreemind": "Editable map (.mm)",
+  "mindMapSaved": "Map saved",
+  "mindMapUntitled": "Untitled",
+  "exportSaveMindMap": "Save mind map"
 }

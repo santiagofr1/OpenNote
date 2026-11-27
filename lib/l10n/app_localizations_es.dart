@@ -1956,4 +1956,25 @@ class LEs extends L {
 
   @override
   String get eyedropperCancel => 'Cancelar cuentagotas';
+
+  @override
+  String get indexMindMap => 'Exportar como mapa conceptual';
+
+  @override
+  String get mindMapTitle => 'Mapa conceptual del índice';
+
+  @override
+  String get mindMapPng => 'Imagen (PNG)';
+
+  @override
+  String get mindMapFreemind => 'Mapa editable (.mm)';
+
+  @override
+  String get mindMapSaved => 'Mapa guardado';
+
+  @override
+  String get mindMapUntitled => 'Sin título';
+
+  @override
+  String get exportSaveMindMap => 'Guardar mapa conceptual';
 }
