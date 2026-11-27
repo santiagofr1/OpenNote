@@ -287,6 +287,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       v.dispose();
     }
     _stillTimer?.cancel();
+    _warmTimer?.cancel();
     _wheelSave?.cancel();
     _shapeHold?.cancel();
     _imgs.dispose();
@@ -379,8 +380,77 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   ({int first, int last}) _calcColRange() {
     if (!doc.nb.canvas) return (first: 0, last: 0);
     final v = _visibleCols();
-    return (first: max(0, v.c0 - 1), last: min(v.n - 1, v.c1 + 1));
+    return (first: max(0, v.c0 - kCanvasColMargin), last: min(v.n - 1, v.c1 + kCanvasColMargin));
   }
+
+  // ---- lienzo: mallas de las columnas de margen, armadas en los ratos libres ----
+  Timer? _warmTimer;
+  int _warmKey = 0;
+  List<Stroke>? _warmQueue;
+  int _warmAt = 0;
+
+  /// Que se vayan armando las mallas de las columnas de margen (y después las de las visibles que quedaron viejas) antes
+  /// de que entren en pantalla: si no, la columna que entra arma las de todos sus trazos en el mismo cuadro. Se
+  /// reinicia si cambió el rango, el sentido del scroll o el borde difuminado; si no, no hace nada.
+  void _kickWarm() {
+    if (!doc.nb.canvas || !mounted) return;
+    final key = Object.hash(_colRange, _range, _hDir, meshFeather, doc.sheetCount);
+    if (key != _warmKey) {
+      _warmKey = key;
+      _warmQueue = null;
+      _warmAt = 0;
+    } else if (_warmQueue != null && _warmAt >= _warmQueue!.length) {
+      return; // ya está todo
+    }
+    _warmTimer ??= Timer(const Duration(milliseconds: 16), _warmStep);
+  }
+
+  /// Cola de trazos a calentar: columnas de margen (primero las del lado al que se scrollea, de la más cercana a la más
+  /// lejana) y al final las visibles.
+  List<Stroke> _buildWarmQueue() {
+    final v = _visibleCols();
+    final order = <int>[
+      for (var d = 1; d <= kCanvasColMargin; d++) ...[
+        if (_hDir >= 0) v.c1 + d,
+        if (_hDir < 0) v.c0 - d,
+        if (_hDir > 0) v.c0 - d,
+        if (_hDir <= 0) v.c1 + d,
+      ],
+      for (var c = v.c0; c <= v.c1; c++) c,
+    ].where((c) => c >= _colRange.first && c <= _colRange.last).toList();
+    final seen = <Stroke>{};
+    final q = <Stroke>[];
+    for (final c in order) {
+      for (var k = _range.first; k <= _range.last && k < doc.sheetCount; k++) {
+        for (final runs in (_sheetTiles[doc.sheets[k].id] ?? const <int, Map<int, List<Stroke>>>{}).values) {
+          for (final s in runs[c] ?? const <Stroke>[]) {
+            if (seen.add(s)) q.add(s);
+          }
+        }
+      }
+    }
+    return q;
+  }
+
+  void _warmStep() {
+    _warmTimer = null;
+    if (!mounted || !doc.nb.canvas) return;
+    if (_imgs.busy?.call() ?? false) {
+      _warmTimer = Timer(const Duration(milliseconds: 200), _warmStep); // con el lápiz o el pellizco no se arma nada
+      return;
+    }
+    final q = _warmQueue ??= _buildWarmQueue();
+    final sw = Stopwatch()..start();
+    while (_warmAt < q.length && sw.elapsedMicroseconds < kWarmBudgetUs) {
+      final s = q[_warmAt++];
+      if (identical(doc.strokes[s.id], s) && (s.mesh == null || s.mesh!.feather != meshFeather)) s.ensureMesh();
+    }
+    if (_warmAt < q.length) _warmTimer = Timer(const Duration(milliseconds: 16), _warmStep);
+  }
+
+  /// Para los tests: cuántos trazos de la cola de calentamiento faltan.
+  @visibleForTesting
+  int get debugWarmPending => _warmQueue == null ? -1 : _warmQueue!.length - _warmAt;
 
   /// Para los tests: columnas armadas del lienzo.
   @visibleForTesting
@@ -547,7 +617,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     _stillTimer?.cancel();
     _stillTimer = Timer(const Duration(milliseconds: 120), _markStill);
     _updatePrefetch();
-    if (_calcColRange() == _colRange) return;
+    if (_calcColRange() == _colRange) {
+      _kickWarm();
+      return;
+    }
     void rebuild() {
       if (mounted && _calcColRange() != _colRange) setState(() {});
     }
@@ -2830,6 +2903,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         developer.Timeline.timeSync('ON canvas range+sync', () {
           _range = _calcRange();
           _colRange = _calcColRange();
+          _kickWarm();
           _requestSync();
         });
         final sheetSize = Size(layout.sheetWidth, doc.h * scale);

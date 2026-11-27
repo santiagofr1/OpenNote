@@ -7,6 +7,7 @@ import 'package:apuntes/editor/page_editor.dart';
 import 'package:apuntes/l10n/l10n.dart';
 import 'package:apuntes/rendering/ink_layers.dart';
 import 'package:apuntes/rendering/sheet_image_cache.dart';
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -83,12 +84,12 @@ void main() {
 
   Set<int> cols(WidgetTester t) => {for (final k in inkKeys(t)) int.parse(k.substring(k.lastIndexOf('-c') + 2))};
 
-  testWidgets('lienzo ancho: solo hay capas de las columnas que se ven más una de margen', (t) async {
+  testWidgets('lienzo ancho: solo hay capas de las columnas que se ven más las de margen', (t) async {
     final ed = await openEd(t, wide());
     final v = ed.debugColRange;
     expect(cols(t), {for (var j = v.first; j <= v.last; j++) j});
     expect(cols(t), contains(0));
-    expect(cols(t).length, lessThan(6));
+    expect(cols(t).length, lessThan(8));
     expect(cols(t), isNot(contains(11)));
   });
 
@@ -143,6 +144,73 @@ void main() {
     await t.pump(const Duration(milliseconds: 100));
     final q = painters(t).values.firstWhere((p) => p.sheet.left == 9 * kCanvasTileW);
     expect(q.strokes.map((x) => x.id), contains('w0'));
+  });
+
+  Future<void> idle(WidgetTester t, [int ms = 600]) async {
+    for (var i = 0; i < ms ~/ 20; i++) {
+      await t.pump(const Duration(milliseconds: 20));
+    }
+  }
+
+  testWidgets('lienzo ancho: en los ratos libres se arman las mallas de las columnas de margen', (t) async {
+    final doc = wide();
+    final ed = await openEd(t, doc);
+    await idle(t);
+    final r = ed.debugColRange;
+    expect(r.last, greaterThan(ed.debugColRange.first));
+    for (var j = r.first; j <= r.last; j++) {
+      final m = doc.strokes['w$j']!.mesh;
+      expect(m, isNotNull, reason: 'columna $j');
+      expect(m!.feather, meshFeather);
+    }
+    expect(doc.strokes['w11']!.mesh, isNull, reason: 'las lejanas no se arman');
+    expect(ed.debugWarmPending, 0);
+  });
+
+  testWidgets('lienzo ancho: con un pellizco en curso no se arma nada, y al soltar sigue', (t) async {
+    final doc = wide();
+    final ed = await openEd(t, doc);
+    await idle(t);
+    ed.hscroll.jumpTo(ed.hscroll.position.maxScrollExtent * .5);
+    await t.pump();
+    final a = await t.createGesture(kind: PointerDeviceKind.touch);
+    final b = await t.createGesture(kind: PointerDeviceKind.touch);
+    await a.down(const Offset(600, 500));
+    await b.down(const Offset(900, 500));
+    await a.moveTo(const Offset(580, 500));
+    await b.moveTo(const Offset(920, 500));
+    await t.pump(const Duration(milliseconds: 20));
+    expect(ed.touch.pinching, isTrue);
+    final r = ed.debugColRange;
+    final far = [for (var j = r.first; j <= r.last; j++) doc.strokes['w$j']!];
+    final before = far.where((s) => s.mesh == null).length;
+    await idle(t, 400);
+    expect(far.where((s) => s.mesh == null).length, before, reason: 'durante el pellizco no se arma nada');
+    await a.up();
+    await b.up();
+    await idle(t, 800);
+    expect(ed.touch.pinching, isFalse);
+    final r2 = ed.debugColRange;
+    for (var j = r2.first; j <= r2.last; j++) {
+      expect(doc.strokes['w$j']!.mesh, isNotNull, reason: 'columna $j');
+    }
+  });
+
+  testWidgets('lienzo ancho: si cambió el borde difuminado se rehacen las mallas viejas del margen', (t) async {
+    final doc = wide();
+    final ed = await openEd(t, doc);
+    await idle(t);
+    final r = ed.debugColRange;
+    final stale = [for (var j = r.first; j <= r.last; j++) doc.strokes['w$j']!];
+    for (final s in stale) {
+      s.mesh = buildStrokeMesh(s, feather: meshFeather + 1); // como si el feather hubiera cambiado
+    }
+    ed.hscroll.jumpTo(ed.hscroll.offset + 1); // cualquier scroll vuelve a mirar
+    await t.pump();
+    await idle(t);
+    for (final s in stale) {
+      expect(s.mesh!.feather, meshFeather, reason: s.id);
+    }
   });
 
   testWidgets('hojas: la tanda sigue siendo una sola capa ink-<id>-<i>', (t) async {

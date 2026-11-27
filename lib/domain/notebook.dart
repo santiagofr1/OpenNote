@@ -15,6 +15,11 @@ const kCanvasW0 = 2000.0;
 /// la caché, así con un lienzo ancho se regenera y se dibuja solo lo que se ve, y no toda la banda.
 const kCanvasTileW = kW;
 
+/// Columnas de tinta que se arman a cada lado de las visibles (así la que entra en pantalla ya está armada) y tiempo
+/// por turno (µs) que se gasta en los ratos libres armando las mallas de las columnas de margen.
+const kCanvasColMargin = 2;
+const kWarmBudgetUs = 4000;
+
 /// Ancho nuevo del lienzo de ancho [canvasW] si el contenido llega hasta [right]: crece de a 500 cuando el borde queda a
 /// menos de 400 del final, dejando 800 de aire. Nunca achica.
 double grownCanvasW(double canvasW, double right) =>
