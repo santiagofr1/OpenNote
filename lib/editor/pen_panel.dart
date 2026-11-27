@@ -179,7 +179,15 @@ class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
 
         if (!isHl) ...[
           _label(context.l10n.penTip),
-          Row(children: [for (final (id, name) in tips) _tipCell(p, id, name(context.l10n))]),
+          // las puntas van de a 4 por fila (con 11 no entran en una)
+          for (var i = 0; i < tips.length; i += 4)
+            Padding(
+              padding: EdgeInsets.only(top: i == 0 ? 0 : 6),
+              child: Row(children: [
+                for (var j = i; j < i + 4; j++)
+                  if (j < tips.length) _tipCell(p, tips[j].$1, tips[j].$2(context.l10n)) else const Expanded(child: SizedBox()),
+              ]),
+            ),
           const SizedBox(height: 10),
           const SizedBox(height: 14),
         ],
@@ -252,6 +260,7 @@ class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
     final scheme = Theme.of(context).colorScheme;
     return Expanded(
       child: GestureDetector(
+        key: Key('tip-$id'),
         onTap: () => _set(() => p.tip = id),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
@@ -266,7 +275,7 @@ class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
             SizedBox(
               height: 34,
               width: double.infinity,
-              child: CustomPaint(painter: _SamplePainter(id, p.color, id == 'fine' ? 2.5 : 3.2, 1)),
+              child: CustomPaint(painter: _SamplePainter(id, p.color, id == 'fine' ? 2.5 : (id == 'neon' ? 2.2 : 3.2), 1)),
             ),
             const SizedBox(height: 4),
             Text(name, style: TextStyle(fontSize: 11.5, color: p.tip == id ? scheme.primary : scheme.onSurface), overflow: TextOverflow.ellipsis),

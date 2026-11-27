@@ -1653,6 +1653,24 @@ class LPt extends L {
   String get tipCalligraphy => 'Caligrafia';
 
   @override
+  String get tipDotted => 'Pontilhado';
+
+  @override
+  String get tipDashed => 'Tracejado';
+
+  @override
+  String get tipChalk => 'Giz';
+
+  @override
+  String get tipChisel => 'Marcador chanfrado';
+
+  @override
+  String get tipNeon => 'Neon';
+
+  @override
+  String get tipDouble => 'Linha dupla';
+
+  @override
   String get paintStyleBrush => 'Pincel';
 
   @override

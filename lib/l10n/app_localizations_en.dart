@@ -1646,6 +1646,24 @@ class LEn extends L {
   String get tipCalligraphy => 'Calligraphy';
 
   @override
+  String get tipDotted => 'Dotted';
+
+  @override
+  String get tipDashed => 'Dashed';
+
+  @override
+  String get tipChalk => 'Chalk';
+
+  @override
+  String get tipChisel => 'Chisel marker';
+
+  @override
+  String get tipNeon => 'Neon';
+
+  @override
+  String get tipDouble => 'Double line';
+
+  @override
   String get paintStyleBrush => 'Brush';
 
   @override

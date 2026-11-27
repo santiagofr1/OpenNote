@@ -310,6 +310,34 @@ void main() {
     await settle(t, 1200);
   });
 
+  testWidgets('lápiz: elige cada punta nueva desde el panel (punteado, discontinuo, tiza, biselado, neón, doble línea), dibuja y el trazo queda con su punta y su malla (issue #26)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Puntas');
+    final c = sheetCenter(t);
+    var y = -170.0;
+    for (final id in ['dotted', 'dashed', 'chalk', 'chisel', 'neon', 'double']) {
+      await t.tap(find.byTooltip('Lápiz · tocá de nuevo para opciones'));
+      await settle(t);
+      await t.ensureVisible(find.byKey(Key('tip-$id')));
+      await t.tap(find.byKey(Key('tip-$id')));
+      await settle(t);
+      expect(editor(t).ts.pen.tip, id);
+      // cierra el panel desde adentro (no a ciegas sobre la cortina)
+      Navigator.of(t.element(find.byKey(Key('tip-$id')))).pop();
+      await settle(t);
+      expect(find.byKey(Key('tip-$id')), findsNothing);
+      final before = editor(t).doc.strokes.length;
+      await stylusLine(t, c + Offset(-100, y), c + Offset(100, y));
+      y += 60;
+      expect(editor(t).doc.strokes.length, before + 1, reason: id);
+      final s = editor(t).doc.strokes.values.last;
+      expect(s.k, id);
+      expect(s.ensureMesh()!.vertexCount, greaterThan(0), reason: id);
+    }
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+  });
+
   testWidgets('panel de páginas: contador, agregar hoja y marcador', (t) async {
     await start(t);
     await createNotebook(t, 'Panel');

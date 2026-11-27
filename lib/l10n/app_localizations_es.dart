@@ -1650,6 +1650,24 @@ class LEs extends L {
   String get tipCalligraphy => 'Caligrafía';
 
   @override
+  String get tipDotted => 'Punteado';
+
+  @override
+  String get tipDashed => 'Discontinuo';
+
+  @override
+  String get tipChalk => 'Tiza';
+
+  @override
+  String get tipChisel => 'Rotulador biselado';
+
+  @override
+  String get tipNeon => 'Neón';
+
+  @override
+  String get tipDouble => 'Doble línea';
+
+  @override
   String get paintStyleBrush => 'Pincel';
 
   @override

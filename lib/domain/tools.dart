@@ -11,7 +11,16 @@ final tips = <(String, String Function(L))>[
   ('pencil', (l) => l.tipPencil),
   ('fine', (l) => l.tipFine),
   ('calli', (l) => l.tipCalligraphy),
+  ('dotted', (l) => l.tipDotted),
+  ('dashed', (l) => l.tipDashed),
+  ('chalk', (l) => l.tipChalk),
+  ('chisel', (l) => l.tipChisel),
+  ('neon', (l) => l.tipNeon),
+  ('double', (l) => l.tipDouble),
 ];
+
+/// ¿[id] es una punta del lápiz que existe (ver [tips])?
+bool isPenTip(String id) => tips.any((t) => t.$1 == id);
 
 /// Tipos de trazo de la pintura (id guardado en `pp.st`, nombre en pantalla).
 final paintStyles = <(String, String Function(L))>[
@@ -196,6 +205,7 @@ class ToolState {
     if (j == null) return;
     tool = Tool.values.firstWhere((t) => t.name == j['tool'], orElse: () => Tool.pen);
     pen.load(j['pen']);
+    if (!isPenTip(pen.tip)) pen.tip = 'pen'; // una punta que ya no existe (o de una versión más nueva)
     hl.load(j['hl']);
     paint.load(j['paint']);
     paintParams = j['paintParams'] is Map ? PaintParams.fromJson(j['paintParams'] as Map) : const PaintParams();
