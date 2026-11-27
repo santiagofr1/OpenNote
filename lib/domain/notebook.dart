@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 
+import 'geometry.dart';
 import 'paper_layout.dart';
 import 'folders.dart';
 import 'outline.dart';
@@ -9,6 +10,10 @@ import 'values.dart';
 
 /// Ancho inicial (y mínimo) de un lienzo infinito, en unidades lógicas.
 const kCanvasW0 = 2000.0;
+
+/// Ancho de cada columna en que se parte la tinta de un lienzo (una hoja A4): cada columna tiene su propia imagen en
+/// la caché, así con un lienzo ancho se regenera y se dibuja solo lo que se ve, y no toda la banda.
+const kCanvasTileW = kW;
 
 /// Ancho nuevo del lienzo de ancho [canvasW] si el contenido llega hasta [right]: crece de a 500 cuando el borde queda a
 /// menos de 400 del final, dejando 800 de aire. Nunca achica.

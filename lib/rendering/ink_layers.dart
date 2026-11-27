@@ -125,7 +125,7 @@ class InkPainter extends CustomPainter {
     }
     if (onlyVector != null) c.clipPath(onlyVector);
     c.scale(scale);
-    c.translate(0, -sheet.top);
+    c.translate(-sheet.left, -sheet.top);
     c.clipRect(sheet);
     paintStrokes(c, _alive(skip), cull: sheet);
   }
@@ -140,7 +140,7 @@ class InkPainter extends CustomPainter {
     final c = Canvas(rec);
     c.translate(0, -y0.toDouble());
     c.scale(w / sheet.width, h / sheet.height);
-    c.translate(0, -sheet.top);
+    c.translate(-sheet.left, -sheet.top);
     c.clipRect(sheet);
     Rect? cull;
     if (y1 - y0 < h) {
