@@ -9,8 +9,7 @@ import '../l10n/l10n.dart';
 import '../theme/colors.dart';
 import 'eyedropper.dart';
 
-/// Vistas del selector de color (se guarda la elegida en [ToolState.colorView]).
-const kColorViewPalette = 'palette', kColorViewWheel = 'wheel';
+
 
 /// Muestra de color redonda de los paneles: círculo de 30 (el elegido, con borde blanco y aro [kAccent]) en un área de
 /// toque de [hit] (40 como mínimo en tablet; en un panel angosto se achica para que entren las columnas).
@@ -97,42 +96,21 @@ class FavoriteDot extends StatelessWidget {
       );
 }
 
-/// Grilla de muestras en filas de [perRow] columnas (cada celda se achica si el ancho no alcanza para 40).
-class DotGrid extends StatelessWidget {
-  final List<String> colors;
-  final int perRow;
-  final String? selected;
-  final ValueChanged<String> onTap;
-  const DotGrid({super.key, required this.colors, required this.perRow, required this.selected, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
-        final hit = min(40.0, box.maxWidth / perRow);
-        return Wrap(children: [for (final c in colors) ColorDot(color: c, selected: c == selected, onTap: () => onTap(c), hit: hit)]);
-      });
-}
-
-/// El selector de color de todos los paneles: encabezado (color actual, vista Paleta / Rueda y cuentagotas), el cuerpo
-/// según la vista y la fila de recientes.
-///
-/// [palette] es el contenido de la vista Paleta (lo arma cada panel). [onPick] avisa un color nuevo: [fromWheel] es
-/// verdadero si sale de la rueda o del hex (que no entra a "recientes" en cada movimiento). Con [onEyedropper] nulo no
-/// hay cuentagotas.
+/// El selector de color de todos los paneles: encabezado (color actual y cuentagotas), la rueda con el campo hex y la
+/// fila de recientes. [extras] va entre el encabezado y la rueda (el Decorador pone ahí Auto / Claro / Oscuro).
+/// [onPick] avisa un color nuevo: [fromWheel] es verdadero si sale de la rueda o del hex (que no entra a "recientes"
+/// en cada movimiento). Con [onEyedropper] nulo no hay cuentagotas.
 class ColorChooser extends StatefulWidget {
   final String color;
-  final String view;
-  final ValueChanged<String> onViewChanged;
-  final Widget palette;
+  final Widget? extras;
   final List<String> recent;
   final void Function(String hex, {required bool fromWheel}) onPick;
   final VoidCallback? onEyedropper;
   const ColorChooser({
     super.key,
     required this.color,
-    required this.view,
-    required this.onViewChanged,
-    required this.palette,
     required this.onPick,
+    this.extras,
     this.recent = const [],
     this.onEyedropper,
   });
@@ -201,24 +179,11 @@ class _ColorChooserState extends State<ColorChooser> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final wheel = widget.view == kColorViewWheel;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _header(cs, wheel),
+      _header(cs),
+      if (widget.extras != null) ...[const SizedBox(height: 8), widget.extras!],
       const SizedBox(height: 8),
-      AnimatedSize(
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOut,
-        alignment: Alignment.topCenter,
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 180),
-          switchInCurve: Curves.easeOut,
-          switchOutCurve: Curves.easeOut,
-          layoutBuilder: (current, previous) => Stack(alignment: Alignment.topCenter, children: [...previous, ?current]),
-          child: wheel
-              ? KeyedSubtree(key: const ValueKey('wheelBody'), child: _wheelBody(cs))
-              : Align(key: const ValueKey('paletteBody'), alignment: Alignment.topLeft, child: widget.palette),
-        ),
-      ),
+      _wheelBody(cs),
       if (widget.recent.isNotEmpty) ...[
         const SizedBox(height: 8),
         Text(context.l10n.colorRecent, style: TextStyle(fontSize: 11.5, color: cs.onSurfaceVariant, fontWeight: FontWeight.w600)),
@@ -231,7 +196,7 @@ class _ColorChooserState extends State<ColorChooser> {
     ]);
   }
 
-  Widget _header(ColorScheme cs, bool wheel) {
+  Widget _header(ColorScheme cs) {
     return Row(children: [
       Expanded(
         child: Row(children: [
@@ -257,14 +222,6 @@ class _ColorChooserState extends State<ColorChooser> {
           ),
         ]),
       ),
-      Container(
-        padding: const EdgeInsets.all(2),
-        decoration: BoxDecoration(color: cs.onSurface.withValues(alpha: .06), borderRadius: BorderRadius.circular(12)),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          _seg(cs, const Key('colorViewPalette'), (c) => Icon(Icons.grid_view_rounded, size: 20, color: c), context.l10n.colorViewPalette, !wheel, kColorViewPalette),
-          _seg(cs, const Key('colorViewWheel'), (c) => _HueRingIcon(on: wheel), context.l10n.colorViewWheel, wheel, kColorViewWheel),
-        ]),
-      ),
       if (widget.onEyedropper != null) ...[
         const SizedBox(width: 8),
         IconButton(
@@ -277,33 +234,6 @@ class _ColorChooserState extends State<ColorChooser> {
       ],
     ]);
   }
-
-  Widget _seg(ColorScheme cs, Key key, Widget Function(Color) icon, String tip, bool on, String view) => Tooltip(
-        message: tip,
-        child: Semantics(
-          button: true,
-          selected: on,
-          label: tip,
-          excludeSemantics: true,
-          child: InkWell(
-            key: key,
-            borderRadius: BorderRadius.circular(10),
-            onTap: () => widget.onViewChanged(view),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 160),
-              curve: Curves.easeOut,
-              width: 40,
-              height: 36,
-              decoration: BoxDecoration(
-                color: on ? cs.surface : Colors.transparent,
-                borderRadius: BorderRadius.circular(10),
-                boxShadow: on ? const [BoxShadow(color: Color(0x22000000), blurRadius: 3, offset: Offset(0, 1))] : null,
-              ),
-              child: Center(child: icon(on ? cs.primary : cs.onSurfaceVariant)),
-            ),
-          ),
-        ),
-      );
 
   Widget _wheelBody(ColorScheme cs) => Column(crossAxisAlignment: CrossAxisAlignment.center, children: [
         ColorWheel(hsv: hsv, onChanged: _setHsv),
@@ -495,32 +425,4 @@ class _WheelPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_WheelPainter o) => o.hue != hue || o.square != square;
-}
-
-/// Ícono de la vista Rueda: un anillito con todos los tonos (apagado cuando la vista no está elegida).
-class _HueRingIcon extends StatelessWidget {
-  final bool on;
-  const _HueRingIcon({required this.on});
-  @override
-  Widget build(BuildContext context) =>
-      Opacity(opacity: on ? 1 : .55, child: const SizedBox.square(dimension: 18, child: CustomPaint(painter: _HueRingPainter())));
-}
-
-class _HueRingPainter extends CustomPainter {
-  const _HueRingPainter();
-  @override
-  void paint(Canvas c, Size size) {
-    final r = Offset.zero & size;
-    c.drawCircle(
-        r.center,
-        size.shortestSide / 2 - 2.5,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 5
-          ..shader = SweepGradient(colors: [for (var h = 0; h <= 360; h += 60) HSVColor.fromAHSV(1, h.toDouble(), .85, .95).toColor()])
-              .createShader(r));
-  }
-
-  @override
-  bool shouldRepaint(_HueRingPainter o) => false;
 }

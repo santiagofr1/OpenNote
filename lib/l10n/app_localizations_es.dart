@@ -1714,7 +1714,7 @@ class LEs extends L {
 
   @override
   String get penFavHelp =>
-      'Mantené apretado un favorito para guardar ahí el color actual.';
+      'Mantené apretado un favorito para reemplazarlo por el color actual.';
 
   @override
   String get penPanelHighlighter => 'Resaltador';
@@ -1899,12 +1899,6 @@ class LEs extends L {
 
   @override
   String get updateUpToDate => 'Ya tenés la última versión';
-
-  @override
-  String get colorViewPalette => 'Paleta';
-
-  @override
-  String get colorViewWheel => 'Rueda';
 
   @override
   String get colorEyedropper => 'Cuentagotas';

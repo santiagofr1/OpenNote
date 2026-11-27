@@ -3030,7 +3030,7 @@ abstract class L {
   /// Pen panel: help for the favorite colors
   ///
   /// In es, this message translates to:
-  /// **'Mantené apretado un favorito para guardar ahí el color actual.'**
+  /// **'Mantené apretado un favorito para reemplazarlo por el color actual.'**
   String get penFavHelp;
 
   /// Pen panel title for the highlighter
@@ -3386,18 +3386,6 @@ abstract class L {
   /// In es, this message translates to:
   /// **'Ya tenés la última versión'**
   String get updateUpToDate;
-
-  /// Color chooser: tooltip of the palette view button
-  ///
-  /// In es, this message translates to:
-  /// **'Paleta'**
-  String get colorViewPalette;
-
-  /// Color chooser: tooltip of the color wheel view button
-  ///
-  /// In es, this message translates to:
-  /// **'Rueda'**
-  String get colorViewWheel;
 
   /// Color chooser: tooltip of the eyedropper button
   ///

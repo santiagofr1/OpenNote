@@ -2377,7 +2377,7 @@
   "@penFavorites": {
     "description": "Pen panel: section title of the favorite colors"
   },
-  "penFavHelp": "Mantené apretado un favorito para guardar ahí el color actual.",
+  "penFavHelp": "Mantené apretado un favorito para reemplazarlo por el color actual.",
   "@penFavHelp": {
     "description": "Pen panel: help for the favorite colors"
   },
@@ -2629,14 +2629,6 @@
   "updateUpToDate": "Ya tenés la última versión",
   "@updateUpToDate": {
     "description": "Snackbar when the app is up to date"
-  },
-  "colorViewPalette": "Paleta",
-  "@colorViewPalette": {
-    "description": "Color chooser: tooltip of the palette view button"
-  },
-  "colorViewWheel": "Rueda",
-  "@colorViewWheel": {
-    "description": "Color chooser: tooltip of the color wheel view button"
   },
   "colorEyedropper": "Cuentagotas",
   "@colorEyedropper": {

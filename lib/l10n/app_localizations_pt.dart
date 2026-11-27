@@ -1716,7 +1716,8 @@ class LPt extends L {
   String get penFavorites => 'Favoritos';
 
   @override
-  String get penFavHelp => 'Segure um favorito para salvar nele a cor atual.';
+  String get penFavHelp =>
+      'Segure um favorito para substituí-lo pela cor atual.';
 
   @override
   String get penPanelHighlighter => 'Marca-texto';
@@ -1902,12 +1903,6 @@ class LPt extends L {
 
   @override
   String get updateUpToDate => 'Você já tem a versão mais recente';
-
-  @override
-  String get colorViewPalette => 'Paleta';
-
-  @override
-  String get colorViewWheel => 'Roda';
 
   @override
   String get colorEyedropper => 'Conta-gotas';

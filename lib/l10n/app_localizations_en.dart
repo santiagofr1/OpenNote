@@ -1710,7 +1710,7 @@ class LEn extends L {
 
   @override
   String get penFavHelp =>
-      'Press and hold a favorite to save the current color there.';
+      'Press and hold a favorite to replace it with the current color.';
 
   @override
   String get penPanelHighlighter => 'Highlighter';
@@ -1893,12 +1893,6 @@ class LEn extends L {
 
   @override
   String get updateUpToDate => 'You have the latest version';
-
-  @override
-  String get colorViewPalette => 'Palette';
-
-  @override
-  String get colorViewWheel => 'Wheel';
 
   @override
   String get colorEyedropper => 'Eyedropper';

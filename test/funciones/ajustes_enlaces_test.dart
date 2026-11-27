@@ -105,7 +105,6 @@ void main() {
             ..shapeFill = r.nextBool()
             ..shapeFillColor = color()
             ..shapeGrid = r.nextBool()
-            ..colorView = r.nextBool() ? 'palette' : 'wheel'
             ..exportBackground = r.nextBool();
           t.pen
             ..color = color()

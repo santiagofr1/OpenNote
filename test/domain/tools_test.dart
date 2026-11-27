@@ -104,4 +104,65 @@ void main() {
     expect(t.clipboard.isEmpty, isFalse);
     expect(t.toJson().keys, isNot(contains('clipboard')));
   });
+
+  group('pickColor + saveFavorite: toque justo antes del mantener apretado', () {
+    var now = DateTime(2026, 1, 1);
+    setUp(() {
+      now = DateTime(2026, 1, 1);
+      ToolState.clock = () => now;
+    });
+    tearDown(() => ToolState.clock = DateTime.now);
+
+    test('el mismo favorito tocado hace menos de 2 s: se deshace el toque y se guarda el color anterior', () {
+      final t = ToolState();
+      t.pen.color = '#7b3a43';
+      final fav = t.penFav[0];
+      t.pickColor(fav);
+      now = now.add(const Duration(seconds: 2));
+      expect(t.saveFavorite(0), isTrue);
+      expect(t.pen.color, '#7b3a43');
+      expect(t.penFav[0], '#7b3a43');
+      expect(t.penRecent.first, '#7b3a43');
+      expect(t.saveFavorite(0), isFalse, reason: 'el registro se limpió');
+    });
+
+    test('pasados 2 s no deshace nada', () {
+      final t = ToolState();
+      t.pen.color = '#7b3a43';
+      final fav = t.penFav[0];
+      t.pickColor(fav);
+      now = now.add(const Duration(seconds: 2, milliseconds: 1));
+      expect(t.saveFavorite(0), isFalse);
+      expect(t.pen.color, fav);
+      expect(t.penFav[0], fav);
+    });
+
+    test('otra herramienta no deshace nada', () {
+      final t = ToolState();
+      t.pen.color = '#7b3a43';
+      t.pickColor(t.penFav[0]);
+      t.tool = Tool.hl;
+      t.hl.color = t.hlFav[0];
+      expect(t.saveFavorite(0), isFalse);
+      expect(t.pen.color, t.penFav[0]);
+    });
+
+    test('un favorito distinto del tocado guarda normal y no deshace', () {
+      final t = ToolState();
+      t.pen.color = '#7b3a43';
+      t.pickColor(t.penFav[0]);
+      expect(t.saveFavorite(1), isTrue);
+      expect(t.penFav[1], t.penFav[0]);
+      expect(t.pen.color, t.penFav[0]);
+    });
+
+    test('elegir el color que ya estaba no pisa el registro', () {
+      final t = ToolState();
+      t.pen.color = '#7b3a43';
+      t.pickColor(t.penFav[0]);
+      t.pickColor(t.penFav[0]);
+      expect(t.saveFavorite(0), isTrue);
+      expect(t.pen.color, '#7b3a43');
+    });
+  });
 }

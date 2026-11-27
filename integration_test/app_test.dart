@@ -238,7 +238,7 @@ void main() {
     await settle(t);
     expect(ts.pen.color, antes[2]);
     expect(ts.favorites, antes, reason: 'elegir un favorito no los reordena');
-    final nuevo = palette.firstWhere((c) => !antes.contains(c));
+    const nuevo = '#7b3a43';
     ts.pen.color = nuevo;
     await t.longPress(find.byKey(const ValueKey('fav-0')));
     await settle(t);
@@ -277,8 +277,9 @@ void main() {
       await t.tap(find.byKey(Key('paintSt-${estilos[i]}')));
       await settle(t);
       expect(editor(t).ts.paintParams.style, estilos[i]);
-      await t.ensureVisible(find.byKey(Key('paint-${fondos[i]}')));
-      await t.tap(find.byKey(Key('paint-${fondos[i]}')));
+      final hexFondo = find.byKey(const Key('colorHex')).first; // el del fondo (el de las formitas va después)
+      await t.ensureVisible(hexFondo);
+      await t.enterText(hexFondo, fondos[i]);
       await settle(t);
       expect(editor(t).ts.paint.color, '#${fondos[i]}');
       if (i == 3) {
@@ -3142,8 +3143,6 @@ void main() {
     await t.tap(find.byTooltip('Lápiz · tocá de nuevo para opciones'));
     await settle(t);
     expect(find.byKey(const Key('favEdit')), findsNothing);
-    await t.tap(find.byKey(const Key('colorViewWheel')));
-    await settle(t);
     final wheel = find.byKey(const Key('colorWheel'));
     await t.ensureVisible(wheel);
     await settle(t);
@@ -3157,6 +3156,19 @@ void main() {
     await t.longPress(find.byKey(const ValueKey('panelFav-0')));
     await settle(t);
     expect(ts.favorites[0], nuevo);
+    // el toque cae antes del mantener apretado (pasa con el dedo / S Pen): el color del hex no se pierde (bug de favoritos)
+    ts.setFavorite(0, antes);
+    await t.enterText(find.byKey(const Key('colorHex')), 'AB3C5D');
+    await settle(t);
+    expect(ts.pen.color, '#ab3c5d');
+    await t.ensureVisible(find.byKey(const ValueKey('panelFav-0')));
+    await t.tap(find.byKey(const ValueKey('panelFav-0')));
+    await t.pump();
+    await holdOn(t, find.byKey(const ValueKey('panelFav-0')));
+    await settle(t);
+    expect(ts.favorites[0], '#ab3c5d');
+    expect(ts.pen.color, '#ab3c5d', reason: 'el toque se deshizo');
+    ts.setFavorite(0, nuevo);
     await t.tapAt(const Offset(4, 600)); // cierra el panel
     await settle(t);
     expect(find.byKey(const Key('colorWheel')), findsNothing);

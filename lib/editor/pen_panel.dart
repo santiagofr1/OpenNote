@@ -204,19 +204,9 @@ class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
         const SizedBox(height: 12),
         ColorChooser(
           color: p.color,
-          view: ts.colorView,
-          onViewChanged: (v) => _set(() => ts.colorView = v),
           recent: ts.recent,
           onPick: (hex, {required fromWheel}) => _choose(hex, remember: !fromWheel),
           onEyedropper: () => Navigator.of(context).pop(EyeTarget.tool),
-          palette: isHl
-              ? DotGrid(colors: hlPalette, perRow: 8, selected: p.color, onTap: _choose)
-              // grises arriba; abajo cada columna es una familia, de oscuro a claro
-              : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  DotGrid(colors: palette.take(7).toList(), perRow: 10, selected: p.color, onTap: _choose),
-                  for (var tone = 0; tone < 4; tone++)
-                    DotGrid(colors: [for (var fam = 0; fam < 10; fam++) palette[7 + fam * 4 + tone]], perRow: 10, selected: p.color, onTap: _choose),
-                ]),
         ),
 
         if (!isHl) ...[
@@ -291,7 +281,6 @@ class _ShapePanelState extends State<_ShapePanel> with _PanelParts<_ShapePanel> 
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final sub = TextStyle(fontSize: 12, color: cs.onSurfaceVariant);
-    final fills = [...ts.penFav, ...shapeFillColors.where((c) => !ts.penFav.contains(c))];
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -313,14 +302,8 @@ class _ShapePanelState extends State<_ShapePanel> with _PanelParts<_ShapePanel> 
           const SizedBox(height: 6),
           ColorChooser(
             color: ts.shapeFillColor,
-            view: ts.colorView,
-            onViewChanged: (v) => _set(() => ts.colorView = v),
             onPick: (hex, {required fromWheel}) => _set(() => ts.shapeFillColor = hex),
             onEyedropper: () => Navigator.of(context).pop(EyeTarget.shapeFill),
-            palette: Wrap(children: [
-              for (final c in fills)
-                ColorDot(key: Key('shapeFill-${c.substring(1)}'), color: c, selected: c == ts.shapeFillColor, onTap: () => _set(() => ts.shapeFillColor = c)),
-            ]),
           ),
         ],
         const Divider(height: 24),
@@ -509,14 +492,9 @@ class _PaintPanelState extends State<_PaintPanel> with _PanelParts<_PaintPanel> 
               const SizedBox(height: 12),
               ColorChooser(
                 color: p.color,
-                view: ts.colorView,
-                onViewChanged: (v) => _set(() => ts.colorView = v),
                 recent: ts.paintRecent,
                 onPick: (hex, {required fromWheel}) => _choose(hex, remember: !fromWheel),
                 onEyedropper: () => Navigator.of(context).pop(EyeTarget.tool),
-                palette: Wrap(children: [
-                  for (final c in paintPalette) ColorDot(key: Key('paint-${c.substring(1)}'), color: c, selected: c == p.color, onTap: () => _choose(c)),
-                ]),
               ),
               const SizedBox(height: 4),
               _sliderRow(context.l10n.penOpacity, '${(p.opacity * 100).round()}%', Slider(
@@ -608,12 +586,10 @@ class _PaintPanelState extends State<_PaintPanel> with _PanelParts<_PaintPanel> 
       const SizedBox(height: 12),
       ColorChooser(
         color: custom,
-        view: ts.colorView,
-        onViewChanged: (v) => _set(() => ts.colorView = v),
         recent: ts.paintRecent,
         onPick: (hex, {required fromWheel}) => _pp((q) => q.copyWith(shapeColor: hex)),
         onEyedropper: () => Navigator.of(context).pop(EyeTarget.paintShape),
-        palette: Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
+        extras: Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
           // "Auto": el color de cada forma (blanco, fondo aclarado, dorado)
           GestureDetector(
             behavior: HitTestBehavior.opaque,
@@ -633,7 +609,7 @@ class _PaintPanelState extends State<_PaintPanel> with _PanelParts<_PaintPanel> 
               ),
             ),
           ),
-          for (final c in paintShapeColors)
+          for (final c in const ['light', 'dark'])
             ColorDot(key: Key('shapeColor-$c'), color: _shapeSwatch(c), selected: c == pp.shapeColor, onTap: () => _pp((q) => q.copyWith(shapeColor: c))),
         ]),
       ),

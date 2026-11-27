@@ -53,32 +53,8 @@ final shapeKinds = <(String, String Function(L))>[
   ('triangle', (l) => l.shapeKindTriangle),
 ];
 
-/// Colores claros de relleno de las formas (se suman a los favoritos del lápiz).
-const shapeFillColors = ['#93c5fd', '#86efac', '#fde68a', '#fca5a5', '#c4b5fd', '#e5e7eb'];
-
 /// Radio de la goma: chica, mediana, grande.
 const eraserSizes = [8.0, 16.0, 30.0];
-
-/// Paleta: grises + 10 familias de color en 4 tonos (oscuro → claro)
-const palette = [
-  '#000000', '#22211e', '#4b4a46', '#7a776e', '#a8a59c', '#d4d1c8', '#ffffff',
-  '#7f1d1d', '#b91c1c', '#ef4444', '#fca5a5',
-  '#7c2d12', '#c2410c', '#f97316', '#fdba74',
-  '#713f12', '#ca8a04', '#facc15', '#fde68a',
-  '#14532d', '#15803d', '#22c55e', '#86efac',
-  '#134e4a', '#0f766e', '#14b8a6', '#5eead4',
-  '#1e3a8a', '#1d4ed8', '#3b82f6', '#93c5fd',
-  '#312e81', '#4338ca', '#6366f1', '#a5b4fc',
-  '#581c87', '#7e22ce', '#a855f7', '#d8b4fe',
-  '#831843', '#be185d', '#ec4899', '#f9a8d4',
-  '#3f2a1d', '#7c5a3c', '#a47551', '#d6b896',
-];
-/// Colores de las formitas: blanco, plateado, dorado, o el fondo aclarado / oscurecido ('light' / 'dark', ver [PaintParams]).
-const paintShapeColors = ['#ffffff', '#c0c4cc', '#d4a937', 'light', 'dark'];
-
-/// Fondos de la pintura: pasteles (rosa, aqua, beige dorado, lila, menta, durazno, manteca, gris perla).
-const paintPalette = ['#f4a7c3', '#8fd8e0', '#e3cfa0', '#c9b3ec', '#a8e2c4', '#f8c4a0', '#f6e7a1', '#d9dbe0'];
-const hlPalette = ['#f7d22c', '#ffb347', '#5ee08a', '#5bc8ff', '#ff86c8', '#c79bff', '#ff6b6b', '#b8f35d'];
 
 class PenPreset {
   String tip, color;
@@ -130,7 +106,6 @@ class ToolState {
   bool shapeFill = false; // relleno con color (solo formas cerradas)
   String shapeFillColor = '#93c5fd';
   bool shapeGrid = true; // pegar a la cuadrícula del fondo
-  String colorView = 'palette'; // vista del selector de color: 'palette' | 'wheel'
   bool exportBackground = true; // exportar con el fondo de la hoja (papel, rayado, imagen) o solo lo escrito
   final clipboard = SelectionClipboard(); // no se guarda
 
@@ -140,8 +115,13 @@ class ToolState {
   List<String> get favorites => switch (tool) { Tool.hl => hlFav, Tool.paint => paintFav, _ => penFav };
   double get eraserRadius => eraserSizes[eraserSize];
 
+  /// Reloj (los tests lo reemplazan para avanzar el tiempo).
+  static DateTime Function() clock = DateTime.now;
+  ({String prev, String now, Tool tool, DateTime at})? _lastPick; // último cambio de color hecho por [pickColor]
+
   /// Elige un color y lo pone primero en "recientes" (hasta 7).
   void pickColor(String c) {
+    if (c != current.color) _lastPick = (prev: current.color, now: c, tool: tool, at: clock());
     current.color = c;
     _remember(recent, c);
   }
@@ -152,7 +132,16 @@ class ToolState {
   }
 
   /// Guarda el color actual de la herramienta en un favorito. Devuelve si cambió algo (ya estaba ahí: no).
+  /// Un toque que cae justo antes del mantener apretado sobre el mismo favorito (pasa con el S Pen / el dedo en la
+  /// tablet) no debe tragarse el color que el usuario quería guardar: se deshace ese toque y se guarda el color anterior.
   bool saveFavorite(int slot) {
+    final r = _lastPick;
+    _lastPick = null;
+    if (r != null && r.tool == tool && current.color == r.now && slot >= 0 && slot < kFavCount && favorites[slot] == r.now &&
+        clock().difference(r.at) <= const Duration(seconds: 2) && r.prev != r.now) {
+      current.color = r.prev;
+      _remember(recent, r.prev);
+    }
     if (slot < 0 || slot >= kFavCount || favorites[slot] == current.color) return false;
     favorites[slot] = current.color;
     return true;
@@ -208,7 +197,6 @@ class ToolState {
         'shapeFillColor': shapeFillColor,
         'shapeGrid': shapeGrid,
         'exportBg': exportBackground,
-        'colorView': colorView,
       };
 
   void load(Map? j) {
@@ -242,7 +230,6 @@ class ToolState {
     final fc = j['shapeFillColor'];
     if (fc is String && RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(fc)) shapeFillColor = fc;
     shapeGrid = j['shapeGrid'] is bool ? j['shapeGrid'] as bool : true;
-    if (j['colorView'] == 'palette' || j['colorView'] == 'wheel') colorView = j['colorView'] as String;
     exportBackground = j['exportBg'] is bool ? j['exportBg'] as bool : true;
   }
 }
