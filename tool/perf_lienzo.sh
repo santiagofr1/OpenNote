@@ -43,7 +43,7 @@ fi
 
 set +e
 echo "Midiendo el lienzo ($STROKES trazos); la tablet queda ocupada unos minutos..."
-flutter drive --profile --driver=test_driver/perf_lienzo_driver.dart --target=integration_test/canvas_perf_test.dart \
+flutter drive --profile --no-dds --driver=test_driver/perf_lienzo_driver.dart --target=integration_test/canvas_perf_test.dart \
   -d "$DEV" --use-application-binary="$APK" 2>&1 | tee build/perf/lienzo.log
 R=${PIPESTATUS[0]}
 set -e

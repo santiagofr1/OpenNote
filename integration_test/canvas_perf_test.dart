@@ -7,6 +7,7 @@
 // Dedo (touch) = scrollea y pellizca; lápiz (stylus) = escribe (ver PageEditor._touchDown / _down).
 
 import 'dart:convert';
+import 'dart:developer' show Timeline;
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
@@ -280,6 +281,8 @@ void main() {
         return n;
       }
 
+      var tracing = false; // durante el pellizco se marcan el zoom y si hay pellizco en cada cuadro (timeline)
+
       /// Pellizco de dos dedos separados [from] -> [to] px alrededor de [c], en [steps] cuadros.
       Future<void> pinch(Offset c, double from, double to, {int steps = 40}) async {
         final a = await t.createGesture(kind: PointerDeviceKind.touch);
@@ -292,9 +295,11 @@ void main() {
           await a.moveTo(c - Offset(d / 2, 0));
           await b.moveTo(c + Offset(d / 2, 0));
           await t.pump(const Duration(milliseconds: 16));
+          if (tracing) Timeline.instantSync('PINCH', arguments: {'zoom': ed.ts.zoom, 'pinching': ed.touch.pinching, 'scale': ed.scale});
         }
         await a.up();
         await b.up();
+        if (tracing) Timeline.instantSync('PINCH up', arguments: {'zoom': ed.ts.zoom});
         await settle(t, 300);
       }
 
@@ -323,15 +328,20 @@ void main() {
       final zooms = <double>[];
       await frames.mark();
       sw1 = Stopwatch()..start();
-      for (final pos in [0.0, .5, 1.0]) {
-        hs.jumpTo(hs.position.maxScrollExtent * pos);
-        await settle(t, 600);
-        for (var i = 0; i < 5; i++) {
-          await pinch(center, 150, wide);
-          zooms.add(ed.ts.zoom);
-          await pinch(center, wide, 150);
+      await binding.traceAction(() async {
+        tracing = true;
+        for (final pos in [0.0, .5, 1.0]) {
+          hs.jumpTo(hs.position.maxScrollExtent * pos);
+          await settle(t, 600);
+          for (var i = 0; i < 5; i++) {
+            await pinch(center, 150, wide);
+            zooms.add(ed.ts.zoom);
+            await pinch(center, wide, 150);
+          }
         }
-      }
+        tracing = false;
+      }, reportKey: 'pinch_timeline');
+      results['pinch_timeline'] = binding.reportData!['pinch_timeline']!; // (publish() rehace reportData)
       await phase('pinch_in_out', await frames.take(), {
         'ciclos': 15,
         'zoom_max_alcanzado': r1(zooms.reduce(max) * 100) / 100,

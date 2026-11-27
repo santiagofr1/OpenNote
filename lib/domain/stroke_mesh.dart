@@ -77,6 +77,22 @@ StrokeMesh? buildStrokeMesh(Stroke s, {double? feather}) {
   return StrokeMesh(parts, s.meshGen, f);
 }
 
+/// ¿La malla de [s] lleva colores por vértice ([StrokeMesh.colored])? Sale del trazo, sin armarla: lápiz y pintura
+/// siempre; el resto cuando hay borde difuminado ([meshFeather] o [feather]).
+bool meshIsColored(Stroke s, {double? feather}) => isPaint(s.k) || s.k == 'pencil' || (feather ?? meshFeather) > 0;
+
+/// Cota aproximada de los vértices de la malla de [s] sin armarla (para agrupar trazos en lotes): no depende del
+/// borde difuminado, así los lotes no cambian al cambiar este.
+int estimateMeshVertices(Stroke s) {
+  final n = s.n;
+  if (isPaint(s.k)) return 60 * n + 30;
+  return switch (s.k) {
+    'pencil' => 16 * n + 30,
+    'calli' => 8 * n + 20,
+    _ => 4 * n + 34,
+  };
+}
+
 const _chunk = 6000; // puntos por parte (con 4 vértices por punto queda lejos del tope de 65k)
 const _paintChunk = 250; // la pintura lleva ~20 vértices por muestra y decoración: partes chicas
 

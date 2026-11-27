@@ -23,6 +23,9 @@ enum InkPaintMode {
   vector,
 }
 
+/// Id de la columna [col] de la hoja [sheetId] en un lienzo (cada columna lleva su propia imagen en la caché).
+String tileId(String sheetId, int col) => '$sheetId#c$col';
+
 /// Caché de imágenes de la tinta: una tanda de tinta de una hoja que no cambia se rasteriza a un [ui.Image] y mientras
 /// se scrollea se dibuja esa imagen (una sola textura) en vez de volver a rasterizar decenas de miles de puntos en
 /// cada cuadro (Impeller no tiene caché de pictures).
@@ -62,6 +65,9 @@ enum InkPaintMode {
 /// acotada por la ventana (<= 96 MB) y no por el tiempo que se scrollea. Contra 4 GB de la tablet. Ninguna imagen
 /// pasa del tope de ancho que pone el editor (2x el ancho de pantalla): más zoom que eso se dibuja vectorial.
 class SheetImageCache {
+  /// ¿La entrada de id [entrySheet] es de la hoja [sheetId] (ella misma o una de sus columnas)?
+  static bool ofSheet(String entrySheet, String sheetId) => entrySheet == sheetId || entrySheet.startsWith('$sheetId#c');
+
   int maxImages;
   int maxBytes;
 
@@ -139,6 +145,7 @@ class SheetImageCache {
 
   final _entries = <String, InkImage>{};
   final _bySheet = <String, List<InkImage>>{};
+  final _tilesOf = <String, Set<String>>{}; // hoja -> ids de sus columnas con entradas (ver [tileId])
   List<String> _wanted = const []; // hojas a generar por adelantado, en orden de prioridad
   int _dir = 0; // dirección del scroll (+1 hacia abajo)
   final _ready = <InkImage>[]; // tandas cuyo temporizador de quietud venció
@@ -208,11 +215,19 @@ class SheetImageCache {
   InkImage entry(String key, String sheetId) => _entries.putIfAbsent(key, () {
         final e = InkImage._(this, key, sheetId);
         (_bySheet[sheetId] ??= []).add(e);
+        final h = sheetId.indexOf('#c');
+        if (h > 0) (_tilesOf[sheetId.substring(0, h)] ??= {}).add(sheetId);
         return e;
       });
 
-  /// Las tandas de una hoja (para los tests y el benchmark).
-  Iterable<InkImage> entriesOf(String sheetId) => _bySheet[sheetId] ?? const [];
+  /// Las tandas de una hoja, con las de sus columnas si es un lienzo (para los tests y el benchmark). Con el id de
+  /// una columna ([tileId]) solo las de esa columna.
+  Iterable<InkImage> entriesOf(String sheetId) {
+    final own = _bySheet[sheetId] ?? const <InkImage>[];
+    final tiles = _tilesOf[sheetId];
+    if (tiles == null) return own;
+    return [...own, for (final t in tiles) ...?_bySheet[t]];
+  }
 
   /// Claves de todas las franjas que hay ahora en memoria.
   Iterable<String> get stripKeys => [for (final e in _entries.values) ...e.readyStripKeys];
@@ -254,6 +269,9 @@ class SheetImageCache {
   void dropSheet(String sheetId) {
     final gone = List.of(entriesOf(sheetId));
     _bySheet.remove(sheetId);
+    for (final t in _tilesOf.remove(sheetId) ?? const <String>{}) {
+      _bySheet.remove(t);
+    }
     for (final e in gone) {
       _entries.remove(e.key);
       _ready.remove(e);
@@ -267,6 +285,7 @@ class SheetImageCache {
     }
     _entries.clear();
     _bySheet.clear();
+    _tilesOf.clear();
     _ready.clear();
   }
 
