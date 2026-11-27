@@ -152,7 +152,7 @@ void main() {
     }
   }
 
-  testWidgets('lienzo ancho: en los ratos libres se arman las mallas de las columnas de margen', (t) async {
+  testWidgets('lienzo ancho: en los ratos libres se arman las mallas del rango y de las columnas por entrar', (t) async {
     final doc = wide();
     final ed = await openEd(t, doc);
     await idle(t);
@@ -163,7 +163,10 @@ void main() {
       expect(m, isNotNull, reason: 'columna $j');
       expect(m!.feather, meshFeather);
     }
-    expect(doc.strokes['w11']!.mesh, isNull, reason: 'las lejanas no se arman');
+    // las que están por entrar al rango también se calientan; las lejanas no
+    expect(doc.strokes['w${r.last + 1}']!.mesh, isNotNull);
+    expect(doc.strokes['w${r.last + 2}']!.mesh, isNotNull);
+    expect(doc.strokes['w${r.last + 3}']!.mesh, isNull);
     expect(ed.debugWarmPending, 0);
   });
 

@@ -389,8 +389,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   List<Stroke>? _warmQueue;
   int _warmAt = 0;
 
-  /// Que se vayan armando las mallas de las columnas de margen (y después las de las visibles que quedaron viejas) antes
-  /// de que entren en pantalla: si no, la columna que entra arma las de todos sus trazos en el mismo cuadro. Se
+  /// Que se vayan armando las mallas de las columnas que están por entrar al rango armado (y después las del rango que
+  /// quedaron viejas) antes de que entren: si no, la columna que entra arma las de todos sus trazos en el mismo cuadro. Se
   /// reinicia si cambió el rango, el sentido del scroll o el borde difuminado; si no, no hace nada.
   void _kickWarm() {
     if (!doc.nb.canvas || !mounted) return;
@@ -405,19 +405,20 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     _warmTimer ??= Timer(const Duration(milliseconds: 16), _warmStep);
   }
 
-  /// Cola de trazos a calentar: columnas de margen (primero las del lado al que se scrollea, de la más cercana a la más
-  /// lejana) y al final las visibles.
+  /// Cola de trazos a calentar: primero las columnas justo afuera del rango armado (la que entra se pinta entera en el
+  /// cuadro en que se arma, y ahí arma todas sus mallas), las del lado al que se scrollea primero; después las del rango.
   List<Stroke> _buildWarmQueue() {
     final v = _visibleCols();
+    final r = _colRange;
     final order = <int>[
       for (var d = 1; d <= kCanvasColMargin; d++) ...[
-        if (_hDir >= 0) v.c1 + d,
-        if (_hDir < 0) v.c0 - d,
-        if (_hDir > 0) v.c0 - d,
-        if (_hDir <= 0) v.c1 + d,
+        if (_hDir >= 0) r.last + d,
+        if (_hDir < 0) r.first - d,
+        if (_hDir > 0) r.first - d,
+        if (_hDir <= 0) r.last + d,
       ],
-      for (var c = v.c0; c <= v.c1; c++) c,
-    ].where((c) => c >= _colRange.first && c <= _colRange.last).toList();
+      for (var c = r.first; c <= r.last; c++) c,
+    ].where((c) => c >= 0 && c < v.n).toList();
     final seen = <Stroke>{};
     final q = <Stroke>[];
     for (final c in order) {
