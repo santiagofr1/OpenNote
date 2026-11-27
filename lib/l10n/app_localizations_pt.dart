@@ -1960,4 +1960,25 @@ class LPt extends L {
 
   @override
   String get eyedropperCancel => 'Cancelar conta-gotas';
+
+  @override
+  String get indexMindMap => 'Exportar como mapa conceitual';
+
+  @override
+  String get mindMapTitle => 'Mapa conceitual do índice';
+
+  @override
+  String get mindMapPng => 'Imagem (PNG)';
+
+  @override
+  String get mindMapFreemind => 'Mapa editável (.mm)';
+
+  @override
+  String get mindMapSaved => 'Mapa salvo';
+
+  @override
+  String get mindMapUntitled => 'Sem título';
+
+  @override
+  String get exportSaveMindMap => 'Salvar mapa conceitual';
 }

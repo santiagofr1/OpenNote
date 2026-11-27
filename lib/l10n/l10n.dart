@@ -57,6 +57,7 @@ ExportTexts exportTextsOf(L l) => ExportTexts(
       saveImages: l.exportSaveImages,
       saveNotebook: l.exportSaveNotebook,
       saveFolder: l.exportSaveFolder,
+      saveMindMap: l.exportSaveMindMap,
     );
 
 /// Texto de un error de sincronización ([SyncError]) en el idioma de la app. [fallback] es el mensaje en español que

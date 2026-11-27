@@ -3500,6 +3500,48 @@ abstract class L {
   /// In es, this message translates to:
   /// **'Cancelar cuentagotas'**
   String get eyedropperCancel;
+
+  /// Tooltip of the index panel button that exports the index as a mind map
+  ///
+  /// In es, this message translates to:
+  /// **'Exportar como mapa conceptual'**
+  String get indexMindMap;
+
+  /// Title of the dialog that asks the mind map format
+  ///
+  /// In es, this message translates to:
+  /// **'Mapa conceptual del índice'**
+  String get mindMapTitle;
+
+  /// Mind map export option: picture
+  ///
+  /// In es, this message translates to:
+  /// **'Imagen (PNG)'**
+  String get mindMapPng;
+
+  /// Mind map export option: editable FreeMind file
+  ///
+  /// In es, this message translates to:
+  /// **'Mapa editable (.mm)'**
+  String get mindMapFreemind;
+
+  /// Snackbar after saving the mind map
+  ///
+  /// In es, this message translates to:
+  /// **'Mapa guardado'**
+  String get mindMapSaved;
+
+  /// Name of an index heading that has no text, in the mind map
+  ///
+  /// In es, this message translates to:
+  /// **'Sin título'**
+  String get mindMapUntitled;
+
+  /// Title of the system dialog that saves the mind map
+  ///
+  /// In es, this message translates to:
+  /// **'Guardar mapa conceptual'**
+  String get exportSaveMindMap;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

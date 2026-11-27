@@ -1950,4 +1950,25 @@ class LEn extends L {
 
   @override
   String get eyedropperCancel => 'Cancel eyedropper';
+
+  @override
+  String get indexMindMap => 'Export as mind map';
+
+  @override
+  String get mindMapTitle => 'Index mind map';
+
+  @override
+  String get mindMapPng => 'Image (PNG)';
+
+  @override
+  String get mindMapFreemind => 'Editable map (.mm)';
+
+  @override
+  String get mindMapSaved => 'Map saved';
+
+  @override
+  String get mindMapUntitled => 'Untitled';
+
+  @override
+  String get exportSaveMindMap => 'Save mind map';
 }

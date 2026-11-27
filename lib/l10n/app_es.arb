@@ -2702,5 +2702,33 @@
   "eyedropperCancel": "Cancelar cuentagotas",
   "@eyedropperCancel": {
     "description": "Tooltip of the button that cancels the eyedropper"
+  },
+  "indexMindMap": "Exportar como mapa conceptual",
+  "@indexMindMap": {
+    "description": "Tooltip of the index panel button that exports the index as a mind map"
+  },
+  "mindMapTitle": "Mapa conceptual del índice",
+  "@mindMapTitle": {
+    "description": "Title of the dialog that asks the mind map format"
+  },
+  "mindMapPng": "Imagen (PNG)",
+  "@mindMapPng": {
+    "description": "Mind map export option: picture"
+  },
+  "mindMapFreemind": "Mapa editable (.mm)",
+  "@mindMapFreemind": {
+    "description": "Mind map export option: editable FreeMind file"
+  },
+  "mindMapSaved": "Mapa guardado",
+  "@mindMapSaved": {
+    "description": "Snackbar after saving the mind map"
+  },
+  "mindMapUntitled": "Sin título",
+  "@mindMapUntitled": {
+    "description": "Name of an index heading that has no text, in the mind map"
+  },
+  "exportSaveMindMap": "Guardar mapa conceptual",
+  "@exportSaveMindMap": {
+    "description": "Title of the system dialog that saves the mind map"
   }
 }
