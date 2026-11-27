@@ -2331,11 +2331,11 @@ abstract class L {
   /// **'Buscar en \"{name}\"'**
   String notebookSearchIn(String name);
 
-  /// Counter under the notebook title: optional sheet title prefix, current sheet and total
+  /// Counter under the notebook title: current sheet and total
   ///
   /// In es, this message translates to:
-  /// **'{title}{n} / {total}'**
-  String notebookSheetCounter(String title, int n, int total);
+  /// **'{n} / {total}'**
+  String notebookSheetCounter(int n, int total);
 
   /// Prefix of the default name of audio recordings (followed by a number), and hint of the audio rename field
   ///

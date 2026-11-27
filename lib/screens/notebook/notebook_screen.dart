@@ -1311,8 +1311,8 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
           ListenableBuilder(
             listenable: Listenable.merge([sheetNotifier, _structure]),
             builder: (_, _) {
-              final k = curSheet, t = doc!.sheets[k].title;
-              return Text(context.l10n.notebookSheetCounter(t.isEmpty ? '' : '$t · ', k + 1, doc!.sheetCount),
+              // solo la hoja actual y el total: el título de la hoja (ej. el nombre del PDF importado) no va acá
+              return Text(context.l10n.notebookSheetCounter(curSheet + 1, doc!.sheetCount),
                   key: const Key('sheetCounter'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

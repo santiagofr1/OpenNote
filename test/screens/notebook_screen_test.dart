@@ -86,7 +86,7 @@ void main() {
     final ed = editor(t);
     ed.scroll.jumpTo(kSheetStep * ed.scale);
     await settle(t);
-    expect(counter(t, 'sheetCounter'), 'Ohm · 2 / 3', reason: 'con el título de la hoja');
+    expect(counter(t, 'sheetCounter'), '2 / 3', reason: 'sin el título de la hoja');
     expect(ed.visibleSheet, 1);
 
     // panel: una miniatura por hoja; tocar lleva a esa hoja

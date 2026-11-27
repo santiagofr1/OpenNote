@@ -372,7 +372,7 @@
   "notebookMore": "More options",
   "notebookRemoteChanges": "There are changes from another device",
   "notebookSearchIn": "Search in \"{name}\"",
-  "notebookSheetCounter": "{title}{n} / {total}",
+  "notebookSheetCounter": "{n} / {total}",
   "audioPrefix": "Audio",
   "errVoiceBusy": "A recording is already in progress",
   "errVoiceNoPermission": "No permission to use the microphone",

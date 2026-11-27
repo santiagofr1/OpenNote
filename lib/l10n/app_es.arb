@@ -1864,13 +1864,10 @@
       }
     }
   },
-  "notebookSheetCounter": "{title}{n} / {total}",
+  "notebookSheetCounter": "{n} / {total}",
   "@notebookSheetCounter": {
-    "description": "Counter under the notebook title: optional sheet title prefix, current sheet and total",
+    "description": "Counter under the notebook title: current sheet and total",
     "placeholders": {
-      "title": {
-        "type": "String"
-      },
       "n": {
         "type": "int"
       },
