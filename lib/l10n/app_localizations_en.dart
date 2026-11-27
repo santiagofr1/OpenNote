@@ -64,6 +64,30 @@ class LEn extends L {
   String get paperMonthly => 'Monthly calendar';
 
   @override
+  String get paperIso => 'Isometric';
+
+  @override
+  String get paperHex => 'Hexagonal';
+
+  @override
+  String get paperPolar => 'Polar';
+
+  @override
+  String get paperSemilog => 'Semilogarithmic';
+
+  @override
+  String get paperCalli => 'Calligraphy';
+
+  @override
+  String get paperStoryboard => 'Storyboard';
+
+  @override
+  String get paperGuitarTab => 'Guitar tab';
+
+  @override
+  String get paperDaily => 'Daily planner';
+
+  @override
   String get shortcutBold => 'Bold';
 
   @override

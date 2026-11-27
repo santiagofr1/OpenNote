@@ -64,6 +64,30 @@ class LPt extends L {
   String get paperMonthly => 'Calendário mensal';
 
   @override
+  String get paperIso => 'Isométrico';
+
+  @override
+  String get paperHex => 'Hexagonal';
+
+  @override
+  String get paperPolar => 'Polar';
+
+  @override
+  String get paperSemilog => 'Semilogarítmico';
+
+  @override
+  String get paperCalli => 'Caligrafia';
+
+  @override
+  String get paperStoryboard => 'Storyboard';
+
+  @override
+  String get paperGuitarTab => 'Tablatura de violão';
+
+  @override
+  String get paperDaily => 'Planejador diário';
+
+  @override
   String get shortcutBold => 'Negrito';
 
   @override

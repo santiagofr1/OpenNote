@@ -64,6 +64,30 @@ class LEs extends L {
   String get paperMonthly => 'Calendario mensual';
 
   @override
+  String get paperIso => 'Isométrico';
+
+  @override
+  String get paperHex => 'Hexagonal';
+
+  @override
+  String get paperPolar => 'Polar';
+
+  @override
+  String get paperSemilog => 'Semilogarítmico';
+
+  @override
+  String get paperCalli => 'Caligrafía';
+
+  @override
+  String get paperStoryboard => 'Storyboard';
+
+  @override
+  String get paperGuitarTab => 'Tablatura de guitarra';
+
+  @override
+  String get paperDaily => 'Planificador diario';
+
+  @override
   String get shortcutBold => 'Negrita';
 
   @override

@@ -207,6 +207,54 @@ abstract class L {
   /// **'Calendario mensual'**
   String get paperMonthly;
 
+  /// Isometric paper name in the paper style dialog
+  ///
+  /// In es, this message translates to:
+  /// **'Isométrico'**
+  String get paperIso;
+
+  /// Hexagonal (honeycomb) paper name in the paper style dialog
+  ///
+  /// In es, this message translates to:
+  /// **'Hexagonal'**
+  String get paperHex;
+
+  /// Polar graph paper name in the paper style dialog
+  ///
+  /// In es, this message translates to:
+  /// **'Polar'**
+  String get paperPolar;
+
+  /// Semi-log graph paper name in the paper style dialog
+  ///
+  /// In es, this message translates to:
+  /// **'Semilogarítmico'**
+  String get paperSemilog;
+
+  /// Calligraphy guides template name in the paper style dialog
+  ///
+  /// In es, this message translates to:
+  /// **'Caligrafía'**
+  String get paperCalli;
+
+  /// Storyboard template name in the paper style dialog
+  ///
+  /// In es, this message translates to:
+  /// **'Storyboard'**
+  String get paperStoryboard;
+
+  /// Guitar tablature template name in the paper style dialog
+  ///
+  /// In es, this message translates to:
+  /// **'Tablatura de guitarra'**
+  String get paperGuitarTab;
+
+  /// Daily planner template name in the paper style dialog
+  ///
+  /// In es, this message translates to:
+  /// **'Planificador diario'**
+  String get paperDaily;
+
   /// Keyboard shortcut description in the shortcuts dialog
   ///
   /// In es, this message translates to:

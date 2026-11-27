@@ -44,6 +44,22 @@ void paintPaperPattern(Canvas c, String bg, double spacing,
       _paintStaff(c, size, ruleWidth);
     case 'weekly':
       _paintWeekly(c, size, ruleWidth);
+    case 'iso':
+      _paintIso(c, spacing, size, ruleWidth);
+    case 'hex':
+      _paintHex(c, spacing, size, ruleWidth);
+    case 'polar':
+      _paintPolar(c, size, ruleWidth);
+    case 'semilog':
+      _paintSemilog(c, size, ruleWidth);
+    case 'calli':
+      _paintCalli(c, size, ruleWidth);
+    case 'storyboard':
+      _paintStoryboard(c, size, ruleWidth);
+    case 'guitartab':
+      _paintTab(c, size, ruleWidth);
+    case 'daily':
+      _paintDaily(c, size, ruleWidth);
     case 'monthly':
       _paintMonthly(c, size, ruleWidth);
     case 'mm':
@@ -265,4 +281,198 @@ class CanvasPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(CanvasPainter o) => o.paper != paper || o.height != height || o.width != width || o.scale != scale;
+}
+
+/// Isométrico: triángulos equiláteros de lado [spacing] (horizontales y dos familias de diagonales a +-60 grados).
+void _paintIso(Canvas c, double spacing, String size, double ruleWidth) {
+  final u = unitsPerMm(size), h = paperHeightMm(size) * u, w = paperWidthMm(size) * u;
+  final p = Paint()
+    ..color = _ruleColor
+    ..strokeWidth = ruleWidth;
+  c.save();
+  c.clipRect(Rect.fromLTWH(0, 0, w, h));
+  for (final y in isoYsMm(spacing, size: size)) {
+    c.drawLine(Offset(0, y * u), Offset(w, y * u), p);
+  }
+  final run = h / math.sqrt(3);
+  for (final x in isoDiagonalXsMm(spacing, size: size)) {
+    c.drawLine(Offset(x * u, 0), Offset(x * u + run, h), p);
+    c.drawLine(Offset(x * u, 0), Offset(x * u - run, h), p);
+  }
+  c.restore();
+}
+
+/// Panal: hexágonos de lado [spacing].
+void _paintHex(Canvas c, double spacing, String size, double ruleWidth) {
+  final u = unitsPerMm(size), r = spacing * u;
+  final p = Paint()
+    ..color = _ruleColor
+    ..style = PaintingStyle.stroke
+    ..strokeJoin = StrokeJoin.round
+    ..strokeWidth = ruleWidth;
+  final path = Path();
+  for (final ctr in hexCentersMm(spacing, size: size)) {
+    for (var k = 0; k < 6; k++) {
+      final a = k * math.pi / 3;
+      final x = ctr.dx * u + r * math.cos(a), y = ctr.dy * u + r * math.sin(a);
+      k == 0 ? path.moveTo(x, y) : path.lineTo(x, y);
+    }
+    path.close();
+  }
+  c.save();
+  c.clipRect(Rect.fromLTWH(0, 0, paperWidthMm(size) * u, paperHeightMm(size) * u));
+  c.drawPath(path, p);
+  c.restore();
+}
+
+/// Polar: centro en la hoja, círculos cada 10 mm, radios cada 15 grados y rótulos cada 30 al borde del círculo mayor.
+void _paintPolar(Canvas c, String size, double ruleWidth) {
+  final u = unitsPerMm(size), center = Offset(paperWidthMm(size) / 2 * u, paperHeightMm(size) / 2 * u);
+  final rmax = polarMaxRadiusMm(size);
+  final rule = Paint()
+    ..color = _ruleColor
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = ruleWidth;
+  final axis = Paint()
+    ..color = _axisColor
+    ..strokeWidth = ruleWidth * 1.6;
+  for (var r = kPolarRingMm; r <= rmax + 0.001; r += kPolarRingMm) {
+    c.drawCircle(center, r * u, rule);
+  }
+  for (var deg = 0; deg < 360; deg += kPolarSpokeDeg) {
+    final a = deg * math.pi / 180, d = Offset(math.cos(a), -math.sin(a));
+    c.drawLine(center, center + d * rmax * u, deg % 90 == 0 ? axis : rule);
+  }
+  final fs = 2.6 * u;
+  for (var deg = 0; deg < 360; deg += kPolarLabelDeg) {
+    final a = deg * math.pi / 180, tp = _label('$deg°', fs, _axisColor);
+    final at = center + Offset(math.cos(a), -math.sin(a)) * (rmax + 4) * u;
+    tp.paint(c, at - Offset(tp.width / 2, tp.height / 2));
+  }
+}
+
+/// Semilogarítmico: eje x lineal cada 5 mm (marcada cada 10) y eje y logarítmico de 3 décadas.
+void _paintSemilog(Canvas c, String size, double ruleWidth) {
+  final u = unitsPerMm(size), a = semilogAreaMm(size);
+  final minor = Paint()
+    ..color = _ruleColor
+    ..strokeWidth = ruleWidth;
+  final major = Paint()
+    ..color = _boxColor
+    ..strokeWidth = ruleWidth * 1.4;
+  for (final (x, w) in semilogXsMm(size)) {
+    c.drawLine(Offset(x * u, a.top * u), Offset(x * u, a.bottom * u), w == 1 ? major : minor);
+  }
+  final right = semilogXsMm(size).last.$1;
+  for (final (y, w) in semilogYsMm(size)) {
+    c.drawLine(Offset(a.left * u, y * u), Offset(right * u, y * u), w == 1 ? major : minor);
+  }
+}
+
+/// Caligrafía: grupos de ascendente / altura x / base / descendente con guías inclinadas a 55 grados, finas y claras.
+void _paintCalli(Canvas c, String size, double ruleWidth) {
+  final u = unitsPerMm(size), w = paperWidthMm(size);
+  final guide = Paint()
+    ..color = _ruleColor
+    ..strokeWidth = ruleWidth;
+  final base = Paint()
+    ..color = _staffColor
+    ..strokeWidth = ruleWidth;
+  final slant = Paint()
+    ..color = _ruleColor.withValues(alpha: 0.7)
+    ..strokeWidth = ruleWidth * 0.6;
+  const x0 = 15.0, step = kCalliStepMm, height = 3 * step;
+  final dx = height / math.tan(kCalliSlantDeg * math.pi / 180);
+  for (final top in calliTopsMm(size)) {
+    for (var i = 0; i < 4; i++) {
+      final y = (top + i * step) * u;
+      c.drawLine(Offset(x0 * u, y), Offset((w - 15) * u, y), i == 2 ? base : guide);
+    }
+    for (var x = x0; x + dx <= w - 15 + 0.001; x += 10) {
+      c.drawLine(Offset(x * u, (top + height) * u), Offset((x + dx) * u, top * u), slant);
+    }
+  }
+}
+
+/// Storyboard: 2 x 3 recuadros 16:9 con 3 renglones cortos debajo de cada uno.
+void _paintStoryboard(Canvas c, String size, double ruleWidth) {
+  final u = unitsPerMm(size);
+  final box = Paint()
+    ..color = _boxColor
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = ruleWidth * 1.2;
+  final rule = Paint()
+    ..color = _ruleColor
+    ..strokeWidth = ruleWidth;
+  for (final f in storyboardFramesMm(size)) {
+    c.drawRect(Rect.fromLTWH(f.left * u, f.top * u, f.width * u, f.height * u), box);
+    for (var i = 1; i <= 3; i++) {
+      final y = (f.bottom + i * kStoryLineMm) * u;
+      c.drawLine(Offset(f.left * u, y), Offset(f.right * u, y), rule);
+    }
+  }
+}
+
+/// Tablatura: grupos de 6 líneas a 3 mm con "TAB" al inicio de cada uno (misma lógica que el pentagrama).
+void _paintTab(Canvas c, String size, double ruleWidth) {
+  final u = unitsPerMm(size), w = paperWidthMm(size);
+  final p = Paint()
+    ..color = _staffColor
+    ..strokeWidth = ruleWidth;
+  const x0 = 24.0;
+  for (final top in tabTopsMm(size)) {
+    for (var i = 0; i < 6; i++) {
+      final y = (top + i * kTabStepMm) * u;
+      c.drawLine(Offset(x0 * u, y), Offset((w - 15) * u, y), p);
+    }
+    c.drawLine(Offset(x0 * u, top * u), Offset(x0 * u, (top + 5 * kTabStepMm) * u), p);
+    c.drawLine(Offset((w - 15) * u, top * u), Offset((w - 15) * u, (top + 5 * kTabStepMm) * u), p);
+    for (var i = 0; i < 3; i++) {
+      final tp = _label('TAB'[i], 3.4 * u, _labelColor);
+      tp.paint(c, Offset(19.5 * u - tp.width / 2, (top + 3 + i * 4.5) * u - tp.height / 2 + 0.5 * u));
+    }
+  }
+}
+
+/// Planificador diario: horas de 7 a 22 con renglón por media hora, y a la derecha Prioridades y Notas.
+void _paintDaily(Canvas c, String size, double ruleWidth) {
+  final u = unitsPerMm(size), l = dailyLayoutMm(size);
+  final box = Paint()
+    ..color = _boxColor
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = ruleWidth * 1.2;
+  final rule = Paint()
+    ..color = _ruleColor
+    ..strokeWidth = ruleWidth;
+  Rect r(Rect m) => Rect.fromLTWH(m.left * u, m.top * u, m.width * u, m.height * u);
+  c.drawRect(r(l.hours), box);
+  c.drawRect(r(l.priorities), box);
+  c.drawRect(r(l.notes), box);
+  final hours = kDailyLastHour - kDailyFirstHour + 1, gutter = 11.0;
+  for (var i = 0; i < hours; i++) {
+    final y = l.hours.top + i * l.hourH;
+    if (i > 0) c.drawLine(Offset(l.hours.left * u, y * u), Offset(l.hours.right * u, y * u), box);
+    c.drawLine(Offset((l.hours.left + gutter) * u, (y + l.hourH / 2) * u), Offset((l.hours.right - 2) * u, (y + l.hourH / 2) * u), rule);
+    _label('${kDailyFirstHour + i}:00', 3.0 * u, _labelColor).paint(c, Offset((l.hours.left + 1.5) * u, (y + 1.2) * u));
+  }
+  c.drawLine(Offset((l.hours.left + gutter) * u, l.hours.top * u), Offset((l.hours.left + gutter) * u, l.hours.bottom * u), rule);
+  // prioridades: 3 casilleros con su renglón
+  final pr = l.priorities;
+  _label('Prioridades', 3.2 * u, _labelColor).paint(c, Offset((pr.left + 2) * u, (pr.top + 2) * u));
+  final side = 4.5, sq = Paint()
+    ..color = _boxColor
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = ruleWidth * 1.2;
+  final rowH = (pr.height - 10) / 3;
+  for (var i = 0; i < 3; i++) {
+    final bottom = pr.top + 10 + (i + 1) * rowH - 1.5;
+    c.drawRect(Rect.fromLTWH((pr.left + 2) * u, (bottom - side) * u, side * u, side * u), sq);
+    c.drawLine(Offset((pr.left + 2 + side + 2) * u, bottom * u), Offset((pr.right - 2) * u, bottom * u), rule);
+  }
+  // notas: renglones cada 8 mm
+  final nt = l.notes;
+  _label('Notas', 3.2 * u, _labelColor).paint(c, Offset((nt.left + 2) * u, (nt.top + 2) * u));
+  for (var y = nt.top + 10; y < nt.bottom - 0.01; y += 8) {
+    c.drawLine(Offset((nt.left + 2) * u, y * u), Offset((nt.right - 2) * u, y * u), rule);
+  }
 }

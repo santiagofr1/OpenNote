@@ -2972,6 +2972,26 @@ void main() {
     expect([editor(t).doc.sheets[0].bg, editor(t).doc.sheets[0].spacing], ['axes', 7.0]);
   });
 
+  testWidgets('fondos y plantillas nuevos: isométrico, hexagonal, polar, semilog, caligrafía, storyboard, tablatura y diario (issue #25)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Fondos nuevos');
+    for (final bg in ['iso', 'hex', 'polar', 'semilog', 'calli', 'storyboard', 'guitartab', 'daily']) {
+      await openMore(t, 'Estilo de hoja');
+      await tapV(t, find.byKey(Key('bg-$bg')));
+      await tapV(t, find.byKey(const Key('applySheet')));
+      await settle(t);
+      if (bg == 'iso' || bg == 'hex') {
+        await tapV(t, find.byKey(const Key('spacing-7')));
+        await settle(t);
+      }
+      await tapV(t, find.byKey(const Key('styleOk')));
+      await settle(t, 800);
+      final m = editor(t).doc.sheets[0];
+      expect(m.bg, bg);
+      if (bg == 'iso' || bg == 'hex') expect(m.spacing, 7.0);
+    }
+  });
+
   testWidgets('plantillas incluidas: aplicar una a la hoja y crear una hoja nueva con otra (issue #33)', (t) async {
     await start(t);
     await createNotebook(t, 'Plantillas');
