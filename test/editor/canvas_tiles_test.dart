@@ -67,6 +67,84 @@ void main() {
     expect(p['ink-$id-0-c2']!.sheetId, tileId(id, 2));
   });
 
+  NotebookDoc wide() {
+    final doc = NotebookDoc(Notebook.create('W', canvas: true));
+    doc.nb.canvasW = 12000;
+    for (var j = 0; j < 12; j++) {
+      doc.strokes['w$j'] = line('w$j', j * kCanvasTileW + 100, 200, j * kCanvasTileW + 300);
+    }
+    return doc;
+  }
+
+  Future<PageEditorState> openEd(WidgetTester t, NotebookDoc doc) async {
+    await open(t, doc);
+    return t.state<PageEditorState>(find.byType(PageEditor));
+  }
+
+  Set<int> cols(WidgetTester t) => {for (final k in inkKeys(t)) int.parse(k.substring(k.lastIndexOf('-c') + 2))};
+
+  testWidgets('lienzo ancho: solo hay capas de las columnas que se ven más una de margen', (t) async {
+    final ed = await openEd(t, wide());
+    final v = ed.debugColRange;
+    expect(cols(t), {for (var j = v.first; j <= v.last; j++) j});
+    expect(cols(t), contains(0));
+    expect(cols(t).length, lessThan(6));
+    expect(cols(t), isNot(contains(11)));
+  });
+
+  testWidgets('lienzo ancho: scrollear en horizontal cambia las columnas armadas', (t) async {
+    final ed = await openEd(t, wide());
+    ed.hscroll.jumpTo(ed.hscroll.position.maxScrollExtent);
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 100));
+    expect(cols(t), contains(11));
+    expect(cols(t), isNot(contains(0)));
+  });
+
+  testWidgets('lienzo ancho: alejar el zoom ensancha el rango', (t) async {
+    final doc = wide();
+    final ed = await openEd(t, doc);
+    final n1 = cols(t).length;
+    ed.ts.zoom = .5;
+    // ignore: invalid_use_of_protected_member
+    ed.setState(() {});
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 100));
+    expect(cols(t).length, greaterThan(n1));
+  });
+
+  testWidgets('lienzo ancho: una columna fuera del rango sigue sin capa pero su trazo entra al scrollear', (t) async {
+    final doc = wide();
+    final ed = await openEd(t, doc);
+    expect(cols(t), isNot(contains(8)));
+    doc.strokes['nuevo'] = line('nuevo', 8 * kCanvasTileW + 400, 500, 8 * kCanvasTileW + 700);
+    ed.hscroll.jumpTo(ed.hscroll.position.maxScrollExtent * 8 / 11);
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 100));
+    expect(cols(t), contains(8));
+    final p = painters(t).values.where((p) => p.sheet.left == 8 * kCanvasTileW).single;
+    expect(p.strokes.map((s) => s.id), containsAll(['w8', 'nuevo']));
+  });
+
+  testWidgets('lienzo ancho: mover una selección que sale del rango no pierde sus trazos', (t) async {
+    final doc = wide();
+    final ed = await openEd(t, doc);
+    // mientras se mueve no se dibuja en las capas sino en la capa en vivo, que cubre todo el ancho (no depende del rango)
+    final live = t.widgetList<CustomPaint>(find.byType(CustomPaint)).where((w) => w.painter is LivePainter);
+    expect(live, isNotEmpty);
+    // al soltarlo en otra columna (fuera del rango) y volver a verla, el trazo está en su capa
+    final s = doc.strokes['w0']!;
+    doc.strokes.remove('w0');
+    final moved = Stroke('w0', 'pen', '#000000', 6, [9 * kCanvasTileW + 100, 200, .5, 9 * kCanvasTileW + 300, 200, .5]);
+    doc.strokes['w0'] = moved;
+    expect(s, isNot(same(moved)));
+    ed.hscroll.jumpTo(ed.hscroll.position.maxScrollExtent * 9 / 11);
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 100));
+    final q = painters(t).values.firstWhere((p) => p.sheet.left == 9 * kCanvasTileW);
+    expect(q.strokes.map((x) => x.id), contains('w0'));
+  });
+
   testWidgets('hojas: la tanda sigue siendo una sola capa ink-<id>-<i>', (t) async {
     final doc = NotebookDoc(Notebook.create('P'));
     doc.strokes['a'] = line('a', 100, 200, 400);

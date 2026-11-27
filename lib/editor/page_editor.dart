@@ -205,6 +205,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   // hojas armadas: las que se ven más un margen (ver [_calcRange]); las demás no tienen widgets
   ({int first, int last}) _range = (first: 0, last: 0);
+  // lienzo: columnas de tinta armadas (las que se ven más una de margen a cada lado, ver [_calcColRange])
+  ({int first, int last}) _colRange = (first: 0, last: 0);
   double _viewH = 800; // alto del visor
   final _stickyFocus = <String>{}; // notas con el teclado abierto: se quedan armadas aunque se scrolleen lejos
 
@@ -372,6 +374,18 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     }
   }
 
+  /// Lienzo: columnas de tinta que se arman: las que se ven (según el scroll horizontal, el ancho del visor y la escala
+  /// de ahora) más una de margen a cada lado. Las demás no tienen widgets (ni se pintan en cada cuadro del pellizco).
+  ({int first, int last}) _calcColRange() {
+    if (!doc.nb.canvas) return (first: 0, last: 0);
+    final v = _visibleCols();
+    return (first: max(0, v.c0 - 1), last: min(v.n - 1, v.c1 + 1));
+  }
+
+  /// Para los tests: columnas armadas del lienzo.
+  @visibleForTesting
+  ({int first, int last}) get debugColRange => _colRange;
+
   /// Hojas que se arman: las que se ven más un margen de un alto de visor arriba y abajo.
   ({int first, int last}) _calcRange() {
     final off = scroll.hasClients && scroll.position.hasPixels ? scroll.offset : 0.0;
@@ -533,6 +547,16 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     _stillTimer?.cancel();
     _stillTimer = Timer(const Duration(milliseconds: 120), _markStill);
     _updatePrefetch();
+    if (_calcColRange() == _colRange) return;
+    void rebuild() {
+      if (mounted && _calcColRange() != _colRange) setState(() {});
+    }
+
+    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => rebuild()); // en pleno armado no se puede
+    } else {
+      rebuild();
+    }
   }
 
   void _onScrollImpl() {
@@ -2805,6 +2829,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         _syncMeshFeather();
         developer.Timeline.timeSync('ON canvas range+sync', () {
           _range = _calcRange();
+          _colRange = _calcColRange();
           _requestSync();
         });
         final sheetSize = Size(layout.sheetWidth, doc.h * scale);
@@ -3189,7 +3214,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     final r = doc.bandRect(sheet);
     return [
       for (final j in (tiles.keys.toList()..sort()))
-        _inkTile(run, i, id, Rect.fromLTRB(j * kCanvasTileW, r.top, j * kCanvasTileW + kCanvasTileW > r.right && j * kCanvasTileW < r.right ? r.right : j * kCanvasTileW + kCanvasTileW, r.bottom),
+        if (j >= _colRange.first && j <= _colRange.last) // solo las columnas cerca del visor (ver [_calcColRange])
+          _inkTile(run, i, id, Rect.fromLTRB(j * kCanvasTileW, r.top, j * kCanvasTileW + kCanvasTileW > r.right && j * kCanvasTileW < r.right ? r.right : j * kCanvasTileW + kCanvasTileW, r.bottom),
             tiles[j]!, tileId(id, j), 'ink-$id-$i-c$j'),
     ];
   }
