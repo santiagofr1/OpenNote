@@ -3,7 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
-/// Portapapeles del sistema (solo imágenes). Variables para que los tests las reemplacen.
+/// Portapapeles del sistema (solo imágenes). En Android y Linux lo lee código nativo (canal 'vynote/clipboard'; en Linux,
+/// si el canal no existe, cae a xclip / wl-paste). Variables para que los tests las reemplacen.
 class SystemClipboard {
   static Future<bool> Function() hasImage = _hasImage;
   static Future<Uint8List?> Function() readImage = _readImage; // bytes PNG/JPEG/…, null si no hay
@@ -29,7 +30,16 @@ String? pickImageType(List<String> types) {
 Future<bool> _hasImage() async {
   try {
     if (Platform.isAndroid) return await _channel.invokeMethod<bool>('hasImage') ?? false;
-    if (Platform.isLinux) return pickImageType(await _linuxTypes()) != null;
+    if (Platform.isLinux) {
+      try {
+        return await _channel.invokeMethod<bool>('hasImage') ?? false;
+      } on MissingPluginException {
+        // sin canal nativo: xclip / wl-paste
+      } on PlatformException {
+        // ídem
+      }
+      return pickImageType(await _linuxTypes()) != null;
+    }
     if (Platform.isWindows) return (await _powershell(_winHas)).trim() == '1';
   } catch (_) {}
   return false;
@@ -39,6 +49,13 @@ Future<Uint8List?> _readImage() async {
   try {
     if (Platform.isAndroid) return await _channel.invokeMethod<Uint8List>('readImage');
     if (Platform.isLinux) {
+      try {
+        return await _channel.invokeMethod<Uint8List>('readImage');
+      } on MissingPluginException {
+        // sin canal nativo: xclip / wl-paste
+      } on PlatformException {
+        // ídem
+      }
       final type = pickImageType(await _linuxTypes());
       if (type == null) return null;
       final r = await _run(_wayland ? 'wl-paste' : 'xclip',

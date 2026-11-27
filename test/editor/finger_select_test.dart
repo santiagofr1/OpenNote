@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:apuntes/data/storage.dart';
+import 'package:apuntes/data/system_clipboard.dart';
 import 'package:apuntes/domain/domain.dart';
 import 'package:apuntes/editor/page_editor.dart';
 import 'package:apuntes/editor/context_menu.dart';
@@ -193,6 +194,9 @@ void main() {
   }
 
   testWidgets('mantener el dedo quieto sobre la hoja con algo copiado abre el menú (y no elige)', (t) async {
+    final hasImage = SystemClipboard.hasImage;
+    SystemClipboard.hasImage = () async => false; // el canal nativo no responde dentro del reloj falso del test
+    addTearDown(() => SystemClipboard.hasImage = hasImage);
     final h = await open(t, armado());
     h.tools.clipboard.strokes = [Stroke('c', 'pen', '#000000', 1, [0, 0, .5, 1, 1, .5])];
     await mantener(t, h.at(350, 400));
