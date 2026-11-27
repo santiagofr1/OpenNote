@@ -72,6 +72,38 @@
   "@paperMonthly": {
     "description": "Monthly calendar template name in the paper style dialog"
   },
+  "paperIso": "Isométrico",
+  "@paperIso": {
+    "description": "Isometric paper name in the paper style dialog"
+  },
+  "paperHex": "Hexagonal",
+  "@paperHex": {
+    "description": "Hexagonal (honeycomb) paper name in the paper style dialog"
+  },
+  "paperPolar": "Polar",
+  "@paperPolar": {
+    "description": "Polar graph paper name in the paper style dialog"
+  },
+  "paperSemilog": "Semilogarítmico",
+  "@paperSemilog": {
+    "description": "Semi-log graph paper name in the paper style dialog"
+  },
+  "paperCalli": "Caligrafía",
+  "@paperCalli": {
+    "description": "Calligraphy guides template name in the paper style dialog"
+  },
+  "paperStoryboard": "Storyboard",
+  "@paperStoryboard": {
+    "description": "Storyboard template name in the paper style dialog"
+  },
+  "paperGuitarTab": "Tablatura de guitarra",
+  "@paperGuitarTab": {
+    "description": "Guitar tablature template name in the paper style dialog"
+  },
+  "paperDaily": "Planificador diario",
+  "@paperDaily": {
+    "description": "Daily planner template name in the paper style dialog"
+  },
   "shortcutBold": "Negrita",
   "@shortcutBold": {
     "description": "Keyboard shortcut description in the shortcuts dialog"
