@@ -857,7 +857,7 @@ void main() {
     }
   });
 
-  testWidgets('estilo de hoja: en horizontal entra sin scroll, en dos columnas', (t) async {
+  testWidgets('estilo de hoja: en horizontal entra sin scroll, en columnas', (t) async {
     await start(t);
     // tablet en horizontal (1333 x 752 lógicos) con la letra del sistema al 110 %
     t.view.physicalSize = const Size(1333.4, 752) * t.view.devicePixelRatio;
@@ -882,6 +882,38 @@ void main() {
 
     await t.tap(find.text('Cancelar'));
     await settle(t, 600);
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('panel del lápiz: con todas las puntas entra entero en horizontal, en los tres lados de la barra', (t) async {
+    await start(t);
+    t.view.physicalSize = const Size(1333.4, 752) * t.view.devicePixelRatio;
+    t.platformDispatcher.textScaleFactorTestValue = 1.1;
+    addTearDown(t.view.resetPhysicalSize);
+    addTearDown(t.platformDispatcher.clearTextScaleFactorTestValue);
+    await settle(t);
+    await createNotebook(t, 'PanelLapiz');
+    final ts = editor(t).ts;
+    final screen = Offset.zero & (t.view.physicalSize / t.view.devicePixelRatio);
+    for (final dock in ['top', 'left', 'right']) {
+      ts.dock = dock;
+      await settle(t);
+      await t.tap(find.byTooltip('Lápiz · tocá de nuevo para opciones'));
+      await settle(t);
+      final scroll = find.ancestor(of: find.byKey(const Key('tip-pen')), matching: find.byType(Scrollable));
+      expect(scroll, findsWidgets, reason: dock);
+      for (final id in [for (final (id, _) in tips) id]) {
+        final r = t.getRect(find.byKey(Key('tip-$id')));
+        expect(screen.contains(r.topLeft) && screen.contains(r.bottomRight), isTrue, reason: '$dock: punta $id en $r');
+      }
+      for (final k in [const Key('eyedropper'), const Key('shapeSnapSwitch')]) {
+        final r = t.getRect(find.byKey(k));
+        expect(screen.contains(r.topLeft) && screen.contains(r.bottomRight), isTrue, reason: '$dock: $k en $r');
+      }
+      expect(t.state<ScrollableState>(scroll.first).position.maxScrollExtent, 0, reason: '$dock: el panel entra sin scroll');
+      await t.tapAt(const Offset(4, 600)); // cierra el panel
+      await settle(t);
+    }
     expect(t.takeException(), isNull);
   });
 
@@ -3565,7 +3597,8 @@ void main() {
     await settle(t);
     await t.tap(find.byKey(Key('bookmarkItem-$id')));
     await settle(t, 800);
-    expect(find.text('Parcial · 2 / 2'), findsOneWidget);
+    expect(editor(t).visibleSheet, 1);
+    expect(t.widget<Text>(find.byKey(const Key('sheetCounter'))).data, '2 / 2', reason: 'la barra muestra solo la hoja actual y el total, sin el título');
     // desmarcar con el botón de arriba
     await t.tap(find.byKey(const Key('bookmarkSheet')));
     await settle(t, 600);

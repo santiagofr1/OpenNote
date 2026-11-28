@@ -1659,7 +1659,7 @@ class LEs extends L {
   String get tipChalk => 'Tiza';
 
   @override
-  String get tipChisel => 'Rotulador biselado';
+  String get tipChisel => 'Biselado';
 
   @override
   String get tipNeon => 'Neón';

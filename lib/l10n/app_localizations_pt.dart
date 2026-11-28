@@ -1662,7 +1662,7 @@ class LPt extends L {
   String get tipChalk => 'Giz';
 
   @override
-  String get tipChisel => 'Marcador chanfrado';
+  String get tipChisel => 'Chanfrado';
 
   @override
   String get tipNeon => 'Neon';

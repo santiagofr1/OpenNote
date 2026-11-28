@@ -1655,7 +1655,7 @@ class LEn extends L {
   String get tipChalk => 'Chalk';
 
   @override
-  String get tipChisel => 'Chisel marker';
+  String get tipChisel => 'Chisel';
 
   @override
   String get tipNeon => 'Neon';

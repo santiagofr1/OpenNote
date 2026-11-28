@@ -2302,7 +2302,7 @@
   "@tipChalk": {
     "description": "Name of the pen tip \"chalk\" in the pen panel"
   },
-  "tipChisel": "Rotulador biselado",
+  "tipChisel": "Biselado",
   "@tipChisel": {
     "description": "Name of the pen tip \"chisel\" in the pen panel"
   },
