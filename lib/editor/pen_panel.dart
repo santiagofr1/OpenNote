@@ -11,6 +11,12 @@ import '../theme/colors.dart';
 import 'color_chooser.dart';
 import 'eyedropper.dart';
 
+/// Pantalla ancha y baja (la tablet en horizontal): el panel del lápiz va en dos columnas para que entre entero, sin scroll.
+bool _wideLayout(BuildContext context) {
+  final s = MediaQuery.sizeOf(context);
+  return s.width >= 900 && s.width > s.height;
+}
+
 /// Trazo de muestra (una ola con presión variable) para previsualizar una punta.
 Stroke _sampleStroke(String tip, String color, double w, double o, Size size, [PaintParams? pp]) {
   final pts = <double>[];
@@ -68,7 +74,7 @@ Future<EyeTarget?> showPenPanel(BuildContext context, ToolState ts, VoidCallback
           elevation: 12,
           borderRadius: BorderRadius.circular(18),
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: 460, maxHeight: MediaQuery.of(ctx).size.height - 90),
+            constraints: BoxConstraints(maxWidth: _wideLayout(ctx) ? 900 : 460, maxHeight: MediaQuery.of(ctx).size.height - 90),
             child: ts.tool == Tool.paint
                 ? _PaintPanel(ts: ts, onChange: onChange)
                 : ts.tool == Tool.shape
@@ -171,87 +177,106 @@ class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
   Widget build(BuildContext context) {
     final p = ts.current;
     final minW = isHl ? 6.0 : .6, maxW = isHl ? 60.0 : 16.0;
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(isHl ? context.l10n.penPanelHighlighter : context.l10n.penPanelPencil, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-        const SizedBox(height: 12),
+    final wide = _wideLayout(context);
+    final header = Text(isHl ? context.l10n.penPanelHighlighter : context.l10n.penPanelPencil,
+        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700));
 
-        if (!isHl) ...[
-          _label(context.l10n.penTip),
-          // las puntas van de a 4 por fila (con 11 no entran en una)
-          for (var i = 0; i < tips.length; i += 4)
-            Padding(
-              padding: EdgeInsets.only(top: i == 0 ? 0 : 6),
-              child: Row(children: [
-                for (var j = i; j < i + 4; j++)
-                  if (j < tips.length) _tipCell(p, tips[j].$1, tips[j].$2(context.l10n)) else const Expanded(child: SizedBox()),
-              ]),
-            ),
-          const SizedBox(height: 10),
-          const SizedBox(height: 14),
-        ],
-
-        // vista previa con los valores actuales
-        Container(
-          height: 64,
-          decoration: BoxDecoration(color: const Color(0xFFFFFEFB), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFDCD9D0))),
-          child: CustomPaint(painter: _SamplePainter(p.tip, p.color, p.width, p.opacity), size: Size.infinite),
-        ),
-        const SizedBox(height: 10),
-
-        _sliderRow(context.l10n.penWidth, p.width.toStringAsFixed(p.width < 10 ? 1 : 0), Slider(
-          value: p.width.clamp(minW, maxW),
-          min: minW,
-          max: maxW,
-          onChanged: (v) => _set(() => p.width = (v * 10).round() / 10),
-        )),
-        _sliderRow(context.l10n.penOpacity, '${(p.opacity * 100).round()}%', Slider(
-          value: p.opacity,
-          min: .1,
-          max: 1,
-          onChanged: (v) => _set(() => p.opacity = (v * 100).round() / 100),
-        )),
-        const SizedBox(height: 6),
-
-        Row(children: [
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              _label(context.l10n.penSmartShapes),
-              Text(context.l10n.penSmartShapesHint,
-                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+    // punta, vista previa, grosor, opacidad y figuras inteligentes
+    final tipsAndSliders = <Widget>[
+      if (!isHl) ...[
+        _label(context.l10n.penTip),
+        // las puntas van de a 4 por fila (con 11 no entran en una)
+        for (var i = 0; i < tips.length; i += 4)
+          Padding(
+            padding: EdgeInsets.only(top: i == 0 ? 0 : 6),
+            child: Row(children: [
+              for (var j = i; j < i + 4; j++)
+                if (j < tips.length) _tipCell(p, tips[j].$1, tips[j].$2(context.l10n)) else const Expanded(child: SizedBox()),
             ]),
           ),
-          Switch(key: const Key('shapeSnapSwitch'), value: ts.shapeSnap, onChanged: (v) => _set(() => ts.shapeSnap = v)),
-        ]),
-        const SizedBox(height: 6),
-
-        _favSection(ts, (f) => _set(f)),
         const SizedBox(height: 12),
-        ColorChooser(
-          color: p.color,
-          onPick: (hex, {required fromWheel}) => _set(() => ts.setColor(hex)),
-          onEyedropper: () => Navigator.of(context).pop(EyeTarget.tool),
-        ),
+      ],
 
-        if (!isHl) ...[
-          const SizedBox(height: 14),
-          const Divider(height: 1),
-          const SizedBox(height: 12),
-          _label(context.l10n.penEraser),
-          Wrap(runSpacing: 6, children: [
-            for (var i = 0; i < 3; i++)
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: ChoiceChip(
-                  label: Text([context.l10n.penEraserSmall, context.l10n.penEraserMedium, context.l10n.penEraserLarge][i]),
-                  selected: ts.eraserSize == i,
-                  onSelected: (_) => _set(() => ts.eraserSize = i),
-                ),
-              ),
+      // vista previa con los valores actuales
+      Container(
+        height: 64,
+        decoration: BoxDecoration(color: const Color(0xFFFFFEFB), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFDCD9D0))),
+        child: CustomPaint(painter: _SamplePainter(p.tip, p.color, p.width, p.opacity), size: Size.infinite),
+      ),
+      const SizedBox(height: 10),
+
+      _sliderRow(context.l10n.penWidth, p.width.toStringAsFixed(p.width < 10 ? 1 : 0), Slider(
+        value: p.width.clamp(minW, maxW),
+        min: minW,
+        max: maxW,
+        onChanged: (v) => _set(() => p.width = (v * 10).round() / 10),
+      )),
+      _sliderRow(context.l10n.penOpacity, '${(p.opacity * 100).round()}%', Slider(
+        value: p.opacity,
+        min: .1,
+        max: 1,
+        onChanged: (v) => _set(() => p.opacity = (v * 100).round() / 100),
+      )),
+      const SizedBox(height: 6),
+
+      Row(children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _label(context.l10n.penSmartShapes),
+            Text(context.l10n.penSmartShapesHint,
+                style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ]),
-        ],
+        ),
+        Switch(key: const Key('shapeSnapSwitch'), value: ts.shapeSnap, onChanged: (v) => _set(() => ts.shapeSnap = v)),
       ]),
+    ];
+
+    // favoritos, color y goma
+    final colors = <Widget>[
+      _favSection(ts, (f) => _set(f)),
+      const SizedBox(height: 12),
+      ColorChooser(
+        color: p.color,
+        onPick: (hex, {required fromWheel}) => _set(() => ts.setColor(hex)),
+        onEyedropper: () => Navigator.of(context).pop(EyeTarget.tool),
+      ),
+      if (!isHl) ...[
+        const SizedBox(height: 14),
+        const Divider(height: 1),
+        const SizedBox(height: 12),
+        _label(context.l10n.penEraser),
+        Wrap(runSpacing: 6, children: [
+          for (var i = 0; i < 3; i++)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                label: Text([context.l10n.penEraserSmall, context.l10n.penEraserMedium, context.l10n.penEraserLarge][i]),
+                selected: ts.eraserSize == i,
+                onSelected: (_) => _set(() => ts.eraserSize = i),
+              ),
+            ),
+        ]),
+      ],
+    ];
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+      child: wide
+          // tablet en horizontal: punta y grosor a la izquierda, color y goma a la derecha
+          ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [header, const SizedBox(height: 12), ...tipsAndSliders]),
+              ),
+              const SizedBox(width: 22),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: colors)),
+            ])
+          : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              header,
+              const SizedBox(height: 12),
+              ...tipsAndSliders,
+              const SizedBox(height: 6),
+              ...colors,
+            ]),
     );
   }
 
@@ -272,9 +297,11 @@ class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
             border: Border.all(color: p.tip == id ? scheme.primary : Colors.transparent, width: 1.5),
           ),
           child: Column(children: [
-            SizedBox(
+            // la muestra va sobre color papel (como la vista previa grande): se ve igual en tema claro y oscuro
+            Container(
               height: 34,
               width: double.infinity,
+              decoration: BoxDecoration(color: const Color(0xFFFFFEFB), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFFDCD9D0))),
               child: CustomPaint(painter: _SamplePainter(id, p.color, id == 'fine' ? 2.5 : (id == 'neon' ? 2.2 : 3.2), 1)),
             ),
             const SizedBox(height: 4),

@@ -2922,7 +2922,7 @@ abstract class L {
   /// Name of the pen tip "chisel" in the pen panel
   ///
   /// In es, this message translates to:
-  /// **'Rotulador biselado'**
+  /// **'Biselado'**
   String get tipChisel;
 
   /// Name of the pen tip "neon" in the pen panel
