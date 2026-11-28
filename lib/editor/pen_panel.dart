@@ -74,7 +74,10 @@ Future<EyeTarget?> showPenPanel(BuildContext context, ToolState ts, VoidCallback
           elevation: 12,
           borderRadius: BorderRadius.circular(18),
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: _wideLayout(ctx) ? 900 : 460, maxHeight: MediaQuery.of(ctx).size.height - 90),
+            constraints: BoxConstraints(
+                maxWidth: _wideLayout(ctx) ? 900 : 460,
+                // arriba: debajo de la barra (64) con un margen; a los costados, centrado con margen arriba y abajo
+                maxHeight: MediaQuery.of(ctx).size.height - (align == Alignment.topCenter ? 64 + 12 : 24)),
             child: ts.tool == Tool.paint
                 ? _PaintPanel(ts: ts, onChange: onChange)
                 : ts.tool == Tool.shape
@@ -199,7 +202,7 @@ class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
 
       // vista previa con los valores actuales
       Container(
-        height: 64,
+        height: wide ? 48 : 64,
         decoration: BoxDecoration(color: const Color(0xFFFFFEFB), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFDCD9D0))),
         child: CustomPaint(painter: _SamplePainter(p.tip, p.color, p.width, p.opacity), size: Size.infinite),
       ),
@@ -231,19 +234,16 @@ class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
       ]),
     ];
 
-    // favoritos, color y goma
-    final colors = <Widget>[
-      _favSection(ts, (f) => _set(f)),
-      const SizedBox(height: 12),
-      ColorChooser(
-        color: p.color,
-        onPick: (hex, {required fromWheel}) => _set(() => ts.setColor(hex)),
-        onEyedropper: () => Navigator.of(context).pop(EyeTarget.tool),
-      ),
+    // goma, abajo del color (en horizontal sin divisor: la columna derecha, con la rueda, es la más alta)
+    final eraser = <Widget>[
       if (!isHl) ...[
-        const SizedBox(height: 14),
-        const Divider(height: 1),
-        const SizedBox(height: 12),
+        if (wide)
+          const SizedBox(height: 8)
+        else ...[
+          const SizedBox(height: 14),
+          const Divider(height: 1),
+          const SizedBox(height: 12),
+        ],
         _label(context.l10n.penEraser),
         Wrap(runSpacing: 6, children: [
           for (var i = 0; i < 3; i++)
@@ -259,6 +259,17 @@ class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
       ],
     ];
 
+    // favoritos y color
+    final colors = <Widget>[
+      _favSection(ts, (f) => _set(f)),
+      SizedBox(height: wide ? 6 : 12),
+      ColorChooser(
+        color: p.color,
+        onPick: (hex, {required fromWheel}) => _set(() => ts.setColor(hex)),
+        onEyedropper: () => Navigator.of(context).pop(EyeTarget.tool),
+      ),
+    ];
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
       child: wide
@@ -268,7 +279,7 @@ class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [header, const SizedBox(height: 12), ...tipsAndSliders]),
               ),
               const SizedBox(width: 22),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: colors)),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [...colors, ...eraser])),
             ])
           : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               header,
@@ -276,6 +287,7 @@ class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
               ...tipsAndSliders,
               const SizedBox(height: 6),
               ...colors,
+              ...eraser,
             ]),
     );
   }
@@ -299,7 +311,7 @@ class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
           child: Column(children: [
             // la muestra va sobre color papel (como la vista previa grande): se ve igual en tema claro y oscuro
             Container(
-              height: 34,
+              height: 30,
               width: double.infinity,
               decoration: BoxDecoration(color: const Color(0xFFFFFEFB), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFFDCD9D0))),
               child: CustomPaint(painter: _SamplePainter(id, p.color, id == 'fine' ? 2.5 : (id == 'neon' ? 2.2 : 3.2), 1)),
