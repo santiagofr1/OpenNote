@@ -160,7 +160,7 @@ class Stroke extends Layered {
       y0 = min(y0, pts[i + 1]);
       y1 = max(y1, pts[i + 1]);
     }
-    final r = w * 1.6; // cubre la franja de pintura (ancho w) con sus puntas
+    final r = w * (k == 'neon' ? 2.1 : 1.6); // cubre la franja de pintura (ancho w) con sus puntas y el halo del neón
     return _bounds = Rect.fromLTRB(x0 - r, y0 - r, x1 + r, y1 + r);
   }
 
@@ -192,7 +192,7 @@ class Stroke extends Layered {
   }
 
   /// Cuánto se aleja la tinta de la línea central: la mitad del grosor (un poco más en la pintura, por el desflecado).
-  double get _reach => isPaint(k) ? w * .55 : w / 2;
+  double get _reach => isPaint(k) ? w * .55 : w * tipReach(k);
 
   /// ¿El trazo toca el rectángulo [r]? Real: algún tramo del recorrido, engordado la mitad del grosor,
   /// cruza el rectángulo (no alcanza con que se superpongan los rectángulos que envuelven).
@@ -228,7 +228,7 @@ class Stroke extends Layered {
   /// ¿La goma de radio [r] en [pt] toca este trazo?
   bool hitBy(Offset pt, double r) {
     if (!bounds.inflate(r).contains(pt)) return false;
-    final lim = r + w * .75, p = pts;
+    final lim = r + w * (k == 'neon' ? 1.3 : .75), p = pts;
     if (n == 1) return (Offset(p[0], p[1]) - pt).distance < lim;
     for (var i = 1; i < n; i++) {
       if (distToSegment(pt, Offset(p[i * 3 - 3], p[i * 3 - 2]), Offset(p[i * 3], p[i * 3 + 1])) < lim) return true;

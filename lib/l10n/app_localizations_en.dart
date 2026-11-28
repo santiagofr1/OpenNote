@@ -64,6 +64,30 @@ class LEn extends L {
   String get paperMonthly => 'Monthly calendar';
 
   @override
+  String get paperIso => 'Isometric';
+
+  @override
+  String get paperHex => 'Hexagonal';
+
+  @override
+  String get paperPolar => 'Polar';
+
+  @override
+  String get paperSemilog => 'Semilogarithmic';
+
+  @override
+  String get paperCalli => 'Calligraphy';
+
+  @override
+  String get paperStoryboard => 'Storyboard';
+
+  @override
+  String get paperGuitarTab => 'Guitar tab';
+
+  @override
+  String get paperDaily => 'Daily planner';
+
+  @override
   String get shortcutBold => 'Bold';
 
   @override
@@ -1343,8 +1367,8 @@ class LEn extends L {
   }
 
   @override
-  String notebookSheetCounter(String title, int n, int total) {
-    return '$title$n / $total';
+  String notebookSheetCounter(int n, int total) {
+    return '$n / $total';
   }
 
   @override
@@ -1622,6 +1646,24 @@ class LEn extends L {
   String get tipCalligraphy => 'Calligraphy';
 
   @override
+  String get tipDotted => 'Dotted';
+
+  @override
+  String get tipDashed => 'Dashed';
+
+  @override
+  String get tipChalk => 'Chalk';
+
+  @override
+  String get tipChisel => 'Chisel';
+
+  @override
+  String get tipNeon => 'Neon';
+
+  @override
+  String get tipDouble => 'Double line';
+
+  @override
   String get paintStyleBrush => 'Brush';
 
   @override
@@ -1710,7 +1752,13 @@ class LEn extends L {
 
   @override
   String get penFavHelp =>
-      'Press and hold a favorite to save the current color there.';
+      'Tap a favorite and change its color with the wheel. Press and hold it to delete it.';
+
+  @override
+  String get penFavAdd => 'Add color';
+
+  @override
+  String get penFavDelete => 'Delete color';
 
   @override
   String get penPanelHighlighter => 'Highlighter';
@@ -1895,12 +1943,6 @@ class LEn extends L {
   String get updateUpToDate => 'You have the latest version';
 
   @override
-  String get colorViewPalette => 'Palette';
-
-  @override
-  String get colorViewWheel => 'Wheel';
-
-  @override
   String get colorEyedropper => 'Eyedropper';
 
   @override
@@ -1910,5 +1952,23 @@ class LEn extends L {
   String get eyedropperCancel => 'Cancel eyedropper';
 
   @override
-  String get colorRecent => 'Recent';
+  String get indexMindMap => 'Export as mind map';
+
+  @override
+  String get mindMapTitle => 'Index mind map';
+
+  @override
+  String get mindMapPng => 'Image (PNG)';
+
+  @override
+  String get mindMapFreemind => 'Editable map (.mm)';
+
+  @override
+  String get mindMapSaved => 'Map saved';
+
+  @override
+  String get mindMapUntitled => 'Untitled';
+
+  @override
+  String get exportSaveMindMap => 'Save mind map';
 }

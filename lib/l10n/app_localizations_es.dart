@@ -64,6 +64,30 @@ class LEs extends L {
   String get paperMonthly => 'Calendario mensual';
 
   @override
+  String get paperIso => 'Isométrico';
+
+  @override
+  String get paperHex => 'Hexagonal';
+
+  @override
+  String get paperPolar => 'Polar';
+
+  @override
+  String get paperSemilog => 'Semilogarítmico';
+
+  @override
+  String get paperCalli => 'Caligrafía';
+
+  @override
+  String get paperStoryboard => 'Storyboard';
+
+  @override
+  String get paperGuitarTab => 'Tablatura de guitarra';
+
+  @override
+  String get paperDaily => 'Planificador diario';
+
+  @override
   String get shortcutBold => 'Negrita';
 
   @override
@@ -1346,8 +1370,8 @@ class LEs extends L {
   }
 
   @override
-  String notebookSheetCounter(String title, int n, int total) {
-    return '$title$n / $total';
+  String notebookSheetCounter(int n, int total) {
+    return '$n / $total';
   }
 
   @override
@@ -1626,6 +1650,24 @@ class LEs extends L {
   String get tipCalligraphy => 'Caligrafía';
 
   @override
+  String get tipDotted => 'Punteado';
+
+  @override
+  String get tipDashed => 'Discontinuo';
+
+  @override
+  String get tipChalk => 'Tiza';
+
+  @override
+  String get tipChisel => 'Biselado';
+
+  @override
+  String get tipNeon => 'Neón';
+
+  @override
+  String get tipDouble => 'Doble línea';
+
+  @override
   String get paintStyleBrush => 'Pincel';
 
   @override
@@ -1714,7 +1756,13 @@ class LEs extends L {
 
   @override
   String get penFavHelp =>
-      'Mantené apretado un favorito para guardar ahí el color actual.';
+      'Tocá un favorito y cambiale el color con la rueda. Mantenelo apretado para borrarlo.';
+
+  @override
+  String get penFavAdd => 'Agregar color';
+
+  @override
+  String get penFavDelete => 'Borrar color';
 
   @override
   String get penPanelHighlighter => 'Resaltador';
@@ -1901,12 +1949,6 @@ class LEs extends L {
   String get updateUpToDate => 'Ya tenés la última versión';
 
   @override
-  String get colorViewPalette => 'Paleta';
-
-  @override
-  String get colorViewWheel => 'Rueda';
-
-  @override
   String get colorEyedropper => 'Cuentagotas';
 
   @override
@@ -1916,5 +1958,23 @@ class LEs extends L {
   String get eyedropperCancel => 'Cancelar cuentagotas';
 
   @override
-  String get colorRecent => 'Recientes';
+  String get indexMindMap => 'Exportar como mapa conceptual';
+
+  @override
+  String get mindMapTitle => 'Mapa conceptual del índice';
+
+  @override
+  String get mindMapPng => 'Imagen (PNG)';
+
+  @override
+  String get mindMapFreemind => 'Mapa editable (.mm)';
+
+  @override
+  String get mindMapSaved => 'Mapa guardado';
+
+  @override
+  String get mindMapUntitled => 'Sin título';
+
+  @override
+  String get exportSaveMindMap => 'Guardar mapa conceptual';
 }

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:apuntes/data/system_clipboard.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -22,5 +23,15 @@ void main() {
   test('la implementación real no tira aunque falte wl-paste/xclip', () async {
     expect(await SystemClipboard.hasImage(), isA<bool>());
     await SystemClipboard.readImage();
+  }, skip: !Platform.isLinux);
+
+  test('en Linux usa el canal nativo vynote/clipboard', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    final png = Uint8List.fromList([0x89, 0x50, 0x4E, 0x47, 9, 9]);
+    final m = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    m.setMockMethodCallHandler(const MethodChannel('vynote/clipboard'), (c) async => c.method == 'hasImage' ? true : png);
+    addTearDown(() => m.setMockMethodCallHandler(const MethodChannel('vynote/clipboard'), null));
+    expect(await SystemClipboard.hasImage(), isTrue);
+    expect(await SystemClipboard.readImage(), png);
   }, skip: !Platform.isLinux);
 }

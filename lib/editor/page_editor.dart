@@ -124,10 +124,15 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   double _dpr = 1, _viewW = 800; // para el tamaño en píxeles de esas imágenes
   double _lastOff = 0; // para la dirección del scroll (prefetch de imágenes)
   int _scrollDir = 0, _prefKey = -1;
+  double _lastHOff = 0; // ídem en horizontal (solo lienzo: el prefetch va por columnas)
+  int _hDir = 0;
   Timer? _stillTimer;
   double _pressScrollY = 0; // scroll vertical al apoyar el dedo (para el menú de la hoja)
   // elementos de cada hoja (por id) ya ordenados y agrupados en tandas; se rehacen solo cuando esa hoja cambia
   final _sheetRuns = <String, List<ZRun>>{};
+  // lienzo: trazos de cada tanda partidos por columna (hoja -> tanda -> columna -> trazos); listas estables entre
+  // rebuilds (el painter las compara) y se rehacen junto con [_sheetRuns]
+  final _sheetTiles = <String, Map<int, Map<int, List<Stroke>>>>{};
   int _runsCount = -1;
   final history = History();
   final sel = Selection();
@@ -200,6 +205,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   // hojas armadas: las que se ven más un margen (ver [_calcRange]); las demás no tienen widgets
   ({int first, int last}) _range = (first: 0, last: 0);
+  // lienzo: columnas de tinta armadas (las que se ven más una de margen a cada lado, ver [_calcColRange])
+  ({int first, int last}) _colRange = (first: 0, last: 0);
   double _viewH = 800; // alto del visor
   final _stickyFocus = <String>{}; // notas con el teclado abierto: se quedan armadas aunque se scrolleen lejos
 
@@ -221,6 +228,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     doc.addRenderListener(_onSheetTouched);
     doc.addLoadListener(_onSheetLoaded);
     scroll.addListener(_onScroll);
+    hscroll.addListener(_onHScroll);
     _imgs.still = true; // abierto y sin mover: lo que falte de las visibles se genera ya
     _imgs.busy = () => pointer != null || live != null || _shapeEdit != null || _cover != null || erased != null || touch.pinching; // no generar con el lápiz en uso
     WidgetsBinding.instance.addPostFrameCallback((_) => scrollToSheet(widget.initialSheet, animate: false));
@@ -238,6 +246,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       _versions.clear();
       _imgs.clear();
       _sheetRuns.clear();
+      _sheetTiles.clear();
       _stickyFocus.clear();
       _loading.clear();
       _syncedRange = null;
@@ -278,6 +287,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       v.dispose();
     }
     _stillTimer?.cancel();
+    _warmTimer?.cancel();
     _wheelSave?.cancel();
     _shapeHold?.cancel();
     _imgs.dispose();
@@ -313,6 +323,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       _touchAll();
     } else {
       _sheetRuns.remove(id);
+      _sheetTiles.remove(id);
       _bump(id);
       if (!doc.isLoaded(id)) _requestSync(); // algo cayó en una hoja sin cargar: hay que cargarla
     }
@@ -344,6 +355,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   void _touchAll() {
     _sheetRuns.clear();
+    _sheetTiles.clear();
     _imgs.invalidateAll();
     for (final v in _versions.values) {
       v.value++;
@@ -362,6 +374,88 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       _touchRect(s.bounds);
     }
   }
+
+  /// Lienzo: columnas de tinta que se arman: las que se ven (según el scroll horizontal, el ancho del visor y la escala
+  /// de ahora) más una de margen a cada lado. Las demás no tienen widgets (ni se pintan en cada cuadro del pellizco).
+  ({int first, int last}) _calcColRange() {
+    if (!doc.nb.canvas) return (first: 0, last: 0);
+    final v = _visibleCols();
+    return (first: max(0, v.c0 - kCanvasColMargin), last: min(v.n - 1, v.c1 + kCanvasColMargin));
+  }
+
+  // ---- lienzo: mallas de las columnas de margen, armadas en los ratos libres ----
+  Timer? _warmTimer;
+  int _warmKey = 0;
+  List<Stroke>? _warmQueue;
+  int _warmAt = 0;
+
+  /// Que se vayan armando las mallas de las columnas que están por entrar al rango armado (y después las del rango que
+  /// quedaron viejas) antes de que entren: si no, la columna que entra arma las de todos sus trazos en el mismo cuadro. Se
+  /// reinicia si cambió el rango, el sentido del scroll o el borde difuminado; si no, no hace nada.
+  void _kickWarm() {
+    if (!doc.nb.canvas || !mounted) return;
+    final key = Object.hash(_colRange, _range, _hDir, meshFeather, doc.sheetCount);
+    if (key != _warmKey) {
+      _warmKey = key;
+      _warmQueue = null;
+      _warmAt = 0;
+    } else if (_warmQueue != null && _warmAt >= _warmQueue!.length) {
+      return; // ya está todo
+    }
+    _warmTimer ??= Timer(const Duration(milliseconds: 16), _warmStep);
+  }
+
+  /// Cola de trazos a calentar: primero las columnas justo afuera del rango armado (la que entra se pinta entera en el
+  /// cuadro en que se arma, y ahí arma todas sus mallas), las del lado al que se scrollea primero; después las del rango.
+  List<Stroke> _buildWarmQueue() {
+    final v = _visibleCols();
+    final r = _colRange;
+    final order = <int>[
+      for (var d = 1; d <= kCanvasColMargin; d++) ...[
+        if (_hDir >= 0) r.last + d,
+        if (_hDir < 0) r.first - d,
+        if (_hDir > 0) r.first - d,
+        if (_hDir <= 0) r.last + d,
+      ],
+      for (var c = r.first; c <= r.last; c++) c,
+    ].where((c) => c >= 0 && c < v.n).toList();
+    final seen = <Stroke>{};
+    final q = <Stroke>[];
+    for (final c in order) {
+      for (var k = _range.first; k <= _range.last && k < doc.sheetCount; k++) {
+        for (final runs in (_sheetTiles[doc.sheets[k].id] ?? const <int, Map<int, List<Stroke>>>{}).values) {
+          for (final s in runs[c] ?? const <Stroke>[]) {
+            if (seen.add(s)) q.add(s);
+          }
+        }
+      }
+    }
+    return q;
+  }
+
+  void _warmStep() {
+    _warmTimer = null;
+    if (!mounted || !doc.nb.canvas) return;
+    if (_imgs.busy?.call() ?? false) {
+      _warmTimer = Timer(const Duration(milliseconds: 200), _warmStep); // con el lápiz o el pellizco no se arma nada
+      return;
+    }
+    final q = _warmQueue ??= _buildWarmQueue();
+    final sw = Stopwatch()..start();
+    while (_warmAt < q.length && sw.elapsedMicroseconds < kWarmBudgetUs) {
+      final s = q[_warmAt++];
+      if (identical(doc.strokes[s.id], s) && (s.mesh == null || s.mesh!.feather != meshFeather)) s.ensureMesh();
+    }
+    if (_warmAt < q.length) _warmTimer = Timer(const Duration(milliseconds: 16), _warmStep);
+  }
+
+  /// Para los tests: cuántos trazos de la cola de calentamiento faltan.
+  @visibleForTesting
+  int get debugWarmPending => _warmQueue == null ? -1 : _warmQueue!.length - _warmAt;
+
+  /// Para los tests: columnas armadas del lienzo.
+  @visibleForTesting
+  ({int first, int last}) get debugColRange => _colRange;
 
   /// Hojas que se arman: las que se ven más un margen de un alto de visor arriba y abajo.
   ({int first, int last}) _calcRange() {
@@ -404,25 +498,79 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     if ((off - _lastOff).abs() > .5) _scrollDir = off > _lastOff ? 1 : -1;
     _lastOff = off;
     final v = _visibleSheets();
-    final key = (v.first * 100003 + v.last) * 4 + _scrollDir + 1 + doc.sheetCount * 7919 + doc.sheets[v.first].id.hashCode + doc.sheets[v.last].id.hashCode * 31;
+    var key = (v.first * 100003 + v.last) * 4 + _scrollDir + 1 + doc.sheetCount * 7919 + doc.sheets[v.first].id.hashCode + doc.sheets[v.last].id.hashCode * 31;
+    final cv = doc.nb.canvas;
+    final cols = cv ? _visibleCols() : (c0: 0, c1: 0, n: 1);
+    if (cv) {
+      final hoff = hscroll.hasClients && hscroll.position.hasPixels ? hscroll.offset : 0.0;
+      if ((hoff - _lastHOff).abs() > .5) _hDir = hoff > _lastHOff ? 1 : -1;
+      _lastHOff = hoff;
+      key = Object.hash(key, cols.c0, cols.c1, cols.n, _hDir);
+    }
     if (key == _prefKey) return;
     _prefKey = key;
     final plan = SheetImageCache.prefetchPlan(first: v.first, last: v.last, dir: _scrollDir, count: doc.sheetCount);
-    final ids = [for (final k in plan) doc.sheets[k].id];
-    final vis = {for (var k = v.first; k <= v.last; k++) doc.sheets[k].id};
-    // protegidas: el plan y una hoja detrás (la que se acaba de pasar: si se vuelve, está lista)
+    final List<String> ids;
+    final Set<String> vis;
+    final Set<String> protect;
     final behind = _scrollDir == 0 ? -1 : (_scrollDir > 0 ? v.first - 1 : v.last + 1);
-    _imgs.protectedSheets = {...ids, if (behind >= 0 && behind < doc.sheetCount) doc.sheets[behind].id};
+    if (!cv) {
+      ids = [for (final k in plan) doc.sheets[k].id];
+      vis = {for (var k = v.first; k <= v.last; k++) doc.sheets[k].id};
+      // protegidas: el plan y una hoja detrás (la que se acaba de pasar: si se vuelve, está lista)
+      protect = {...ids, if (behind >= 0 && behind < doc.sheetCount) doc.sheets[behind].id};
+    } else {
+      // lienzo: la unidad es la columna de una hoja. Visibles: columnas en pantalla de las hojas visibles. Por
+      // adelantado: esas columnas en las hojas del plan vertical y las 2 siguientes en el sentido horizontal
+      // (ambos lados si está quieto) en las hojas visibles. Protegida además una columna detrás.
+      final cs = [for (var c = cols.c0; c <= cols.c1; c++) c];
+      final ahead = <int>[
+        for (var i = 1; i <= 2; i++) ...[
+          if (_hDir >= 0 && cols.c1 + i < cols.n) cols.c1 + i,
+          if (_hDir <= 0 && cols.c0 - i >= 0) cols.c0 - i,
+        ]
+      ];
+      final back = _hDir == 0 ? -1 : (_hDir > 0 ? cols.c0 - 1 : cols.c1 + 1);
+      vis = {for (var k = v.first; k <= v.last; k++) for (final c in cs) tileId(doc.sheets[k].id, c)};
+      ids = [
+        for (final k in plan) for (final c in cs) tileId(doc.sheets[k].id, c),
+        for (var k = v.first; k <= v.last; k++) for (final c in ahead) tileId(doc.sheets[k].id, c),
+      ];
+      protect = {
+        ...ids,
+        if (back >= 0 && back < cols.n) for (var k = v.first; k <= v.last; k++) tileId(doc.sheets[k].id, back),
+        if (behind >= 0 && behind < doc.sheetCount) for (final c in cs) tileId(doc.sheets[behind].id, c),
+      };
+    }
+    _imgs.protectedSheets = protect;
     _imgs.prefetch(ids, dir: _scrollDir);
     _imgs.releaseOutsideWindow(); // las imágenes de las hojas que quedaron lejos se sueltan (ver SheetImageCache)
     // visibles: las que no se habían dibujado (o tenían franjas a medias sin repintar) pasan a mostrarse; sus franjas
     // que están en pantalla se generan primero
     final top = (off - kTopPad) / scale, bottom = top + _viewH / scale;
-    final fr = <String, (double, double)>{
-      for (var k = v.first; k <= v.last; k++)
-        doc.sheets[k].id: (((top - k * kSheetStep) / kSheetH).clamp(0.0, 1.0), ((bottom - k * kSheetStep) / kSheetH).clamp(0.0, 1.0)),
-    };
+    final fr = <String, (double, double)>{};
+    for (var k = v.first; k <= v.last; k++) {
+      final f = (((top - k * kSheetStep) / kSheetH).clamp(0.0, 1.0), ((bottom - k * kSheetStep) / kSheetH).clamp(0.0, 1.0));
+      if (!cv) {
+        fr[doc.sheets[k].id] = f;
+      } else {
+        for (var c = cols.c0; c <= cols.c1; c++) {
+          fr[tileId(doc.sheets[k].id, c)] = f;
+        }
+      }
+    }
     _imgs.setVisible(vis, fractions: fr);
+  }
+
+  /// Lienzo: columnas (de ancho [kCanvasTileW]) que se ven según el scroll horizontal, y cuántas hay.
+  ({int c0, int c1, int n}) _visibleCols() {
+    final n = max(1, (doc.width / kCanvasTileW).ceil());
+    final has = hscroll.hasClients && hscroll.position.hasPixels;
+    final left = ((has ? hscroll.offset : 0.0) - layout.sheetLeft) / scale;
+    final w = hscroll.hasClients ? hscroll.position.viewportDimension : _viewW;
+    final c0 = (left / kCanvasTileW).floor().clamp(0, n - 1);
+    final c1 = ((left + w / scale) / kCanvasTileW).floor().clamp(c0, n - 1);
+    return (c0: c0, c1: c1, n: n);
   }
 
   /// Un rato sin scroll: lo que falte de las hojas visibles se genera ya (sin presupuesto por cuadro).
@@ -437,11 +585,17 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   @visibleForTesting
   ({bool vector, int activity, int jobs}) get imageFrameState {
     final v = _visibleSheets();
+    final cols = doc.nb.canvas ? _visibleCols() : (c0: 0, c1: 0, n: 1);
     var vec = false;
     for (var k = v.first; k <= v.last; k++) {
-      for (final e in _imgs.entriesOf(doc.sheets[k].id)) {
-        if (!e.cacheable) continue;
-        if (e.mode == InkPaintMode.vector) vec = true;
+      final ids = doc.nb.canvas
+          ? [for (var c = cols.c0; c <= cols.c1; c++) tileId(doc.sheets[k].id, c)]
+          : [doc.sheets[k].id];
+      for (final id in ids) {
+        for (final e in _imgs.entriesOf(id)) {
+          if (!e.cacheable) continue;
+          if (e.mode == InkPaintMode.vector) vec = true;
+        }
       }
     }
     return (vector: vec, activity: _imgs.activity, jobs: _imgs.jobsStarted);
@@ -456,6 +610,28 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
 
   /// Al scrollear solo se rearma el cuaderno si cambió el rango de hojas armadas.
   void _onScroll() => developer.Timeline.timeSync('ON onScroll', _onScrollImpl);
+
+  /// Lienzo: al scrollear en horizontal cambian las columnas visibles (y las que se generan por adelantado).
+  void _onHScroll() {
+    if (!doc.nb.canvas) return;
+    _imgs.still = false;
+    _stillTimer?.cancel();
+    _stillTimer = Timer(const Duration(milliseconds: 120), _markStill);
+    _updatePrefetch();
+    if (_calcColRange() == _colRange) {
+      _kickWarm();
+      return;
+    }
+    void rebuild() {
+      if (mounted && _calcColRange() != _colRange) setState(() {});
+    }
+
+    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => rebuild()); // en pleno armado no se puede
+    } else {
+      rebuild();
+    }
+  }
 
   void _onScrollImpl() {
     _imgs.still = false;
@@ -1973,7 +2149,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
       _eye = null;
       switch (e.target) {
         case EyeTarget.tool:
-          ts.pickColor(hex);
+          ts.setColor(hex);
         case EyeTarget.shapeFill:
           ts.shapeFillColor = hex;
         case EyeTarget.paintShape:
@@ -1982,7 +2158,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     });
     e.image.dispose();
     widget.onPrefsChanged();
-    _openPanel(); // se vuelve al panel: se ve el resultado y se lo puede guardar en un favorito
+    _openPanel(); // se vuelve al panel: se ve el resultado
   }
 
   /// Modo cuentagotas activo (lo usan los tests).
@@ -1995,20 +2171,10 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     _openPanel();
   }
 
-  /// Mantener un favorito de la barra: guarda ahí el color actual de la herramienta (desde texto o seleccionar, del lápiz).
-  bool _saveFavorite(int slot) {
+  /// Tocar un favorito de la barra: lo elige (desde texto o seleccionar, vuelve al lápiz).
+  void _useFavorite(int slot) {
     if (!ts.drawing) _setTool(Tool.pen);
-    final changed = ts.saveFavorite(slot);
-    if (changed) {
-      setState(() {});
-      widget.onPrefsChanged();
-    }
-    return changed;
-  }
-
-  void _pickQuick(String c) {
-    if (!ts.drawing) _setTool(Tool.pen);
-    setState(() => ts.pickColor(c));
+    setState(() => ts.useFavorite(slot));
     widget.onPrefsChanged();
   }
 
@@ -2710,8 +2876,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
             _setTool(t);
             _openPanel();
           },
-          onPickColor: _pickQuick,
-          onSaveFavorite: _saveFavorite,
+          onUseFavorite: _useFavorite,
           onOpenPanel: _openPanelForDrawing,
           onUndo: () => _undoRedo(undo: true),
           onRedo: () => _undoRedo(undo: false),
@@ -2738,6 +2903,8 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
         _syncMeshFeather();
         developer.Timeline.timeSync('ON canvas range+sync', () {
           _range = _calcRange();
+          _colRange = _calcColRange();
+          _kickWarm();
           _requestSync();
         });
         final sheetSize = Size(layout.sheetWidth, doc.h * scale);
@@ -3033,7 +3200,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
               ),
           for (var k = first; k <= last; k++) ...[
             if (!doc.isLoadedAt(k)) _loadingMark(k),
-            for (final (i, run) in _sheetRuns[doc.sheets[k].id]!.indexed) _run(run, i, textMode, k),
+            for (final (i, run) in _sheetRuns[doc.sheets[k].id]!.indexed) ..._runWidgets(run, i, textMode, k),
           ],
           for (final (i, run) in splitHighlighters(zRuns(sortByZ(extras))).indexed) _run(run, i, textMode, -1),
           Positioned.fill(
@@ -3057,6 +3224,7 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
   void _fillRuns(int first, int last) {
     if (_runsCount != doc.sheetCount) {
       _sheetRuns.clear(); // se agregaron o sacaron hojas
+      _sheetTiles.clear();
       _runsCount = doc.sheetCount;
     }
     final missing = [for (var k = first; k <= last; k++) if (!_sheetRuns.containsKey(doc.sheets[k].id)) k];
@@ -3103,29 +3271,56 @@ class PageEditorState extends State<PageEditor> with SingleTickerProviderStateMi
     return (lines + 1) * doc.lineAt(t.y) * 1.8;
   }
 
+  /// Los widgets de una tanda: uno solo, salvo la tinta de un lienzo, que va partida en columnas (ver [_inkTile]).
+  List<Widget> _runWidgets(ZRun run, int i, bool textMode, int sheet) {
+    final strokes = run.strokes;
+    if (strokes == null || !doc.nb.canvas) return [_run(run, i, textMode, sheet)];
+    final id = doc.sheets[sheet].id;
+    final tiles = (_sheetTiles.putIfAbsent(id, () => {}).putIfAbsent(i, () {
+      final m = <int, List<Stroke>>{};
+      for (final s in strokes) {
+        final b = s.bounds;
+        for (var j = max(0, (b.left / kCanvasTileW).floor()); j <= max(0, (b.right / kCanvasTileW).floor()); j++) {
+          (m[j] ??= []).add(s);
+        }
+      }
+      return m;
+    }));
+    final r = doc.bandRect(sheet);
+    return [
+      for (final j in (tiles.keys.toList()..sort()))
+        if (j >= _colRange.first && j <= _colRange.last) // solo las columnas cerca del visor (ver [_calcColRange])
+          _inkTile(run, i, id, Rect.fromLTRB(j * kCanvasTileW, r.top, j * kCanvasTileW + kCanvasTileW > r.right && j * kCanvasTileW < r.right ? r.right : j * kCanvasTileW + kCanvasTileW, r.bottom),
+            tiles[j]!, tileId(id, j), 'ink-$id-$i-c$j'),
+    ];
+  }
+
+  Widget _inkTile(ZRun run, int i, String id, Rect r, List<Stroke> strokes, String sheetId, String key) {
+    return Positioned(
+      key: ValueKey(key),
+      left: r.left * scale,
+      top: r.top * scale,
+      width: r.width * scale,
+      height: r.height * scale,
+      child: IgnorePointer(
+        child: RepaintBoundary(
+          child: CustomPaint(
+              painter: InkPainter(doc, strokes, r, scale, _verOf(id), () => sel.moving ? sel.strokes : (_shapeEdit != null ? {_shapeEdit!.id} : const {}),
+                  cache: _imgs, cacheKey: key, sheetId: sheetId, dpr: _dpr, maxPx: 2 * _viewW * _dpr, multiply: run.multiply),
+              // la tanda multiplicada no se rasteriza aparte: perdería la mezcla con el PDF de abajo
+              isComplex: !run.multiply,
+              willChange: run.multiply),
+        ),
+      ),
+    );
+  }
+
   /// [sheet]: índice de la hoja de la tanda de tinta (-1 en los extras, que nunca llevan tinta).
   Widget _run(ZRun run, int i, bool textMode, int sheet) {
     final strokes = run.strokes;
     if (strokes != null) {
-      final r = doc.bandRect(sheet);
       final id = doc.sheets[sheet].id;
-      return Positioned(
-        key: ValueKey('ink-$id-$i'),
-        left: 0,
-        top: r.top * scale,
-        width: r.width * scale,
-        height: r.height * scale,
-        child: IgnorePointer(
-          child: RepaintBoundary(
-            child: CustomPaint(
-                painter: InkPainter(doc, strokes, r, scale, _verOf(id), () => sel.moving ? sel.strokes : (_shapeEdit != null ? {_shapeEdit!.id} : const {}),
-                    cache: _imgs, cacheKey: 'ink-$id-$i', sheetId: id, dpr: _dpr, maxPx: 2 * _viewW * _dpr, multiply: run.multiply),
-                // la tanda multiplicada no se rasteriza aparte: perdería la mezcla con el PDF de abajo
-                isComplex: !run.multiply,
-                willChange: run.multiply),
-          ),
-        ),
-      );
+      return _inkTile(run, i, id, doc.bandRect(sheet), strokes, id, 'ink-$id-$i');
     }
     final e = run.single;
     if (e is Item) {

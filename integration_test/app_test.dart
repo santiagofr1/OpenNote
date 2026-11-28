@@ -229,7 +229,7 @@ void main() {
     await settle(t, 1200);
   });
 
-  testWidgets('barra: 4 colores favoritos fijos; tocar elige sin reordenar y mantener apretado guarda ahí el color actual (issue #23)', (t) async {
+  testWidgets('barra: tocar un favorito lo elige (sin reordenar) y el color que se cambie edita ese favorito (issue #23)', (t) async {
     await start(t);
     await createNotebook(t, 'Favoritos');
     final ts = editor(t).ts;
@@ -237,18 +237,19 @@ void main() {
     await t.tap(find.byKey(const ValueKey('fav-2')));
     await settle(t);
     expect(ts.pen.color, antes[2]);
+    expect(ts.favSel, 2);
     expect(ts.favorites, antes, reason: 'elegir un favorito no los reordena');
-    final nuevo = palette.firstWhere((c) => !antes.contains(c));
-    ts.pen.color = nuevo;
+    const nuevo = '#7b3a43';
+    ts.setColor(nuevo); // lo que hacen la rueda, el hex y el cuentagotas
+    editor(t).widget.onPrefsChanged();
+    await t.tap(find.byKey(const ValueKey('fav-0')));
+    await settle(t);
+    expect(ts.pen.color, antes[0]);
+    expect(ts.favorites, [antes[0], antes[1], nuevo, antes[3]]);
     await t.longPress(find.byKey(const ValueKey('fav-0')));
     await settle(t);
-    expect(find.byKey(const Key('eyedropper')), findsNothing, reason: 'mantener apretado ya no abre el panel');
-    expect(ts.favorites, [nuevo, antes[1], antes[2], antes[3]]);
-    expect(ts.pen.color, nuevo, reason: 'el color actual no cambia');
-    // dejar los favoritos como estaban
-    ts.setFavorite(0, antes[0]);
-    editor(t).widget.onPrefsChanged();
-    expect(ts.favorites, antes);
+    expect(find.byKey(const Key('eyedropper')), findsNothing, reason: 'mantener apretado en la barra no hace nada');
+    expect(ts.favorites.length, 4);
     await t.tap(find.byKey(const Key('back')));
     await settle(t, 1200);
   });
@@ -277,8 +278,9 @@ void main() {
       await t.tap(find.byKey(Key('paintSt-${estilos[i]}')));
       await settle(t);
       expect(editor(t).ts.paintParams.style, estilos[i]);
-      await t.ensureVisible(find.byKey(Key('paint-${fondos[i]}')));
-      await t.tap(find.byKey(Key('paint-${fondos[i]}')));
+      final hexFondo = find.byKey(const Key('colorHex')).first; // el del fondo (el de las formitas va después)
+      await t.ensureVisible(hexFondo);
+      await t.enterText(hexFondo, fondos[i]);
       await settle(t);
       expect(editor(t).ts.paint.color, '#${fondos[i]}');
       if (i == 3) {
@@ -304,6 +306,34 @@ void main() {
       i++;
     }
     expect(editor(t).doc.strokes.values.last.pp!.bg, false);
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+  });
+
+  testWidgets('lápiz: elige cada punta nueva desde el panel (punteado, discontinuo, tiza, biselado, neón, doble línea), dibuja y el trazo queda con su punta y su malla (issue #26)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Puntas');
+    final c = sheetCenter(t);
+    var y = -170.0;
+    for (final id in ['dotted', 'dashed', 'chalk', 'chisel', 'neon', 'double']) {
+      await t.tap(find.byTooltip('Lápiz · tocá de nuevo para opciones'));
+      await settle(t);
+      await t.ensureVisible(find.byKey(Key('tip-$id')));
+      await t.tap(find.byKey(Key('tip-$id')));
+      await settle(t);
+      expect(editor(t).ts.pen.tip, id);
+      // cierra el panel desde adentro (no a ciegas sobre la cortina)
+      Navigator.of(t.element(find.byKey(Key('tip-$id')))).pop();
+      await settle(t);
+      expect(find.byKey(Key('tip-$id')), findsNothing);
+      final before = editor(t).doc.strokes.length;
+      await stylusLine(t, c + Offset(-100, y), c + Offset(100, y));
+      y += 60;
+      expect(editor(t).doc.strokes.length, before + 1, reason: id);
+      final s = editor(t).doc.strokes.values.last;
+      expect(s.k, id);
+      expect(s.ensureMesh()!.vertexCount, greaterThan(0), reason: id);
+    }
     await t.tap(find.byKey(const Key('back')));
     await settle(t, 1200);
   });
@@ -827,7 +857,7 @@ void main() {
     }
   });
 
-  testWidgets('estilo de hoja: en horizontal entra sin scroll, en dos columnas', (t) async {
+  testWidgets('estilo de hoja: en horizontal entra sin scroll, en columnas', (t) async {
     await start(t);
     // tablet en horizontal (1333 x 752 lógicos) con la letra del sistema al 110 %
     t.view.physicalSize = const Size(1333.4, 752) * t.view.devicePixelRatio;
@@ -852,6 +882,38 @@ void main() {
 
     await t.tap(find.text('Cancelar'));
     await settle(t, 600);
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('panel del lápiz: con todas las puntas entra entero en horizontal, en los tres lados de la barra', (t) async {
+    await start(t);
+    t.view.physicalSize = const Size(1333.4, 752) * t.view.devicePixelRatio;
+    t.platformDispatcher.textScaleFactorTestValue = 1.1;
+    addTearDown(t.view.resetPhysicalSize);
+    addTearDown(t.platformDispatcher.clearTextScaleFactorTestValue);
+    await settle(t);
+    await createNotebook(t, 'PanelLapiz');
+    final ts = editor(t).ts;
+    final screen = Offset.zero & (t.view.physicalSize / t.view.devicePixelRatio);
+    for (final dock in ['top', 'left', 'right']) {
+      ts.dock = dock;
+      await settle(t);
+      await t.tap(find.byTooltip('Lápiz · tocá de nuevo para opciones'));
+      await settle(t);
+      final scroll = find.ancestor(of: find.byKey(const Key('tip-pen')), matching: find.byType(Scrollable));
+      expect(scroll, findsWidgets, reason: dock);
+      for (final id in [for (final (id, _) in tips) id]) {
+        final r = t.getRect(find.byKey(Key('tip-$id')));
+        expect(screen.contains(r.topLeft) && screen.contains(r.bottomRight), isTrue, reason: '$dock: punta $id en $r');
+      }
+      for (final k in [const Key('eyedropper'), const Key('shapeSnapSwitch')]) {
+        final r = t.getRect(find.byKey(k));
+        expect(screen.contains(r.topLeft) && screen.contains(r.bottomRight), isTrue, reason: '$dock: $k en $r');
+      }
+      expect(t.state<ScrollableState>(scroll.first).position.maxScrollExtent, 0, reason: '$dock: el panel entra sin scroll');
+      await t.tapAt(const Offset(4, 600)); // cierra el panel
+      await settle(t);
+    }
     expect(t.takeException(), isNull);
   });
 
@@ -2947,6 +3009,55 @@ void main() {
     await t.tap(find.byKey(const Key('back')));
     await settle(t, 1200);
   });
+  testWidgets('índice: exportar el mapa conceptual como imagen y como archivo .mm (issue #17)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Mapa & Co');
+    final ed = editor(t);
+    await t.tap(find.byKey(const Key('indexBtn')));
+    await settle(t, 600);
+    expect(find.byKey(const Key('indexMindMap')), findsNothing, reason: 'sin títulos no hay mapa que exportar');
+    await t.tap(find.byKey(const Key('indexBtn'))); // cierra el panel
+    await settle(t, 600);
+    // dos títulos marcados (uno de segundo nivel)
+    ed.doc.sheets[0].heads
+      ..add(Heading('h-uno', title: 'Introducción', ids: ['x1']))
+      ..add(Heading('h-dos', level: 2, title: 'Objetivos <básicos>', y: 100, ids: ['x2']));
+    await t.tap(find.byKey(const Key('indexBtn')));
+    await settle(t, 600);
+    expect(find.byKey(const Key('indexMindMap')), findsOneWidget);
+
+    final savedMap = saveMindMap;
+    addTearDown(() => saveMindMap = savedMap);
+    final files = <String, Uint8List>{};
+    saveMindMap = (bytes, name, mime) async {
+      files[name] = bytes;
+      return true;
+    };
+
+    await t.tap(find.byKey(const Key('indexMindMap')));
+    await settle(t, 600);
+    await t.tap(find.byKey(const Key('mindMapPng')));
+    await settle(t, 3000);
+    final png = files['Mapa & Co - mapa.png']!;
+    expect(png.sublist(0, 8), [137, 80, 78, 71, 13, 10, 26, 10], reason: 'un PNG válido');
+    final dim = ByteData.sublistView(png);
+    expect(dim.getUint32(16), greaterThan(200));
+    expect(dim.getUint32(20), greaterThan(100));
+
+    await t.tap(find.byKey(const Key('indexMindMap')));
+    await settle(t, 600);
+    await t.tap(find.byKey(const Key('mindMapFreemind')));
+    await settle(t, 800);
+    final mm = utf8.decode(files['Mapa & Co - mapa.mm']!);
+    expect(mm, contains('<map version="1.0.1">'));
+    expect(mm, contains('TEXT="Mapa &amp; Co"'));
+    expect(mm, contains('TEXT="Introducción"'));
+    expect(mm, contains('TEXT="Objetivos &lt;básicos&gt;"'));
+    expect(files.length, 2);
+
+    await t.tap(find.byKey(const Key('back')));
+    await settle(t, 1200);
+  });
   // ---------------- fondos y plantillas (#31, #33) ----------------
   testWidgets('fondos nuevos: milimetrado y ejes cartesianos (issue #31)', (t) async {
     await start(t);
@@ -2968,6 +3079,26 @@ void main() {
     await tapV(t, find.byKey(const Key('styleOk')));
     await settle(t, 800);
     expect([editor(t).doc.sheets[0].bg, editor(t).doc.sheets[0].spacing], ['axes', 7.0]);
+  });
+
+  testWidgets('fondos y plantillas nuevos: isométrico, hexagonal, polar, semilog, caligrafía, storyboard, tablatura y diario (issue #25)', (t) async {
+    await start(t);
+    await createNotebook(t, 'Fondos nuevos');
+    for (final bg in ['iso', 'hex', 'polar', 'semilog', 'calli', 'storyboard', 'guitartab', 'daily']) {
+      await openMore(t, 'Estilo de hoja');
+      await tapV(t, find.byKey(Key('bg-$bg')));
+      await tapV(t, find.byKey(const Key('applySheet')));
+      await settle(t);
+      if (bg == 'iso' || bg == 'hex') {
+        await tapV(t, find.byKey(const Key('spacing-7')));
+        await settle(t);
+      }
+      await tapV(t, find.byKey(const Key('styleOk')));
+      await settle(t, 800);
+      final m = editor(t).doc.sheets[0];
+      expect(m.bg, bg);
+      if (bg == 'iso' || bg == 'hex') expect(m.spacing, 7.0);
+    }
   });
 
   testWidgets('plantillas incluidas: aplicar una a la hoja y crear una hoja nueva con otra (issue #33)', (t) async {
@@ -3133,16 +3264,16 @@ void main() {
     expect(ed.doc.items.values.where((i) => i.type == 'image'), isEmpty);
   });
 
-  testWidgets('rueda de color: arrastrar el anillo cambia el color y mantener apretado un favorito del panel lo guarda; se ve en la barra', (t) async {
+  testWidgets('rueda de color: tocar un favorito del panel y mover la rueda o el hex lo edita (se ve en la barra); + suma y mantener apretado borra', (t) async {
     await start(t);
     await createNotebook(t, 'Selector');
     final ts = editor(t).ts;
-    final antes = ts.favorites[0];
-    final color0 = ts.pen.color;
+    final antes = List<String>.from(ts.favorites);
     await t.tap(find.byTooltip('Lápiz · tocá de nuevo para opciones'));
     await settle(t);
     expect(find.byKey(const Key('favEdit')), findsNothing);
-    await t.tap(find.byKey(const Key('colorViewWheel')));
+    await t.ensureVisible(find.byKey(const ValueKey('panelFav-0')));
+    await t.tap(find.byKey(const ValueKey('panelFav-0')));
     await settle(t);
     final wheel = find.byKey(const Key('colorWheel'));
     await t.ensureVisible(wheel);
@@ -3152,18 +3283,32 @@ void main() {
     await t.dragFrom(c + Offset(r, 0), Offset(-r, r)); // por el anillo, de las 3 a las 6 en punto
     await settle(t);
     final nuevo = ts.pen.color;
-    expect(nuevo, isNot(color0));
-    await t.ensureVisible(find.byKey(const ValueKey('panelFav-0')));
-    await t.longPress(find.byKey(const ValueKey('panelFav-0')));
+    expect(nuevo, isNot(antes[0]));
+    expect(ts.favorites[0], nuevo, reason: 'la rueda edita el favorito elegido');
+    await t.enterText(find.byKey(const Key('colorHex')), 'AB3C5D');
     await settle(t);
-    expect(ts.favorites[0], nuevo);
+    expect(ts.favorites[0], '#ab3c5d');
+    expect(ts.favorites.sublist(1), antes.sublist(1));
+    // + suma un favorito con el color actual
+    await t.ensureVisible(find.byKey(const ValueKey('panelFavAdd')));
+    await t.tap(find.byKey(const ValueKey('panelFavAdd')));
+    await settle(t);
+    expect(ts.favorites.length, 5);
+    expect(ts.favSel, 4);
+    // mantener apretado el segundo: aparece Borrar color
+    await t.ensureVisible(find.byKey(const ValueKey('panelFav-1')));
+    await holdOn(t, find.byKey(const ValueKey('panelFav-1')));
+    await settle(t);
+    await t.tap(find.byKey(const ValueKey('panelFavDelete')));
+    await settle(t);
+    expect(ts.favorites.length, 4);
+    expect(ts.favorites, ['#ab3c5d', antes[2], antes[3], '#ab3c5d']);
+    expect(ts.favSel, 3, reason: 'el elegido corrió un lugar');
     await t.tapAt(const Offset(4, 600)); // cierra el panel
     await settle(t);
     expect(find.byKey(const Key('colorWheel')), findsNothing);
-    final dot = find.descendant(of: find.byKey(const ValueKey('fav-0')), matching: find.byWidgetPredicate((w) => w is Container && (w.decoration as BoxDecoration?)?.color == parseColor(nuevo)));
+    final dot = find.descendant(of: find.byKey(const ValueKey('fav-0')), matching: find.byWidgetPredicate((w) => w is Container && (w.decoration as BoxDecoration?)?.color == parseColor('#ab3c5d')));
     expect(dot, findsOneWidget, reason: 'la barra muestra el color nuevo');
-    // dejar el favorito como estaba
-    ts.setFavorite(0, antes);
     await t.tap(find.byKey(const Key('back')));
     await settle(t, 1200);
   });
@@ -3179,7 +3324,7 @@ void main() {
     final c = sheetCenter(t);
     await stylusLine(t, c, c + const Offset(150, 0));
     expect(ed.doc.strokes.length, 1);
-    ts.pickColor('#1d4ed8'); // otro color
+    ts.setColor('#1d4ed8'); // otro color
     await t.tap(find.byTooltip('Lápiz · tocá de nuevo para opciones'));
     await settle(t);
     await t.tap(find.byKey(const Key('eyedropper')));
@@ -3452,7 +3597,8 @@ void main() {
     await settle(t);
     await t.tap(find.byKey(Key('bookmarkItem-$id')));
     await settle(t, 800);
-    expect(find.text('Parcial · 2 / 2'), findsOneWidget);
+    expect(editor(t).visibleSheet, 1);
+    expect(t.widget<Text>(find.byKey(const Key('sheetCounter'))).data, '2 / 2', reason: 'la barra muestra solo la hoja actual y el total, sin el título');
     // desmarcar con el botón de arriba
     await t.tap(find.byKey(const Key('bookmarkSheet')));
     await settle(t, 600);

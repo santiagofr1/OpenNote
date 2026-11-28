@@ -2,6 +2,7 @@ import 'dart:math';
 import 'dart:ui' show Vertices, VertexMode;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 
 import '../domain/domain.dart';
 import '../l10n/l10n.dart';
@@ -9,6 +10,12 @@ import '../rendering/stroke_painter.dart';
 import '../theme/colors.dart';
 import 'color_chooser.dart';
 import 'eyedropper.dart';
+
+/// Pantalla ancha y baja (la tablet en horizontal): el panel del lápiz va en dos columnas para que entre entero, sin scroll.
+bool _wideLayout(BuildContext context) {
+  final s = MediaQuery.sizeOf(context);
+  return s.width >= 900 && s.width > s.height;
+}
 
 /// Trazo de muestra (una ola con presión variable) para previsualizar una punta.
 Stroke _sampleStroke(String tip, String color, double w, double o, Size size, [PaintParams? pp]) {
@@ -67,7 +74,10 @@ Future<EyeTarget?> showPenPanel(BuildContext context, ToolState ts, VoidCallback
           elevation: 12,
           borderRadius: BorderRadius.circular(18),
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: 460, maxHeight: MediaQuery.of(ctx).size.height - 90),
+            constraints: BoxConstraints(
+                maxWidth: _wideLayout(ctx) ? 900 : 460,
+                // arriba: debajo de la barra (64) con un margen; a los costados, centrado con margen arriba y abajo
+                maxHeight: MediaQuery.of(ctx).size.height - (align == Alignment.topCenter ? 64 + 12 : 24)),
             child: ts.tool == Tool.paint
                 ? _PaintPanel(ts: ts, onChange: onChange)
                 : ts.tool == Tool.shape
@@ -78,8 +88,6 @@ Future<EyeTarget?> showPenPanel(BuildContext context, ToolState ts, VoidCallback
       ),
     ),
   ).then((target) {
-    ts.pickColor(ts.current.color);
-    if (ts.tool == Tool.paint) ts.rememberShapeColor();
     onChange();
     return target;
   });
@@ -98,22 +106,27 @@ mixin _PanelParts<T extends StatefulWidget> on State<T> {
         SizedBox(width: 44, child: Text(value, textAlign: TextAlign.right, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]))),
       ]);
 
-  /// Favoritos: tocar uno usa ese color; mantenerlo apretado guarda ahí el color actual de la herramienta.
-  Widget _favSection(ToolState ts, String current, ValueChanged<String> onUse, VoidCallback onSaved) => Column(
+  /// Favoritos: tocar uno lo elige (la rueda, el hex y el cuentagotas lo editan); "+" suma uno; mantener apretado
+  /// abre el menú para borrarlo. [set] aplica el cambio y avisa.
+  Widget _favSection(ToolState ts, void Function(VoidCallback) set) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _label(context.l10n.penFavorites),
           Wrap(children: [
             for (final (i, c) in ts.favorites.indexed)
-              FavoriteDot(
-                key: ValueKey('panelFav-$i'),
-                color: c,
-                selected: c == current,
-                onTap: () => onUse(c),
-                onSave: () {
-                  final ok = ts.saveFavorite(i);
-                  if (ok) onSaved();
-                  return ok;
+              Builder(builder: (dotContext) => FavoriteDot(
+                    key: ValueKey('panelFav-$i'),
+                    color: c,
+                    selected: ts.favSel == i,
+                    onTap: () => set(() => ts.useFavorite(i)),
+                    onLongPress: ts.favorites.length > 1 ? () => _favMenu(dotContext, ts, i, set) : null,
+                  )),
+            if (ts.favorites.length < ToolState.kFavMax)
+              AddFavoriteDot(
+                key: const ValueKey('panelFavAdd'),
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  set(() => ts.addFavorite());
                 },
               ),
           ]),
@@ -121,6 +134,29 @@ mixin _PanelParts<T extends StatefulWidget> on State<T> {
           Text(context.l10n.penFavHelp, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
         ],
       );
+
+  /// Menú del favorito [i] (anclado a su muestra) con la única opción de borrarlo.
+  Future<void> _favMenu(BuildContext dotContext, ToolState ts, int i, void Function(VoidCallback) set) async {
+    HapticFeedback.selectionClick();
+    final box = dotContext.findRenderObject() as RenderBox;
+    final overlay = Overlay.of(dotContext).context.findRenderObject() as RenderBox;
+    final pos = RelativeRect.fromRect(
+      Rect.fromPoints(box.localToGlobal(Offset.zero, ancestor: overlay), box.localToGlobal(box.size.bottomRight(Offset.zero), ancestor: overlay)),
+      Offset.zero & overlay.size,
+    );
+    final del = await showMenu<bool>(
+      context: dotContext,
+      position: pos,
+      items: [
+        PopupMenuItem<bool>(
+          key: const ValueKey('panelFavDelete'),
+          value: true,
+          child: Row(children: [const Icon(Icons.delete_outline, size: 20), const SizedBox(width: 10), Text(context.l10n.penFavDelete)]),
+        ),
+      ],
+    );
+    if (del == true && mounted) set(() => ts.removeFavorite(i));
+  }
 }
 
 class _PenPanel extends StatefulWidget {
@@ -135,15 +171,6 @@ class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
   ToolState get ts => widget.ts;
   bool get isHl => ts.tool == Tool.hl;
 
-  /// Elige un color (de la rueda no entra a "recientes" en cada movimiento).
-  void _choose(String c, {bool remember = true}) => _set(() {
-        if (remember) {
-          ts.pickColor(c);
-        } else {
-          ts.current.color = c;
-        }
-      });
-
   void _set(VoidCallback f) {
     setState(f);
     widget.onChange();
@@ -153,90 +180,115 @@ class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
   Widget build(BuildContext context) {
     final p = ts.current;
     final minW = isHl ? 6.0 : .6, maxW = isHl ? 60.0 : 16.0;
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(isHl ? context.l10n.penPanelHighlighter : context.l10n.penPanelPencil, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-        const SizedBox(height: 12),
+    final wide = _wideLayout(context);
+    final header = Text(isHl ? context.l10n.penPanelHighlighter : context.l10n.penPanelPencil,
+        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700));
 
-        if (!isHl) ...[
-          _label(context.l10n.penTip),
-          Row(children: [for (final (id, name) in tips) _tipCell(p, id, name(context.l10n))]),
-          const SizedBox(height: 10),
-          const SizedBox(height: 14),
-        ],
-
-        // vista previa con los valores actuales
-        Container(
-          height: 64,
-          decoration: BoxDecoration(color: const Color(0xFFFFFEFB), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFDCD9D0))),
-          child: CustomPaint(painter: _SamplePainter(p.tip, p.color, p.width, p.opacity), size: Size.infinite),
-        ),
-        const SizedBox(height: 10),
-
-        _sliderRow(context.l10n.penWidth, p.width.toStringAsFixed(p.width < 10 ? 1 : 0), Slider(
-          value: p.width.clamp(minW, maxW),
-          min: minW,
-          max: maxW,
-          onChanged: (v) => _set(() => p.width = (v * 10).round() / 10),
-        )),
-        _sliderRow(context.l10n.penOpacity, '${(p.opacity * 100).round()}%', Slider(
-          value: p.opacity,
-          min: .1,
-          max: 1,
-          onChanged: (v) => _set(() => p.opacity = (v * 100).round() / 100),
-        )),
-        const SizedBox(height: 6),
-
-        Row(children: [
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              _label(context.l10n.penSmartShapes),
-              Text(context.l10n.penSmartShapesHint,
-                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+    // punta, vista previa, grosor, opacidad y figuras inteligentes
+    final tipsAndSliders = <Widget>[
+      if (!isHl) ...[
+        _label(context.l10n.penTip),
+        // las puntas van de a 4 por fila (con 11 no entran en una)
+        for (var i = 0; i < tips.length; i += 4)
+          Padding(
+            padding: EdgeInsets.only(top: i == 0 ? 0 : 6),
+            child: Row(children: [
+              for (var j = i; j < i + 4; j++)
+                if (j < tips.length) _tipCell(p, tips[j].$1, tips[j].$2(context.l10n)) else const Expanded(child: SizedBox()),
             ]),
           ),
-          Switch(key: const Key('shapeSnapSwitch'), value: ts.shapeSnap, onChanged: (v) => _set(() => ts.shapeSnap = v)),
-        ]),
-        const SizedBox(height: 6),
-
-        _favSection(ts, p.color, _choose, () => _set(() {})),
         const SizedBox(height: 12),
-        ColorChooser(
-          color: p.color,
-          view: ts.colorView,
-          onViewChanged: (v) => _set(() => ts.colorView = v),
-          recent: ts.recent,
-          onPick: (hex, {required fromWheel}) => _choose(hex, remember: !fromWheel),
-          onEyedropper: () => Navigator.of(context).pop(EyeTarget.tool),
-          palette: isHl
-              ? DotGrid(colors: hlPalette, perRow: 8, selected: p.color, onTap: _choose)
-              // grises arriba; abajo cada columna es una familia, de oscuro a claro
-              : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  DotGrid(colors: palette.take(7).toList(), perRow: 10, selected: p.color, onTap: _choose),
-                  for (var tone = 0; tone < 4; tone++)
-                    DotGrid(colors: [for (var fam = 0; fam < 10; fam++) palette[7 + fam * 4 + tone]], perRow: 10, selected: p.color, onTap: _choose),
-                ]),
-        ),
+      ],
 
-        if (!isHl) ...[
+      // vista previa con los valores actuales
+      Container(
+        height: wide ? 48 : 64,
+        decoration: BoxDecoration(color: const Color(0xFFFFFEFB), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFDCD9D0))),
+        child: CustomPaint(painter: _SamplePainter(p.tip, p.color, p.width, p.opacity), size: Size.infinite),
+      ),
+      const SizedBox(height: 10),
+
+      _sliderRow(context.l10n.penWidth, p.width.toStringAsFixed(p.width < 10 ? 1 : 0), Slider(
+        value: p.width.clamp(minW, maxW),
+        min: minW,
+        max: maxW,
+        onChanged: (v) => _set(() => p.width = (v * 10).round() / 10),
+      )),
+      _sliderRow(context.l10n.penOpacity, '${(p.opacity * 100).round()}%', Slider(
+        value: p.opacity,
+        min: .1,
+        max: 1,
+        onChanged: (v) => _set(() => p.opacity = (v * 100).round() / 100),
+      )),
+      const SizedBox(height: 6),
+
+      Row(children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _label(context.l10n.penSmartShapes),
+            Text(context.l10n.penSmartShapesHint,
+                style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          ]),
+        ),
+        Switch(key: const Key('shapeSnapSwitch'), value: ts.shapeSnap, onChanged: (v) => _set(() => ts.shapeSnap = v)),
+      ]),
+    ];
+
+    // goma, abajo del color (en horizontal sin divisor: la columna derecha, con la rueda, es la más alta)
+    final eraser = <Widget>[
+      if (!isHl) ...[
+        if (wide)
+          const SizedBox(height: 8)
+        else ...[
           const SizedBox(height: 14),
           const Divider(height: 1),
           const SizedBox(height: 12),
-          _label(context.l10n.penEraser),
-          Wrap(runSpacing: 6, children: [
-            for (var i = 0; i < 3; i++)
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: ChoiceChip(
-                  label: Text([context.l10n.penEraserSmall, context.l10n.penEraserMedium, context.l10n.penEraserLarge][i]),
-                  selected: ts.eraserSize == i,
-                  onSelected: (_) => _set(() => ts.eraserSize = i),
-                ),
-              ),
-          ]),
         ],
-      ]),
+        _label(context.l10n.penEraser),
+        Wrap(runSpacing: 6, children: [
+          for (var i = 0; i < 3; i++)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                label: Text([context.l10n.penEraserSmall, context.l10n.penEraserMedium, context.l10n.penEraserLarge][i]),
+                selected: ts.eraserSize == i,
+                onSelected: (_) => _set(() => ts.eraserSize = i),
+              ),
+            ),
+        ]),
+      ],
+    ];
+
+    // favoritos y color
+    final colors = <Widget>[
+      _favSection(ts, (f) => _set(f)),
+      SizedBox(height: wide ? 6 : 12),
+      ColorChooser(
+        color: p.color,
+        onPick: (hex, {required fromWheel}) => _set(() => ts.setColor(hex)),
+        onEyedropper: () => Navigator.of(context).pop(EyeTarget.tool),
+      ),
+    ];
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+      child: wide
+          // tablet en horizontal: punta y grosor a la izquierda, color y goma a la derecha
+          ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [header, const SizedBox(height: 12), ...tipsAndSliders]),
+              ),
+              const SizedBox(width: 22),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [...colors, ...eraser])),
+            ])
+          : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              header,
+              const SizedBox(height: 12),
+              ...tipsAndSliders,
+              const SizedBox(height: 6),
+              ...colors,
+              ...eraser,
+            ]),
     );
   }
 
@@ -245,6 +297,7 @@ class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
     final scheme = Theme.of(context).colorScheme;
     return Expanded(
       child: GestureDetector(
+        key: Key('tip-$id'),
         onTap: () => _set(() => p.tip = id),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
@@ -256,10 +309,12 @@ class _PenPanelState extends State<_PenPanel> with _PanelParts<_PenPanel> {
             border: Border.all(color: p.tip == id ? scheme.primary : Colors.transparent, width: 1.5),
           ),
           child: Column(children: [
-            SizedBox(
-              height: 34,
+            // la muestra va sobre color papel (como la vista previa grande): se ve igual en tema claro y oscuro
+            Container(
+              height: 30,
               width: double.infinity,
-              child: CustomPaint(painter: _SamplePainter(id, p.color, id == 'fine' ? 2.5 : 3.2, 1)),
+              decoration: BoxDecoration(color: const Color(0xFFFFFEFB), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFFDCD9D0))),
+              child: CustomPaint(painter: _SamplePainter(id, p.color, id == 'fine' ? 2.5 : (id == 'neon' ? 2.2 : 3.2), 1)),
             ),
             const SizedBox(height: 4),
             Text(name, style: TextStyle(fontSize: 11.5, color: p.tip == id ? scheme.primary : scheme.onSurface), overflow: TextOverflow.ellipsis),
@@ -291,7 +346,6 @@ class _ShapePanelState extends State<_ShapePanel> with _PanelParts<_ShapePanel> 
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final sub = TextStyle(fontSize: 12, color: cs.onSurfaceVariant);
-    final fills = [...ts.penFav, ...shapeFillColors.where((c) => !ts.penFav.contains(c))];
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -302,7 +356,7 @@ class _ShapePanelState extends State<_ShapePanel> with _PanelParts<_ShapePanel> 
         _label(context.l10n.shapesBorder),
         Text(context.l10n.shapesBorderHint, style: sub),
         const SizedBox(height: 8),
-        Wrap(children: [for (final c in ts.penFav) ColorDot(key: Key('shapePen-${c.substring(1)}'), color: c, selected: c == ts.pen.color, onTap: () => _set(() => ts.pickColor(c)))]),
+        Wrap(children: [for (final (i, c) in ts.penFav.indexed) ColorDot(key: Key('shapePen-${c.substring(1)}'), color: c, selected: ts.penFavSel == i, onTap: () => _set(() => ts.useFavorite(i)))]),
         const Divider(height: 24),
         Row(children: [
           Expanded(child: _label(context.l10n.shapesFill)),
@@ -313,14 +367,8 @@ class _ShapePanelState extends State<_ShapePanel> with _PanelParts<_ShapePanel> 
           const SizedBox(height: 6),
           ColorChooser(
             color: ts.shapeFillColor,
-            view: ts.colorView,
-            onViewChanged: (v) => _set(() => ts.colorView = v),
             onPick: (hex, {required fromWheel}) => _set(() => ts.shapeFillColor = hex),
             onEyedropper: () => Navigator.of(context).pop(EyeTarget.shapeFill),
-            palette: Wrap(children: [
-              for (final c in fills)
-                ColorDot(key: Key('shapeFill-${c.substring(1)}'), color: c, selected: c == ts.shapeFillColor, onTap: () => _set(() => ts.shapeFillColor = c)),
-            ]),
           ),
         ],
         const Divider(height: 24),
@@ -443,15 +491,6 @@ class _PaintPanelState extends State<_PaintPanel> with _PanelParts<_PaintPanel> 
   PenPreset get p => ts.paint;
   PaintParams get pp => ts.paintParams;
 
-  /// Elige un color del Fondo (de la rueda no entra a "recientes" en cada movimiento).
-  void _choose(String c, {bool remember = true}) => _set(() {
-        if (remember) {
-          ts.pickColor(c);
-        } else {
-          p.color = c;
-        }
-      });
-
   void _set(VoidCallback f) {
     setState(f);
     widget.onChange();
@@ -505,18 +544,12 @@ class _PaintPanelState extends State<_PaintPanel> with _PanelParts<_PaintPanel> 
             const Divider(height: 20),
             _switchRow(context.l10n.paintBackground, const Key('paintBgSwitch'), pp.bg, _canOff(false, true, true), (on) => _pp((q) => q.copyWith(bg: on))),
             if (pp.bg) ...[
-              _favSection(ts, p.color, _choose, () => _set(() {})),
+              _favSection(ts, (f) => _set(f)),
               const SizedBox(height: 12),
               ColorChooser(
                 color: p.color,
-                view: ts.colorView,
-                onViewChanged: (v) => _set(() => ts.colorView = v),
-                recent: ts.paintRecent,
-                onPick: (hex, {required fromWheel}) => _choose(hex, remember: !fromWheel),
+                onPick: (hex, {required fromWheel}) => _set(() => ts.setColor(hex)),
                 onEyedropper: () => Navigator.of(context).pop(EyeTarget.tool),
-                palette: Wrap(children: [
-                  for (final c in paintPalette) ColorDot(key: Key('paint-${c.substring(1)}'), color: c, selected: c == p.color, onTap: () => _choose(c)),
-                ]),
               ),
               const SizedBox(height: 4),
               _sliderRow(context.l10n.penOpacity, '${(p.opacity * 100).round()}%', Slider(
@@ -608,12 +641,9 @@ class _PaintPanelState extends State<_PaintPanel> with _PanelParts<_PaintPanel> 
       const SizedBox(height: 12),
       ColorChooser(
         color: custom,
-        view: ts.colorView,
-        onViewChanged: (v) => _set(() => ts.colorView = v),
-        recent: ts.paintRecent,
         onPick: (hex, {required fromWheel}) => _pp((q) => q.copyWith(shapeColor: hex)),
         onEyedropper: () => Navigator.of(context).pop(EyeTarget.paintShape),
-        palette: Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
+        extras: Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
           // "Auto": el color de cada forma (blanco, fondo aclarado, dorado)
           GestureDetector(
             behavior: HitTestBehavior.opaque,
@@ -633,7 +663,7 @@ class _PaintPanelState extends State<_PaintPanel> with _PanelParts<_PaintPanel> 
               ),
             ),
           ),
-          for (final c in paintShapeColors)
+          for (final c in const ['light', 'dark'])
             ColorDot(key: Key('shapeColor-$c'), color: _shapeSwatch(c), selected: c == pp.shapeColor, onTap: () => _pp((q) => q.copyWith(shapeColor: c))),
         ]),
       ),

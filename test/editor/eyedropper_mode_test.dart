@@ -98,7 +98,7 @@ void main() {
     expect(find.byKey(const Key('eyedropperLoupe')), findsNothing);
     expect(h.tools.pen.color, matches(RegExp(r'^#[0-9a-f]{6}$')));
     expect(h.tools.pen.color, isNot('#22211e'), reason: 'el papel no es el color de la tinta');
-    expect(h.tools.recent.first, h.tools.pen.color, reason: 'pickColor lo suma a recientes');
+    expect(h.tools.penFav[h.tools.penFavSel], h.tools.pen.color, reason: 'el favorito elegido sigue al color');
     expect(find.byKey(const Key('eyedropper')), findsOneWidget, reason: 'vuelve el panel');
     expect(h.prefs(), greaterThan(0), reason: 'se persiste');
   });

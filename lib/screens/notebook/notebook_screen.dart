@@ -19,6 +19,7 @@ import '../../editor/page_editor.dart';
 import '../../editor/voice_recorder.dart';
 import '../../sync/sync_controller.dart';
 import '../../widgets/dialogs.dart';
+import '../../widgets/mind_map_export.dart';
 import '../../widgets/pdf_progress.dart';
 import '../../widgets/shortcuts_dialog.dart';
 import '../library/sync_indicator.dart';
@@ -1088,6 +1089,7 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
           refresh: Listenable.merge([_headings, _structure]),
           onOpen: _openEntry,
           onAction: _entryAction,
+          onMindMap: () => exportMindMapFlow(context, nb),
         );
 
   /// Abre el destino de un link: la web en el navegador, otra hoja (de esta o de otra sección) o otro cuaderno
@@ -1311,8 +1313,8 @@ class NotebookScreenState extends State<NotebookScreen> with WidgetsBindingObser
           ListenableBuilder(
             listenable: Listenable.merge([sheetNotifier, _structure]),
             builder: (_, _) {
-              final k = curSheet, t = doc!.sheets[k].title;
-              return Text(context.l10n.notebookSheetCounter(t.isEmpty ? '' : '$t · ', k + 1, doc!.sheetCount),
+              // solo la hoja actual y el total: el título de la hoja (ej. el nombre del PDF importado) no va acá
+              return Text(context.l10n.notebookSheetCounter(curSheet + 1, doc!.sheetCount),
                   key: const Key('sheetCounter'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

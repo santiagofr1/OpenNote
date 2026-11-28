@@ -97,12 +97,12 @@ void main() {
     await settle(t, 400);
     await t.tap(find.byKey(const Key('thumb-1')));
     await settle(t, 800);
-    expect(t.widget<Text>(find.byKey(const Key('sheetCounter'))).data, 'H0 · 1 / 3');
+    expect(t.widget<Text>(find.byKey(const Key('sheetCounter'))).data, '1 / 3');
     await t.tap(find.byTooltip('Solo marcadas'));
     await settle(t, 400);
     await t.tap(item);
     await settle(t, 800);
-    expect(t.widget<Text>(find.byKey(const Key('sheetCounter'))).data, 'Parcial · 3 / 3');
+    expect(t.widget<Text>(find.byKey(const Key('sheetCounter'))).data, '3 / 3');
 
     // "Sin nombre" marca sin tocar el título; el botón desmarca
     await t.tap(find.byKey(const Key('bookmarkSheet')));

@@ -5,6 +5,8 @@ import 'paint_shapes.dart';
 import 'stroke.dart';
 import 'values.dart';
 
+part 'stroke_mesh_tips.dart';
+
 /// Algo con memoria nativa que hay que soltar (el `ui.Vertices` que arma el painter).
 abstract interface class NativeHandle {
   void dispose();
@@ -77,6 +79,32 @@ StrokeMesh? buildStrokeMesh(Stroke s, {double? feather}) {
   return StrokeMesh(parts, s.meshGen, f);
 }
 
+/// ¿La malla de [s] lleva colores por vértice ([StrokeMesh.colored])? Sale del trazo, sin armarla: lápiz y pintura
+/// siempre; las puntas con alfa por vértice ([tipHasVertexAlpha]) también; el resto cuando hay borde difuminado
+/// ([meshFeather] o [feather]).
+bool meshIsColored(Stroke s, {double? feather}) =>
+    isPaint(s.k) || tipHasVertexAlpha(s.k) || (feather ?? meshFeather) > 0;
+
+/// Cota aproximada de los vértices de la malla de [s] sin armarla (para agrupar trazos en lotes): no depende del
+/// borde difuminado, así los lotes no cambian al cambiar este.
+int estimateMeshVertices(Stroke s) {
+  final n = s.n;
+  if (isPaint(s.k)) return 60 * n + 30;
+  return switch (s.k) {
+    'pencil' => 16 * n + 30,
+    'calli' => 8 * n + 20,
+    // las nuevas: la línea suave tiene a lo sumo [_tipSteps] vértices por tramo de entrada (y se ralea); los puntos
+    // y guiones además tienen tope duro por tramo (ver stroke_mesh_tips.dart)
+    'dotted' => 2 * _dotMaxVertices * n + 30,
+    'dashed' => 40 * n + 40,
+    'chalk' => 36 * n + 100,
+    'chisel' => 24 * n + 60,
+    'neon' => 20 * n + 120,
+    'double' => 26 * n + 100,
+    _ => 4 * n + 34,
+  };
+}
+
 const _chunk = 6000; // puntos por parte (con 4 vértices por punto queda lejos del tope de 65k)
 const _paintChunk = 250; // la pintura lleva ~20 vértices por muestra y decoración: partes chicas
 
@@ -137,6 +165,18 @@ MeshPart _buildPart(Stroke s, int a, int b, double feather) {
       final col = feather > 0 ? List<int>.filled(xs.length, argb) : null;
       _strip(w, xs, ys, hw, col, round: s.k == 'fine', feather: feather);
       return w.done();
+    case 'dotted':
+      return _dottedPart(s, a, b, feather);
+    case 'dashed':
+      return _dashedPart(s, a, b, feather);
+    case 'chalk':
+      return _chalkPart(s, a, b, feather);
+    case 'chisel':
+      return _chiselPart(s, a, b, feather);
+    case 'neon':
+      return _neonPart(s, a, b);
+    case 'double':
+      return _doublePart(s, a, b, feather);
     case 'pencil':
       final w = _W(true);
       if (n == 1) {
@@ -575,7 +615,7 @@ double _grain(int i, int salt) {
 }
 
 /// Curva del trazo suave: pasa por los puntos medios con los puntos como control (como el `Path` viejo).
-void _smoothCenterline(List<double> p, List<double> xs, List<double> ys) {
+void _smoothCenterline(List<double> p, List<double> xs, List<double> ys, {int maxSteps = 8}) {
   final n = p.length ~/ 2;
   xs.add(p[0]);
   ys.add(p[1]);
@@ -585,7 +625,7 @@ void _smoothCenterline(List<double> p, List<double> xs, List<double> ys) {
     final qx = p[i * 2], qy = p[i * 2 + 1];
     final ex = (qx + p[i * 2 + 2]) / 2, ey = (qy + p[i * 2 + 3]) / 2;
     final len = (qx - cx).abs() + (qy - cy).abs() + (ex - qx).abs() + (ey - qy).abs();
-    final steps = (len / 5).ceil().clamp(1, 8);
+    final steps = (len / 5).ceil().clamp(1, maxSteps);
     for (var k = 1; k <= steps; k++) {
       final t = k / steps, u = 1 - t;
       xs.add(u * u * cx + 2 * u * t * qx + t * t * ex);

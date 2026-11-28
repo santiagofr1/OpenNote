@@ -72,6 +72,38 @@
   "@paperMonthly": {
     "description": "Monthly calendar template name in the paper style dialog"
   },
+  "paperIso": "Isométrico",
+  "@paperIso": {
+    "description": "Isometric paper name in the paper style dialog"
+  },
+  "paperHex": "Hexagonal",
+  "@paperHex": {
+    "description": "Hexagonal (honeycomb) paper name in the paper style dialog"
+  },
+  "paperPolar": "Polar",
+  "@paperPolar": {
+    "description": "Polar graph paper name in the paper style dialog"
+  },
+  "paperSemilog": "Semilogarítmico",
+  "@paperSemilog": {
+    "description": "Semi-log graph paper name in the paper style dialog"
+  },
+  "paperCalli": "Caligrafía",
+  "@paperCalli": {
+    "description": "Calligraphy guides template name in the paper style dialog"
+  },
+  "paperStoryboard": "Storyboard",
+  "@paperStoryboard": {
+    "description": "Storyboard template name in the paper style dialog"
+  },
+  "paperGuitarTab": "Tablatura de guitarra",
+  "@paperGuitarTab": {
+    "description": "Guitar tablature template name in the paper style dialog"
+  },
+  "paperDaily": "Planificador diario",
+  "@paperDaily": {
+    "description": "Daily planner template name in the paper style dialog"
+  },
   "shortcutBold": "Negrita",
   "@shortcutBold": {
     "description": "Keyboard shortcut description in the shortcuts dialog"
@@ -1864,13 +1896,10 @@
       }
     }
   },
-  "notebookSheetCounter": "{title}{n} / {total}",
+  "notebookSheetCounter": "{n} / {total}",
   "@notebookSheetCounter": {
-    "description": "Counter under the notebook title: optional sheet title prefix, current sheet and total",
+    "description": "Counter under the notebook title: current sheet and total",
     "placeholders": {
-      "title": {
-        "type": "String"
-      },
       "n": {
         "type": "int"
       },
@@ -2261,6 +2290,30 @@
   "@tipCalligraphy": {
     "description": "Name of the pen tip \"calli\" in the pen panel"
   },
+  "tipDotted": "Punteado",
+  "@tipDotted": {
+    "description": "Name of the pen tip \"dotted\" in the pen panel"
+  },
+  "tipDashed": "Discontinuo",
+  "@tipDashed": {
+    "description": "Name of the pen tip \"dashed\" in the pen panel"
+  },
+  "tipChalk": "Tiza",
+  "@tipChalk": {
+    "description": "Name of the pen tip \"chalk\" in the pen panel"
+  },
+  "tipChisel": "Biselado",
+  "@tipChisel": {
+    "description": "Name of the pen tip \"chisel\" in the pen panel"
+  },
+  "tipNeon": "Neón",
+  "@tipNeon": {
+    "description": "Name of the pen tip \"neon\" in the pen panel"
+  },
+  "tipDouble": "Doble línea",
+  "@tipDouble": {
+    "description": "Name of the pen tip \"double\" in the pen panel"
+  },
   "paintStyleBrush": "Pincel",
   "@paintStyleBrush": {
     "description": "Name of the decorator stroke style \"brush\""
@@ -2377,9 +2430,17 @@
   "@penFavorites": {
     "description": "Pen panel: section title of the favorite colors"
   },
-  "penFavHelp": "Mantené apretado un favorito para guardar ahí el color actual.",
+  "penFavHelp": "Tocá un favorito y cambiale el color con la rueda. Mantenelo apretado para borrarlo.",
   "@penFavHelp": {
     "description": "Pen panel: help for the favorite colors"
+  },
+  "penFavAdd": "Agregar color",
+  "@penFavAdd": {
+    "description": "Pen panel: tooltip of the button that adds a favorite color"
+  },
+  "penFavDelete": "Borrar color",
+  "@penFavDelete": {
+    "description": "Pen panel: menu item that deletes a favorite color"
   },
   "penPanelHighlighter": "Resaltador",
   "@penPanelHighlighter": {
@@ -2630,14 +2691,6 @@
   "@updateUpToDate": {
     "description": "Snackbar when the app is up to date"
   },
-  "colorViewPalette": "Paleta",
-  "@colorViewPalette": {
-    "description": "Color chooser: tooltip of the palette view button"
-  },
-  "colorViewWheel": "Rueda",
-  "@colorViewWheel": {
-    "description": "Color chooser: tooltip of the color wheel view button"
-  },
   "colorEyedropper": "Cuentagotas",
   "@colorEyedropper": {
     "description": "Color chooser: tooltip of the eyedropper button"
@@ -2650,8 +2703,32 @@
   "@eyedropperCancel": {
     "description": "Tooltip of the button that cancels the eyedropper"
   },
-  "colorRecent": "Recientes",
-  "@colorRecent": {
-    "description": "Color chooser: caption of the row of recently used colors"
+  "indexMindMap": "Exportar como mapa conceptual",
+  "@indexMindMap": {
+    "description": "Tooltip of the index panel button that exports the index as a mind map"
+  },
+  "mindMapTitle": "Mapa conceptual del índice",
+  "@mindMapTitle": {
+    "description": "Title of the dialog that asks the mind map format"
+  },
+  "mindMapPng": "Imagen (PNG)",
+  "@mindMapPng": {
+    "description": "Mind map export option: picture"
+  },
+  "mindMapFreemind": "Mapa editable (.mm)",
+  "@mindMapFreemind": {
+    "description": "Mind map export option: editable FreeMind file"
+  },
+  "mindMapSaved": "Mapa guardado",
+  "@mindMapSaved": {
+    "description": "Snackbar after saving the mind map"
+  },
+  "mindMapUntitled": "Sin título",
+  "@mindMapUntitled": {
+    "description": "Name of an index heading that has no text, in the mind map"
+  },
+  "exportSaveMindMap": "Guardar mapa conceptual",
+  "@exportSaveMindMap": {
+    "description": "Title of the system dialog that saves the mind map"
   }
 }

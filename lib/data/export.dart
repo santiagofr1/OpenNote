@@ -347,8 +347,9 @@ class ExportTexts {
     this.saveImages = 'Guardar imágenes',
     this.saveNotebook = 'Guardar cuaderno',
     this.saveFolder = 'Guardar carpeta',
+    this.saveMindMap = 'Guardar mapa conceptual',
   });
-  final String notebook, folder, section, page, sheet, savePdf, saveImage, saveImages, saveNotebook, saveFolder;
+  final String notebook, folder, section, page, sheet, savePdf, saveImage, saveImages, saveNotebook, saveFolder, saveMindMap;
 }
 
 /// Los textos vigentes (ver [ExportTexts]).
@@ -486,6 +487,18 @@ Future<bool> Function(Uint8List bytes, String name) saveVynote = (bytes, name) a
     fileName: '${safe.isEmpty ? exportTexts.notebook : safe}.vynote',
     bytes: bytes,
     mimeType: 'application/octet-stream',
+  );
+  return uri != null;
+};
+
+/// Abre el selector del sistema para guardar el mapa conceptual del índice: [fileName] ya lleva la extensión (`.png` o
+/// `.mm`). Falso si el usuario canceló. Es una variable para que los tests la reemplacen.
+Future<bool> Function(Uint8List bytes, String fileName, String mimeType) saveMindMap = (bytes, fileName, mimeType) async {
+  final uri = await FilePicker.saveFile(
+    dialogTitle: exportTexts.saveMindMap,
+    fileName: fileName,
+    bytes: bytes,
+    mimeType: mimeType,
   );
   return uri != null;
 };

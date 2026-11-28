@@ -1,3 +1,4 @@
+import 'dart:math' show min;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'dart:ui';
@@ -54,7 +55,7 @@ void _drawParts(Canvas c, Iterable<MeshPart> parts, Color color, bool colored) {
   }
 }
 
-bool _layered(Stroke s) => s.o < .999 && s.k != 'pencil' && !isPaint(s.k); // lápiz y pintura llevan el alfa en los vértices
+bool _layered(Stroke s) => s.o < .999 && !tipHasVertexAlpha(s.k) && !isPaint(s.k); // lápiz, tiza, neón, puntos, guiones y pintura llevan el alfa en los vértices
 
 /// Relleno de una forma exacta: el polígono de sus puntos a 35 % de opacidad (por la opacidad del trazo), debajo del borde.
 void _paintFill(Canvas c, Stroke s) {
@@ -66,7 +67,9 @@ void _paintFill(Canvas c, Stroke s) {
 /// oscurezcan sus propias uniones (el lápiz lleva el alfa en los colores de los vértices).
 /// El resaltador va siempre en una capa que se compone multiplicando con lo de abajo: blanco × color = color,
 /// negro × color = negro (así el texto de un PDF queda por encima).
-void paintStroke(Canvas c, Stroke s) {
+/// [cull]: si no toca el trazo no se arma ni su malla.
+void paintStroke(Canvas c, Stroke s, {Rect? cull}) {
+  if (cull != null && !s.bounds.overlaps(cull)) return;
   final m = s.ensureMesh();
   if (m == null) return;
   if (s.fill != null) _paintFill(c, s);
@@ -108,15 +111,16 @@ void _pass(Canvas c, List<Stroke> list, Rect? cull, bool hl) {
     if (s.fill != null || isHighlighter(s.k) || _layered(s)) {
       // con relleno, resaltador o capa va solo (no entra en lotes): el relleno va antes del borde
       flush();
-      if (cull == null || s.bounds.overlaps(cull)) paintStroke(c, s);
+      paintStroke(c, s, cull: cull);
       continue;
     }
-    final m = s.ensureMesh();
-    if (m == null) continue;
-    final k = m.colored ? 0 : s.color.toARGB32();
-    if (group.isNotEmpty && (k != key || verts + m.vertexCount > kBatchVertices)) flush();
+    // el lote se decide sin armar mallas (estimación y color salen del trazo): así no depende de `cull` ni de qué
+    // mallas existan, y los trazos que no se ven no arman la suya
+    final k = meshIsColored(s) ? 0 : s.color.toARGB32();
+    final v = estimateMeshVertices(s);
+    if (group.isNotEmpty && (k != key || verts + v > kBatchVertices)) flush();
     group.add(s);
-    verts += m.vertexCount;
+    verts += v;
     key = k;
   }
   flush();
@@ -124,7 +128,7 @@ void _pass(Canvas c, List<Stroke> list, Rect? cull, bool hl) {
 
 void _drawGroup(Canvas c, List<Stroke> g, Rect? cull) {
   if (g.length == 1) {
-    if (cull == null || g[0].bounds.overlaps(cull)) paintStroke(c, g[0]);
+    paintStroke(c, g[0], cull: cull);
     return;
   }
   if (cull != null) {
@@ -134,8 +138,12 @@ void _drawGroup(Canvas c, List<Stroke> g, Rect? cull) {
     }
     if (!r.overlaps(cull)) return;
   }
+  for (final s in g) {
+    s.ensureMesh();
+  }
   final b = _batchOf(g);
   final colored = g.first.mesh!.colored;
+  assert(colored == meshIsColored(g.first));
   c.drawVertices(b.vertices, colored ? BlendMode.dst : BlendMode.srcOver, Paint()..color = g.first.color);
 }
 
@@ -190,11 +198,26 @@ void paintStrokeLegacy(Canvas c, Stroke s) {
     case 'pencil':
       _pencil(c, s);
       return;
+    case 'dotted':
+    case 'dashed':
+      _dashes(c, s, s.k == 'dotted');
+      return;
+    case 'chalk':
+      _pathStroke(c, s, s.color.withValues(alpha: s.o * .75), StrokeCap.round);
+      return;
+    case 'neon':
+      _pathStroke(c, s, s.color.withValues(alpha: s.o * .3), StrokeCap.round, s.w * 3.4);
+      _pathStroke(c, s, Color.lerp(s.color, const Color(0xFFFFFFFF), .85)!.withValues(alpha: s.o), StrokeCap.round, s.w * .4);
+      return;
+    case 'double':
+      // aproximación: una sola línea gruesa (el dibujo viejo no tenía esta punta)
+      _pathStroke(c, s, s.color.withValues(alpha: s.o), StrokeCap.round, s.w * 1.4);
+      return;
   }
   // con opacidad: se dibuja en una capa para que no se oscurezcan las uniones
   final layered = s.o < .999;
   if (layered) c.saveLayer(s.bounds, Paint()..color = Color.fromRGBO(0, 0, 0, s.o));
-  if (s.k == 'calli') {
+  if (s.k == 'calli' || s.k == 'chisel') {
     _calli(c, s);
   } else if (s.k == 'fountain') {
     _variable(c, s, .15, 1.7, true);
@@ -205,7 +228,7 @@ void paintStrokeLegacy(Canvas c, Stroke s) {
 }
 
 /// trazo de grosor constante (fibra, resaltador), suavizado con curvas
-void _pathStroke(Canvas c, Stroke s, Color color, StrokeCap cap) {
+void _pathStroke(Canvas c, Stroke s, Color color, StrokeCap cap, [double? width]) {
   final p = s.pts, n = s.n;
   final path = Path()..moveTo(p[0], p[1]);
   if (n == 1) path.lineTo(p[0] + .1, p[1]);
@@ -218,10 +241,36 @@ void _pathStroke(Canvas c, Stroke s, Color color, StrokeCap cap) {
     Paint()
       ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = s.w
+      ..strokeWidth = width ?? s.w
       ..strokeCap = cap
       ..strokeJoin = StrokeJoin.round,
   );
+}
+
+/// punteado / discontinuo: círculos o guiones redondos sobre el recorrido, con el mismo ritmo que las mallas
+void _dashes(Canvas c, Stroke s, bool dots) {
+  final p = s.pts, n = s.n;
+  final path = Path()..moveTo(p[0], p[1]);
+  if (n == 1) path.lineTo(p[0] + .1, p[1]);
+  for (var i = 1; i < n - 1; i++) {
+    path.quadraticBezierTo(p[i * 3], p[i * 3 + 1], (p[i * 3] + p[i * 3 + 3]) / 2, (p[i * 3 + 1] + p[i * 3 + 4]) / 2);
+  }
+  if (n > 1) path.lineTo(p[n * 3 - 3], p[n * 3 - 2]);
+  final paint = Paint()
+    ..color = s.color.withValues(alpha: s.o)
+    ..strokeCap = StrokeCap.round
+    ..strokeWidth = s.w
+    ..style = PaintingStyle.stroke;
+  final period = s.w * (dots ? 2.2 : 6.5), body = s.w * 3;
+  for (final m in path.computeMetrics()) {
+    for (var u = 0.0; u <= m.length; u += period) {
+      if (dots) {
+        c.drawCircle(m.getTangentForOffset(u)!.position, s.w / 2, paint..style = PaintingStyle.fill);
+      } else {
+        c.drawPath(m.extractPath(u, min(u + body, m.length)), paint..style = PaintingStyle.stroke);
+      }
+    }
+  }
 }
 
 /// grosor según presión (bolígrafo) y además según velocidad (pluma)

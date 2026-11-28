@@ -64,6 +64,30 @@ class LPt extends L {
   String get paperMonthly => 'Calendário mensal';
 
   @override
+  String get paperIso => 'Isométrico';
+
+  @override
+  String get paperHex => 'Hexagonal';
+
+  @override
+  String get paperPolar => 'Polar';
+
+  @override
+  String get paperSemilog => 'Semilogarítmico';
+
+  @override
+  String get paperCalli => 'Caligrafia';
+
+  @override
+  String get paperStoryboard => 'Storyboard';
+
+  @override
+  String get paperGuitarTab => 'Tablatura de violão';
+
+  @override
+  String get paperDaily => 'Planejador diário';
+
+  @override
   String get shortcutBold => 'Negrito';
 
   @override
@@ -1349,8 +1373,8 @@ class LPt extends L {
   }
 
   @override
-  String notebookSheetCounter(String title, int n, int total) {
-    return '$title$n / $total';
+  String notebookSheetCounter(int n, int total) {
+    return '$n / $total';
   }
 
   @override
@@ -1629,6 +1653,24 @@ class LPt extends L {
   String get tipCalligraphy => 'Caligrafia';
 
   @override
+  String get tipDotted => 'Pontilhado';
+
+  @override
+  String get tipDashed => 'Tracejado';
+
+  @override
+  String get tipChalk => 'Giz';
+
+  @override
+  String get tipChisel => 'Chanfrado';
+
+  @override
+  String get tipNeon => 'Neon';
+
+  @override
+  String get tipDouble => 'Linha dupla';
+
+  @override
   String get paintStyleBrush => 'Pincel';
 
   @override
@@ -1716,7 +1758,14 @@ class LPt extends L {
   String get penFavorites => 'Favoritos';
 
   @override
-  String get penFavHelp => 'Segure um favorito para salvar nele a cor atual.';
+  String get penFavHelp =>
+      'Toque um favorito e mude a cor dele com a roda. Segure para apagá-lo.';
+
+  @override
+  String get penFavAdd => 'Adicionar cor';
+
+  @override
+  String get penFavDelete => 'Apagar cor';
 
   @override
   String get penPanelHighlighter => 'Marca-texto';
@@ -1904,12 +1953,6 @@ class LPt extends L {
   String get updateUpToDate => 'Você já tem a versão mais recente';
 
   @override
-  String get colorViewPalette => 'Paleta';
-
-  @override
-  String get colorViewWheel => 'Roda';
-
-  @override
   String get colorEyedropper => 'Conta-gotas';
 
   @override
@@ -1919,5 +1962,23 @@ class LPt extends L {
   String get eyedropperCancel => 'Cancelar conta-gotas';
 
   @override
-  String get colorRecent => 'Recentes';
+  String get indexMindMap => 'Exportar como mapa conceitual';
+
+  @override
+  String get mindMapTitle => 'Mapa conceitual do índice';
+
+  @override
+  String get mindMapPng => 'Imagem (PNG)';
+
+  @override
+  String get mindMapFreemind => 'Mapa editável (.mm)';
+
+  @override
+  String get mindMapSaved => 'Mapa salvo';
+
+  @override
+  String get mindMapUntitled => 'Sem título';
+
+  @override
+  String get exportSaveMindMap => 'Salvar mapa conceitual';
 }

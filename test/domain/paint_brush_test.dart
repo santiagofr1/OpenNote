@@ -196,13 +196,12 @@ void main() {
     expect((ToolState()..load(jsonDecode(jsonEncode(nuevos.toJson())) as Map)).paintParams, const PaintParams(style: 'hl', bg: false));
   });
 
-  test('con la herramienta de pintura: current, recent y drawing', () {
+  test('con la herramienta de pintura: current, favoritos y drawing', () {
     final ts = ToolState()..tool = Tool.paint;
     expect(ts.drawing, isTrue);
     expect(ts.current, same(ts.paint));
-    expect(ts.recent, same(ts.paintRecent));
-    ts.pickColor('#c9b3ec');
-    expect(ts.paintRecent.first, '#c9b3ec');
+    expect(ts.favorites, same(ts.paintFav));
+    ts.useFavorite(3);
     expect(ts.paint.color, '#c9b3ec');
   });
 

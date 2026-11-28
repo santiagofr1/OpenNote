@@ -207,6 +207,54 @@ abstract class L {
   /// **'Calendario mensual'**
   String get paperMonthly;
 
+  /// Isometric paper name in the paper style dialog
+  ///
+  /// In es, this message translates to:
+  /// **'Isométrico'**
+  String get paperIso;
+
+  /// Hexagonal (honeycomb) paper name in the paper style dialog
+  ///
+  /// In es, this message translates to:
+  /// **'Hexagonal'**
+  String get paperHex;
+
+  /// Polar graph paper name in the paper style dialog
+  ///
+  /// In es, this message translates to:
+  /// **'Polar'**
+  String get paperPolar;
+
+  /// Semi-log graph paper name in the paper style dialog
+  ///
+  /// In es, this message translates to:
+  /// **'Semilogarítmico'**
+  String get paperSemilog;
+
+  /// Calligraphy guides template name in the paper style dialog
+  ///
+  /// In es, this message translates to:
+  /// **'Caligrafía'**
+  String get paperCalli;
+
+  /// Storyboard template name in the paper style dialog
+  ///
+  /// In es, this message translates to:
+  /// **'Storyboard'**
+  String get paperStoryboard;
+
+  /// Guitar tablature template name in the paper style dialog
+  ///
+  /// In es, this message translates to:
+  /// **'Tablatura de guitarra'**
+  String get paperGuitarTab;
+
+  /// Daily planner template name in the paper style dialog
+  ///
+  /// In es, this message translates to:
+  /// **'Planificador diario'**
+  String get paperDaily;
+
   /// Keyboard shortcut description in the shortcuts dialog
   ///
   /// In es, this message translates to:
@@ -2331,11 +2379,11 @@ abstract class L {
   /// **'Buscar en \"{name}\"'**
   String notebookSearchIn(String name);
 
-  /// Counter under the notebook title: optional sheet title prefix, current sheet and total
+  /// Counter under the notebook title: current sheet and total
   ///
   /// In es, this message translates to:
-  /// **'{title}{n} / {total}'**
-  String notebookSheetCounter(String title, int n, int total);
+  /// **'{n} / {total}'**
+  String notebookSheetCounter(int n, int total);
 
   /// Prefix of the default name of audio recordings (followed by a number), and hint of the audio rename field
   ///
@@ -2853,6 +2901,42 @@ abstract class L {
   /// **'Caligrafía'**
   String get tipCalligraphy;
 
+  /// Name of the pen tip "dotted" in the pen panel
+  ///
+  /// In es, this message translates to:
+  /// **'Punteado'**
+  String get tipDotted;
+
+  /// Name of the pen tip "dashed" in the pen panel
+  ///
+  /// In es, this message translates to:
+  /// **'Discontinuo'**
+  String get tipDashed;
+
+  /// Name of the pen tip "chalk" in the pen panel
+  ///
+  /// In es, this message translates to:
+  /// **'Tiza'**
+  String get tipChalk;
+
+  /// Name of the pen tip "chisel" in the pen panel
+  ///
+  /// In es, this message translates to:
+  /// **'Biselado'**
+  String get tipChisel;
+
+  /// Name of the pen tip "neon" in the pen panel
+  ///
+  /// In es, this message translates to:
+  /// **'Neón'**
+  String get tipNeon;
+
+  /// Name of the pen tip "double" in the pen panel
+  ///
+  /// In es, this message translates to:
+  /// **'Doble línea'**
+  String get tipDouble;
+
   /// Name of the decorator stroke style "brush"
   ///
   /// In es, this message translates to:
@@ -3030,8 +3114,20 @@ abstract class L {
   /// Pen panel: help for the favorite colors
   ///
   /// In es, this message translates to:
-  /// **'Mantené apretado un favorito para guardar ahí el color actual.'**
+  /// **'Tocá un favorito y cambiale el color con la rueda. Mantenelo apretado para borrarlo.'**
   String get penFavHelp;
+
+  /// Pen panel: tooltip of the button that adds a favorite color
+  ///
+  /// In es, this message translates to:
+  /// **'Agregar color'**
+  String get penFavAdd;
+
+  /// Pen panel: menu item that deletes a favorite color
+  ///
+  /// In es, this message translates to:
+  /// **'Borrar color'**
+  String get penFavDelete;
 
   /// Pen panel title for the highlighter
   ///
@@ -3387,18 +3483,6 @@ abstract class L {
   /// **'Ya tenés la última versión'**
   String get updateUpToDate;
 
-  /// Color chooser: tooltip of the palette view button
-  ///
-  /// In es, this message translates to:
-  /// **'Paleta'**
-  String get colorViewPalette;
-
-  /// Color chooser: tooltip of the color wheel view button
-  ///
-  /// In es, this message translates to:
-  /// **'Rueda'**
-  String get colorViewWheel;
-
   /// Color chooser: tooltip of the eyedropper button
   ///
   /// In es, this message translates to:
@@ -3417,11 +3501,47 @@ abstract class L {
   /// **'Cancelar cuentagotas'**
   String get eyedropperCancel;
 
-  /// Color chooser: caption of the row of recently used colors
+  /// Tooltip of the index panel button that exports the index as a mind map
   ///
   /// In es, this message translates to:
-  /// **'Recientes'**
-  String get colorRecent;
+  /// **'Exportar como mapa conceptual'**
+  String get indexMindMap;
+
+  /// Title of the dialog that asks the mind map format
+  ///
+  /// In es, this message translates to:
+  /// **'Mapa conceptual del índice'**
+  String get mindMapTitle;
+
+  /// Mind map export option: picture
+  ///
+  /// In es, this message translates to:
+  /// **'Imagen (PNG)'**
+  String get mindMapPng;
+
+  /// Mind map export option: editable FreeMind file
+  ///
+  /// In es, this message translates to:
+  /// **'Mapa editable (.mm)'**
+  String get mindMapFreemind;
+
+  /// Snackbar after saving the mind map
+  ///
+  /// In es, this message translates to:
+  /// **'Mapa guardado'**
+  String get mindMapSaved;
+
+  /// Name of an index heading that has no text, in the mind map
+  ///
+  /// In es, this message translates to:
+  /// **'Sin título'**
+  String get mindMapUntitled;
+
+  /// Title of the system dialog that saves the mind map
+  ///
+  /// In es, this message translates to:
+  /// **'Guardar mapa conceptual'**
+  String get exportSaveMindMap;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

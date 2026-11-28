@@ -106,7 +106,7 @@ Future<StyleChoice?> showStyleDialog(BuildContext context, NotebookDoc doc,
       final title = TextStyle(fontWeight: FontWeight.w500, color: cs.onSurface);
       final options = spacingsFor(bg);
       final mq = MediaQuery.sizeOf(ctx);
-      // tablet en horizontal: dos columnas y la vista previa abajo de la segunda, para que entre sin scroll
+      // tablet en horizontal: tres columnas (tamaño y fondos, plantillas, resto) y la vista previa abajo de la tercera, para que entre sin scroll
       final wide = !doc.nb.canvas && mq.width >= 1000 && mq.width > mq.height;
       final colA = Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(ctx.l10n.styleSize, style: title),
@@ -119,7 +119,8 @@ Future<StyleChoice?> showStyleDialog(BuildContext context, NotebookDoc doc,
         Text(ctx.l10n.styleBackground, style: title),
         const SizedBox(height: 8),
         Wrap(spacing: 8, runSpacing: 8, children: [for (final (v, i, label) in backgrounds) bgChip(v, i, label)]),
-        const SizedBox(height: 18),
+      ]);
+      final colTpl = Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(ctx.l10n.styleTemplates, style: title),
         const SizedBox(height: 8),
         Wrap(spacing: 8, runSpacing: 8, children: [for (final (v, i, label) in templates) bgChip(v, i, label)]),
@@ -183,6 +184,8 @@ Future<StyleChoice?> showStyleDialog(BuildContext context, NotebookDoc doc,
       final sheetControls = Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         colA,
         const SizedBox(height: 18),
+        colTpl,
+        const SizedBox(height: 18),
         colB,
       ]);
       // lienzo infinito: solo el color del papel, que vale para todo
@@ -207,10 +210,12 @@ Future<StyleChoice?> showStyleDialog(BuildContext context, NotebookDoc doc,
         title: Text(doc.nb.canvas ? ctx.l10n.menuMorePaperColor : (forNew ? ctx.l10n.styleTitleNew : ctx.l10n.styleTitle)),
         content: wide
             ? SizedBox(
-                width: min(mq.width - 96, 940),
+                width: min(mq.width - 96, 1100),
                 child: SingleChildScrollView(
                   child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Expanded(child: colA),
+                    const SizedBox(width: 24),
+                    Expanded(child: colTpl),
                     const SizedBox(width: 24),
                     Expanded(
                       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
